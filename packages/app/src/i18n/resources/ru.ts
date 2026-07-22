@@ -234,6 +234,16 @@ export const ru: TranslationResources = {
       callout: "Этот агент находится в архиве",
       unarchive: "Разархивировать",
     },
+    artifacts: {
+      chatTab: "Чат",
+      tab: "Артефакты ({{count}})",
+      emptyTitle: "Артефактов пока нет",
+      emptyDescription: "Созданные агентом файлы появятся здесь.",
+      updateHostTitle: "Обновите хост для работы с артефактами",
+      updateHostDescription: "Этот хост пока не поддерживает артефакты чата.",
+      open: "Открыть {{name}}",
+      openLabel: "Открыть",
+    },
   },
   sessions: {
     title: "История",

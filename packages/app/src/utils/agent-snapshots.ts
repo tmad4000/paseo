@@ -77,5 +77,6 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     archivedAt,
     parentAgentId,
     labels: snapshot.labels,
+    artifacts: snapshot.artifacts,
   };
 }

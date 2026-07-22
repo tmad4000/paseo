@@ -12,6 +12,7 @@ import {
   isOpenAgentTabLabel,
   PARENT_AGENT_ID_LABEL,
 } from "@getpaseo/protocol/agent-labels";
+import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
@@ -75,6 +76,7 @@ import {
   type ProviderSubagentDescriptor,
   type ProviderSubagentStoreEvent,
 } from "./provider-subagents/store.js";
+import { AgentArtifactCollector } from "./artifacts/collector.js";
 
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
@@ -260,6 +262,7 @@ export interface CreateAgentOptions {
   // undefined is an explicit decision: the agent never appears in the sidebar.
   workspaceId: string | undefined;
   owner?: AgentOwner;
+  artifacts?: AgentArtifact[];
 }
 
 export interface AgentManagerOptions {
@@ -313,6 +316,10 @@ function resolveInitialAttention(input: AttentionState | undefined): AttentionSt
     attentionReason: input.attentionReason,
     attentionTimestamp: new Date(input.attentionTimestamp),
   };
+}
+
+function resolveInitialArtifacts(artifacts: AgentArtifact[] | undefined): AgentArtifact[] {
+  return artifacts ? [...artifacts] : [];
 }
 
 interface StreamEventFlags {
@@ -371,6 +378,7 @@ interface ManagedAgentBase {
    * User-defined labels for categorizing agents (e.g., { surface: "workspace" }).
    */
   labels: Record<string, string>;
+  artifacts: AgentArtifact[];
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -656,6 +664,7 @@ export class AgentManager {
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
+  private readonly artifactCollector = new AgentArtifactCollector();
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
   private paseoToolsEnabled = true;
@@ -1134,6 +1143,7 @@ export class AgentManager {
       initialTitle: options.initialTitle,
       workspaceId: options.workspaceId,
       owner: options.owner,
+      artifacts: options.artifacts,
     });
   }
 
@@ -1158,6 +1168,7 @@ export class AgentManager {
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
+      artifacts?: AgentArtifact[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1177,6 +1188,7 @@ export class AgentManager {
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
+      artifacts?: AgentArtifact[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1376,6 +1388,7 @@ export class AgentManager {
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
         attention: preservedAttention,
+        artifacts: existing.artifacts,
       });
     } finally {
       if (!handedToRegistration) {
@@ -1660,6 +1673,7 @@ export class AgentManager {
         attention: { requiresAttention: false },
         internal: record.internal,
         labels: record.labels,
+        artifacts: record.artifacts ?? [],
       },
     });
   }
@@ -2154,10 +2168,12 @@ export class AgentManager {
     const streamForwarder = async function* streamForwarder(this: AgentManager) {
       let turnId: string;
       let turnStream: ReturnType<AgentRunState["createTurnStream"]> | null = null;
+      this.artifactCollector.beginTurn(agent.id, agent.cwd);
       try {
         const result = await agent.session.startTurn(prompt, options);
         turnId = result.turnId;
       } catch (error) {
+        this.artifactCollector.cancelTurn(agent.id);
         agent.pendingReplacement = false;
         const errorMsg = error instanceof Error ? error.message : "Failed to start turn";
         await this.handleStreamEvent(agent, {
@@ -2919,6 +2935,7 @@ export class AgentManager {
       publishWhenReady?: boolean;
       workspaceId?: string;
       owner?: AgentOwner;
+      artifacts?: AgentArtifact[];
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3072,6 +3089,7 @@ export class AgentManager {
           persistence?: AgentPersistenceHandle;
           workspaceId?: string;
           owner?: AgentOwner;
+          artifacts?: AgentArtifact[];
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -3112,6 +3130,7 @@ export class AgentManager {
       attention: resolveInitialAttention(options?.attention),
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
+      artifacts: resolveInitialArtifacts(options?.artifacts),
     } as ActiveManagedAgent;
   }
 
@@ -3165,6 +3184,7 @@ export class AgentManager {
   }
 
   private discardRetainedAgentState(agentId: string): void {
+    this.artifactCollector.cancelTurn(agentId);
     this.timelineStore.delete(agentId);
     for (const event of this.providerSubagents.deleteParent(agentId)) {
       this.dispatch({ type: "provider_subagent", event });
@@ -3283,6 +3303,10 @@ export class AgentManager {
     );
 
     const shouldNotifyWaiters = await this.handleStreamEvent(agent, event);
+
+    if (isTurnTerminalEvent(event)) {
+      await this.collectArtifactsForTurn(agent);
+    }
 
     if (!shouldNotifyWaiters) {
       return;
@@ -3962,6 +3986,7 @@ export class AgentManager {
     flags: StreamEventFlags;
   }): void {
     const { agent, eventTurnId, isForegroundEvent, flags } = params;
+    this.artifactCollector.beginTurn(agent.id, agent.cwd);
     this.logger.trace(
       {
         agentId: agent.id,
@@ -4038,6 +4063,28 @@ export class AgentManager {
     }
   }
 
+  private async collectArtifactsForTurn(agent: ActiveManagedAgent): Promise<void> {
+    try {
+      const collection = await this.artifactCollector.finishTurn(agent.id, agent.artifacts);
+      if (!collection) {
+        return;
+      }
+      agent.artifacts = collection.artifacts;
+      this.touchUpdatedAt(agent);
+      this.emitState(agent);
+      this.logger.info(
+        {
+          agentId: agent.id,
+          addedOrUpdated: collection.addedOrUpdated,
+          artifactCount: collection.artifacts.length,
+        },
+        "Collected agent artifacts",
+      );
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: agent.id }, "Failed to collect agent artifacts");
+    }
+  }
+
   private recordAndDispatchTimelineItem(
     agentId: string,
     item: AgentTimelineItem,
@@ -4045,6 +4092,9 @@ export class AgentManager {
     turnId?: string,
     options?: { providerMessageId?: string },
   ): AgentStreamEvent {
+    if (item.type === "tool_call") {
+      this.artifactCollector.observeToolCall(agentId, item);
+    }
     const row = this.recordTimeline(agentId, item, options);
     const event: AgentStreamEvent = {
       type: "timeline",

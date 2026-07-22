@@ -236,6 +236,16 @@ export const fr: TranslationResources = {
       callout: "Cet agent est archivé",
       unarchive: "Désarchiver",
     },
+    artifacts: {
+      chatTab: "Discussion",
+      tab: "Artefacts ({{count}})",
+      emptyTitle: "Aucun artefact",
+      emptyDescription: "Les fichiers créés par cet agent apparaîtront ici.",
+      updateHostTitle: "Mettez à jour l’hôte pour utiliser les artefacts",
+      updateHostDescription: "Cet hôte ne prend pas encore en charge les artefacts par discussion.",
+      open: "Ouvrir {{name}}",
+      openLabel: "Ouvrir",
+    },
   },
   sessions: {
     title: "Historique",

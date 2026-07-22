@@ -230,6 +230,43 @@ describe("ReplicaCache", () => {
     });
   });
 
+  it("restores agents that carry artifacts", async () => {
+    const storage = new MemoryStorage();
+    const writer = new ReplicaCache(storage);
+    writer.setHosts([SERVER_ID]);
+    seedSession();
+    const artifacts = [
+      {
+        path: "docs/report.html",
+        name: "report.html",
+        kind: "html" as const,
+        mimeType: "text/html",
+        size: 2048,
+        createdAt: "2026-07-18T08:03:00.000Z",
+        updatedAt: "2026-07-18T08:04:00.000Z",
+      },
+    ];
+    useSessionStore
+      .getState()
+      .setAgents(SERVER_ID, new Map([["agent-1", { ...agent("agent-1"), artifacts }]]));
+    await writer.flush();
+
+    useSessionStore.getState().clearSession(SERVER_ID);
+
+    const reader = new ReplicaCache(storage);
+    reader.setHosts([SERVER_ID]);
+    await reader.restore();
+
+    const session = useSessionStore.getState().sessions[SERVER_ID];
+    expect(session).toBeDefined();
+    if (!session) throw new Error("Expected restored session");
+    // serializeAgent writes `artifacts` into a strict stored object. If the
+    // schema does not accept the key, parsing throws and the agent disappears
+    // from the restored cache entirely.
+    expect(Array.from(session.agents.keys())).toEqual(["agent-1"]);
+    expect(session.agents.get("agent-1")?.artifacts).toEqual(artifacts);
+  });
+
   it("persists only the focused agent view with a short timeline tail", async () => {
     const storage = new MemoryStorage();
     const cache = new ReplicaCache(storage);

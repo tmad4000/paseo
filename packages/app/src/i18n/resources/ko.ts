@@ -233,6 +233,16 @@ export const ko: TranslationResources = {
       callout: "이 에이전트는 보관되었습니다",
       unarchive: "보관 해제",
     },
+    artifacts: {
+      chatTab: "채팅",
+      tab: "산출물 ({{count}})",
+      emptyTitle: "아직 산출물이 없습니다",
+      emptyDescription: "이 에이전트가 만든 파일이 여기에 표시됩니다.",
+      updateHostTitle: "산출물을 사용하려면 호스트를 업데이트하세요",
+      updateHostDescription: "이 호스트는 아직 채팅별 산출물 피드를 지원하지 않습니다.",
+      open: "{{name}} 열기",
+      openLabel: "열기",
+    },
   },
   sessions: {
     title: "기록",

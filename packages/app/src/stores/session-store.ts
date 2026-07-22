@@ -32,6 +32,7 @@ import type {
   AgentCapabilityFlags,
   AgentUsage,
   AgentPersistenceHandle,
+  AgentArtifact,
 } from "@getpaseo/protocol/agent-types";
 import type {
   ServerInfoStatusPayload,
@@ -102,6 +103,7 @@ export interface Agent {
   parentAgentId: string | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
+  artifacts?: AgentArtifact[];
 }
 
 export interface WorkspaceDescriptor {
