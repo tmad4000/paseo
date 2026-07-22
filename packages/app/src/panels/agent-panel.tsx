@@ -1,6 +1,6 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { TFunction } from "i18next";
-import { SquarePen } from "lucide-react-native";
+import { FileCode2, MessageSquare, SquarePen } from "lucide-react-native";
 import React, {
   memo,
   useCallback,
@@ -20,9 +20,11 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
+import { ArtifactFeed } from "@/artifacts/feed";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { SidebarCallout } from "@/components/sidebar-callout";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Composer } from "@/composer";
 import { AgentModeControl } from "@/composer/agent-controls/mode-control";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
@@ -63,6 +65,7 @@ import {
   useHostRuntimeLastError,
   useHosts,
 } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
 import {
   deriveRouteBottomAnchorIntent,
   deriveRouteBottomAnchorRequest,
@@ -106,6 +109,7 @@ interface ChatAgentStateShape {
   runtimeInfo?: Agent["runtimeInfo"];
   features?: Agent["features"];
   lastError?: Agent["lastError"] | null;
+  artifacts?: Agent["artifacts"];
 }
 
 interface ChatAgentSelectedState extends ChatAgentStateShape {
@@ -156,6 +160,7 @@ function selectChatAgentState(
     runtimeInfo: agent.runtimeInfo,
     features: agent.features,
     lastError: agent.lastError ?? null,
+    artifacts: agent.artifacts,
     archivedAt: agent.archivedAt ?? null,
     requiresAttention: agent.requiresAttention ?? false,
     attentionReason: agent.attentionReason ?? null,
@@ -1152,6 +1157,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
+  const [selectedView, setSelectedView] = useState<"chat" | "artifacts">("chat");
+  const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1227,15 +1234,60 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const streamContent = (
     <ReanimatedAnimated.View style={animatedContentStyle}>{streamSection}</ReanimatedAnimated.View>
   );
-  const contentContainer = <View style={styles.contentContainer}>{streamContent}</View>;
+  const artifacts = agentState.artifacts ?? [];
+  const viewOptions = useMemo(
+    () => [
+      {
+        value: "chat" as const,
+        label: t("agentPanel.artifacts.chatTab"),
+        icon: ({ color, size }: { color: string; size: number }) => (
+          <MessageSquare color={color} size={size} />
+        ),
+        testID: "agent-view-chat",
+      },
+      {
+        value: "artifacts" as const,
+        label: t("agentPanel.artifacts.tab", { count: artifacts.length }),
+        icon: ({ color, size }: { color: string; size: number }) => (
+          <FileCode2 color={color} size={size} />
+        ),
+        testID: "agent-view-artifacts",
+      },
+    ],
+    [artifacts.length, t],
+  );
+  const contentContainer = (
+    <View style={styles.contentContainer}>
+      {selectedView === "chat" ? (
+        streamContent
+      ) : (
+        <ArtifactFeed
+          serverId={serverId}
+          cwd={cwd}
+          artifacts={artifacts}
+          isSupported={artifactFeedSupported}
+          onOpenWorkspaceFile={onOpenWorkspaceFile}
+        />
+      )}
+    </View>
+  );
 
   return (
     <RewindComposerRestoreProvider text={agentInputDraft.text} setText={agentInputDraft.setText}>
       <View style={styles.root}>
         <FileDropZone style={styles.container} disabled={isArchivingCurrentAgent}>
+          <View style={styles.viewSwitcher}>
+            <SegmentedControl
+              options={viewOptions}
+              value={selectedView}
+              onValueChange={setSelectedView}
+              size="xs"
+              testID="agent-view-switcher"
+            />
+          </View>
           {contentContainer}
 
-          {showHistorySyncError ? (
+          {selectedView === "chat" && showHistorySyncError ? (
             <SidebarCallout
               title={t("agentPanel.states.timelineSyncFailed")}
               variant="error"
@@ -1243,9 +1295,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             />
           ) : null}
 
-          {composerSection}
+          {selectedView === "chat" ? composerSection : null}
 
-          {showHistorySyncOverlay ? (
+          {selectedView === "chat" && showHistorySyncOverlay ? (
             <View style={styles.historySyncOverlay} testID="agent-history-overlay">
               <ThemedActivityIndicator size="large" uniProps={foregroundMutedColorMapping} />
             </View>
@@ -1674,6 +1726,15 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     overflow: "hidden",
     ...(isWeb ? { userSelect: "none" as const } : {}),
+  },
+  viewSwitcher: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   historySyncOverlay: {
     position: "absolute",
