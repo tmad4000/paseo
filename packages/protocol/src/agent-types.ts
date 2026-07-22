@@ -2,6 +2,18 @@ import type { AgentAttachment } from "./messages.js";
 
 export type AgentProvider = string;
 
+export type AgentArtifactKind = "html" | "markdown" | "image" | "svg" | "pdf" | "diff";
+
+export interface AgentArtifact {
+  path: string;
+  name: string;
+  kind: AgentArtifactKind;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentMetadata {
   [key: string]: unknown;
 }
