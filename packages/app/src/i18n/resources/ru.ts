@@ -506,6 +506,7 @@ export const ru: TranslationResources = {
         openFor: "Открыть меню для{{label}}",
         copyResumeCommand: "Копировать команду возобновления",
         copyAgentId: "Скопировать идентификатор агента",
+        copyTerminalId: "Скопировать идентификатор терминала",
         copyFilePath: "Copy file path",
         rename: "Переименовать",
         closeAbove: "Закрыть вкладки выше",
@@ -543,6 +544,7 @@ export const ru: TranslationResources = {
       toasts: {
         copyFailed: "Не удалось скопировать",
         agentIdCopiedLabel: "AgentID",
+        terminalIdCopiedLabel: "Идентификатор терминала",
         resumeCommandCopiedLabel: "команда возобновления",
         filePathCopiedLabel: "File path",
         resumeIdUnavailable: "Резюме ID недоступно",
@@ -827,7 +829,8 @@ export const ru: TranslationResources = {
         deletedFile: "Удалено",
         commits: {
           title: "Коммиты",
-          countLabel: "{{count}} последних коммитов",
+          countLabel: "{{count}} коммитов рабочего пространства",
+          noneAhead: "Коммитов впереди {{baseRef}} пока нет",
           fileDiffEmpty: "Нет изменений для отображения",
           fileDiffError: "Не удалось загрузить различия файла",
           loading: "Загрузка коммитов…",

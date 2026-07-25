@@ -2,7 +2,15 @@
 
 Paseo Hub is an explicit opt-in connection from one Paseo daemon to one Hub. Running a daemon does
 not register it with a Hub. The relationship begins only when a user runs
-`paseo hub connect <url> --token <token>` from the daemon machine.
+`paseo hub connect <url>` from the daemon machine.
+
+`--token <token>` is optional. With a token the CLI enrolls directly. Without one it runs a device
+authorization flow against the Hub: it starts an authorization, prints the verification URI and user
+code, opens the completion URL in a browser when stderr is a TTY, and polls until the Hub approves,
+denies, or expires the request. The approved enrollment token is then used for the same
+`connectHub` call, so both paths converge on one enrollment. The suggested device display name is the
+daemon machine's hostname, trimmed to 100 characters. Token-less connect refuses to run when the
+daemon already has a relationship in any state other than `not_connected` or `revoked`.
 
 ## Connection and authority
 
@@ -45,8 +53,22 @@ replays the original prompt. A duplicate create returns the existing agent witho
 turn.
 
 Hub creates use the same agent creation path as trusted clients. They may select any existing
-worktree target shape and may request `autoArchive`. Worktree creation and terminal auto-archive use
-the shared workspace-aware lifecycle policy; Hub does not have a second launch or cleanup path.
+worktree target shape. Execution completion policy remains outside the daemon: a completed agent
+turn does not imply that the Hub execution is terminal.
+
+The Hub ends an execution by sending `hub.execution.control.request` with the durable execution ID
+and either `interrupt` or `archive`. The daemon resolves the agent from the authenticated daemon
+relationship plus that execution ID; callers cannot supply an agent ID or workspace path. Both
+actions are idempotent and continue to resolve from stored ownership after daemon restart.
+If no execution exists for that authenticated daemon and execution ID, interrupt and archive return
+success because the requested stopped or archived state already holds. An execution owned by another
+daemon is indistinguishable from a missing execution and is never exposed or affected.
+
+Interrupt uses the ordinary agent cancellation lifecycle. Archive first archives the owned agent.
+When that agent belongs to an active Paseo-owned worktree workspace, the daemon also archives the
+workspace through the shared workspace archive service, so the backing directory is removed only
+after its final active workspace reference disappears. Local and shared checkouts archive only the
+execution-owned agent.
 
 ## Disconnect and revocation
 
