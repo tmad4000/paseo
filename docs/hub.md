@@ -2,7 +2,15 @@
 
 Paseo Hub is an explicit opt-in connection from one Paseo daemon to one Hub. Running a daemon does
 not register it with a Hub. The relationship begins only when a user runs
-`paseo hub connect <url> --token <token>` from the daemon machine.
+`paseo hub connect <url>` from the daemon machine.
+
+`--token <token>` is optional. With a token the CLI enrolls directly. Without one it runs a device
+authorization flow against the Hub: it starts an authorization, prints the verification URI and user
+code, opens the completion URL in a browser when stderr is a TTY, and polls until the Hub approves,
+denies, or expires the request. The approved enrollment token is then used for the same
+`connectHub` call, so both paths converge on one enrollment. The suggested device display name is the
+daemon machine's hostname, trimmed to 100 characters. Token-less connect refuses to run when the
+daemon already has a relationship in any state other than `not_connected` or `revoked`.
 
 ## Connection and authority
 
