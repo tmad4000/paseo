@@ -445,7 +445,14 @@ interface WorkspaceDesktopTabsRowProps {
 
 function getFallbackTabLabel(
   tab: WorkspaceTabDescriptor,
-  labels: { newAgent: string; setup: string; terminal: string; agent: string; changes: string },
+  labels: {
+    newAgent: string;
+    setup: string;
+    terminal: string;
+    agent: string;
+    changes: string;
+    notebook: string;
+  },
 ): string {
   if (tab.target.kind === "draft") {
     return labels.newAgent;
@@ -461,6 +468,9 @@ function getFallbackTabLabel(
   }
   if (tab.target.kind === "working_diff") {
     return labels.changes;
+  }
+  if (tab.target.kind === "notebook") {
+    return labels.notebook;
   }
   return labels.agent;
 }
@@ -842,6 +852,7 @@ export function WorkspaceDesktopTabsRow({
       terminal: t("workspace.tabs.fallback.terminal"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
+      notebook: t("workNotebook.title"),
     }),
     [t],
   );

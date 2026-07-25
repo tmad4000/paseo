@@ -44,6 +44,27 @@ describe("provider subagent tab identity", () => {
   });
 });
 
+describe("work notebook tab identity", () => {
+  it("normalizes and keys one notebook tab per agent", () => {
+    const target = normalizeWorkspaceTabTarget({
+      kind: "notebook",
+      agentId: " agent-1 ",
+    });
+
+    expect(target).toEqual({ kind: "notebook", agentId: "agent-1" });
+    expect(
+      target &&
+        workspaceTabTargetsEqual(target, {
+          kind: "notebook",
+          agentId: "agent-1",
+        }),
+    ).toBe(true);
+    expect(buildDeterministicWorkspaceTabId({ kind: "notebook", agentId: "agent-1" })).toBe(
+      "notebook_agent-1",
+    );
+  });
+});
+
 describe("working diff tab identity", () => {
   const target = {
     kind: "working_diff" as const,

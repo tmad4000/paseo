@@ -25,6 +25,7 @@ export interface BuildWorkspacePaneContentModelInput {
   normalizedWorkspaceId: string;
   fileNavigationRevision?: number;
   onOpenTab: (target: WorkspaceTabDescriptor["target"]) => void;
+  onOpenTabBeside: (target: WorkspaceTabDescriptor["target"]) => void;
   onCloseCurrentTab: () => void;
   onRetargetCurrentTab: (target: WorkspaceTabDescriptor["target"]) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
@@ -37,6 +38,7 @@ export function buildWorkspacePaneContentModel({
   normalizedWorkspaceId,
   fileNavigationRevision,
   onOpenTab,
+  onOpenTabBeside,
   onCloseCurrentTab,
   onRetargetCurrentTab,
   onOpenWorkspaceFile,
@@ -55,6 +57,7 @@ export function buildWorkspacePaneContentModel({
       target: tab.target,
       fileNavigationRevision,
       openTab: onOpenTab,
+      openTabBeside: onOpenTabBeside,
       closeCurrentTab: onCloseCurrentTab,
       retargetCurrentTab: onRetargetCurrentTab,
       openFileInWorkspace: onOpenWorkspaceFile,
@@ -78,6 +81,7 @@ export function WorkspacePaneContent({
 }: WorkspacePaneContentProps) {
   const { Component, key, paneContextValue } = content;
   const openTab = useStableEvent(paneContextValue.openTab);
+  const openTabBeside = useStableEvent(paneContextValue.openTabBeside);
   const closeCurrentTab = useStableEvent(paneContextValue.closeCurrentTab);
   const retargetCurrentTab = useStableEvent(paneContextValue.retargetCurrentTab);
   const openFileInWorkspace = useStableEvent(paneContextValue.openFileInWorkspace);
@@ -90,6 +94,7 @@ export function WorkspacePaneContent({
       target: paneContextValue.target,
       fileNavigationRevision: paneContextValue.fileNavigationRevision,
       openTab,
+      openTabBeside,
       closeCurrentTab,
       retargetCurrentTab,
       openFileInWorkspace,
@@ -100,6 +105,7 @@ export function WorkspacePaneContent({
       openFileInWorkspace,
       openImportSheet,
       openTab,
+      openTabBeside,
       paneContextValue.serverId,
       paneContextValue.fileNavigationRevision,
       paneContextValue.tabId,

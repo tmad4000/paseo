@@ -1,7 +1,7 @@
 import equal from "fast-deep-equal";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
-import { resolve, sep } from "path";
+import { join, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
 import {
@@ -239,6 +239,9 @@ import {
 import { runGitCommand } from "../utils/run-git-command.js";
 import { CreateAgentLifecycleDispatch } from "./agent/create-agent-lifecycle-dispatch.js";
 import { resolveWorktreeSourceCwd } from "./workspace-source.js";
+import { WorkNotebookSession } from "./notebook/session.js";
+import { WorkNotebookStore } from "./notebook/store.js";
+import { deriveNotebookSources } from "./notebook/derived-sources.js";
 
 // TODO: Remove once all app store clients are on >=0.1.45 and understand arbitrary provider strings.
 // Clients before 0.1.45 validate providers with z.enum(["claude", "codex", "opencode"]) and reject
@@ -417,6 +420,7 @@ export interface SessionOptions {
   agentStorage: AgentStorage;
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
+  workNotebookStore?: WorkNotebookStore;
   filesystem?: SessionFileSystem;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
@@ -633,6 +637,8 @@ export class Session {
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
   private readonly daemonSession: DaemonSession;
+  private readonly workNotebookSession: WorkNotebookSession;
+  private readonly workNotebookStore: WorkNotebookStore;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
@@ -658,6 +664,7 @@ export class Session {
       agentStorage,
       projectRegistry,
       workspaceRegistry,
+      workNotebookStore,
       filesystem,
       chatService,
       scheduleService,
@@ -721,6 +728,8 @@ export class Session {
     });
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
+    this.workNotebookStore =
+      workNotebookStore ?? new WorkNotebookStore(join(this.paseoHome, "notebooks"));
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
     this.filesystem = filesystem ?? nodeSessionFileSystem;
@@ -866,6 +875,42 @@ export class Session {
       logger: this.sessionLogger,
       hubRelationships: options.hubRelationships,
     });
+    this.workNotebookSession = new WorkNotebookSession(
+      {
+        emit: (msg) => this.emit(msg),
+        getAgentState: async (agentId) => {
+          const stored = await this.agentStorage.get(agentId);
+          if (stored) {
+            return stored.archivedAt ? "archived" : "active";
+          }
+          return this.agentManager.getAgent(agentId) ? "active" : "missing";
+        },
+        getDerivedSources: async (agentId) => {
+          const liveAgent = this.agentManager.getAgent(agentId);
+          if (liveAgent?.lifecycle === "initializing" || liveAgent?.lifecycle === "running") {
+            return null;
+          }
+          const storedAgent = await this.agentStorage.get(agentId);
+          if (storedAgent?.archivedAt) {
+            return null;
+          }
+          try {
+            return deriveNotebookSources({
+              agentId,
+              timelineRows: await this.agentManager.getCommittedTimelineRowsIfAvailable(agentId),
+              artifacts: liveAgent?.artifacts ?? storedAgent?.artifacts ?? [],
+            });
+          } catch (error) {
+            this.sessionLogger.warn(
+              { err: error, agentId },
+              "Failed to derive work notebook sources",
+            );
+            return null;
+          }
+        },
+      },
+      this.workNotebookStore,
+    );
     this.hubExecutionController = options.hubExecutionAgents
       ? new HubExecutionController({
           agents: options.hubExecutionAgents,
@@ -1779,6 +1824,7 @@ export class Session {
       this.dispatchVoiceAndControlMessage(msg) ??
       this.dispatchAgentRewindMessage(msg) ??
       this.dispatchAgentRelationshipMessage(msg) ??
+      this.dispatchWorkNotebookMessage(msg) ??
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchAgentLifecycleMessage(msg) ??
@@ -1857,6 +1903,17 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchWorkNotebookMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.notebook.get.request":
+        return this.workNotebookSession.handleGetRequest(msg);
+      case "agent.notebook.append.request":
+        return this.workNotebookSession.handleAppendRequest(msg);
       default:
         return undefined;
     }
@@ -3046,6 +3103,14 @@ export class Session {
         },
       );
       createdAgentId = snapshot.id;
+      try {
+        await this.workNotebookStore.ensureSessionNotebook(snapshot.id);
+      } catch (error) {
+        this.sessionLogger.warn(
+          { err: error, agentId: snapshot.id },
+          "Failed to initialize agent work notebook; it will be retried on first open",
+        );
+      }
       await this.agentUpdates.forwardLiveAgent(snapshot);
       if (resolvedIntent.createdDirectoryWorkspace && trimmedPrompt) {
         this.workspaceAutoName.scheduleForDirectory(

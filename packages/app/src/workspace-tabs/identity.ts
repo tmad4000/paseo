@@ -19,6 +19,10 @@ export function normalizeWorkspaceTabTarget(
     const agentId = trimNonEmpty(value.agentId);
     return agentId ? { kind: "agent", agentId } : null;
   }
+  if (value.kind === "notebook") {
+    const agentId = trimNonEmpty(value.agentId);
+    return agentId ? { kind: "notebook", agentId } : null;
+  }
   if (value.kind === "provider_subagent") {
     const parentAgentId = trimNonEmpty(value.parentAgentId);
     const subagentId = trimNonEmpty(value.subagentId);
@@ -40,6 +44,10 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
     case "agent": {
       const agentId = trimNonEmpty(value.agentId);
       return agentId ? { kind: "agent", agentId } : null;
+    }
+    case "notebook": {
+      const agentId = trimNonEmpty(value.agentId);
+      return agentId ? { kind: "notebook", agentId } : null;
     }
     case "terminal": {
       const terminalId = trimNonEmpty(value.terminalId);
@@ -97,6 +105,9 @@ export function workspaceTabTargetsEqual(
     return left.draftId === right.draftId && workspaceDraftTabSetupsEqual(left.setup, right.setup);
   }
   if (left.kind === "agent" && right.kind === "agent") {
+    return left.agentId === right.agentId;
+  }
+  if (left.kind === "notebook" && right.kind === "notebook") {
     return left.agentId === right.agentId;
   }
   if (left.kind === "provider_subagent" && right.kind === "provider_subagent") {
@@ -169,6 +180,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   }
   if (target.kind === "agent") {
     return `agent_${target.agentId}`;
+  }
+  if (target.kind === "notebook") {
+    return `notebook_${target.agentId}`;
   }
   if (target.kind === "provider_subagent") {
     return `provider_subagent_${target.parentAgentId.length}_${target.parentAgentId}_${target.subagentId.length}_${target.subagentId}`;

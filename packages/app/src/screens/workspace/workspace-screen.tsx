@@ -154,7 +154,7 @@ import {
 } from "@/workspace-tabs/agent-visibility";
 import {
   deriveWorkspacePaneState,
-  resolveSideFileOpenPlacement,
+  resolveSideTabOpenPlacement,
 } from "@/screens/workspace/workspace-pane-state";
 import {
   buildWorkspacePaneContentModel,
@@ -349,6 +349,7 @@ function getFallbackTabOptionLabel(
     browser: string;
     agent: string;
     changes: string;
+    notebook: string;
   },
 ): string {
   if (tab.target.kind === "draft") {
@@ -372,6 +373,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
+  if (tab.target.kind === "notebook") {
+    return labels.notebook;
+  }
   return labels.agent;
 }
 
@@ -384,6 +388,7 @@ function getFallbackTabOptionDescription(
     terminal: string;
     browser: string;
     changes: string;
+    sessionNotebook: string;
   },
 ): string {
   if (tab.target.kind === "draft") {
@@ -409,6 +414,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "working_diff") {
     return labels.changes;
+  }
+  if (tab.target.kind === "notebook") {
+    return labels.sessionNotebook;
   }
   return tab.target.path;
 }
@@ -688,6 +696,8 @@ function MobileWorkspaceTabOption({
       browser: t("workspace.tabs.fallback.browser"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
+      notebook: t("workNotebook.title"),
+      sessionNotebook: t("workNotebook.descriptor.session"),
     }),
     [t],
   );
@@ -2401,7 +2411,7 @@ function WorkspaceScreenContent({
       }
 
       const target: WorkspaceTabTarget = createWorkspaceFileTabTarget(location);
-      const placement = resolveSideFileOpenPlacement({
+      const placement = resolveSideTabOpenPlacement({
         layout: workspaceLayout,
         sourcePaneId: input.sourcePaneId,
         tabs: uiTabs,
@@ -2535,6 +2545,8 @@ function WorkspaceScreenContent({
       browser: t("workspace.tabs.fallback.browser"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
+      notebook: t("workNotebook.title"),
+      sessionNotebook: t("workNotebook.descriptor.session"),
     }),
     [t],
   );
@@ -3279,6 +3291,31 @@ function WorkspaceScreenContent({
             navigateToTabId(tabId);
           }
         },
+        onOpenTabBeside: (target) => {
+          if (!persistenceKey) {
+            return;
+          }
+          if (!isMobile && input.paneId) {
+            const placement = resolveSideTabOpenPlacement({
+              layout: workspaceLayout,
+              sourcePaneId: input.paneId,
+              tabs: uiTabs,
+              target,
+            });
+            if (placement.kind === "focus-side-pane") {
+              focusWorkspacePane(persistenceKey, placement.paneId);
+            } else if (placement.kind === "split-side-pane") {
+              splitWorkspacePaneEmpty(persistenceKey, {
+                targetPaneId: placement.paneId,
+                position: "right",
+              });
+            }
+          }
+          const tabId = openWorkspaceChildTabFocused(persistenceKey, target, input.tab.tabId);
+          if (tabId) {
+            navigateToTabId(tabId);
+          }
+        },
         onCloseCurrentTab: () => {
           void handleCloseTabById(input.tab.tabId);
         },
@@ -3303,6 +3340,7 @@ function WorkspaceScreenContent({
       focusWorkspacePane,
       fileNavigationRevisionByTabId,
       handleOpenWorkspaceFileFromPane,
+      isMobile,
       navigateToTabId,
       normalizedServerId,
       normalizedWorkspaceId,
@@ -3310,6 +3348,9 @@ function WorkspaceScreenContent({
       openWorkspaceChildTabFocused,
       persistenceKey,
       retargetWorkspaceTab,
+      splitWorkspacePaneEmpty,
+      uiTabs,
+      workspaceLayout,
     ],
   );
   const focusedPaneId = useMemo(

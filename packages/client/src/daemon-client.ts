@@ -142,6 +142,11 @@ import type {
   BrowserAutomationExecuteRequest,
   BrowserAutomationExecuteResponse,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+import type {
+  NotebookAppendEntry,
+  NotebookEvent,
+  WorkNotebook,
+} from "@getpaseo/protocol/notebook/types";
 
 export interface Logger {
   debug(obj: object, msg?: string): void;
@@ -554,6 +559,31 @@ export interface FetchAgentOptions {
   requestId?: string;
   timeout?: number;
 }
+export interface GetAgentNotebookOptions {
+  agentId: string;
+  afterSequence?: number;
+  limit?: number;
+  requestId?: string;
+  timeout?: number;
+}
+export interface AppendAgentNotebookEntryOptions {
+  agentId: string;
+  expectedRevision: number;
+  entry: NotebookAppendEntry;
+  requestId?: string;
+  timeout?: number;
+}
+export interface AgentNotebookPage {
+  notebook: WorkNotebook;
+  events: NotebookEvent[];
+  hasMore: boolean;
+  writable: boolean;
+  readOnlyReason: "agent_archived" | null;
+}
+export interface AgentNotebookAppendResult {
+  notebook: WorkNotebook;
+  event: NotebookEvent;
+}
 type LegacyFetchAgentOptions = Omit<FetchAgentOptions, "agentId">;
 export interface FetchAgentTimelineOptions {
   direction?: FetchAgentTimelineDirection;
@@ -929,6 +959,23 @@ class DaemonProtocolError extends Error {
     this.name = "DaemonProtocolError";
     this.requestId = identity.requestId;
     this.responseType = identity.responseType;
+  }
+}
+
+export class WorkNotebookConflictError extends Error {
+  constructor(readonly currentRevision: number) {
+    super("The work notebook changed on another client");
+    this.name = "WorkNotebookConflictError";
+  }
+}
+
+export class WorkNotebookRpcError extends Error {
+  constructor(
+    readonly code: "agent_not_found" | "agent_archived" | "invalid_target",
+    message: string,
+  ) {
+    super(message);
+    this.name = "WorkNotebookRpcError";
   }
 }
 
@@ -2287,6 +2334,56 @@ export class DaemonClient {
       return null;
     }
     return { agent: payload.agent, project: payload.project ?? null };
+  }
+
+  async getAgentNotebook(options: GetAgentNotebookOptions): Promise<AgentNotebookPage> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.notebook.get.response">({
+        requestId: options.requestId,
+        message: {
+          type: "agent.notebook.get.request",
+          agentId: options.agentId,
+          ...(options.afterSequence !== undefined ? { afterSequence: options.afterSequence } : {}),
+          ...(options.limit !== undefined ? { limit: options.limit } : {}),
+        },
+        timeout: options.timeout,
+      });
+    if (payload.result.status === "error") {
+      throw new WorkNotebookRpcError(payload.result.code, payload.result.message);
+    }
+    return {
+      notebook: payload.result.notebook,
+      events: payload.result.events,
+      hasMore: payload.result.hasMore,
+      writable: payload.result.writable,
+      readOnlyReason: payload.result.readOnlyReason,
+    };
+  }
+
+  async appendAgentNotebookEntry(
+    options: AppendAgentNotebookEntryOptions,
+  ): Promise<AgentNotebookAppendResult> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.notebook.append.response">({
+        requestId: options.requestId,
+        message: {
+          type: "agent.notebook.append.request",
+          agentId: options.agentId,
+          expectedRevision: options.expectedRevision,
+          entry: options.entry,
+        },
+        timeout: options.timeout,
+      });
+    if (payload.result.status === "conflict") {
+      throw new WorkNotebookConflictError(payload.result.currentRevision);
+    }
+    if (payload.result.status === "error") {
+      throw new WorkNotebookRpcError(payload.result.code, payload.result.message);
+    }
+    return {
+      notebook: payload.result.notebook,
+      event: payload.result.event,
+    };
   }
 
   private resubscribeCheckoutDiffSubscriptions(): void {
