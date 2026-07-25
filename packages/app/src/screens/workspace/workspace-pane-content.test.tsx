@@ -61,6 +61,7 @@ function buildContent(tab: WorkspaceTabDescriptor = agentTab) {
     normalizedServerId: "server-a",
     normalizedWorkspaceId: "workspace-a",
     onOpenTab: vi.fn(),
+    onOpenTabBeside: vi.fn(),
     onCloseCurrentTab: vi.fn(),
     onRetargetCurrentTab: vi.fn(),
     onOpenWorkspaceFile: vi.fn(),

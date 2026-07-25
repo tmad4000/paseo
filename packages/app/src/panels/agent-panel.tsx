@@ -1,6 +1,6 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { TFunction } from "i18next";
-import { FileCode2, MessageSquare, SquarePen } from "lucide-react-native";
+import { FileCode2, MessageSquare, NotebookPen, SquarePen } from "lucide-react-native";
 import React, {
   memo,
   useCallback,
@@ -25,6 +25,7 @@ import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { SidebarCallout } from "@/components/sidebar-callout";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Button } from "@/components/ui/button";
 import { Composer } from "@/composer";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
 import { getProviderIcon } from "@/components/provider-icons";
@@ -1158,6 +1159,15 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const { t } = useTranslation();
   const [selectedView, setSelectedView] = useState<"chat" | "artifacts">("chat");
   const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
+  const isCompactFormFactor = useIsCompactFormFactor();
+  const { onLayout: onViewSwitcherLayout, isBelow: isNarrowViewSwitcher } = useContainerWidthBelow(
+    420,
+    { initialIsBelow: isCompactFormFactor },
+  );
+  const { openTabBeside } = usePaneContext();
+  const handleOpenNotebook = useCallback(() => {
+    openTabBeside({ kind: "notebook", agentId });
+  }, [agentId, openTabBeside]);
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1275,7 +1285,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     <RewindComposerRestoreProvider text={agentInputDraft.text} setText={agentInputDraft.setText}>
       <View style={styles.root}>
         <FileDropZone style={styles.container} disabled={isArchivingCurrentAgent}>
-          <View style={styles.viewSwitcher}>
+          <View style={styles.viewSwitcher} onLayout={onViewSwitcherLayout}>
             <SegmentedControl
               options={viewOptions}
               value={selectedView}
@@ -1283,6 +1293,17 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
               size="xs"
               testID="agent-view-switcher"
             />
+            <Button
+              variant="ghost"
+              size="xs"
+              leftIcon={NotebookPen}
+              style={styles.openNotebookButton}
+              onPress={handleOpenNotebook}
+              accessibilityLabel={t("workNotebook.openBesideAccessibility")}
+              testID="agent-open-notebook"
+            >
+              {isNarrowViewSwitcher ? null : t("workNotebook.title")}
+            </Button>
           </View>
           {contentContainer}
 
@@ -1720,6 +1741,10 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[3],
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  openNotebookButton: {
+    position: "absolute",
+    right: theme.spacing[3],
   },
   historySyncOverlay: {
     position: "absolute",

@@ -55,6 +55,45 @@ Route ownership, startup restore, and native blank-screen gotchas live in
 [expo-router.md](expo-router.md). Read it before changing `packages/app/src/app`,
 startup routing, remembered workspace restore, or active workspace selection.
 
+### Work Notebook smoke test
+
+The Work Notebook is daemon-owned and advertised through the optional `workNotebook` host
+capability. Build the client/server together before testing a changed protocol:
+
+```bash
+npm run build:server
+npm run dev:server
+npm run dev:app
+```
+
+In a browser, open an existing agent chat and select **Notebook** in its header.
+
+- At desktop width, the notebook opens or focuses immediately to the chat's right, creating a
+  right split only when needed.
+- At compact width, it opens as a normal full-screen center tab; it does not add a mobile drawer
+  destination.
+- Add a note and a question. Confirm both remain in the chronological Stream.
+- Confirm the question also appears under Open questions, then resolve and reopen it.
+- Pin and unpin the note. Confirm the original stream row remains in place throughout.
+- Reload and confirm the same sequence and projections return from
+  `$PASEO_HOME/notebooks/{sha256-agent-id}.json`.
+- Complete a turn containing an HTTP(S) URL and producing an artifact, then refresh the notebook.
+  Confirm one link row and one artifact row appear, the link opens externally, the artifact reuses
+  the workspace side-file behavior, and a second refresh adds no duplicates.
+- Stop or disconnect the daemon and confirm cached content becomes read-only with reconnect copy;
+  write failures must preserve the composer draft.
+- Archive the agent and confirm its saved notebook remains readable while the composer, pin, and
+  question-state controls are disabled. A direct append RPC must return `agent_archived`; this is a
+  daemon boundary, not only a UI convention.
+
+A new client connected to a daemon without `workNotebook` keeps the existing Chat/Artifacts
+surface and does not offer notebook editing.
+
+This feature branch implements the writable note/question/pin vertical slice plus deterministic
+URL and artifact observations. Standalone turn-reference rows, derived question candidates,
+dedicated Links/Artifacts lenses, and the beads lens are still deferred; do not treat their absence
+from a smoke run as a daemon ingestion failure.
+
 ### iOS simulator preview service
 
 Paseo worktrees expose the native iOS dev app through the `ios-simulator` service in `paseo.json`. The service URL serves the simulator preview at `/.sim`, so the preview link is `${PASEO_URL}/.sim`.

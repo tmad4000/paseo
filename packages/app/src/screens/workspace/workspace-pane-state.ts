@@ -24,7 +24,7 @@ export interface WorkspacePaneState {
   activeTab: WorkspaceDerivedTab | null;
 }
 
-export type WorkspaceSideFileOpenPlacement =
+export type WorkspaceSideTabOpenPlacement =
   | { kind: "open-in-source" }
   | { kind: "focus-side-pane"; paneId: string }
   | { kind: "split-side-pane"; paneId: string };
@@ -203,12 +203,12 @@ export function getWorkspacePaneDescriptors(input: {
   return deriveWorkspacePaneState(input).tabs.map((tab) => tab.descriptor);
 }
 
-export function resolveSideFileOpenPlacement(input: {
+export function resolveSideTabOpenPlacement(input: {
   layout?: WorkspaceLayout | null;
   sourcePaneId?: string | null;
   tabs: WorkspaceTab[];
   target: WorkspaceTabTarget;
-}): WorkspaceSideFileOpenPlacement {
+}): WorkspaceSideTabOpenPlacement {
   const targetTabId = buildDeterministicWorkspaceTabId(input.target);
   const existingTab = input.tabs.find(
     (tab) => tab.tabId === targetTabId || workspaceTabTargetsEqual(tab.target, input.target),

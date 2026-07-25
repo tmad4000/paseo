@@ -74,6 +74,7 @@ not retain non-Git directories.
 | `server/agent/tools/`           | Transport-neutral catalog for workspaces, agents, permissions, and automation |
 | `server/agent/mcp-server.ts`    | Thin MCP adapter that registers the Paseo tool catalog with the MCP SDK       |
 | `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                               |
+| `server/notebook/`              | Session Work Notebook persistence, revision checks, and RPC routing           |
 | `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                 |
 | `server/schedule/`              | Cron-based scheduled agents                                                   |
 | `server/loop-service.ts`        | Looping agent runs that retry until an exit condition                         |
@@ -102,6 +103,14 @@ Cross-platform React Native app that connects to one or more daemons.
 - `runtime/replica-cache` keeps a non-authoritative per-host display replica in AsyncStorage: only the last focused agent, its workspace, and a short timeline tail. It restores before navigation becomes ready, leaves remote hydration flags false, and is atomically replaced by the normal snapshot-plus-delta synchronization path.
 - `SessionContext` wraps the daemon client for the active session
 - Composer UI and submit/draft behavior live in `packages/app/src/composer/`; screens and panels should integrate it from there instead of dropping composer internals into `components/`, `hooks/`, or `screens/workspace/`
+- `notebook/panel.tsx` registers the Work Notebook target. Its pane placement remains client-owned
+  while notebook events remain daemon-owned; desktop opens use the existing
+  right-neighbor/right-split algorithm and compact layouts use a center tab. The client reads every
+  page at one stable revision before deriving lenses, and the daemon exposes archived notebooks as
+  readable but rejects their writes. The current feature-branch slice covers explicit
+  notes/questions, pin/question state, deterministic links from committed message rows, and
+  versioned observations from existing artifact metadata. Standalone turn rows,
+  candidate-question sources, dedicated link/artifact lenses, and beads remain deferred.
 - Timeline reducers in `timeline/session-stream-reducers.ts` handle compaction, gap detection, sequence-based deduplication
 - Timeline sync correctness is documented in [docs/timeline-sync.md](timeline-sync.md): live streams are for immediacy, `fetch_agent_timeline_request` is authoritative, and catch-up is paged but complete.
 - Voice features: dictation (STT) and voice agent (realtime)
@@ -365,6 +374,7 @@ Providers that can accept native tool definitions should set `supportsNativePase
 ```
 $PASEO_HOME/
 ├── agents/{cwd-with-dashes}/{agent-id}.json   # Agent record + persisted timeline rows
+├── notebooks/{sha256-agent-id}.json            # Session notebook metadata + immutable events
 ├── projects/projects.json                      # Project registry
 ├── projects/workspaces.json                    # Workspace registry
 ├── chat/                                       # Chat rooms

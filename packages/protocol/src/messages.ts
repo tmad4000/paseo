@@ -59,6 +59,12 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  AgentNotebookAppendRequestSchema,
+  AgentNotebookAppendResponseSchema,
+  AgentNotebookGetRequestSchema,
+  AgentNotebookGetResponseSchema,
+} from "./notebook/rpc-schemas.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -2511,6 +2517,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
   AgentRewindRequestMessageSchema,
+  AgentNotebookGetRequestSchema,
+  AgentNotebookAppendRequestSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
   SubscribeCheckoutDiffRequestSchema,
@@ -2801,6 +2809,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceFileEditing: z.boolean().optional(),
         // COMPAT(artifactFeed): added in v0.2.0, remove after 2027-01-22 once daemon floor >= v0.2.0.
         artifactFeed: z.boolean().optional(),
+        // COMPAT(workNotebook): added in v0.2.1, remove after 2027-01-25 once daemon floor >= v0.2.1.
+        workNotebook: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -5245,6 +5255,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
   AgentRewindResponseMessageSchema,
+  AgentNotebookGetResponseSchema,
+  AgentNotebookAppendResponseSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   ProjectRemoveResponseSchema,

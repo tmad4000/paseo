@@ -3,10 +3,40 @@
 ## Status
 
 - Product direction: approved for planning
-- Implementation status: not started
+- Implementation status: writable vertical slice implemented on the feature branch; the complete
+  Phase 1 source set is not yet implemented
 - Base branch: `chore/sync-upstream-2026-07-24`
 - Feature branch: `feat/work-notebook-sidecar`
 - Primary user: people running long-lived agent conversations, especially through First Mate
+
+### Implemented vertical slice
+
+- One deterministic, daemon-owned session notebook per agent, eagerly initialized for new agents
+  and lazily initialized for existing agents.
+- Atomic JSON persistence, monotonic event sequences, optimistic revision checks, bounded
+  pagination, and fail-closed complete-stream reads.
+- Writable notes and questions; append-only resolve/reopen and pin/unpin state changes; pure Pinned
+  and Open Questions projections.
+- A registered, localized notebook panel with loading, reconnect, success, conflict, and failure
+  states across all supported locales.
+- Open Notebook on every chat, using the existing right-neighbor/right-split desktop placement and
+  center-tab compact placement without replacing Chat or Artifacts.
+- Archived notebook reads with write rejection enforced by the daemon as well as disabled client
+  controls.
+- Deterministic link capture from committed user/assistant timeline messages and artifact
+  observations from the existing `AgentArtifact` metadata. Reconciliation runs for non-running,
+  active agents, deduplicates unchanged sources with stable IDs, and never copies artifact bytes.
+- Optional host capability compatibility plus focused protocol, persistence, session, projection,
+  tab-identity, and pane-placement tests.
+
+### Explicitly deferred
+
+The implemented slice is writable, but it is not the complete Phase 1 derived notebook. Deferred
+sources and lenses include standalone completed-turn reference rows, derived question candidates,
+dedicated Links and Artifacts lenses, and the read-only beads tree. Decisions, milestones, pin
+ordering, filtering/collapse preferences, shared notebooks, agent tools, bounded model-context
+digests, and experiment instrumentation also remain later work. Real-browser desktop and compact
+interaction verification remains pending.
 
 ## 1. Introduction
 

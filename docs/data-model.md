@@ -46,6 +46,8 @@ $PASEO_HOME/
 ├── agents/
 │   └── {sanitized-cwd}/
 │       └── {agentId}.json               # One file per agent
+├── notebooks/
+│   └── {sha256-agent-id}.json            # Session notebook metadata + immutable events
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
 ├── chat/
@@ -155,6 +157,48 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `icon`        | `string?`             |
 | `value`       | `string \| null`      |
 | `options`     | `AgentSelectOption[]` |
+
+---
+
+## 1a. Session Work Notebook
+
+**Path:** `$PASEO_HOME/notebooks/{sha256-agent-id}.json`
+
+Every newly created agent session receives one daemon-owned session notebook. Existing agent
+records receive the same notebook lazily and idempotently on first read or write. The file name is
+the SHA-256 digest of the opaque agent ID; the user-visible notebook ID is a separate deterministic
+`notebook_…` value.
+
+Each file contains:
+
+| Field      | Type              | Description                                                                |
+| ---------- | ----------------- | -------------------------------------------------------------------------- |
+| `notebook` | `WorkNotebook`    | Session scope, owning `agentId`, timestamps, revision, and last sequence   |
+| `events`   | `NotebookEvent[]` | Append-only events in monotonically increasing per-notebook sequence order |
+
+`NotebookEvent` is a discriminated union with a stable ID, notebook ID, sequence, timestamp, and
+author envelope. The initial kinds are `note_added`, `question_opened`, `question_resolved`,
+`question_reopened`, `item_pinned`, `item_unpinned`, `link_captured`, and `artifact_observed`.
+State changes reference an earlier event through `targetEventId`; they never mutate or delete that
+event. Link events retain their committed timeline sequence, optional message ID, and message role.
+Artifact events retain the existing `AgentArtifact` metadata and source agent but do not copy file
+bytes.
+
+The store serializes writes per agent, requires the caller's expected revision, increments revision
+and sequence together, and atomically replaces the JSON file. Pinned items and open questions are
+pure projections of the event stream. Reads are paginated by `afterSequence` and `limit`; clients
+must reach `hasMore=false` with a stable revision and a complete sequence before projecting state
+or enabling writes. Archived agents keep readable notebooks, but the notebook RPC rejects every
+append at the daemon boundary and reports the read-only reason to clients.
+
+When an active agent is not running, notebook reads reconcile URLs from committed user/assistant
+timeline messages and versions from the existing artifact collector. Stable source-derived event
+IDs make repeated reads idempotent; an artifact with a new `updatedAt`/size becomes a new historical
+observation. Archived notebooks do not reconcile new sources because archival freezes writes.
+
+This is the implemented writable vertical slice. Standalone completed-turn rows, derived question
+candidates, dedicated Links/Artifacts lenses, and beads events/lenses described in
+`tasks/prd-work-notebook-sidecar.md` remain deferred rather than implied stored data.
 
 ---
 

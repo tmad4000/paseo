@@ -10,6 +10,7 @@ export interface PaneContextValue {
   target: WorkspaceTabTarget;
   fileNavigationRevision?: number;
   openTab: (target: WorkspaceTabTarget) => void;
+  openTabBeside: (target: WorkspaceTabTarget) => void;
   closeCurrentTab: () => void;
   retargetCurrentTab: (target: WorkspaceTabTarget) => void;
   openFileInWorkspace: (request: WorkspaceFileOpenRequest) => void;

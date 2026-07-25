@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveWorkspacePaneState,
   getWorkspacePaneDescriptors,
-  resolveSideFileOpenPlacement,
+  resolveSideTabOpenPlacement,
 } from "@/screens/workspace/workspace-pane-state";
 import type { WorkspaceLayout } from "@/stores/workspace-layout-store";
 import type { WorkspaceTab } from "@/workspace-tabs/model";
@@ -121,7 +121,7 @@ describe("workspace-pane-state", () => {
     const tabs = [createTab("file_/repo/README.md", { kind: "file", path: "/repo/README.md" })];
 
     expect(
-      resolveSideFileOpenPlacement({
+      resolveSideTabOpenPlacement({
         layout,
         sourcePaneId: "main",
         tabs,
@@ -145,7 +145,7 @@ describe("workspace-pane-state", () => {
     const tabs = [createTab("file_/repo/README.md", { kind: "file", path: "/repo/README.md" })];
 
     expect(
-      resolveSideFileOpenPlacement({
+      resolveSideTabOpenPlacement({
         layout,
         sourcePaneId: "main",
         tabs,
@@ -178,7 +178,7 @@ describe("workspace-pane-state", () => {
     };
 
     expect(
-      resolveSideFileOpenPlacement({
+      resolveSideTabOpenPlacement({
         layout,
         sourcePaneId: "left",
         tabs: [createTab("agent_agent-a", { kind: "agent", agentId: "agent-a" })],
@@ -197,12 +197,45 @@ describe("workspace-pane-state", () => {
     };
 
     expect(
-      resolveSideFileOpenPlacement({
+      resolveSideTabOpenPlacement({
         layout,
         sourcePaneId: "main",
         tabs: [createTab("agent_agent-a", { kind: "agent", agentId: "agent-a" })],
         target: { kind: "file", path: "/repo/README.md" },
       }),
     ).toEqual({ kind: "split-side-pane", paneId: "main" });
+  });
+
+  it("places a work notebook in the existing right pane", () => {
+    const layout: WorkspaceLayout = {
+      root: {
+        kind: "group",
+        group: {
+          id: "group-root",
+          direction: "horizontal",
+          sizes: [0.6, 0.4],
+          children: [
+            {
+              kind: "pane",
+              pane: { id: "chat", tabIds: ["agent_agent-a"], focusedTabId: "agent_agent-a" },
+            },
+            {
+              kind: "pane",
+              pane: { id: "margin", tabIds: [], focusedTabId: null },
+            },
+          ],
+        },
+      },
+      focusedPaneId: "chat",
+    };
+
+    expect(
+      resolveSideTabOpenPlacement({
+        layout,
+        sourcePaneId: "chat",
+        tabs: [createTab("agent_agent-a", { kind: "agent", agentId: "agent-a" })],
+        target: { kind: "notebook", agentId: "agent-a" },
+      }),
+    ).toEqual({ kind: "focus-side-pane", paneId: "margin" });
   });
 });
