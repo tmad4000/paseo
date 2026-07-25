@@ -130,7 +130,9 @@ export function toAgentPayload(
     persistence: sanitizePersistenceHandle(agent.persistence),
     title: options?.title ?? null,
     labels: agent.labels,
-    artifacts: agent.artifacts,
+    // Omit rather than emit undefined: JSON sanitizers (MCP structuredContent) turn
+    // undefined into null, which fails the optional array schema.
+    ...(agent.artifacts ? { artifacts: agent.artifacts } : {}),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -238,7 +240,7 @@ export function buildStoredAgentPayload(
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
-    artifacts: record.artifacts,
+    ...(record.artifacts ? { artifacts: record.artifacts } : {}),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }
