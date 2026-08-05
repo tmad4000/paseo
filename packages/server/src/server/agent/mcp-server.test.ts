@@ -5332,6 +5332,7 @@ describe("agent snapshot MCP serialization", () => {
           provider: "codex",
           sessionId: "session-full",
         },
+        artifacts: [],
       }),
     );
     expect(snapshot.capabilities).toEqual(
