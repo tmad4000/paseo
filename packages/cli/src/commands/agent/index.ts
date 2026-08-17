@@ -14,6 +14,7 @@ import { addReloadOptions, runReloadCommand } from "./reload.js";
 import { addImportOptions, runImportCommand } from "./import.js";
 import { runUpdateCommand } from "./update.js";
 import { runDetachCommand } from "./detach.js";
+import { addArtifactsScanOptions, runArtifactsScanCommand } from "./artifacts-scan.js";
 import { addOpenOptions, runOpenCommand } from "./open.js";
 import { withOutput } from "../../output/index.js";
 import {
@@ -81,6 +82,15 @@ export function createAgentCommand(): Command {
   addJsonAndDaemonHostOptions(addReloadOptions(agent.command("reload"))).action(
     withOutput(runReloadCommand),
   );
+
+  addJsonAndDaemonHostOptions(
+    addArtifactsScanOptions(
+      agent
+        .command("artifacts-scan")
+        .description("Backfill an agent's artifact feed from files already on disk")
+        .argument("<id>", "Agent ID, prefix, or name"),
+    ),
+  ).action(withOutput(runArtifactsScanCommand));
 
   addJsonAndDaemonHostOptions(
     agent

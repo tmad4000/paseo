@@ -1621,6 +1621,28 @@ export const AgentConfigApplyResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+export const AgentArtifactsScanRequestMessageSchema = z.object({
+  type: z.literal("agent.artifacts.scan.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+  /** Overrides the daemon's default retention ceiling for this scan. */
+  limit: z.number().int().positive().optional(),
+});
+
+export const AgentArtifactsScanResponseMessageSchema = z.object({
+  type: z.literal("agent.artifacts.scan.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+    /** Files newly recorded or refreshed by this scan. */
+    addedOrUpdated: z.number().int().nonnegative(),
+    /** Size of the agent's artifact list after the scan. */
+    total: z.number().int().nonnegative(),
+  }),
+});
+
 export const AgentDetachRequestMessageSchema = z.object({
   type: z.literal("agent.detach.request"),
   agentId: z.string(),
@@ -2781,6 +2803,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentArtifactsScanRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -5739,6 +5762,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentArtifactsScanResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -6097,6 +6121,12 @@ export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMes
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
+export type AgentArtifactsScanRequestMessage = z.infer<
+  typeof AgentArtifactsScanRequestMessageSchema
+>;
+export type AgentArtifactsScanResponseMessage = z.infer<
+  typeof AgentArtifactsScanResponseMessageSchema
+>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;

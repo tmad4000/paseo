@@ -1900,6 +1900,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.artifacts.scan.request":
+        return this.handleAgentArtifactsScanRequest(msg.agentId, msg.requestId, msg.limit);
       default:
         return undefined;
     }
@@ -2446,6 +2448,53 @@ export class Session {
     }
 
     return { agentId, archivedAt };
+  }
+
+  private async handleAgentArtifactsScanRequest(
+    agentId: string,
+    requestId: string,
+    limit: number | undefined,
+  ): Promise<void> {
+    this.sessionLogger.info(
+      { agentId, requestId, limit },
+      "Scanning agent working dir for artifacts",
+    );
+    try {
+      // Backfill targets are usually closed agents, which are not resident in
+      // the manager until something loads them.
+      await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const result = await this.agentManager.scanAgentArtifacts(
+        agentId,
+        limit !== undefined ? { limit } : {},
+      );
+      this.emit({
+        type: "agent.artifacts.scan.response",
+        payload: {
+          requestId,
+          agentId,
+          accepted: true,
+          error: null,
+          addedOrUpdated: result.addedOrUpdated,
+          total: result.total,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.artifacts.scan.response",
+        payload: {
+          requestId,
+          agentId,
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error),
+          addedOrUpdated: 0,
+          total: 0,
+        },
+      });
+    }
   }
 
   private async handleDetachAgentRequest(agentId: string, requestId: string): Promise<void> {
