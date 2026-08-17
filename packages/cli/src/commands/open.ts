@@ -6,7 +6,12 @@ import { buildAgentDeepLink, type AgentDeepLinkTarget } from "@getpaseo/protocol
 
 function findDesktopApp(): string | null {
   if (process.platform === "darwin") {
+    // The fork bundle is checked first: this CLI ships inside it, so opening a
+    // stock Paseo that happens to be installed alongside would hand the agent
+    // to a different daemon build than the one the user is driving.
     const candidates = [
+      "/Applications/Paseo Fork.app",
+      path.join(homedir(), "Applications", "Paseo Fork.app"),
       "/Applications/Paseo.app",
       path.join(homedir(), "Applications", "Paseo.app"),
     ];
@@ -22,6 +27,9 @@ function findDesktopApp(): string | null {
 
   if (process.platform === "linux") {
     const candidates = [
+      "/usr/bin/Paseo Fork",
+      "/opt/Paseo Fork/Paseo Fork",
+      path.join(homedir(), "Applications", "Paseo-Fork.AppImage"),
       "/usr/bin/Paseo",
       "/opt/Paseo/Paseo",
       path.join(homedir(), "Applications", "Paseo.AppImage"),
