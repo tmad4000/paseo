@@ -1,102 +1,124 @@
 import { create } from "zustand";
-import { getDesktopHost } from "@/desktop/host";
+import { getFindHighlighter } from "@/find/find-highlighter";
 
 /**
  * State for the find bar (Cmd+F).
  *
- * The search itself runs in Chromium via `webContents.findInPage`, so this
- * store holds only what the bar renders: the query and the match counters that
- * arrive asynchronously on the desktop `find-in-page-result` event.
+ * Matching runs in the renderer through the CSS Custom Highlight API — see
+ * find-highlighter.web.ts for why `webContents.findInPage` is unusable here.
+ * That keeps the counts synchronous, so the bar never renders a stale count.
  */
 
-export interface FindResult {
-  matches: number;
-  activeMatch: number;
-}
+/**
+ * Typing re-scans the document, so a keystroke-per-scan makes a long transcript
+ * feel laggy. One scan per pause is indistinguishable to the user.
+ */
+const SEARCH_DEBOUNCE_MS = 120;
 
 interface FindState {
   isOpen: boolean;
   query: string;
   matches: number;
-  activeMatch: number;
+  /** 0-based index into the match list; -1 when there is nothing to step to. */
+  activeIndex: number;
   open: () => void;
   close: () => void;
   toggle: () => void;
   setQuery: (query: string) => void;
   findNext: () => void;
   findPrevious: () => void;
-  applyResult: (result: FindResult) => void;
+  /** Runs the pending search immediately. Exposed for tests. */
+  flushSearch: () => void;
 }
 
-function findBridge() {
-  return getDesktopHost()?.find ?? null;
-}
+let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 
-function runSearch(query: string, options: { forward: boolean; findNext: boolean }): void {
-  const bridge = findBridge();
-  if (!bridge) {
-    return;
+function cancelPendingSearch(): void {
+  if (debounceHandle !== null) {
+    clearTimeout(debounceHandle);
+    debounceHandle = null;
   }
-  if (query.length === 0) {
-    void bridge.stop().catch(() => {});
-    return;
-  }
-  void bridge
-    .start({ query, forward: options.forward, findNext: options.findNext })
-    .catch(() => {});
 }
 
-export const useFindStore = create<FindState>((set, get) => ({
-  isOpen: false,
-  query: "",
-  matches: 0,
-  activeMatch: 0,
-
-  open: () => {
-    set({ isOpen: true });
-    // Reopening with a query already typed re-runs it, so the highlights come
-    // back instead of the bar showing a stale count over an unsearched page.
-    const { query } = get();
-    if (query.length > 0) {
-      runSearch(query, { forward: true, findNext: false });
-    }
-  },
-
-  close: () => {
-    set({ isOpen: false, matches: 0, activeMatch: 0 });
-    void findBridge()
-      ?.stop({ keepSelection: true })
-      ?.catch(() => {});
-  },
-
-  toggle: () => {
-    if (get().isOpen) {
-      get().close();
-    } else {
-      get().open();
-    }
-  },
-
-  setQuery: (query: string) => {
-    set({ query });
+export const useFindStore = create<FindState>((set, get) => {
+  function runSearch(query: string): void {
+    cancelPendingSearch();
+    const highlighter = getFindHighlighter();
     if (query.length === 0) {
-      set({ matches: 0, activeMatch: 0 });
+      highlighter.clear();
+      set({ matches: 0, activeIndex: -1 });
+      return;
     }
-    // findNext:false restarts the search from the top of the document, which is
-    // what every keystroke should do; findNext:true would walk forward on each
-    // character typed.
-    runSearch(query, { forward: true, findNext: false });
-  },
+    const matches = highlighter.search(query);
+    set({ matches, activeIndex: matches > 0 ? 0 : -1 });
+  }
 
-  findNext: () => {
-    runSearch(get().query, { forward: true, findNext: true });
-  },
+  function step(delta: number): void {
+    // A pending debounce means the counts on screen predate the current query;
+    // settle it first so stepping moves within the right match list.
+    if (debounceHandle !== null) {
+      runSearch(get().query);
+    }
+    const { matches, activeIndex } = get();
+    if (matches === 0) {
+      return;
+    }
+    // Wrap around, matching every other find bar.
+    const next = (activeIndex + delta + matches) % matches;
+    set({ activeIndex: next });
+    getFindHighlighter().focusMatch(next);
+  }
 
-  findPrevious: () => {
-    runSearch(get().query, { forward: false, findNext: true });
-  },
+  return {
+    isOpen: false,
+    query: "",
+    matches: 0,
+    activeIndex: -1,
 
-  applyResult: (result: FindResult) => {
-    set({ matches: result.matches, activeMatch: result.activeMatch });
-  },
-}));
+    open: () => {
+      set({ isOpen: true });
+      // Reopening with a query already typed re-runs it, so highlights come
+      // back instead of the bar showing a count over an unhighlighted page.
+      const { query } = get();
+      if (query.length > 0) {
+        runSearch(query);
+      }
+    },
+
+    close: () => {
+      cancelPendingSearch();
+      getFindHighlighter().clear();
+      set({ isOpen: false, matches: 0, activeIndex: -1 });
+    },
+
+    toggle: () => {
+      if (get().isOpen) {
+        get().close();
+      } else {
+        get().open();
+      }
+    },
+
+    setQuery: (query: string) => {
+      set({ query });
+      cancelPendingSearch();
+      if (query.length === 0) {
+        runSearch("");
+        return;
+      }
+      debounceHandle = setTimeout(() => {
+        debounceHandle = null;
+        runSearch(get().query);
+      }, SEARCH_DEBOUNCE_MS);
+    },
+
+    findNext: () => step(1),
+    findPrevious: () => step(-1),
+
+    flushSearch: () => {
+      if (debounceHandle !== null) {
+        runSearch(get().query);
+      }
+    },
+  };
+});

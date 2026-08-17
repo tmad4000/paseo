@@ -30,12 +30,6 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
         agentId: string;
       } | null>,
   },
-  find: {
-    start: (input: { query: string; forward?: boolean; findNext?: boolean; matchCase?: boolean }) =>
-      ipcRenderer.invoke("paseo:find:start", input) as Promise<number | null>,
-    stop: (input?: { keepSelection?: boolean }) =>
-      ipcRenderer.invoke("paseo:find:stop", input ?? {}) as Promise<boolean>,
-  },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {
       const listener = (_ipcEvent: Electron.IpcRendererEvent, payload: unknown) => {
