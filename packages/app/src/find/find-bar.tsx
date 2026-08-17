@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
+} from "react-native";
 import { ChevronDown, ChevronUp, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { getIsElectronRuntime } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
-import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
-import { useFindStore, type FindResult } from "@/find/find-store";
+import { useFindStore } from "@/find/find-store";
 
 const ThemedChevronUp = withUnistyles(ChevronUp);
 const ThemedChevronDown = withUnistyles(ChevronDown);
@@ -20,78 +26,34 @@ const ThemedTextInput = withUnistyles(TextInput, (theme: Theme) => ({
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-interface DesktopFindResultEvent {
-  matches?: unknown;
-  activeMatchOrdinal?: unknown;
-  finalUpdate?: unknown;
-}
+// Renders as data-paseo-find-bar, which the highlighter uses to skip the bar's
+// own text so the query never matches itself.
+const FIND_BAR_DATASET = { paseoFindBar: "" } as const;
+
+type WebTextInputKeyPressEvent = NativeSyntheticEvent<
+  TextInputKeyPressEventData & { shiftKey?: boolean }
+>;
 
 /**
- * The Cmd+F bar. Chromium owns the actual search and the scroll-into-view, so
- * this is only the control surface: a query field, a match counter, and the
- * step/dismiss affordances.
+ * The Cmd+F bar.
  *
- * Desktop-only. `findInPage` has no equivalent on native, and on plain web the
- * browser's own Cmd+F is already the right answer.
+ * Desktop-only: an Electron window has no browser chrome, so it has no native
+ * find. A plain web build still has the browser's own Cmd+F, which is better
+ * than anything reimplemented here.
  */
 export function FindBar() {
   const { t } = useTranslation();
   const isOpen = useFindStore((state) => state.isOpen);
   const query = useFindStore((state) => state.query);
   const matches = useFindStore((state) => state.matches);
-  const activeMatch = useFindStore((state) => state.activeMatch);
+  const activeIndex = useFindStore((state) => state.activeIndex);
   const setQuery = useFindStore((state) => state.setQuery);
   const findNext = useFindStore((state) => state.findNext);
   const findPrevious = useFindStore((state) => state.findPrevious);
   const close = useFindStore((state) => state.close);
-  const applyResult = useFindStore((state) => state.applyResult);
   const inputRef = useRef<TextInput | null>(null);
 
   const isDesktop = !isNative && getIsElectronRuntime();
-
-  useEffect(() => {
-    if (!isDesktop) {
-      return;
-    }
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    const subscribe = async (): Promise<void> => {
-      try {
-        const dispose = await listenToDesktopEvent<DesktopFindResultEvent>(
-          "find-in-page-result",
-          (payload) => {
-            // Only the final update carries a settled count; intermediate ones
-            // make the counter flicker while Chromium is still scanning.
-            if (payload.finalUpdate !== true) {
-              return;
-            }
-            const result: FindResult = {
-              matches: typeof payload.matches === "number" ? payload.matches : 0,
-              activeMatch:
-                typeof payload.activeMatchOrdinal === "number" ? payload.activeMatchOrdinal : 0,
-            };
-            applyResult(result);
-          },
-        );
-        // The effect can be torn down while the subscription is still in
-        // flight; dispose immediately rather than leaking the listener.
-        if (disposed) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-      } catch {
-        // No desktop event bridge in this runtime; the bar stays countless.
-      }
-    };
-    void subscribe();
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [isDesktop, applyResult]);
 
   useEffect(() => {
     if (isOpen) {
@@ -100,7 +62,7 @@ export function FindBar() {
   }, [isOpen]);
 
   const onKeyPress = useCallback(
-    (event: { nativeEvent: { key: string; shiftKey?: boolean } }) => {
+    (event: WebTextInputKeyPressEvent) => {
       const { key } = event.nativeEvent;
       if (key === "Escape") {
         close();
@@ -122,10 +84,13 @@ export function FindBar() {
   }
 
   const hasQuery = query.length > 0;
-  const counter = hasQuery ? t("find.counter", { active: activeMatch, total: matches }) : "";
+  const noMatches = hasQuery && matches === 0;
+  const counter = hasQuery
+    ? t("find.counter", { active: activeIndex >= 0 ? activeIndex + 1 : 0, total: matches })
+    : "";
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} dataSet={FIND_BAR_DATASET}>
       <View style={styles.bar}>
         <ThemedTextInput
           ref={inputRef}
@@ -139,9 +104,7 @@ export function FindBar() {
           autoCorrect={false}
           spellCheck={false}
         />
-        <Text style={[styles.counter, hasQuery && matches === 0 && styles.counterEmpty]}>
-          {counter}
-        </Text>
+        <Text style={[styles.counter, noMatches && styles.counterEmpty]}>{counter}</Text>
         <Pressable
           onPress={findPrevious}
           style={styles.iconButton}
