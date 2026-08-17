@@ -25,6 +25,7 @@ import {
   webContents,
 } from "electron";
 import { registerDaemonManager } from "./daemon/daemon-manager.js";
+import { registerFindInPage } from "./features/find-in-page/index.js";
 import { parsePassthroughCliArgsFromArgv, runPassthroughCli } from "./daemon/cli/passthrough.js";
 import { closeAllTransportSessions } from "./daemon/local-transport.js";
 import {
@@ -983,6 +984,7 @@ async function bootstrap(): Promise<void> {
   });
   ensureNotificationCenterRegistration();
   registerDaemonManager();
+  registerFindInPage();
   registerWindowManager();
   registerDialogHandlers();
   registerNotificationHandlers();

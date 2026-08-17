@@ -236,6 +236,13 @@ export const ptBR: TranslationResources = {
       unarchive: "Desarquivar",
     },
   },
+  find: {
+    placeholder: "Localizar",
+    counter: "{{active}}/{{total}}",
+    next: "Próxima ocorrência",
+    previous: "Ocorrência anterior",
+    close: "Fechar localizar",
+  },
   sessions: {
     title: "Histórico de agentes",
     empty: "Nenhuma sessão ainda",

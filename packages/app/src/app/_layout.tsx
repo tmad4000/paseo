@@ -127,6 +127,7 @@ import {
 } from "@/utils/host-routes";
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { FindBar } from "@/find/find-bar";
 import {
   ensureOsNotificationPermission,
   WEB_NOTIFICATION_CLICK_EVENT,
@@ -1023,6 +1024,7 @@ export default function RootLayout() {
           <RootErrorBoundary>
             <RootAppTree />
           </RootErrorBoundary>
+          <FindBar />
         </SafeAreaProvider>
       </I18nProvider>
     </QueryProvider>

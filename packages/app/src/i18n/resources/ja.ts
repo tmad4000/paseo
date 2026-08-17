@@ -236,6 +236,13 @@ export const ja: TranslationResources = {
       unarchive: "アーカイブ解除",
     },
   },
+  find: {
+    placeholder: "検索",
+    counter: "{{active}}/{{total}}",
+    next: "次の一致",
+    previous: "前の一致",
+    close: "検索を閉じる",
+  },
   sessions: {
     title: "履歴",
     empty: "セッションがまだありません",

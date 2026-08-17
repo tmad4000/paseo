@@ -237,6 +237,13 @@ export const fr: TranslationResources = {
       unarchive: "Désarchiver",
     },
   },
+  find: {
+    placeholder: "Rechercher",
+    counter: "{{active}}/{{total}}",
+    next: "Occurrence suivante",
+    previous: "Occurrence précédente",
+    close: "Fermer la recherche",
+  },
   sessions: {
     title: "Historique",
     empty: "Aucune séance pour l'instant",
