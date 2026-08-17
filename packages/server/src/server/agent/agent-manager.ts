@@ -1048,6 +1048,43 @@ export class AgentManager {
     return agent ? { ...agent } : null;
   }
 
+  /**
+   * Backfills an agent's artifact feed from what is already on disk.
+   *
+   * Turn-scoped collection cannot see work an agent did before this feature
+   * existed, so without this every pre-existing agent shows an empty feed
+   * forever. Explicit rather than automatic: a full walk of a large working
+   * directory is not something to do on every agent load.
+   */
+  async scanAgentArtifacts(
+    agentId: string,
+    options?: { limit?: number },
+  ): Promise<{ addedOrUpdated: number; total: number }> {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+    const collection = await this.artifactCollector.scanExisting(agent.cwd, agent.artifacts, {
+      ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+    });
+    if (!collection) {
+      return { addedOrUpdated: 0, total: agent.artifacts?.length ?? 0 };
+    }
+    agent.artifacts = collection.artifacts;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    this.logger.info(
+      {
+        agentId,
+        cwd: agent.cwd,
+        addedOrUpdated: collection.addedOrUpdated,
+        artifactCount: collection.artifacts.length,
+      },
+      "Backfilled agent artifacts",
+    );
+    return { addedOrUpdated: collection.addedOrUpdated, total: collection.artifacts.length };
+  }
+
   async waitForAgentClose(agentId: string): Promise<void> {
     await this.inFlightAgentCloses?.get(agentId)?.catch(() => undefined);
   }
