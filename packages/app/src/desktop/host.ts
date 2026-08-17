@@ -170,11 +170,22 @@ export interface DesktopInvokeBridge {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
+export interface DesktopFindBridge {
+  start: (input: {
+    query: string;
+    forward?: boolean;
+    findNext?: boolean;
+    matchCase?: boolean;
+  }) => Promise<number | null>;
+  stop: (input?: { keepSelection?: boolean }) => Promise<boolean>;
+}
+
 export interface DesktopHostBridge {
   platform?: string;
   invoke?: DesktopInvokeBridge["invoke"];
   getPendingOpenProject?: () => Promise<string | null>;
   agentNavigation?: DesktopAgentNavigationBridge;
+  find?: DesktopFindBridge;
   events?: DesktopEventsBridge;
   window?: DesktopWindowModuleBridge;
   dialog?: DesktopDialogBridge;

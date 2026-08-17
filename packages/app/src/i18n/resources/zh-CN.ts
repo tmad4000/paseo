@@ -243,6 +243,13 @@ export const zhCN: TranslationResources = {
       openLabel: "打开",
     },
   },
+  find: {
+    placeholder: "查找",
+    counter: "{{active}}/{{total}}",
+    next: "下一个匹配",
+    previous: "上一个匹配",
+    close: "关闭查找",
+  },
   sessions: {
     title: "历史",
     empty: "还没有会话",

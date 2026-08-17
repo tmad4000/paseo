@@ -244,6 +244,13 @@ export const ko: TranslationResources = {
       openLabel: "열기",
     },
   },
+  find: {
+    placeholder: "찾기",
+    counter: "{{active}}/{{total}}",
+    next: "다음 일치",
+    previous: "이전 일치",
+    close: "찾기 닫기",
+  },
   sessions: {
     title: "기록",
     empty: "아직 세션이 없습니다",

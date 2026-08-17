@@ -242,6 +242,13 @@ export const en = {
       openLabel: "Open",
     },
   },
+  find: {
+    placeholder: "Find",
+    counter: "{{active}}/{{total}}",
+    next: "Next match",
+    previous: "Previous match",
+    close: "Close find",
+  },
   sessions: {
     title: "History",
     empty: "No sessions yet",

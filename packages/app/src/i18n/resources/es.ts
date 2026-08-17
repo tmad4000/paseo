@@ -246,6 +246,13 @@ export const es: TranslationResources = {
       openLabel: "Abrir",
     },
   },
+  find: {
+    placeholder: "Buscar",
+    counter: "{{active}}/{{total}}",
+    next: "Coincidencia siguiente",
+    previous: "Coincidencia anterior",
+    close: "Cerrar búsqueda",
+  },
   sessions: {
     title: "Historial",
     empty: "Aún no hay sesiones",

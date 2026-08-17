@@ -246,6 +246,13 @@ export const ja: TranslationResources = {
       openLabel: "開く",
     },
   },
+  find: {
+    placeholder: "検索",
+    counter: "{{active}}/{{total}}",
+    next: "次の一致",
+    previous: "前の一致",
+    close: "検索を閉じる",
+  },
   sessions: {
     title: "履歴",
     empty: "セッションがまだありません",

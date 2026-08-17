@@ -245,6 +245,13 @@ export const ru: TranslationResources = {
       openLabel: "Открыть",
     },
   },
+  find: {
+    placeholder: "Поиск",
+    counter: "{{active}}/{{total}}",
+    next: "Следующее совпадение",
+    previous: "Предыдущее совпадение",
+    close: "Закрыть поиск",
+  },
   sessions: {
     title: "История",
     empty: "Сеансов пока нет",

@@ -243,6 +243,13 @@ export const ar: TranslationResources = {
       openLabel: "فتح",
     },
   },
+  find: {
+    placeholder: "بحث",
+    counter: "{{active}}/{{total}}",
+    next: "التطابق التالي",
+    previous: "التطابق السابق",
+    close: "إغلاق البحث",
+  },
   sessions: {
     title: "السجل",
     empty: "لا توجد جلسات بعد",

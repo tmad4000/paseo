@@ -42,6 +42,7 @@ export type KeyboardActionId =
   | "settings.toggle"
   | "command-center.toggle"
   | "command-center.files"
+  | "find.toggle"
   | "shortcuts.dialog.toggle"
   | "workspace.terminal.new"
   | "workspace.new"
