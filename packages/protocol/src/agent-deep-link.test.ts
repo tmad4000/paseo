@@ -11,9 +11,18 @@ describe("agent deep links", () => {
 
     const link = buildAgentDeepLink(target);
 
-    expect(link).toBe("paseo://h/server%2Fmain/agent/agent%20123");
+    expect(link).toBe("paseo-fork://h/server%2Fmain/agent/agent%20123");
     expect(buildAgentDeepLinkRoute(target)).toBe("/h/server%2Fmain/agent/agent%20123");
     expect(parseAgentDeepLink(link)).toEqual(target);
+  });
+
+  it("still parses links written with the upstream scheme", () => {
+    // The fork emits paseo-fork:// but must keep accepting paseo:// so links
+    // saved before the rename, or produced by a stock build, still resolve.
+    expect(parseAgentDeepLink("paseo://h/server%2Fmain/agent/agent%20123")).toEqual({
+      serverId: "server/main",
+      agentId: "agent 123",
+    });
   });
 
   it("rejects links outside the exact agent route", () => {
