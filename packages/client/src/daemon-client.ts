@@ -114,6 +114,8 @@ import type {
   AgentConfigApply,
   MutableDaemonConfig,
   MutableDaemonConfigPatch,
+  UiTabOpenResponseMessage,
+  UiWorkspaceTabTarget,
 } from "@getpaseo/protocol/messages";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import { terminalSubscriptionKey } from "@getpaseo/protocol/terminal-subscription-key";
@@ -3171,6 +3173,50 @@ export class DaemonClient {
       throw new Error(payload.error ?? "applyAgentConfig rejected");
     }
     return payload.notice ?? null;
+  }
+
+  /** True when the daemon can accept `ui.*` commands. */
+  supportsUiCommands(): boolean {
+    return this.lastServerInfoMessage?.features?.uiCommands === true;
+  }
+
+  /**
+   * Ask the attached app clients to open a tab in a workspace view. The daemon
+   * validates the workspace and broadcasts; `deliveredTo` reports how many
+   * other clients received the command, so 0 means nothing was listening.
+   * Gated on `server_info.features.uiCommands`.
+   */
+  async openWorkspaceTab(input: {
+    workspaceId: string;
+    target: UiWorkspaceTabTarget;
+    focus?: boolean;
+    serverId?: string;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<UiTabOpenResponseMessage["payload"]> {
+    const requestId = this.createRequestId(input.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "ui.tab.open.request",
+      requestId,
+      workspaceId: input.workspaceId,
+      target: input.target,
+      ...(input.serverId ? { serverId: input.serverId } : {}),
+      ...(input.focus === false ? { focus: false } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: input.timeout,
+      options: { skipQueue: true },
+      select: (msg) =>
+        msg.type === "ui.tab.open.response" && msg.payload.requestId === requestId
+          ? msg.payload
+          : null,
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return payload;
   }
 
   async restartServer(reason?: string, requestId?: string): Promise<RestartRequestedStatusPayload> {

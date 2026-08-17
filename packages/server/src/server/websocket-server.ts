@@ -467,6 +467,7 @@ interface SocketSessionOptions {
   onLifecycleIntent?: (intent: SessionLifecycleIntent) => void;
   hubExecutionAgents?: HubExecutionAgents;
   hubRelationships?: HubRelationshipManagement;
+  broadcastToClients?: (message: SessionOutboundMessage) => number;
 }
 
 interface ClosePhysicalSocketParams {
@@ -887,6 +888,28 @@ export class VoiceAssistantWebSocketServer {
     this.sendMessageToSockets(trustedSockets, message);
   }
 
+  /**
+   * Broadcast to every trusted client except the one that asked for it, and
+   * report how many got it. A UI command is issued by one client (usually a
+   * short-lived CLI process) and acted on by the others, so echoing it back to
+   * the sender would both be useless and make the delivery count meaningless.
+   */
+  private broadcastToOtherTrustedClients(
+    origin: TrustedSessionConnection | null,
+    message: WSOutboundMessage,
+  ): number {
+    const sockets = [...this.sessions]
+      .filter(([ws, connection]) => {
+        if (connection.kind !== "trusted") {
+          return false;
+        }
+        return !origin?.sockets.has(ws);
+      })
+      .map(([ws]) => ws);
+    this.sendMessageToSockets(sockets, message);
+    return sockets.length;
+  }
+
   public listTrustedSessions(): Session[] {
     return Array.from(
       new Set(
@@ -1300,6 +1323,8 @@ export class VoiceAssistantWebSocketServer {
         this.onLifecycleIntent?.(intent);
       },
       hubRelationships: this.hubRelationships ?? undefined,
+      broadcastToClients: (msg) =>
+        this.broadcastToOtherTrustedClients(connection, wrapSessionMessage(msg)),
     });
 
     connection = {
@@ -1359,6 +1384,7 @@ export class VoiceAssistantWebSocketServer {
       providerUsageService: this.providerUsageService,
       hubExecutionAgents: options.hubExecutionAgents,
       hubRelationships: options.hubRelationships,
+      broadcastToClients: options.broadcastToClients,
       serviceProxy: this.serviceProxy ?? undefined,
       scriptRuntimeStore: this.scriptRuntimeStore ?? undefined,
       workspaceSetupSnapshots: this.workspaceSetupSnapshots,
@@ -1633,6 +1659,8 @@ export class VoiceAssistantWebSocketServer {
         agentProfiles: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
+        // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
+        uiCommands: true,
       },
     };
   }

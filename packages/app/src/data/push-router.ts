@@ -14,6 +14,8 @@ import {
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
 } from "@/data/providers-snapshot";
+import { enqueueUiCommand } from "@/ui-commands/queue";
+import { resolveUiCommand } from "@/ui-commands/resolve";
 
 type ProvidersSnapshotUpdateMessage = Extract<
   SessionOutboundMessage,
@@ -31,7 +33,8 @@ type ServerDataEventType =
   | "checkout_diff_update"
   | "subscribe_checkout_diff_response"
   | "status"
-  | "terminals_changed";
+  | "terminals_changed"
+  | "ui.command";
 type CheckoutDiffResponsePayload = SubscribeCheckoutDiffResponseMessage["payload"];
 type CheckoutDiffCachePayload = Omit<CheckoutDiffResponsePayload, "subscriptionId">;
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
@@ -320,6 +323,18 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
       message,
     });
   });
+  // UI commands are not query data — they are queued for UiCommandListener,
+  // which owns navigation. Routed here because this is the one place already
+  // subscribed to every server's push stream with its serverId in hand.
+  const unsubscribeUiCommand = input.client.on("ui.command", (message) => {
+    const command = resolveUiCommand({
+      connectionServerId: input.serverId,
+      payload: message.payload,
+    });
+    if (command) {
+      enqueueUiCommand(command);
+    }
+  });
   let reconnectSubscriptionRepairs = reconnectSubscriptionRepairsByServerId.get(input.serverId);
   if (!reconnectSubscriptionRepairs) {
     reconnectSubscriptionRepairs = new Set();
@@ -341,6 +356,7 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
     unsubscribeCheckoutDiffUpdate();
     unsubscribeCheckoutDiffResponse();
     unsubscribeTerminalsChanged();
+    unsubscribeUiCommand();
     for (const subscriptionId of activeCheckoutDiffSubscriptions.keys()) {
       unsubscribeCheckoutDiff(input.client, subscriptionId);
     }

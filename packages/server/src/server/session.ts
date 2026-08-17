@@ -50,6 +50,7 @@ import {
   resolveFirstAgentPromptTitle,
 } from "./agent/create-agent-title.js";
 import { respondToAgentPermission } from "./agent/permission-response.js";
+import { resolveUiTabOpenCommand } from "./ui-commands.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import { spawnWorkspaceScript } from "./worktree-bootstrap.js";
@@ -498,6 +499,13 @@ export interface SessionOptions {
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  /**
+   * Send a message to every trusted client, not just this session's own.
+   * UI commands need it: the caller is usually a CLI process, and the client
+   * that has to act on the command is a different socket entirely.
+   * Returns how many clients received it.
+   */
+  broadcastToClients?: (message: SessionOutboundMessage) => number;
 }
 
 export type SessionLifecycleIntent =
@@ -676,6 +684,8 @@ export class Session {
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
+  private readonly daemonServerId: string | undefined;
+  private readonly broadcastToClients: ((message: SessionOutboundMessage) => number) | undefined;
 
   constructor(options: SessionOptions) {
     const {
@@ -729,7 +739,10 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      broadcastToClients,
     } = options;
+    this.daemonServerId = serverId;
+    this.broadcastToClients = broadcastToClients;
     this.clientId = clientId;
     this.scopes = [...scopes];
     this.appVersion = appVersion ?? null;
@@ -1827,6 +1840,7 @@ export class Session {
       this.dispatchAgentLifecycleMessage(msg) ??
       this.dispatchAgentConfigMessage(msg) ??
       this.dispatchCheckoutMessage(msg) ??
+      this.dispatchUiCommandMessage(msg) ??
       this.dispatchWorkspaceRecoveryMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg) ??
       this.dispatchWorkspaceFileMessage(msg, source) ??
@@ -2196,6 +2210,53 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private dispatchUiCommandMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "ui.tab.open.request":
+        return this.handleUiTabOpenRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleUiTabOpenRequest(
+    msg: Extract<SessionInboundMessage, { type: "ui.tab.open.request" }>,
+  ): Promise<void> {
+    const result = await resolveUiTabOpenCommand(msg, {
+      serverId: this.daemonServerId ?? "",
+      workspaceExists: async (workspaceId) =>
+        (await this.workspaceRegistry.get(workspaceId)) != null,
+    });
+
+    if (!result.ok) {
+      this.emit({
+        type: "ui.tab.open.response",
+        payload: {
+          requestId: msg.requestId,
+          serverId: result.serverId,
+          workspaceId: result.workspaceId,
+          deliveredTo: 0,
+          error: result.error,
+        },
+      });
+      return;
+    }
+
+    // The daemon holds no UI state, so the command is fanned out to every
+    // attached client and each one decides whether it can act on it.
+    const deliveredTo = this.broadcastToClients?.(result.command) ?? 0;
+    this.emit({
+      type: "ui.tab.open.response",
+      payload: {
+        requestId: msg.requestId,
+        serverId: result.serverId,
+        workspaceId: result.workspaceId,
+        deliveredTo,
+        error: null,
+      },
+    });
   }
 
   private dispatchWorkspaceRecoveryMessage(msg: SessionInboundMessage): Promise<void> | undefined {
