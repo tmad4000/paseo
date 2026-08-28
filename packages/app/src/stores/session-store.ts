@@ -35,12 +35,14 @@ import type {
   AgentArtifact,
 } from "@getpaseo/protocol/agent-types";
 import type {
+  AgentQueueSnapshot,
   ServerInfoStatusPayload,
   ProjectPlacementPayload,
   ServerCapabilities,
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
+import { shouldApplyAgentQueueSnapshot, toQueuedComposerMessages } from "@/composer/queue-sync";
 import {
   normalizeWorkspaceOpaqueId,
   normalizeWorkspacePath,
@@ -440,6 +442,11 @@ export interface SessionState {
     string,
     Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
   >;
+  /**
+   * Last daemon queue revision applied per agent, so an out-of-order broadcast
+   * cannot erase a newer state. See docs/queue-mirroring.md.
+   */
+  queuedMessageRevisions: Map<string, number>;
 }
 
 // Global store state
@@ -628,6 +635,8 @@ interface SessionStoreActions {
           prev: Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>,
         ) => Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>),
   ) => void;
+  /** Applies a daemon queue snapshot, dropping it if it is older than what is shown. */
+  applyAgentQueueSnapshot: (serverId: string, snapshot: AgentQueueSnapshot) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -680,6 +689,7 @@ function createInitialSessionState(
     pendingPermissions: new Map(),
     fileExplorer: new Map(),
     queuedMessages: new Map(),
+    queuedMessageRevisions: new Map(),
   };
 }
 
@@ -1907,6 +1917,34 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, queuedMessages: nextValue },
+            },
+          };
+        });
+      },
+
+      applyAgentQueueSnapshot: (serverId, snapshot) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) {
+            return prev;
+          }
+          if (
+            !shouldApplyAgentQueueSnapshot({
+              incomingRevision: snapshot.revision,
+              appliedRevision: session.queuedMessageRevisions.get(snapshot.agentId),
+            })
+          ) {
+            return prev;
+          }
+          const queuedMessages = new Map(session.queuedMessages);
+          queuedMessages.set(snapshot.agentId, toQueuedComposerMessages(snapshot));
+          const queuedMessageRevisions = new Map(session.queuedMessageRevisions);
+          queuedMessageRevisions.set(snapshot.agentId, snapshot.revision);
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, queuedMessages, queuedMessageRevisions },
             },
           };
         });

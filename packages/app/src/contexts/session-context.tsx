@@ -754,6 +754,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       useProviderSubagentStore.getState().applyUpdate(serverId, message.payload);
     });
 
+    const unsubAgentQueueUpdate = client.on("agent.queue.update", (message) => {
+      if (message.type !== "agent.queue.update") return;
+      useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
+    });
+
     const unsubScriptStatusUpdate = client.on("script_status_update", (message) => {
       if (message.type !== "script_status_update") return;
       setWorkspaces(serverId, (prev) => patchWorkspaceScripts(prev, message.payload));
@@ -947,6 +952,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubAgentStream();
       unsubAgentTimeline();
       unsubProviderSubagentUpdate();
+      unsubAgentQueueUpdate();
       unsubAgentAttention();
       unsubScriptStatusUpdate();
       unsubCheckoutStatusUpdate();

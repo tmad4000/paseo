@@ -2140,11 +2140,9 @@ export const QueuedComposerAttachmentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("forge_issue"), item: ForgeSearchItemSchema }),
   z.object({ kind: z.literal("forge_change_request"), item: ForgeSearchItemSchema }),
   z.object({ kind: z.literal("github_issue"), item: ForgeSearchItemSchema }),
-  z.object({
-    kind: z.literal("github_pr"),
-    item: ForgeSearchItemSchema,
-    owner: z.string().optional(),
-  }),
+  // `owner` is deliberately absent: it marks an attachment as belonging to the
+  // new-workspace picker, which a queued message never is.
+  z.object({ kind: z.literal("github_pr"), item: ForgeSearchItemSchema }),
 ]);
 
 export const QueuedAgentMessageSchema = z.object({
