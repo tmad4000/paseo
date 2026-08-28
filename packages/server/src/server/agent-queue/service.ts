@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
-import type { AgentAttachment, AgentQueueSnapshot } from "@getpaseo/protocol/messages";
+import type {
+  AgentAttachment,
+  AgentQueueSnapshot,
+  QueuedComposerAttachment,
+} from "@getpaseo/protocol/messages";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
 
 import type { AgentManager } from "../agent/agent-manager.js";
@@ -13,6 +17,7 @@ import {
   toAgentQueueSnapshot,
   type AgentQueueMutationResult,
   type AgentQueueStore,
+  type StoredQueuedImage,
   type StoredQueuedMessage,
 } from "./store.js";
 
@@ -24,6 +29,7 @@ export interface EnqueueAgentMessageInput {
   text: string;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: AgentAttachment[];
+  composerAttachments?: QueuedComposerAttachment[];
 }
 
 export interface SendQueuedPromptInput {
@@ -124,6 +130,9 @@ export class AgentQueueService {
       text,
       createdAt: new Date().toISOString(),
       ...(attachments.length ? { attachments } : {}),
+      ...(input.composerAttachments?.length
+        ? { composerAttachments: input.composerAttachments }
+        : {}),
       ...(images.length
         ? {
             images: images.map((image) => ({
@@ -175,6 +184,20 @@ export class AgentQueueService {
     });
     this.publish(result);
     return toAgentQueueSnapshot(result.queue);
+  }
+
+  /**
+   * Returns the stored image bytes for one queued item. Only the device that
+   * queued an image has a local copy, so any other device has to ask for it
+   * before it can pull the item back into its composer.
+   */
+  async getItemImages(agentId: string, itemId: string): Promise<StoredQueuedImage[]> {
+    const queue = await this.store.get(agentId);
+    const item = queue.items.find((candidate) => candidate.id === itemId);
+    if (!item) {
+      throw new Error(`Queued message ${itemId} is no longer queued`);
+    }
+    return item.images ?? [];
   }
 
   async deleteForAgent(agentId: string): Promise<void> {

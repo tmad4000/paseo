@@ -2,7 +2,11 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { AgentAttachmentWireSchema, type AgentQueueSnapshot } from "@getpaseo/protocol/messages";
+import {
+  AgentAttachmentWireSchema,
+  QueuedComposerAttachmentSchema,
+  type AgentQueueSnapshot,
+} from "@getpaseo/protocol/messages";
 import { writeJsonFileAtomic } from "../atomic-file.js";
 
 /**
@@ -20,6 +24,7 @@ const StoredQueuedMessageSchema = z.object({
   id: z.string(),
   text: z.string(),
   attachments: z.array(AgentAttachmentWireSchema).optional(),
+  composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
   images: z.array(StoredQueuedImageSchema).optional(),
   createdAt: z.string(),
 });
@@ -48,6 +53,9 @@ export function toAgentQueueSnapshot(queue: StoredAgentQueue): AgentQueueSnapsho
       text: item.text,
       createdAt: item.createdAt,
       ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+      ...(item.composerAttachments?.length
+        ? { composerAttachments: item.composerAttachments }
+        : {}),
       ...(item.images?.length
         ? {
             images: item.images.map((image) => ({

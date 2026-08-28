@@ -1930,6 +1930,8 @@ export class Session {
       case "agent.queue.list.request":
       case "agent.queue.reorder.request":
         return this.handleAgentQueueRequest(msg);
+      case "agent.queue.get_item_images.request":
+        return this.handleAgentQueueGetItemImagesRequest(msg);
       default:
         return undefined;
     }
@@ -3697,6 +3699,50 @@ export class Session {
     }
   }
 
+  private async handleAgentQueueGetItemImagesRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.get_item_images.request" }>,
+  ): Promise<void> {
+    const emitError = (agentId: string, error: string) => {
+      this.emit({
+        type: "agent.queue.get_item_images.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          itemId: msg.itemId,
+          images: [],
+          error,
+        },
+      });
+    };
+
+    const service = this.agentQueueService;
+    if (!service) {
+      emitError(msg.agentId, "This daemon does not support queued agent messages.");
+      return;
+    }
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      emitError(msg.agentId, resolved.error);
+      return;
+    }
+
+    try {
+      const images = await service.getItemImages(resolved.agentId, msg.itemId);
+      this.emit({
+        type: "agent.queue.get_item_images.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: resolved.agentId,
+          itemId: msg.itemId,
+          images,
+          error: null,
+        },
+      });
+    } catch (error) {
+      emitError(resolved.agentId, errorToFriendlyMessage(error));
+    }
+  }
+
   private applyAgentQueueRequest(
     service: AgentQueueService,
     agentId: string,
@@ -3710,6 +3756,7 @@ export class Session {
           text: msg.text,
           images: msg.images,
           attachments: msg.attachments,
+          composerAttachments: msg.composerAttachments,
         });
       case "agent.queue.remove.request":
         return service.remove(agentId, msg.itemId);
