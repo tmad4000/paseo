@@ -435,6 +435,22 @@ export interface ComposerQueueClient {
   ) => Promise<Array<{ id: string; mimeType: string; fileName?: string | null; data: string }>>;
 }
 
+/**
+ * Durable copy of an enqueue until the daemon acknowledges it. Backed by the
+ * queue outbox store; actions only see this narrow writer so they stay pure.
+ */
+export interface QueueOutboxWriter {
+  add: (entry: {
+    agentId: string;
+    itemId: string;
+    text: string;
+    images: Array<{ data: string; mimeType: string }>;
+    attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
+    composerAttachments: QueuedComposerAttachment[];
+  }) => void;
+  remove: (itemId: string) => void;
+}
+
 export interface QueueComposerMessageOnServerInput {
   client: ComposerQueueClient;
   agentId: string;
@@ -446,12 +462,18 @@ export interface QueueComposerMessageOnServerInput {
   ) => Promise<Array<{ data: string; mimeType: string }> | undefined>;
   queue: QueueWriter;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
+  outbox?: QueueOutboxWriter;
 }
 
 /**
  * Queues a message on the daemon. The local row appears immediately and is
- * replaced by the daemon's snapshot; if the daemon rejects the write the
- * optimistic row is rolled back so the two never disagree for long.
+ * replaced by the daemon's snapshot.
+ *
+ * With an outbox, the wire payload is written durably before the request goes
+ * out: a send the daemon never acknowledged — relay stall, app suspended
+ * mid-request — is retried on the next reconnect instead of being lost, so the
+ * optimistic row stays. Without one, failure rolls the row back and surfaces
+ * the error, as before.
  */
 export async function queueComposerMessageOnServer(
   input: QueueComposerMessageOnServerInput,
@@ -466,31 +488,50 @@ export async function queueComposerMessageOnServer(
     return optimistic;
   }
 
-  const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
-    format: input.attachmentSubmitFormat,
-  });
-  try {
-    const images = await input.encodeImages(wirePayload.images);
-    const snapshot = await input.client.enqueueAgentMessage({
-      agentId: input.agentId,
-      itemId: optimistic.queued.id,
-      text: optimistic.queued.text,
-      images: images ?? [],
-      attachments: wirePayload.attachments,
-      composerAttachments: toQueuedComposerAttachments(input.attachments),
-    });
-    input.applySnapshot(snapshot);
-    return optimistic;
-  } catch (error) {
+  const rollBack = (error: unknown): QueueComposerMessageResult & { error?: string } => {
     removeQueuedComposerMessageLocally({
       agentId: input.agentId,
-      messageId: optimistic.queued.id,
+      messageId: optimistic.queued!.id,
       queue: input.queue,
     });
     return {
       queued: null,
       error: error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend"),
     };
+  };
+
+  const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
+    format: input.attachmentSubmitFormat,
+  });
+  let images: Array<{ data: string; mimeType: string }> | undefined;
+  try {
+    images = await input.encodeImages(wirePayload.images);
+  } catch (error) {
+    // Encoding is local; its failure is real and retrying would not help.
+    return rollBack(error);
+  }
+
+  const enqueueInput = {
+    agentId: input.agentId,
+    itemId: optimistic.queued.id,
+    text: optimistic.queued.text,
+    images: images ?? [],
+    attachments: wirePayload.attachments,
+    composerAttachments: toQueuedComposerAttachments(input.attachments),
+  };
+  input.outbox?.add(enqueueInput);
+  try {
+    const snapshot = await input.client.enqueueAgentMessage(enqueueInput);
+    input.outbox?.remove(enqueueInput.itemId);
+    input.applySnapshot(snapshot);
+    return optimistic;
+  } catch (error) {
+    if (input.outbox) {
+      // The durable entry retries on reconnect; keep the row so the message
+      // still reads as queued on this device.
+      return optimistic;
+    }
+    return rollBack(error);
   }
 }
 

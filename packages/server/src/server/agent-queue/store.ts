@@ -33,6 +33,9 @@ const StoredAgentQueueSchema = z.object({
   agentId: z.string(),
   revision: z.number().int().nonnegative(),
   items: z.array(StoredQueuedMessageSchema),
+  // Ids of items that have already been drained. An enqueue retry (same id) that
+  // arrives after its item was delivered must be a no-op, not a resend.
+  drainedIds: z.array(z.string()).optional(),
 });
 
 export type StoredQueuedImage = z.infer<typeof StoredQueuedImageSchema>;
@@ -41,6 +44,18 @@ export type StoredAgentQueue = z.infer<typeof StoredAgentQueueSchema>;
 
 export function emptyAgentQueue(agentId: string): StoredAgentQueue {
   return { agentId, revision: 0, items: [] };
+}
+
+/**
+ * The window only has to outlast a client's retry horizon, not history: a
+ * retry always targets a recent item, so a small bound is plenty and keeps the
+ * queue file from growing forever.
+ */
+export const MAX_REMEMBERED_DRAINED_IDS = 100;
+
+export function recordDrainedId(ids: readonly string[] | undefined, id: string): string[] {
+  const next = [...(ids ?? []).filter((existing) => existing !== id), id];
+  return next.slice(-MAX_REMEMBERED_DRAINED_IDS);
 }
 
 /** Projects the stored queue onto the wire, replacing image bytes with descriptors. */

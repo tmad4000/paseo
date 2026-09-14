@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { AgentQueueSnapshot, ForgeSearchItem } from "@getpaseo/protocol/messages";
 
 import type { AttachmentMetadata } from "@/attachments/types";
+import type { PendingQueueEnqueue } from "@/stores/queue-outbox-store/model";
 import {
+  appendPendingQueueRows,
   shouldApplyAgentQueueSnapshot,
   toQueuedComposerAttachments,
   toQueuedComposerMessages,
@@ -86,6 +88,40 @@ describe("toQueuedComposerMessages", () => {
     expect(toQueuedComposerMessages(snapshot())).toEqual([
       { id: "item-1", text: "first", attachments: [] },
     ]);
+  });
+});
+
+describe("appendPendingQueueRows", () => {
+  function pending(overrides: Partial<PendingQueueEnqueue> = {}): PendingQueueEnqueue {
+    return {
+      serverId: "server",
+      agentId: "agent",
+      itemId: "pending-1",
+      text: "not acked yet",
+      images: [],
+      attachments: [],
+      composerAttachments: [],
+      createdAt: 1,
+      attempts: 0,
+      ...overrides,
+    };
+  }
+
+  it("re-appends un-acked rows a snapshot would otherwise erase", () => {
+    const rows = appendPendingQueueRows(toQueuedComposerMessages(snapshot()), [pending()]);
+    expect(rows.map((row) => row.id)).toEqual(["item-1", "pending-1"]);
+  });
+
+  it("drops a pending row the snapshot already contains", () => {
+    const rows = appendPendingQueueRows(toQueuedComposerMessages(snapshot()), [
+      pending({ itemId: "item-1" }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["item-1"]);
+  });
+
+  it("returns the input list unchanged when nothing is pending", () => {
+    const rows = toQueuedComposerMessages(snapshot());
+    expect(appendPendingQueueRows(rows, [])).toBe(rows);
   });
 });
 

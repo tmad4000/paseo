@@ -14,6 +14,7 @@ import type { AgentStorage } from "../agent/agent-storage.js";
 import { buildAgentPrompt } from "../agent/prompt-attachments.js";
 import { sendPromptToAgent } from "../agent/agent-prompt.js";
 import {
+  recordDrainedId,
   toAgentQueueSnapshot,
   type AgentQueueMutationResult,
   type AgentQueueStore,
@@ -146,8 +147,10 @@ export class AgentQueueService {
     };
 
     const result = await this.store.mutate(input.agentId, (current) =>
-      // Re-enqueueing the same id is a retry, not a duplicate.
-      current.items.some((existing) => existing.id === item.id)
+      // Re-enqueueing the same id is a retry, not a duplicate — including a
+      // retry that lands after the item was already drained and delivered.
+      current.items.some((existing) => existing.id === item.id) ||
+      current.drainedIds?.includes(item.id)
         ? current
         : { ...current, items: [...current.items, item] },
     );
@@ -258,9 +261,14 @@ export class AgentQueueService {
     }
 
     // Claim the head before sending so a concurrent drain cannot send it twice.
+    // Remembering the drained id makes a late enqueue retry of this item a no-op.
     const claimed = await this.store.mutate(agentId, (current) =>
       current.items[0]?.id === next.id
-        ? { ...current, items: current.items.slice(1) }
+        ? {
+            ...current,
+            items: current.items.slice(1),
+            drainedIds: recordDrainedId(current.drainedIds, next.id),
+          }
         : // Someone else changed the head while we were reading; try again later.
           current,
     );
@@ -283,6 +291,8 @@ export class AgentQueueService {
       const restored = await this.store.mutate(agentId, (current) => ({
         ...current,
         items: [next, ...current.items],
+        // The item is queued again, so its id must not read as already-delivered.
+        drainedIds: (current.drainedIds ?? []).filter((id) => id !== next.id),
       }));
       this.publish(restored);
     }

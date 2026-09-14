@@ -298,6 +298,43 @@ describe("AgentQueueService", () => {
     expect(snapshot.items.map((item) => item.id)).toEqual(["item-1"]);
   });
 
+  test("an enqueue retry that lands after the item drained does not resend it", async () => {
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    await harness.service.flushDrains();
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+
+    // The client never saw the ack (e.g. relay dropped mid-request) and retries
+    // after reconnect. The daemon already delivered the item.
+    harness.agents.lifecycle = "idle";
+    const snapshot = await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "item-1",
+      text: "once",
+    });
+    await harness.service.flushDrains();
+
+    expect(snapshot.items).toEqual([]);
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+  });
+
+  test("a send failure clears the drained marker so the item can drain again", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "flaky" });
+
+    harness.failSends(new Error("provider exploded"));
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+
+    harness.failSends(null);
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+  });
+
   test("deleting an agent drops its queue", async () => {
     harness.agents.lifecycle = "running";
     await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "first" });

@@ -7,6 +7,7 @@ import type {
 import type { ComposerAttachment, UserComposerAttachment } from "@/attachments/types";
 import { userAttachmentsOnly } from "@/attachments/workspace-attachment-utils";
 import type { QueuedComposerMessage } from "@/composer/actions";
+import type { PendingQueueEnqueue } from "@/stores/queue-outbox-store/model";
 
 /**
  * Reconciliation between the daemon-owned queue and the local optimistic copy.
@@ -65,4 +66,25 @@ export function shouldApplyAgentQueueSnapshot(input: {
   appliedRevision: number | undefined;
 }): boolean {
   return input.appliedRevision === undefined || input.incomingRevision > input.appliedRevision;
+}
+
+/**
+ * The one exception to snapshots-replace-wholesale: an un-acked enqueue is a
+ * write the server does not know about yet, so a snapshot cannot be allowed to
+ * erase its row. Pending entries the snapshot already contains are dropped —
+ * the ack raced the broadcast — and the rest are re-appended in enqueue order.
+ */
+export function appendPendingQueueRows(
+  items: QueuedComposerMessage[],
+  pending: readonly PendingQueueEnqueue[],
+): QueuedComposerMessage[] {
+  const present = new Set(items.map((item) => item.id));
+  const rows = pending
+    .filter((entry) => !present.has(entry.itemId))
+    .map((entry) => ({
+      id: entry.itemId,
+      text: entry.text,
+      attachments: toComposerAttachments(entry.composerAttachments),
+    }));
+  return rows.length === 0 ? items : [...items, ...rows];
 }

@@ -42,7 +42,12 @@ import type {
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
-import { shouldApplyAgentQueueSnapshot, toQueuedComposerMessages } from "@/composer/queue-sync";
+import {
+  appendPendingQueueRows,
+  shouldApplyAgentQueueSnapshot,
+  toQueuedComposerMessages,
+} from "@/composer/queue-sync";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import {
   normalizeWorkspaceOpaqueId,
   normalizeWorkspacePath,
@@ -1937,7 +1942,13 @@ export const useSessionStore = create<SessionStore>()(
             return prev;
           }
           const queuedMessages = new Map(session.queuedMessages);
-          queuedMessages.set(snapshot.agentId, toQueuedComposerMessages(snapshot));
+          queuedMessages.set(
+            snapshot.agentId,
+            appendPendingQueueRows(
+              toQueuedComposerMessages(snapshot),
+              useQueueOutboxStore.getState().entriesForAgent(serverId, snapshot.agentId),
+            ),
+          );
           const queuedMessageRevisions = new Map(session.queuedMessageRevisions);
           queuedMessageRevisions.set(snapshot.agentId, snapshot.revision);
           return {

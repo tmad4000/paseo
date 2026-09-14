@@ -69,9 +69,11 @@ import {
   toggleGithubAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
+  type QueueOutboxWriter,
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1354,6 +1356,14 @@ export function Composer({
     [serverId, setQueuedMessages],
   );
 
+  const queueOutbox = useMemo<QueueOutboxWriter>(
+    () => ({
+      add: (entry) => useQueueOutboxStore.getState().add({ ...entry, serverId }),
+      remove: (itemId) => useQueueOutboxStore.getState().remove(itemId),
+    }),
+    [serverId],
+  );
+
   useEffect(() => {
     if (!supportsAgentMessageQueue || !client || !isConnected || !agentId) {
       return;
@@ -1397,6 +1407,7 @@ export function Composer({
             encodeImages,
             queue: queueWriter,
             applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+            outbox: queueOutbox,
           });
           if (result.error) {
             setSendError(result.error);
@@ -1421,6 +1432,7 @@ export function Composer({
       applyAgentQueueSnapshot,
       clearSentAttachments,
       client,
+      queueOutbox,
       queueWriter,
       resetSuppression,
       serverId,
@@ -1822,6 +1834,7 @@ export function Composer({
             encodeImages,
             queue: queueWriter,
             applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+            outbox: queueOutbox,
           });
         }
         return;
@@ -1843,6 +1856,7 @@ export function Composer({
       agentId,
       applyAgentQueueSnapshot,
       client,
+      queueOutbox,
       queueWriter,
       serverId,
       submitMessage,

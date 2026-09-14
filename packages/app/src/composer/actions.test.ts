@@ -1048,6 +1048,61 @@ describe("queueComposerMessageOnServer", () => {
     expect(queue.state.get("agent")).toEqual([]);
   });
 
+  it("writes the outbox entry before sending and clears it on ack", async () => {
+    const queue = createFakeQueue();
+    const client = createFakeQueueClient();
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    const result = await queueComposerMessageOnServer({
+      client,
+      agentId: "agent",
+      text: "durable",
+      attachments: [],
+      encodeImages: passthroughEncodeImages,
+      queue,
+      applySnapshot: () => {},
+      outbox: {
+        add: (entry) => added.push(entry.itemId),
+        remove: (itemId) => removed.push(itemId),
+      },
+    });
+
+    expect(added).toEqual([result.queued?.id]);
+    expect(removed).toEqual([result.queued?.id]);
+  });
+
+  it("keeps the row and the outbox entry when the send never gets an ack", async () => {
+    const queue = createFakeQueue();
+    const client = createFakeQueueClient({
+      enqueueAgentMessage: async () => {
+        throw new Error("Transport not connected");
+      },
+    });
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    const result = await queueComposerMessageOnServer({
+      client,
+      agentId: "agent",
+      text: "survives the relay stall",
+      attachments: [],
+      encodeImages: passthroughEncodeImages,
+      queue,
+      applySnapshot: () => {},
+      outbox: {
+        add: (entry) => added.push(entry.itemId),
+        remove: (itemId) => removed.push(itemId),
+      },
+    });
+
+    expect(result.queued).not.toBeNull();
+    expect(result.error).toBeUndefined();
+    expect(added).toEqual([result.queued?.id]);
+    expect(removed).toEqual([]);
+    expect(queue.state.get("agent")?.map((row) => row.id)).toEqual([result.queued?.id]);
+  });
+
   it("does not reach the daemon for an empty message", async () => {
     const queue = createFakeQueue();
     const client = createFakeQueueClient();

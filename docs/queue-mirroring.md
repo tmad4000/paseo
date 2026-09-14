@@ -158,6 +158,39 @@ replace it:
 
 Do not merge local and server lists. Last snapshot wins.
 
+## The un-acked window
+
+Daemon ownership leaves one gap: the moment between tapping queue and the daemon
+acknowledging the enqueue. If the relay is stalled or iOS suspends the app
+mid-request, the item exists only in app memory — kill the app and it is gone,
+and the daemon never knew. This is the client-side mirror of upstream #3464 /
+#4477: the write itself has to be durable, not just the queue.
+
+The fix is an outbox (`packages/app/src/stores/queue-outbox-store/`), persisted
+the same way drafts are. `queueComposerMessageOnServer` writes the full wire
+payload — image bytes included — into the outbox before the request goes out and
+removes it on ack. A send that fails keeps its entry and its optimistic row
+instead of rolling back; nothing is surfaced as an error, because delivery is
+now deferred, not dead.
+
+On every (re)connect that advertises `agentMessageQueue` (the `server_info`
+status message, which is exactly the re-established-transport signal), the
+session flushes the outbox: each entry is re-sent through the ordinary enqueue
+RPC, oldest first. Re-sending is safe because the daemon treats an enqueue with
+a known item id as a retry:
+
+- an id already in the queue is a no-op (this existed from the start), and
+- an id in the queue's `drainedIds` — a capped memory of recently delivered
+  items — is also a no-op, so a retry that lands _after_ the item was drained
+  cannot deliver it twice. A failed drain removes the id again so the restored
+  item stays sendable.
+
+Snapshots still replace the local list wholesale, with one exception:
+`appendPendingQueueRows` re-appends un-acked outbox rows a snapshot would
+otherwise erase, since they are writes the server does not know about yet. An
+entry that keeps failing gives up after `QUEUE_OUTBOX_MAX_ATTEMPTS` reconnects
+and drops its row rather than retrying forever.
+
 ## Known edges
 
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
