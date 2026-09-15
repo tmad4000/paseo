@@ -204,6 +204,8 @@ import type { Resolvable } from "./speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
+import type { AgentQueueService } from "./agent-queue/service.js";
+import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
   createGitHubService,
   GitHubAuthenticationError,
@@ -448,6 +450,7 @@ export interface SessionOptions {
   workspaceRegistry: WorkspaceRegistry;
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
+  agentQueueService?: AgentQueueService | null;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -591,6 +594,22 @@ function describeRegistryTransition(record: ArchivedRecordSnapshot | null): Regi
  * It owns all state management, orchestration logic, and message processing.
  * Session has no knowledge of WebSockets - it only emits and receives messages.
  */
+function resolveAgentQueueService(options: SessionOptions): AgentQueueService | null {
+  return options.agentQueueService ?? null;
+}
+
+type AgentQueueRequestMessage = Extract<
+  SessionInboundMessage,
+  { type: keyof typeof AGENT_QUEUE_RESPONSE_TYPES }
+>;
+
+const AGENT_QUEUE_RESPONSE_TYPES = {
+  "agent.queue.enqueue.request": "agent.queue.enqueue.response",
+  "agent.queue.remove.request": "agent.queue.remove.response",
+  "agent.queue.list.request": "agent.queue.list.response",
+  "agent.queue.reorder.request": "agent.queue.reorder.response",
+} as const;
+
 export class Session {
   private readonly clientId: string;
   private scopes: readonly string[];
@@ -668,6 +687,8 @@ export class Session {
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
+  private readonly agentQueueService: AgentQueueService | null;
+  private unsubscribeAgentQueue: (() => void) | null = null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -826,6 +847,7 @@ export class Session {
       onBranchChanged,
       logger: this.sessionLogger,
     });
+    this.agentQueueService = resolveAgentQueueService(options);
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
       scheduleService,
@@ -1396,6 +1418,10 @@ export class Session {
         });
     }
     this.providerCatalogSession.start();
+    this.unsubscribeAgentQueue =
+      this.agentQueueService?.subscribeToMutations((snapshot) => {
+        this.emit({ type: "agent.queue.update", payload: snapshot });
+      }) ?? null;
   }
 
   private subscribeToRegistryMutations(): void {
@@ -1821,6 +1847,7 @@ export class Session {
     const promise =
       this.dispatchVoiceAndControlMessage(msg) ??
       this.dispatchAgentRewindMessage(msg) ??
+      this.dispatchAgentQueueMessage(msg) ??
       this.dispatchAgentRelationshipMessage(msg) ??
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
@@ -1891,6 +1918,20 @@ export class Session {
     switch (msg.type) {
       case "agent.rewind.request":
         return this.handleAgentRewindRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchAgentQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.queue.enqueue.request":
+      case "agent.queue.remove.request":
+      case "agent.queue.list.request":
+      case "agent.queue.reorder.request":
+        return this.handleAgentQueueRequest(msg);
+      case "agent.queue.get_item_images.request":
+        return this.handleAgentQueueGetItemImagesRequest(msg);
       default:
         return undefined;
     }
@@ -2394,6 +2435,7 @@ export class Session {
     try {
       await this.agentStorage.remove(agentId);
       await this.agentManager.deleteAgentState(agentId);
+      await this.agentQueueService?.deleteForAgent(agentId);
     } catch (error) {
       this.sessionLogger.error({ err: error, agentId }, `Failed to fully delete agent ${agentId}`);
     }
@@ -3652,6 +3694,128 @@ export class Session {
           agentId: msg.agentId,
           ok: false,
           error: error instanceof Error ? error.message : "Failed to rewind agent",
+        },
+      });
+    }
+  }
+
+  private async handleAgentQueueGetItemImagesRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.get_item_images.request" }>,
+  ): Promise<void> {
+    const emitError = (agentId: string, error: string) => {
+      this.emit({
+        type: "agent.queue.get_item_images.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          itemId: msg.itemId,
+          images: [],
+          error,
+        },
+      });
+    };
+
+    const service = this.agentQueueService;
+    if (!service) {
+      emitError(msg.agentId, "This daemon does not support queued agent messages.");
+      return;
+    }
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      emitError(msg.agentId, resolved.error);
+      return;
+    }
+
+    try {
+      const images = await service.getItemImages(resolved.agentId, msg.itemId);
+      this.emit({
+        type: "agent.queue.get_item_images.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: resolved.agentId,
+          itemId: msg.itemId,
+          images,
+          error: null,
+        },
+      });
+    } catch (error) {
+      emitError(resolved.agentId, errorToFriendlyMessage(error));
+    }
+  }
+
+  private applyAgentQueueRequest(
+    service: AgentQueueService,
+    agentId: string,
+    msg: AgentQueueRequestMessage,
+  ): Promise<AgentQueueSnapshot> {
+    switch (msg.type) {
+      case "agent.queue.enqueue.request":
+        return service.enqueue({
+          agentId,
+          itemId: msg.itemId,
+          text: msg.text,
+          images: msg.images,
+          attachments: msg.attachments,
+          composerAttachments: msg.composerAttachments,
+        });
+      case "agent.queue.remove.request":
+        return service.remove(agentId, msg.itemId);
+      case "agent.queue.reorder.request":
+        return service.reorder(agentId, msg.itemIds);
+      case "agent.queue.list.request":
+        return service.list(agentId);
+    }
+  }
+
+  private async handleAgentQueueRequest(msg: AgentQueueRequestMessage): Promise<void> {
+    const responseType = AGENT_QUEUE_RESPONSE_TYPES[msg.type];
+    const service = this.agentQueueService;
+    if (!service) {
+      this.emit({
+        type: responseType,
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          queue: null,
+          error: "This daemon does not support queued agent messages.",
+        },
+      });
+      return;
+    }
+
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      this.emit({
+        type: responseType,
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          queue: null,
+          error: resolved.error,
+        },
+      });
+      return;
+    }
+
+    const agentId = resolved.agentId;
+    try {
+      const queue = await this.applyAgentQueueRequest(service, agentId, msg);
+      this.emit({
+        type: responseType,
+        payload: { requestId: msg.requestId, agentId, queue, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.warn(
+        { err: error, agentId, type: msg.type },
+        "Agent queue request failed",
+      );
+      this.emit({
+        type: responseType,
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          queue: null,
+          error: errorToFriendlyMessage(error),
         },
       });
     }
@@ -6986,6 +7150,8 @@ export class Session {
     this.unsubscribeProjectMutations = null;
     this.unsubscribeWorkspaceMutations?.();
     this.unsubscribeWorkspaceMutations = null;
+    this.unsubscribeAgentQueue?.();
+    this.unsubscribeAgentQueue = null;
     this.agentUpdates.dispose();
     await this.hubExecutionController?.cleanup();
     if (this.unsubscribeTerminalWorkspaceContributionEvents) {

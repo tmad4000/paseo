@@ -2518,6 +2518,46 @@ describe("HostRuntimeStore", () => {
     useSessionStore.getState().clearSession(host.serverId);
   });
 
+  it("leaves draining to the daemon on hosts that own the queue", async () => {
+    const host = makeHost({ serverId: "srv_drain_daemon_owned" });
+    const fakeClient = new FakeDaemonClient();
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => fakeClient as unknown as DaemonClient,
+        connectToDaemon: async () => ({
+          client: fakeClient as unknown as DaemonClient,
+          serverId: host.serverId,
+          hostname: null,
+        }),
+        getClientId: async () => "cid_drain_daemon_owned",
+      },
+    });
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    sessionStore.updateSessionServerInfo(host.serverId, {
+      serverId: host.serverId,
+      hostname: null,
+      version: null,
+      features: { agentMessageQueue: true },
+    });
+    sessionStore.setQueuedMessages(
+      host.serverId,
+      new Map([["agent", [{ id: "queued-1", text: "daemon drains this", attachments: [] }]]]),
+    );
+
+    store.drainQueuedAgentMessage(host.serverId, "agent");
+    await Promise.resolve();
+
+    // Draining here as well as on the daemon would send the message twice.
+    expect(fakeClient.sentAgentMessages).toEqual([]);
+    expect(
+      useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("agent"),
+    ).toHaveLength(1);
+
+    store.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
   it("submits an automatically drained message through the submission producer", async () => {
     const host = makeHost({ serverId: "srv_drain_submission" });
     const fakeClient = new FakeDaemonClient();

@@ -62,14 +62,18 @@ import {
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
+  queueComposerMessageOnServer,
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
+  takeQueuedComposerMessage,
   toggleGithubAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
+  type QueueOutboxWriter,
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1135,6 +1139,12 @@ export function Composer({
   const supportsForgeSearch = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.forgeSearch === true,
   );
+  // COMPAT(agentMessageQueue): added in v0.4.0. Older daemons have no queue, so
+  // the client keeps its own against those hosts.
+  const supportsAgentMessageQueue = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
+  const applyAgentQueueSnapshot = useSessionStore((state) => state.applyAgentQueueSnapshot);
   const githubAutoAttach = useComposerGithubAutoAttach({
     text: userInput,
     remoteUrl: resolveCheckoutRemoteUrl(checkoutStatusQuery.status),
@@ -1346,8 +1356,67 @@ export function Composer({
     [serverId, setQueuedMessages],
   );
 
+  const queueOutbox = useMemo<QueueOutboxWriter>(
+    () => ({
+      add: (entry) => useQueueOutboxStore.getState().add({ ...entry, serverId }),
+      remove: (itemId) => useQueueOutboxStore.getState().remove(itemId),
+    }),
+    [serverId],
+  );
+
+  useEffect(() => {
+    if (!supportsAgentMessageQueue || !client || !isConnected || !agentId) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snapshot = await client.listQueuedAgentMessages(agentId);
+        if (!cancelled) {
+          applyAgentQueueSnapshot(serverId, snapshot);
+        }
+      } catch {
+        // A queue we cannot read is not worth interrupting the composer for; the
+        // next broadcast refreshes it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, applyAgentQueueSnapshot, client, isConnected, serverId, supportsAgentMessageQueue]);
+
   const queueMessage = useCallback(
     (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+      const clearComposer = () => {
+        setUserInput("");
+        setSelectedAttachments([]);
+        resetSuppression();
+        clearSentAttachments(queuedAttachments);
+      };
+
+      if (supportsAgentMessageQueue && client) {
+        void (async () => {
+          const result = await queueComposerMessageOnServer({
+            client,
+            agentId,
+            text: queuedMessage,
+            attachments: queuedAttachments,
+            attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+              supportsForgeAttachments: supportsForgeSearch,
+            }),
+            encodeImages,
+            queue: queueWriter,
+            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+            outbox: queueOutbox,
+          });
+          if (result.error) {
+            setSendError(result.error);
+          }
+        })();
+        clearComposer();
+        return;
+      }
+
       const result = queueComposerMessage({
         agentId,
         text: queuedMessage,
@@ -1356,18 +1425,21 @@ export function Composer({
       });
       if (!result.queued) return;
 
-      setUserInput("");
-      setSelectedAttachments([]);
-      resetSuppression();
-      clearSentAttachments(queuedAttachments);
+      clearComposer();
     },
     [
       agentId,
+      applyAgentQueueSnapshot,
       clearSentAttachments,
+      client,
+      queueOutbox,
       queueWriter,
       resetSuppression,
+      serverId,
       setSelectedAttachments,
       setUserInput,
+      supportsAgentMessageQueue,
+      supportsForgeSearch,
     ],
   );
 
@@ -1680,6 +1752,28 @@ export function Composer({
 
   const handleEditQueuedMessage = useCallback(
     (id: string) => {
+      if (supportsAgentMessageQueue && client) {
+        void (async () => {
+          const result = await takeQueuedComposerMessage({
+            client,
+            agentId,
+            messageId: id,
+            queue: queueWriter,
+            persistImage: persistAttachmentFromDataUrl,
+            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+          });
+          if (result.status === "failed") {
+            setSendError(result.errorMessage);
+            return;
+          }
+          if (result.status === "taken") {
+            setUserInput(result.text);
+            setSelectedAttachments(result.attachments);
+          }
+        })();
+        return;
+      }
+
       const result = editQueuedComposerMessage({
         agentId,
         messageId: id,
@@ -1689,13 +1783,63 @@ export function Composer({
       setUserInput(result.text);
       setSelectedAttachments(result.attachments);
     },
-    [agentId, queueWriter, setSelectedAttachments, setUserInput],
+    [
+      agentId,
+      applyAgentQueueSnapshot,
+      client,
+      queueWriter,
+      serverId,
+      setSelectedAttachments,
+      setUserInput,
+      supportsAgentMessageQueue,
+    ],
   );
 
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
       // Reuse the regular send path; server-side send atomically interrupts any active run.
+      if (supportsAgentMessageQueue && client) {
+        // Take the message off the daemon queue first. The daemon drains the same
+        // queue, so leaving it there while we send would risk sending it twice.
+        const taken = await takeQueuedComposerMessage({
+          client,
+          agentId,
+          messageId: id,
+          queue: queueWriter,
+          persistImage: persistAttachmentFromDataUrl,
+          applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+        });
+        if (taken.status === "failed") {
+          setSendError(taken.errorMessage);
+          return;
+        }
+        if (taken.status === "missing") {
+          return;
+        }
+        try {
+          await submitMessage(taken.text, taken.attachments);
+        } catch (error) {
+          setSendError(error instanceof Error ? error.message : t("composer.errors.failedToSend"));
+          // Requeue so the message is not lost. It lands at the end rather than
+          // where it was, because the daemon queue has no insert-at-position.
+          await queueComposerMessageOnServer({
+            client,
+            agentId,
+            text: taken.text,
+            attachments: taken.attachments,
+            attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+              supportsForgeAttachments: supportsForgeSearch,
+            }),
+            encodeImages,
+            queue: queueWriter,
+            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+            outbox: queueOutbox,
+          });
+        }
+        return;
+      }
+
       const result = await sendQueuedComposerMessageNow({
         agentId,
         messageId: id,
@@ -1708,7 +1852,18 @@ export function Composer({
         setSendError(result.errorMessage);
       }
     },
-    [agentId, queueWriter, submitMessage, t],
+    [
+      agentId,
+      applyAgentQueueSnapshot,
+      client,
+      queueOutbox,
+      queueWriter,
+      serverId,
+      submitMessage,
+      supportsAgentMessageQueue,
+      supportsForgeSearch,
+      t,
+    ],
   );
 
   const handleQueue = useCallback(
