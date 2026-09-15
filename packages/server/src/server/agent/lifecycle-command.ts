@@ -30,7 +30,9 @@ export interface LifecycleAgentManager {
     agentId: string,
     updates: {
       title?: string;
-      labels?: Record<string, string>;
+      /** null deletes the label. */
+      labels?: Record<string, string | null>;
+      workspaceId?: string;
     },
   ): Promise<void>;
 }
@@ -161,22 +163,26 @@ export async function updateAgentCommand(
   input: {
     agentId: string;
     name?: string;
-    labels?: Record<string, string>;
+    /** null deletes the label. */
+    labels?: Record<string, string | null>;
+    workspaceId?: string;
   },
 ): Promise<UpdateAgentResult> {
   const title = input.name?.trim();
   const labels = input.labels && Object.keys(input.labels).length > 0 ? input.labels : undefined;
+  const workspaceId = input.workspaceId?.trim();
 
-  if (!title && !labels) {
+  if (!title && !labels && !workspaceId) {
     return {
       accepted: false,
-      error: "Nothing to update (provide name and/or labels)",
+      error: "Nothing to update (provide name, labels, and/or workspaceId)",
     };
   }
 
   await dependencies.agentManager.updateAgentMetadata(input.agentId, {
     ...(title ? { title } : {}),
     ...(labels ? { labels } : {}),
+    ...(workspaceId ? { workspaceId } : {}),
   });
 
   return {

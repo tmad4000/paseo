@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveUiCommand } from "./resolve";
+import { resolveUiCommand, type ResolvedUiTabOpenCommand } from "./resolve";
 
 function tabOpen(payload: Record<string, unknown>) {
   return resolveUiCommand({
@@ -7,7 +7,7 @@ function tabOpen(payload: Record<string, unknown>) {
     payload: { command: "tab.open", ...payload } as Parameters<
       typeof resolveUiCommand
     >[0]["payload"],
-  });
+  }) as ResolvedUiTabOpenCommand | null;
 }
 
 describe("resolveUiCommand", () => {
@@ -15,6 +15,7 @@ describe("resolveUiCommand", () => {
     expect(
       tabOpen({ workspaceId: "workspace-1", target: { kind: "agent", agentId: "agent-1" } }),
     ).toEqual({
+      command: "tab.open",
       serverId: "connection-server",
       workspaceId: "workspace-1",
       target: { kind: "agent", agentId: "agent-1" },
@@ -67,6 +68,24 @@ describe("resolveUiCommand", () => {
     expect(
       tabOpen({ workspaceId: "workspace-1", target: { kind: "draft" }, focus: false })?.focus,
     ).toBe(false);
+  });
+
+  it("resolves a tab.close command without a focus flag", () => {
+    expect(
+      resolveUiCommand({
+        connectionServerId: "connection-server",
+        payload: {
+          command: "tab.close",
+          workspaceId: "workspace-1",
+          target: { kind: "agent", agentId: "agent-1" },
+        },
+      }),
+    ).toEqual({
+      command: "tab.close",
+      serverId: "connection-server",
+      workspaceId: "workspace-1",
+      target: { kind: "agent", agentId: "agent-1" },
+    });
   });
 
   it("drops a command with no resolvable server, workspace, or target", () => {

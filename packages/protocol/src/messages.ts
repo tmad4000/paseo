@@ -5955,6 +5955,12 @@ export const UiCommandMessageSchema = z.object({
       target: UiWorkspaceTabTargetSchema,
       focus: z.boolean().optional(),
     }),
+    z.object({
+      command: z.literal("tab.close"),
+      serverId: z.string().optional(),
+      workspaceId: z.string(),
+      target: UiWorkspaceTabTargetSchema,
+    }),
   ]),
 });
 

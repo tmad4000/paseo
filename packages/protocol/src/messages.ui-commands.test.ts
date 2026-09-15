@@ -131,12 +131,34 @@ describe("ui command protocol", () => {
     });
   });
 
+  test("accepts the tab.close push without a focus flag", () => {
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "ui.command",
+        payload: {
+          command: "tab.close",
+          serverId: "server-1",
+          workspaceId: "workspace-1",
+          target: { kind: "agent", agentId: "agent-1" },
+        },
+      }),
+    ).toEqual({
+      type: "ui.command",
+      payload: {
+        command: "tab.close",
+        serverId: "server-1",
+        workspaceId: "workspace-1",
+        target: { kind: "agent", agentId: "agent-1" },
+      },
+    });
+  });
+
   test("rejects a ui.command with an unknown command", () => {
     expect(
       SessionOutboundMessageSchema.safeParse({
         type: "ui.command",
         payload: {
-          command: "tab.close",
+          command: "tab.reorder",
           workspaceId: "workspace-1",
           target: { kind: "terminal", terminalId: "terminal-1" },
         },

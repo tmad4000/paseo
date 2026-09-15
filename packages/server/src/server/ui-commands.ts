@@ -109,6 +109,32 @@ export async function resolveUiTabOpenCommand(
   input: UiTabOpenCommandInput,
   deps: UiTabOpenCommandDeps,
 ): Promise<UiTabOpenCommandResult> {
+  return resolveUiTabCommand(input, deps, (context) => ({
+    command: "tab.open",
+    ...context,
+    ...(input.focus === false ? { focus: false } : {}),
+  }));
+}
+
+export async function resolveUiTabCloseCommand(
+  input: Omit<UiTabOpenCommandInput, "focus">,
+  deps: UiTabOpenCommandDeps,
+): Promise<UiTabOpenCommandResult> {
+  return resolveUiTabCommand(input, deps, (context) => ({
+    command: "tab.close",
+    ...context,
+  }));
+}
+
+async function resolveUiTabCommand(
+  input: Omit<UiTabOpenCommandInput, "focus">,
+  deps: UiTabOpenCommandDeps,
+  buildPayload: (context: {
+    serverId: string;
+    workspaceId: string;
+    target: UiWorkspaceTabTarget;
+  }) => UiCommandMessage["payload"],
+): Promise<UiTabOpenCommandResult> {
   const serverId = trimNonEmpty(input.serverId) ?? deps.serverId;
   const workspaceId = trimNonEmpty(input.workspaceId) ?? "";
 
@@ -136,13 +162,7 @@ export async function resolveUiTabOpenCommand(
     workspaceId,
     command: {
       type: "ui.command",
-      payload: {
-        command: "tab.open",
-        serverId,
-        workspaceId,
-        target,
-        ...(input.focus === false ? { focus: false } : {}),
-      },
+      payload: buildPayload({ serverId, workspaceId, target }),
     },
   };
 }

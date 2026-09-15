@@ -1,9 +1,29 @@
 # Agent tab control — findings and design
 
-Status: **design under review**. Nothing below is implemented on this branch yet
-except what `feat/ui-tab-control` already shipped. This doc also carries the
-findings for a second, related change: stopping mid-turn messages from killing
-running provider subagents.
+Status: **implemented on `feat/agent-tab-control`** (both the MCP tab tools and
+the queue-instead-of-interrupt send policy; the design sections below describe
+what shipped). This doc also carries the findings for the second, related
+change: stopping mid-turn messages from killing running provider subagents.
+
+Implementation notes that postdate the design:
+
+- Both features landed on this one branch because the send fix depends on the
+  queue-mirror branch's `AgentQueueService`; the branch merges
+  `feat/queue-mirror-across-devices` rather than stacking a third branch.
+- The busy policy lives in
+  `packages/server/src/server/agent-queue/send-or-queue.ts` and is used by the
+  WS send handler and MCP `send_agent_prompt`; `setupFinishNotification` queues
+  inline. `send_agent_message_request` and `send_agent_prompt` carry the
+  optional `interrupt` flag; responses report `queued`.
+- The app's default `sendBehavior` flipped to `"queue"`; the interrupt-labeled
+  send path passes `interrupt: true` explicitly.
+- `open_tab`/`close_tab` are registered only when the daemon wires the
+  `uiCommands` dependency (bootstrap always does). `close_tab` extends the
+  `ui.command` push with `tab.close`, which the app maps to
+  `closeTabByTarget` in the workspace layout store.
+- `update_agent` (MCP) gained `workspaceId` (move between workspaces) and
+  nullable label values (clear a label), backed by
+  `AgentManager.updateAgentMetadata`.
 
 ## Why
 

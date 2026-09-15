@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { normalizeUiWorkspaceTabTarget, resolveUiTabOpenCommand } from "./ui-commands.js";
+import {
+  normalizeUiWorkspaceTabTarget,
+  resolveUiTabCloseCommand,
+  resolveUiTabOpenCommand,
+} from "./ui-commands.js";
 
 function deps(knownWorkspaceIds: string[] = ["workspace-1"]) {
   return {
@@ -7,6 +11,38 @@ function deps(knownWorkspaceIds: string[] = ["workspace-1"]) {
     workspaceExists: async (workspaceId: string) => knownWorkspaceIds.includes(workspaceId),
   };
 }
+
+describe("resolveUiTabCloseCommand", () => {
+  test("builds a tab.close push for a known workspace", async () => {
+    const result = await resolveUiTabCloseCommand(
+      { workspaceId: "workspace-1", target: { kind: "agent", agentId: "agent-1" } },
+      deps(),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      serverId: "daemon-server",
+      workspaceId: "workspace-1",
+      command: {
+        type: "ui.command",
+        payload: {
+          command: "tab.close",
+          serverId: "daemon-server",
+          workspaceId: "workspace-1",
+          target: { kind: "agent", agentId: "agent-1" },
+        },
+      },
+    });
+  });
+
+  test("rejects an unknown workspace", async () => {
+    const result = await resolveUiTabCloseCommand(
+      { workspaceId: "workspace-9", target: { kind: "draft" } },
+      deps(),
+    );
+    expect(result).toMatchObject({ ok: false, error: "Workspace not found: workspace-9" });
+  });
+});
 
 describe("resolveUiTabOpenCommand", () => {
   test("builds a tab.open push for a known workspace", async () => {

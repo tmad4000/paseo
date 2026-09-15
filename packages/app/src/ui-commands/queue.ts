@@ -1,4 +1,4 @@
-import type { ResolvedUiTabOpenCommand } from "./resolve";
+import type { ResolvedUiCommand } from "./resolve";
 
 /**
  * The push router runs outside React and can receive a command before the app
@@ -7,10 +7,10 @@ import type { ResolvedUiTabOpenCommand } from "./resolve";
  * rather than dropped.
  */
 
-const pending: ResolvedUiTabOpenCommand[] = [];
+const pending: ResolvedUiCommand[] = [];
 const listeners = new Set<() => void>();
 
-export function enqueueUiCommand(command: ResolvedUiTabOpenCommand): void {
+export function enqueueUiCommand(command: ResolvedUiCommand): void {
   pending.push(command);
   // Snapshot: a listener may unsubscribe while draining.
   for (const listener of Array.from(listeners)) {
@@ -18,7 +18,7 @@ export function enqueueUiCommand(command: ResolvedUiTabOpenCommand): void {
   }
 }
 
-export function drainUiCommands(): ResolvedUiTabOpenCommand[] {
+export function drainUiCommands(): ResolvedUiCommand[] {
   return pending.splice(0, pending.length);
 }
 

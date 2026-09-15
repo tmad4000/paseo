@@ -10,11 +10,21 @@ import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
  */
 
 export interface ResolvedUiTabOpenCommand {
+  command: "tab.open";
   serverId: string;
   workspaceId: string;
   target: WorkspaceTabTarget;
   focus: boolean;
 }
+
+export interface ResolvedUiTabCloseCommand {
+  command: "tab.close";
+  serverId: string;
+  workspaceId: string;
+  target: WorkspaceTabTarget;
+}
+
+export type ResolvedUiCommand = ResolvedUiTabOpenCommand | ResolvedUiTabCloseCommand;
 
 /** `prepareWorkspaceTab` swaps this sentinel for a freshly generated draft id. */
 const NEW_DRAFT_ID = "new";
@@ -63,9 +73,9 @@ export function resolveUiCommand(input: {
   /** The server the push arrived on, used when the daemon did not name itself. */
   connectionServerId: string;
   payload: UiCommandMessage["payload"];
-}): ResolvedUiTabOpenCommand | null {
+}): ResolvedUiCommand | null {
   const { payload } = input;
-  if (payload.command !== "tab.open") {
+  if (payload.command !== "tab.open" && payload.command !== "tab.close") {
     return null;
   }
 
@@ -80,5 +90,15 @@ export function resolveUiCommand(input: {
     return null;
   }
 
-  return { serverId, workspaceId, target, focus: payload.focus !== false };
+  if (payload.command === "tab.close") {
+    return { command: "tab.close", serverId, workspaceId, target };
+  }
+
+  return {
+    command: "tab.open",
+    serverId,
+    workspaceId,
+    target,
+    focus: payload.focus !== false,
+  };
 }

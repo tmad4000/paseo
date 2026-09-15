@@ -4,7 +4,7 @@ import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { drainUiCommands, subscribeToUiCommands } from "./queue";
-import type { ResolvedUiTabOpenCommand } from "./resolve";
+import type { ResolvedUiCommand } from "./resolve";
 
 /**
  * Applies `ui.command` pushes from the daemon. Mounted once in the app shell,
@@ -17,7 +17,19 @@ import type { ResolvedUiTabOpenCommand } from "./resolve";
  * never realized.
  */
 export function UiCommandListener() {
-  const apply = useStableEvent((command: ResolvedUiTabOpenCommand) => {
+  const apply = useStableEvent((command: ResolvedUiCommand) => {
+    if (command.command === "tab.close") {
+      const workspaceKey = buildWorkspaceTabPersistenceKey({
+        serverId: command.serverId,
+        workspaceId: command.workspaceId,
+      });
+      if (!workspaceKey) {
+        return;
+      }
+      useWorkspaceLayoutStore.getState().closeTabByTarget(workspaceKey, command.target);
+      return;
+    }
+
     if (!command.focus) {
       const workspaceKey = buildWorkspaceTabPersistenceKey({
         serverId: command.serverId,

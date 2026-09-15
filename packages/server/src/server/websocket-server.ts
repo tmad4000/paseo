@@ -898,6 +898,11 @@ export class VoiceAssistantWebSocketServer {
    * short-lived CLI process) and acted on by the others, so echoing it back to
    * the sender would both be useless and make the delivery count meaningless.
    */
+  /** Broadcast to every trusted client and report how many received it. */
+  public broadcastToTrustedClients(message: WSOutboundMessage): number {
+    return this.broadcastToOtherTrustedClients(null, message);
+  }
+
   private broadcastToOtherTrustedClients(
     origin: TrustedSessionConnection | null,
     message: WSOutboundMessage,
