@@ -1248,6 +1248,7 @@ export async function createPaseoDaemon(
   ): PaseoToolHostDependencies => ({
     agentManager,
     agentStorage,
+    agentQueueService,
     terminalManager,
     getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
     scheduleService,

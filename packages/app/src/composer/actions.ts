@@ -52,8 +52,9 @@ export interface ComposerSendClient {
       messageId: string;
       images: Array<{ data: string; mimeType: string }>;
       attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
+      interrupt?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   uploadFile: (input: { fileName: string; mimeType: string; bytes: Uint8Array }) => Promise<{
     requestId: string;
     file: {
@@ -172,6 +173,8 @@ export interface DispatchComposerAgentMessageInput {
   client: ComposerSendClient;
   agentId: string;
   text: string;
+  /** True marks an intentional mid-turn interruption; see SendMessageOptions.interrupt. */
+  interrupt?: boolean;
   attachments: ComposerAttachment[];
   attachmentSubmitFormat?: ComposerAttachmentSubmitFormat;
   encodeImages: (
@@ -201,6 +204,7 @@ export async function dispatchComposerAgentMessage(
       messageId: clientMessageId,
       images: imagesData ?? [],
       attachments: wirePayload.attachments,
+      ...(input.interrupt ? { interrupt: true } : {}),
     });
     input.submission.accept(input.agentId, clientMessageId);
   } catch (error) {

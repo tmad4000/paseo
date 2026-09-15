@@ -340,6 +340,12 @@ export interface SendMessageOptions {
   messageId?: string;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: SendAgentMessageRequest["attachments"];
+  /**
+   * When the agent is mid-turn: true cancels the turn (killing its in-flight
+   * tool calls and subagents); absent/false lets the daemon queue the message
+   * for delivery when the turn completes.
+   */
+  interrupt?: boolean;
 }
 
 export interface AgentAttentionRequiredNotification {
@@ -3045,7 +3051,7 @@ export class DaemonClient {
     agentId: string,
     text: string,
     options?: SendMessageOptions,
-  ): Promise<void> {
+  ): Promise<{ queued: boolean }> {
     const requestId = this.createRequestId();
     const messageId = options?.messageId ?? crypto.randomUUID();
     const message = SessionInboundMessageSchema.parse({
@@ -3056,6 +3062,7 @@ export class DaemonClient {
       ...(messageId ? { messageId } : {}),
       ...(options?.images ? { images: options.images } : {}),
       ...(options?.attachments ? { attachments: options.attachments } : {}),
+      ...(options?.interrupt !== undefined ? { interrupt: options.interrupt } : {}),
     });
     const payload = await this.sendRequest({
       requestId,
@@ -3074,6 +3081,7 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "sendAgentMessage rejected");
     }
+    return { queued: payload.queued === true };
   }
 
   async sendMessage(agentId: string, text: string, options?: SendMessageOptions): Promise<void> {

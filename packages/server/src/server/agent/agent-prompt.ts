@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type {
@@ -7,6 +8,7 @@ import type {
 } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
+import type { AgentQueueService } from "../agent-queue/service.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 
@@ -247,6 +249,12 @@ export async function startCreatedAgentInitialPrompt(
 export interface SetupFinishNotificationParams {
   agentManager: AgentManager;
   agentStorage: AgentStorage;
+  /**
+   * When set and the caller has a turn in flight, the notification is queued
+   * to deliver after the turn instead of interrupting it — interrupting would
+   * kill the caller's own in-flight tool calls and subagents.
+   */
+  queueService?: AgentQueueService | null;
   childAgentId: string;
   callerAgentId: string;
   requireParentOwnership?: boolean;
@@ -302,6 +310,7 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
   const {
     agentManager,
     agentStorage,
+    queueService = null,
     childAgentId,
     callerAgentId,
     requireParentOwnership = false,
@@ -342,11 +351,21 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
       permissionRequest,
     });
 
+    const notificationPrompt = formatSystemNotificationPrompt(body);
+    if (queueService && agentManager.hasInFlightRun(callerAgentId)) {
+      await queueService.enqueue({
+        agentId: callerAgentId,
+        itemId: randomUUID(),
+        text: notificationPrompt,
+      });
+      return;
+    }
+
     await sendPromptToAgent({
       agentManager,
       agentStorage,
       agentId: callerAgentId,
-      prompt: formatSystemNotificationPrompt(body),
+      prompt: notificationPrompt,
       unarchive: false,
       logger,
     });

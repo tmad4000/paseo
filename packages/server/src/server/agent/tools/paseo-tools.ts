@@ -60,7 +60,9 @@ import {
   toScheduleSummary,
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
-import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
+import { setupFinishNotification } from "../agent-prompt.js";
+import { sendOrQueuePromptToAgent } from "../../agent-queue/send-or-queue.js";
+import type { AgentQueueService } from "../../agent-queue/service.js";
 import { respondToAgentPermission } from "../permission-response.js";
 import {
   archiveAgentCommand,
@@ -96,6 +98,8 @@ import type {
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
   agentStorage: AgentStorage;
+  /** Busy agents get prompts queued here instead of having their turn replaced. */
+  agentQueueService?: AgentQueueService | null;
   terminalManager?: TerminalManager | null;
   getDaemonTcpPort?: () => number | null;
   scheduleService?: ScheduleService | null;
@@ -542,6 +546,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   const {
     agentManager,
     agentStorage,
+    agentQueueService = null,
     terminalManager,
     workspaceScripts,
     scheduleService,
@@ -1101,6 +1106,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     agentId: z.string(),
     prompt: z.string(),
     sessionMode: z.string().optional().describe("Optional mode to set before running the prompt."),
+    interrupt: z
+      .boolean()
+      .optional()
+      .describe(
+        "If the target agent is mid-turn: true cancels its current turn (killing its in-flight tool calls and subagents); false (default) queues the prompt to deliver when the turn completes.",
+      ),
   };
   const agentToAgentSendAgentPromptInputSchema = {
     ...commonSendAgentPromptInputSchema,
@@ -1439,6 +1450,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           agentManager,
           agentStorage,
+          queueService: agentQueueService,
           logger: childLogger,
           paseoHome: options.paseoHome,
           worktreesRoot: options.worktreesRoot,
@@ -1878,24 +1890,43 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       agentId,
       prompt,
       sessionMode,
+      interrupt,
       background = Boolean(callerAgentId),
       notifyOnFinish = Boolean(callerAgentId),
     }) => {
       const shouldNotifyOnFinish = Boolean(callerAgentId && notifyOnFinish && background);
 
-      await sendPromptToAgent({
+      const dispatch = await sendOrQueuePromptToAgent({
         agentManager,
         agentStorage,
+        queueService: agentQueueService,
         agentId,
-        prompt,
-        sessionMode,
+        text: prompt,
+        ...(sessionMode ? { sessionMode } : {}),
+        ...(interrupt !== undefined ? { interrupt } : {}),
         logger: childLogger,
       });
+
+      if (dispatch.queued) {
+        const currentSnapshot = agentManager.getAgent(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({
+            success: true,
+            status: currentSnapshot?.lifecycle ?? "running",
+            lastMessage: null,
+            permission: null,
+            guidance:
+              "The agent is mid-turn, so the prompt was queued and will be delivered when its current turn completes. Do not resend; use get_agent_status to follow progress.",
+          }),
+        };
+      }
 
       if (shouldNotifyOnFinish && callerAgentId) {
         setupFinishNotification({
           agentManager,
           agentStorage,
+          queueService: agentQueueService,
           childAgentId: agentId,
           callerAgentId,
           logger: childLogger,

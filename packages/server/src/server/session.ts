@@ -206,6 +206,7 @@ import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
+import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
   createGitHubService,
@@ -6941,23 +6942,27 @@ export class Session {
     try {
       const agentId = resolved.agentId;
 
-      const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
       this.sessionLogger.trace(
         {
           agentId,
           messageId: msg.messageId,
+          interrupt: msg.interrupt,
           textPrefix: msg.text.slice(0, 80),
         },
         "agent.session.send_agent_message",
       );
-      let dispatchResult: { outOfBand: boolean };
+      let dispatchResult: { outOfBand: boolean; queued: boolean };
       try {
-        dispatchResult = await sendPromptToAgent({
+        dispatchResult = await sendOrQueuePromptToAgent({
           agentManager: this.agentManager,
           agentStorage: this.agentStorage,
+          queueService: this.agentQueueService,
           agentId,
-          prompt,
-          messageId: msg.messageId,
+          text: msg.text,
+          ...(msg.images ? { images: msg.images } : {}),
+          ...(msg.attachments ? { attachments: msg.attachments } : {}),
+          ...(msg.messageId ? { messageId: msg.messageId } : {}),
+          ...(msg.interrupt !== undefined ? { interrupt: msg.interrupt } : {}),
           logger: this.sessionLogger,
         });
       } catch (error) {
@@ -6975,7 +6980,7 @@ export class Session {
         return;
       }
 
-      if (dispatchResult.outOfBand) {
+      if (dispatchResult.outOfBand || dispatchResult.queued) {
         this.emit({
           type: "send_agent_message_response",
           payload: {
@@ -6983,6 +6988,7 @@ export class Session {
             agentId,
             accepted: true,
             error: null,
+            ...(dispatchResult.queued ? { queued: true } : {}),
           },
         });
         return;

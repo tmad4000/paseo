@@ -1252,6 +1252,10 @@ export const SendAgentMessageRequestSchema = z.object({
   messageId: z.string().optional(), // Client-provided ID for deduplication
   images: z.array(ImageAttachmentSchema).optional(),
   attachments: AgentAttachmentsSchema,
+  // When the agent has a turn in flight: true cancels that turn (today's
+  // replace behavior); absent/false queues the message to deliver when the
+  // turn completes, so in-flight tool calls and subagents are never killed.
+  interrupt: z.boolean().optional(),
 });
 
 export const WaitForFinishRequestSchema = z.object({
@@ -4362,6 +4366,9 @@ export const SendAgentMessageResponseMessageSchema = z.object({
     agentId: z.string(),
     accepted: z.boolean(),
     error: z.string().nullable(),
+    // True when the agent was mid-turn and the message went to its queue
+    // instead of starting a run.
+    queued: z.boolean().optional(),
   }),
 });
 

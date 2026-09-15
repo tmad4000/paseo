@@ -120,7 +120,9 @@ type StoredAppSettings = z.infer<typeof StoredAppSettingsSchema>;
 export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: "auto",
   language: "system",
-  sendBehavior: "interrupt",
+  // Queue by default: a mid-turn send should never silently kill the turn's
+  // in-flight tool calls and subagents. Interrupt stays one setting away.
+  sendBehavior: "queue",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,
