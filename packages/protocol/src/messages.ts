@@ -768,6 +768,16 @@ const AgentActiveTurnPayloadSchema = z.object({
   startedAt: z.string().nullable(),
 });
 
+export const AgentArtifactSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  kind: z.enum(["html", "markdown", "image", "svg", "pdf", "diff"]),
+  mimeType: z.string(),
+  size: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 export const AgentSnapshotPayloadSchema = z.object({
   id: z.string(),
   provider: AgentProviderSchema,
@@ -797,6 +807,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  artifacts: z.array(AgentArtifactSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1003,18 +1014,20 @@ export const ForgeIssueAttachmentSchema = z.object({
   projectPath: z.string().optional(),
 });
 
-export const TextAttachmentSchema = z
-  .object({
-    type: z.literal("text"),
-    mimeType: z.literal("text/plain"),
-    contextKind: z.string().optional(),
-    title: z.string().nullable().optional(),
-    text: z.string(),
-  })
-  .transform(({ contextKind, ...attachment }) => ({
+export const TextAttachmentWireSchema = z.object({
+  type: z.literal("text"),
+  mimeType: z.literal("text/plain"),
+  contextKind: z.string().optional(),
+  title: z.string().nullable().optional(),
+  text: z.string(),
+});
+
+export const TextAttachmentSchema = TextAttachmentWireSchema.transform(
+  ({ contextKind, ...attachment }) => ({
     ...attachment,
     ...(contextKind === "chat_history" ? { contextKind } : {}),
-  }));
+  }),
+);
 
 export const ReviewAttachmentContextLineSchema = z.object({
   oldLineNumber: z.number().int().positive().nullable(),
@@ -1059,6 +1072,21 @@ export const AgentAttachmentSchema = z.discriminatedUnion("type", [
   GitHubPrAttachmentSchema,
   GitHubIssueAttachmentSchema,
   TextAttachmentSchema,
+  ReviewAttachmentSchema,
+  UploadedFileAttachmentSchema,
+]);
+
+/**
+ * Same shape as AgentAttachmentSchema without the text-attachment transform, so
+ * attachments can appear in outbound messages. Message schemas stay pure — see
+ * docs/protocol-validation.md.
+ */
+export const AgentAttachmentWireSchema = z.discriminatedUnion("type", [
+  ForgeChangeRequestAttachmentSchema,
+  ForgeIssueAttachmentSchema,
+  GitHubPrAttachmentSchema,
+  GitHubIssueAttachmentSchema,
+  TextAttachmentWireSchema,
   ReviewAttachmentSchema,
   UploadedFileAttachmentSchema,
 ]);
@@ -1610,6 +1638,28 @@ export const AgentConfigApplyResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+export const AgentArtifactsScanRequestMessageSchema = z.object({
+  type: z.literal("agent.artifacts.scan.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+  /** Overrides the daemon's default retention ceiling for this scan. */
+  limit: z.number().int().positive().optional(),
+});
+
+export const AgentArtifactsScanResponseMessageSchema = z.object({
+  type: z.literal("agent.artifacts.scan.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+    /** Files newly recorded or refreshed by this scan. */
+    addedOrUpdated: z.number().int().nonnegative(),
+    /** Size of the agent's artifact list after the scan. */
+    total: z.number().int().nonnegative(),
+  }),
+});
+
 export const AgentDetachRequestMessageSchema = z.object({
   type: z.literal("agent.detach.request"),
   agentId: z.string(),
@@ -2049,6 +2099,162 @@ export const ForgeSearchKindSchema = z.enum([
 ]);
 
 export const GitHubSearchKindSchema = ForgeSearchKindSchema;
+
+// ---------------------------------------------------------------------------
+// Agent message queue — see docs/queue-mirroring.md
+// ---------------------------------------------------------------------------
+
+/**
+ * Queued images are described, never shipped. The bytes live on the daemon so a
+ * queue holding a photo does not push megabytes of base64 at every connected
+ * client on every queue change.
+ */
+export const QueuedAgentMessageImageSchema = z.object({
+  id: z.string(),
+  mimeType: z.string(),
+  fileName: z.string().nullable().optional(),
+  byteSize: z.number().int().nonnegative().optional(),
+});
+
+/**
+ * The composer-side view of an attachment, kept alongside the agent-side one so
+ * any device can pull a queued message back into its composer with the same
+ * pills the author saw. Images are excluded: their bytes are stored separately
+ * and fetched with agent.queue.get_item_images.request. Mirrors the non-image
+ * arms of UserComposerAttachment in the app.
+ */
+export const QueuedComposerAttachmentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("file"), attachment: UploadedFileAttachmentSchema }),
+  z.object({
+    kind: z.literal("workspace_file"),
+    path: z.string(),
+    selection: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("whole_file") }),
+      z.object({
+        kind: z.literal("line_range"),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+      }),
+    ]),
+  }),
+  z.object({ kind: z.literal("forge_issue"), item: ForgeSearchItemSchema }),
+  z.object({ kind: z.literal("forge_change_request"), item: ForgeSearchItemSchema }),
+  z.object({ kind: z.literal("github_issue"), item: ForgeSearchItemSchema }),
+  // `owner` is deliberately absent: it marks an attachment as belonging to the
+  // new-workspace picker, which a queued message never is.
+  z.object({ kind: z.literal("github_pr"), item: ForgeSearchItemSchema }),
+]);
+
+export const QueuedAgentMessageSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  attachments: z.array(AgentAttachmentWireSchema).optional(),
+  composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
+  images: z.array(QueuedAgentMessageImageSchema).optional(),
+  createdAt: z.string(),
+});
+
+export const AgentQueueSnapshotSchema = z.object({
+  agentId: z.string(),
+  /** Increments on every mutation so clients can drop a stale broadcast. */
+  revision: z.number().int().nonnegative(),
+  items: z.array(QueuedAgentMessageSchema),
+});
+
+export const AgentQueueEnqueueRequestSchema = z.object({
+  type: z.literal("agent.queue.enqueue.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  /** Client-generated so the optimistic local item and the stored item share an id. */
+  itemId: z.string(),
+  text: z.string(),
+  images: z.array(ImageAttachmentSchema).optional(),
+  attachments: AgentAttachmentsSchema,
+  composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
+});
+
+export const AgentQueueRemoveRequestSchema = z.object({
+  type: z.literal("agent.queue.remove.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+});
+
+export const AgentQueueListRequestSchema = z.object({
+  type: z.literal("agent.queue.list.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+export const AgentQueueReorderRequestSchema = z.object({
+  type: z.literal("agent.queue.reorder.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  /** Full id list in the desired order. Unknown ids are ignored, omitted ids keep their relative order at the end. */
+  itemIds: z.array(z.string()),
+});
+
+/**
+ * Fetches the image bytes of one queued item. A device that did not queue the
+ * item has no local copy, so editing it there would otherwise drop the images.
+ */
+export const AgentQueueGetItemImagesRequestSchema = z.object({
+  type: z.literal("agent.queue.get_item_images.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+});
+
+export const AgentQueueGetItemImagesResponseSchema = z.object({
+  type: z.literal("agent.queue.get_item_images.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    itemId: z.string(),
+    images: z.array(
+      z.object({
+        id: z.string(),
+        mimeType: z.string(),
+        fileName: z.string().nullable().optional(),
+        data: z.string(),
+      }),
+    ),
+    error: z.string().nullable(),
+  }),
+});
+
+const AgentQueueResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  agentId: z.string(),
+  queue: AgentQueueSnapshotSchema.nullable(),
+  error: z.string().nullable(),
+});
+
+export const AgentQueueEnqueueResponseSchema = z.object({
+  type: z.literal("agent.queue.enqueue.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueRemoveResponseSchema = z.object({
+  type: z.literal("agent.queue.remove.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueListResponseSchema = z.object({
+  type: z.literal("agent.queue.list.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueReorderResponseSchema = z.object({
+  type: z.literal("agent.queue.reorder.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+/** Unsolicited full-queue broadcast to every client connected to this daemon. */
+export const AgentQueueUpdateMessageSchema = z.object({
+  type: z.literal("agent.queue.update"),
+  payload: AgentQueueSnapshotSchema,
+});
 
 export const ForgeSearchRequestSchema = z.object({
   type: z.literal("forge.search.request"),
@@ -2826,7 +3032,13 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentArtifactsScanRequestMessageSchema,
   AgentRewindRequestMessageSchema,
+  AgentQueueEnqueueRequestSchema,
+  AgentQueueRemoveRequestSchema,
+  AgentQueueListRequestSchema,
+  AgentQueueReorderRequestSchema,
+  AgentQueueGetItemImagesRequestSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
   SubscribeCheckoutDiffRequestSchema,
@@ -3136,6 +3348,10 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRecovery: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
+        // COMPAT(artifactFeed): added in v0.2.0, remove after 2027-01-22 once daemon floor >= v0.2.0.
+        artifactFeed: z.boolean().optional(),
+        // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
+        agentMessageQueue: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -5817,7 +6033,14 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentArtifactsScanResponseMessageSchema,
   AgentRewindResponseMessageSchema,
+  AgentQueueEnqueueResponseSchema,
+  AgentQueueRemoveResponseSchema,
+  AgentQueueListResponseSchema,
+  AgentQueueReorderResponseSchema,
+  AgentQueueGetItemImagesResponseSchema,
+  AgentQueueUpdateMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   ProjectIconSetResponseSchema,
@@ -6013,6 +6236,12 @@ export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureRespo
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
+export type QueuedAgentMessage = z.infer<typeof QueuedAgentMessageSchema>;
+export type QueuedComposerAttachment = z.infer<typeof QueuedComposerAttachmentSchema>;
+export type QueuedAgentMessageImage = z.infer<typeof QueuedAgentMessageImageSchema>;
+export type AgentQueueSnapshot = z.infer<typeof AgentQueueSnapshotSchema>;
+export type AgentQueueEnqueueRequest = z.infer<typeof AgentQueueEnqueueRequestSchema>;
+export type AgentQueueUpdateMessage = z.infer<typeof AgentQueueUpdateMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
 export type ProjectIconSetResponse = z.infer<typeof ProjectIconSetResponseSchema>;
@@ -6175,6 +6404,12 @@ export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMes
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
+export type AgentArtifactsScanRequestMessage = z.infer<
+  typeof AgentArtifactsScanRequestMessageSchema
+>;
+export type AgentArtifactsScanResponseMessage = z.infer<
+  typeof AgentArtifactsScanResponseMessageSchema
+>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;

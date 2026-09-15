@@ -6,13 +6,18 @@ export function getLocalBinDir(): string {
   return path.join(os.homedir(), ".local", "bin");
 }
 
+// This fork installs its CLI as `paseo-fork` so it can coexist with a stock
+// Paseo install instead of overwriting ~/.local/bin/paseo.
+const CLI_COMMAND_NAME = "paseo-fork";
+
 export function getCliTargetPath(): string {
-  const filename = process.platform === "win32" ? "paseo.cmd" : "paseo";
+  const filename = process.platform === "win32" ? `${CLI_COMMAND_NAME}.cmd` : CLI_COMMAND_NAME;
   return path.join(getLocalBinDir(), filename);
 }
 
 export function getBundledCliShimPath(): string {
-  const cliShimFilename = process.platform === "win32" ? "paseo.cmd" : "paseo";
+  const cliShimFilename =
+    process.platform === "win32" ? `${CLI_COMMAND_NAME}.cmd` : CLI_COMMAND_NAME;
 
   if (process.platform === "darwin") {
     const electronExePath = app.getPath("exe");

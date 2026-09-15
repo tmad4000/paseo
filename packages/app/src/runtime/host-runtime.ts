@@ -2140,6 +2140,11 @@ export class HostRuntimeStore {
     if (this.queuedAgentDrainInFlight.has(drainKey)) return;
     const store = useSessionStore.getState();
     const session = store.sessions[serverId];
+    // COMPAT(agentMessageQueue): added in v0.4.0. When the daemon owns the queue
+    // it also drains it, and draining from here too would send twice.
+    if (session?.serverInfo?.features?.agentMessageQueue === true) {
+      return;
+    }
     const queue = session?.queuedMessages.get(agentId);
     const client = session?.client;
     if (!client || !queue?.length || session.initializingAgents.get(agentId) === true) {

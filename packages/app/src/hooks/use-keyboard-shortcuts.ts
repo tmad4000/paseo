@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { getIsElectronRuntime } from "@/constants/layout";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
+import { useFindStore } from "@/find/find-store";
 import { setCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import { getResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
@@ -208,6 +209,9 @@ export function useKeyboardShortcuts({
         }
         case "shortcuts-dialog-toggle":
           useKeyboardShortcutsStore.getState().setShortcutsDialogOpen(action.nextOpen);
+          return true;
+        case "find-toggle":
+          useFindStore.getState().toggle();
           return true;
       }
     };

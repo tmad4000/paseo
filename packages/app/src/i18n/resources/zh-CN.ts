@@ -232,6 +232,23 @@ export const zhCN: TranslationResources = {
       callout: "此 Agent 已归档",
       unarchive: "取消归档",
     },
+    artifacts: {
+      chatTab: "聊天",
+      tab: "产物 ({{count}})",
+      emptyTitle: "暂无产物",
+      emptyDescription: "此 Agent 创建的文件将显示在这里。",
+      updateHostTitle: "更新 Host 以使用产物",
+      updateHostDescription: "此 Host 尚不支持每个聊天的产物。",
+      open: "打开 {{name}}",
+      openLabel: "打开",
+    },
+  },
+  find: {
+    placeholder: "查找",
+    counter: "{{active}}/{{total}}",
+    next: "下一个匹配",
+    previous: "上一个匹配",
+    close: "关闭查找",
   },
   sessions: {
     title: "历史",

@@ -33,7 +33,8 @@ export type ShortcutAction =
   | { kind: "open-project-picker" }
   | { kind: "callback"; name: ShortcutCallbackName }
   | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" }
-  | { kind: "shortcuts-dialog-toggle"; nextOpen: boolean };
+  | { kind: "shortcuts-dialog-toggle"; nextOpen: boolean }
+  | { kind: "find-toggle" };
 
 const NONE: ShortcutAction = { kind: "none" };
 
@@ -203,6 +204,8 @@ export function routeKeyboardShortcut(
         return { kind: "command-center-toggle", nextOpen: true, scope: "files" };
       }
       return dispatch({ id: "workspace.project.pick", scope: "workspace" });
+    case "find.toggle":
+      return { kind: "find-toggle" };
     case "shortcuts.dialog.toggle":
       return { kind: "shortcuts-dialog-toggle", nextOpen: !ctx.shortcutsDialogOpen };
     default:

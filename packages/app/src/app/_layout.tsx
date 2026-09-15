@@ -128,6 +128,8 @@ import {
 } from "@/utils/host-routes";
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { ForkBadge } from "@/components/desktop/fork-badge";
+import { FindBar } from "@/find/find-bar";
 import {
   ensureOsNotificationPermission,
   WEB_NOTIFICATION_CLICK_EVENT,
@@ -1025,6 +1027,8 @@ export default function RootLayout() {
           <RootErrorBoundary>
             <RootAppTree />
           </RootErrorBoundary>
+          <ForkBadge />
+          <FindBar />
         </SafeAreaProvider>
       </I18nProvider>
     </QueryProvider>

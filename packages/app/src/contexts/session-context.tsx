@@ -46,6 +46,7 @@ import {
   type SessionState,
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
+import { flushQueueOutboxForServer, type PendingQueueEnqueue } from "@/stores/queue-outbox-store";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -195,6 +196,18 @@ type WorkspaceSetupProgressPayload = Extract<
 
 type SessionStoreActions = ReturnType<typeof useSessionStore.getState>;
 type SetInitializingAgents = SessionStoreActions["setInitializingAgents"];
+
+/** Removes the optimistic row of an outbox entry that gave up retrying. */
+function dropAbandonedQueueRow(serverId: string, entry: PendingQueueEnqueue): void {
+  useSessionStore.getState().setQueuedMessages(serverId, (prev) => {
+    const next = new Map(prev);
+    next.set(
+      entry.agentId,
+      (prev.get(entry.agentId) ?? []).filter((row) => row.id !== entry.itemId),
+    );
+    return next;
+  });
+}
 
 function clearAgentInitializingFlag(
   setInitializingAgents: SetInitializingAgents,
@@ -754,6 +767,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       useProviderSubagentStore.getState().applyUpdate(serverId, message.payload);
     });
 
+    const unsubAgentQueueUpdate = client.on("agent.queue.update", (message) => {
+      if (message.type !== "agent.queue.update") return;
+      useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
+    });
+
     const unsubScriptStatusUpdate = client.on("script_status_update", (message) => {
       if (message.type !== "script_status_update") return;
       setWorkspaces(serverId, (prev) => patchWorkspaceScripts(prev, message.payload));
@@ -797,6 +815,17 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
           ...(serverInfo.features ? { features: serverInfo.features } : {}),
         });
+        if (serverInfo.features?.agentMessageQueue === true) {
+          // Server info arrives on every (re)connect, which is exactly when an
+          // enqueue the daemon never acknowledged should be retried.
+          void flushQueueOutboxForServer({
+            serverId,
+            client,
+            applySnapshot: (snapshot) =>
+              useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
+            onDropEntry: (entry) => dropAbandonedQueueRow(serverId, entry),
+          });
+        }
         return;
       }
     });
@@ -947,6 +976,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubAgentStream();
       unsubAgentTimeline();
       unsubProviderSubagentUpdate();
+      unsubAgentQueueUpdate();
       unsubAgentAttention();
       unsubScriptStatusUpdate();
       unsubCheckoutStatusUpdate();

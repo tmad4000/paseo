@@ -107,6 +107,16 @@ const AgentCapabilitiesSchema = z.strictObject({
   supportsRewindBoth: z.boolean().optional(),
 });
 
+const StoredAgentArtifactSchema = z.strictObject({
+  path: z.string(),
+  name: z.string(),
+  kind: z.enum(["html", "markdown", "image", "svg", "pdf", "diff"]),
+  mimeType: z.string(),
+  size: z.number().int().nonnegative(),
+  createdAt: IsoDateSchema,
+  updatedAt: IsoDateSchema,
+});
+
 const StoredAgentSnapshotSchema = z.strictObject({
   id: z.string(),
   provider: AgentProviderSchema,
@@ -137,6 +147,10 @@ const StoredAgentSnapshotSchema = z.strictObject({
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: IsoDateSchema.nullable().optional(),
   archivedAt: IsoDateSchema.nullable().optional(),
+  // serializeAgent writes this key, and the surrounding object is strict — a
+  // missing entry here makes every cached agent that produced an artifact fail
+  // to parse on load, silently emptying the replica cache.
+  artifacts: z.array(StoredAgentArtifactSchema).optional(),
 });
 
 const StoredAgentSchema = z.strictObject({
@@ -367,6 +381,10 @@ function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
   }
 }
 
+function serializeAgentArtifacts(agent: Agent) {
+  return agent.artifacts ? { artifacts: agent.artifacts } : {};
+}
+
 function serializeAgent(agent: Agent): StoredAgent {
   const snapshot = {
     id: agent.id,
@@ -418,6 +436,7 @@ function serializeAgent(agent: Agent): StoredAgent {
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp?.toISOString() ?? null,
     archivedAt: agent.archivedAt?.toISOString() ?? null,
+    ...serializeAgentArtifacts(agent),
   };
   return {
     snapshot,

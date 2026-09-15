@@ -235,6 +235,23 @@ export const es: TranslationResources = {
       callout: "Este agente está archivado.",
       unarchive: "Desarchivar",
     },
+    artifacts: {
+      chatTab: "Chat",
+      tab: "Artefactos ({{count}})",
+      emptyTitle: "Aún no hay artefactos",
+      emptyDescription: "Los archivos que cree este agente aparecerán aquí.",
+      updateHostTitle: "Actualiza el host para usar artefactos",
+      updateHostDescription: "Este host aún no admite artefactos por chat.",
+      open: "Abrir {{name}}",
+      openLabel: "Abrir",
+    },
+  },
+  find: {
+    placeholder: "Buscar",
+    counter: "{{active}}/{{total}}",
+    next: "Coincidencia siguiente",
+    previous: "Coincidencia anterior",
+    close: "Cerrar búsqueda",
   },
   sessions: {
     title: "Historial",

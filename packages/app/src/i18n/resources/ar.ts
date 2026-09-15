@@ -232,6 +232,23 @@ export const ar: TranslationResources = {
       callout: "تمت أرشفة هذا الوكيل",
       unarchive: "إلغاء الأرشفة",
     },
+    artifacts: {
+      chatTab: "الدردشة",
+      tab: "الملفات ({{count}})",
+      emptyTitle: "لا توجد ملفات بعد",
+      emptyDescription: "ستظهر هنا الملفات التي ينشئها هذا الوكيل.",
+      updateHostTitle: "حدّث المضيف لاستخدام الملفات",
+      updateHostDescription: "لا يدعم هذا المضيف ملفات الدردشة بعد.",
+      open: "فتح {{name}}",
+      openLabel: "فتح",
+    },
+  },
+  find: {
+    placeholder: "بحث",
+    counter: "{{active}}/{{total}}",
+    next: "التطابق التالي",
+    previous: "التطابق السابق",
+    close: "إغلاق البحث",
   },
   sessions: {
     title: "السجل",

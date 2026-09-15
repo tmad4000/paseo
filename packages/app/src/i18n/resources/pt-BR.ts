@@ -235,6 +235,23 @@ export const ptBR: TranslationResources = {
       callout: "Este agente está arquivado",
       unarchive: "Desarquivar",
     },
+    artifacts: {
+      chatTab: "Chat",
+      tab: "Artefatos ({{count}})",
+      emptyTitle: "Nenhum artefato ainda",
+      emptyDescription: "Os arquivos criados por este agente aparecerão aqui.",
+      updateHostTitle: "Atualize o host para usar artefatos",
+      updateHostDescription: "Este host ainda não oferece artefatos por chat.",
+      open: "Abrir {{name}}",
+      openLabel: "Abrir",
+    },
+  },
+  find: {
+    placeholder: "Localizar",
+    counter: "{{active}}/{{total}}",
+    next: "Próxima ocorrência",
+    previous: "Ocorrência anterior",
+    close: "Fechar localizar",
   },
   sessions: {
     title: "Histórico de agentes",

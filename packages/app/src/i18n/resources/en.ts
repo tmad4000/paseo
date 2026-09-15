@@ -231,6 +231,23 @@ export const en = {
       callout: "This agent is archived",
       unarchive: "Unarchive",
     },
+    artifacts: {
+      chatTab: "Chat",
+      tab: "Artifacts ({{count}})",
+      emptyTitle: "No artifacts yet",
+      emptyDescription: "Files this agent creates will appear here.",
+      updateHostTitle: "Update the host to use artifacts",
+      updateHostDescription: "This host does not support per-chat artifact feeds yet.",
+      open: "Open {{name}}",
+      openLabel: "Open",
+    },
+  },
+  find: {
+    placeholder: "Find",
+    counter: "{{active}}/{{total}}",
+    next: "Next match",
+    previous: "Previous match",
+    close: "Close find",
   },
   sessions: {
     title: "History",

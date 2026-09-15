@@ -23,8 +23,15 @@ export function buildAgentDeepLinkRoute(
   return `/h/${encodeURIComponent(serverId)}/agent/${encodeURIComponent(agentId)}`;
 }
 
+// This fork registers paseo-fork:// with the OS so it cannot hijack links that
+// belong to a stock Paseo install sitting beside it. Links are emitted with the
+// fork scheme; both schemes still parse, so links produced by a stock build (or
+// stored from before the rename) keep working.
+const DEEP_LINK_SCHEME = "paseo-fork";
+const ACCEPTED_DEEP_LINK_PROTOCOLS = new Set(["paseo-fork:", "paseo:"]);
+
 export function buildAgentDeepLink(target: AgentDeepLinkTarget): string {
-  return `paseo:/${buildAgentDeepLinkRoute(target)}`;
+  return `${DEEP_LINK_SCHEME}:/${buildAgentDeepLinkRoute(target)}`;
 }
 
 export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
@@ -36,7 +43,7 @@ export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
   }
 
   if (
-    url.protocol !== "paseo:" ||
+    !ACCEPTED_DEEP_LINK_PROTOCOLS.has(url.protocol) ||
     url.hostname !== "h" ||
     url.username ||
     url.password ||

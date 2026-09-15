@@ -235,6 +235,23 @@ export const ja: TranslationResources = {
       callout: "このエージェントはアーカイブされています",
       unarchive: "アーカイブ解除",
     },
+    artifacts: {
+      chatTab: "チャット",
+      tab: "成果物 ({{count}})",
+      emptyTitle: "成果物はまだありません",
+      emptyDescription: "このエージェントが作成したファイルがここに表示されます。",
+      updateHostTitle: "成果物を使うにはホストを更新してください",
+      updateHostDescription: "このホストはチャットごとの成果物にまだ対応していません。",
+      open: "{{name}}を開く",
+      openLabel: "開く",
+    },
+  },
+  find: {
+    placeholder: "検索",
+    counter: "{{active}}/{{total}}",
+    next: "次の一致",
+    previous: "前の一致",
+    close: "検索を閉じる",
   },
   sessions: {
     title: "履歴",

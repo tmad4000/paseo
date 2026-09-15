@@ -92,8 +92,10 @@ describe("desktop packaging", () => {
   it("registers Paseo agent links with the operating system", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 
-    expect(config).toContain("name: Paseo agent link");
-    expect(config).toContain("- paseo");
+    // The fork registers its own scheme so it does not take over paseo:// links
+    // from a stock Paseo install sitting next to it.
+    expect(config).toContain("name: Paseo Fork agent link");
+    expect(config).toContain("- paseo-fork");
   });
 
   // electron-builder packs production dependencies declared in package.json into

@@ -156,6 +156,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   general: [
     "toggle-command-center",
     "search-files",
+    "toggle-find",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -783,6 +784,31 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "toggle-command-center",
       section: "general",
       label: "Toggle command center",
+    },
+  },
+
+  // --- Find in page ---
+  {
+    id: "find-toggle-cmd-f-mac",
+    action: "find.toggle",
+    combo: "Cmd+F",
+    when: { mac: true },
+    help: {
+      id: "toggle-find",
+      section: "general",
+      label: "Find in page",
+    },
+  },
+  {
+    id: "find-toggle-ctrl-f-non-mac",
+    action: "find.toggle",
+    combo: "Ctrl+F",
+    // Terminals bind Ctrl+F to cursor-forward, so the terminal scope keeps it.
+    when: { mac: false, terminal: false },
+    help: {
+      id: "toggle-find",
+      section: "general",
+      label: "Find in page",
     },
   },
 
