@@ -5332,6 +5332,7 @@ describe("agent snapshot MCP serialization", () => {
           provider: "codex",
           sessionId: "session-full",
         },
+        artifacts: [],
       }),
     );
     expect(snapshot.capabilities).toEqual(
@@ -5830,5 +5831,183 @@ describe("agent snapshot MCP serialization", () => {
     expect(content).not.toContain("[User] u2");
     expect(content).not.toContain("second answer");
     expect(content).not.toContain("first answer");
+  });
+});
+
+describe("tab MCP tools", () => {
+  const logger = createTestLogger();
+  const TAB_WORKSPACE_ID = "wks_tab_tools";
+
+  class TabAgentManagerFake {
+    public readonly labelUpdates: Array<{
+      agentId: string;
+      updates: { labels?: Record<string, string | null> };
+    }> = [];
+
+    private readonly agent = createManagedAgent({
+      id: "agent-1",
+      cwd: REPO_CWD,
+      workspaceId: TAB_WORKSPACE_ID,
+      labels: {
+        "paseo.auto-open-agent-tab": "true",
+        "paseo.open-agent-tab.client-1": "true",
+      },
+    });
+
+    public getAgent(agentId: string): ManagedAgent | null {
+      return agentId === this.agent.id ? this.agent : null;
+    }
+
+    public listAgents(): ManagedAgent[] {
+      return [];
+    }
+
+    public async updateAgentMetadata(
+      agentId: string,
+      updates: { labels?: Record<string, string | null> },
+    ): Promise<void> {
+      this.labelUpdates.push({ agentId, updates });
+    }
+  }
+
+  class TabAgentStorageFake {
+    public async list(): Promise<StoredAgentRecord[]> {
+      return [];
+    }
+
+    public async get(): Promise<StoredAgentRecord | null> {
+      return null;
+    }
+  }
+
+  async function createTabToolHarness() {
+    const agentManager = new TabAgentManagerFake();
+    const broadcasts: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const server = await createAgentMcpServer({
+      agentManager: agentManager as unknown as AgentManager,
+      agentStorage: new TabAgentStorageFake() as unknown as AgentStorage,
+      providerSnapshotManager:
+        new BoundaryProviderSnapshotManagerFake() as unknown as ProviderSnapshotManager,
+      workspaceRegistry: {
+        get: async (workspaceId: string) =>
+          workspaceId === TAB_WORKSPACE_ID
+            ? createPersistedWorkspaceRecord({
+                workspaceId: TAB_WORKSPACE_ID,
+                projectId: "project-tab-tools",
+                cwd: REPO_CWD,
+                kind: "directory",
+                displayName: "tab tools",
+                createdAt: "2026-07-03T00:00:00.000Z",
+                updatedAt: "2026-07-03T00:00:00.000Z",
+              })
+            : null,
+        list: async () => [],
+        upsert: async () => {},
+      } as unknown as Pick<WorkspaceRegistry, "get" | "list" | "upsert">,
+      uiCommands: {
+        serverId: "daemon-server",
+        broadcast: (command) => {
+          broadcasts.push(command as { type: string; payload: Record<string, unknown> });
+          return 1;
+        },
+      },
+      callerAgentId: "agent-1",
+      logger,
+    });
+    const client = await connectInMemoryMcpClient(server);
+    return { agentManager, broadcasts, client };
+  }
+
+  it("open_tab broadcasts tab.open in the agent's workspace and stamps the auto-open label", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const result = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "agent-1" } },
+      });
+
+      expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+      expect(result.structuredContent).toEqual({
+        workspaceId: TAB_WORKSPACE_ID,
+        delivered: 1,
+      });
+      expect(agentManager.labelUpdates).toEqual([
+        {
+          agentId: "agent-1",
+          updates: { labels: { "paseo.auto-open-agent-tab": "true" } },
+        },
+      ]);
+      expect(broadcasts).toEqual([
+        {
+          type: "ui.command",
+          payload: {
+            command: "tab.open",
+            serverId: "daemon-server",
+            workspaceId: TAB_WORKSPACE_ID,
+            target: { kind: "agent", agentId: "agent-1" },
+          },
+        },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("open_tab rejects a workspace that disagrees with the agent's own", async () => {
+    const { broadcasts, client } = await createTabToolHarness();
+    try {
+      const result = await client.callTool({
+        name: "open_tab",
+        arguments: {
+          target: { kind: "agent", agentId: "agent-1" },
+          workspaceId: "wks_other",
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(broadcasts).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("close_tab broadcasts tab.close and clears every tab label", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const result = await client.callTool({
+        name: "close_tab",
+        arguments: { target: { kind: "agent", agentId: "agent-1" } },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({
+        workspaceId: TAB_WORKSPACE_ID,
+        delivered: 1,
+      });
+      expect(agentManager.labelUpdates).toEqual([
+        {
+          agentId: "agent-1",
+          updates: {
+            labels: {
+              "paseo.auto-open-agent-tab": null,
+              "paseo.open-agent-tab.client-1": null,
+            },
+          },
+        },
+      ]);
+      expect(broadcasts).toEqual([
+        {
+          type: "ui.command",
+          payload: {
+            command: "tab.close",
+            serverId: "daemon-server",
+            workspaceId: TAB_WORKSPACE_ID,
+            target: { kind: "agent", agentId: "agent-1" },
+          },
+        },
+      ]);
+    } finally {
+      await client.close();
+    }
   });
 });

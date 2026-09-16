@@ -1318,10 +1318,18 @@ export function Composer({
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
+      // Reaching a direct send while the agent's turn is active means the user
+      // chose the interrupt-labeled action (queue mode routes elsewhere), so
+      // tell the daemon the interruption is intentional.
+      const isTargetTurnActive = selectAgentTurnPresentation(
+        useSessionStore.getState().sessions[serverId],
+        targetAgentId,
+      ).isActive;
       await dispatchComposerAgentMessage({
         client,
         agentId: targetAgentId,
         text,
+        ...(isTargetTurnActive ? { interrupt: true } : {}),
         attachments: sendAttachments,
         attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,

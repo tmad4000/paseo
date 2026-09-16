@@ -15,6 +15,7 @@ function makeAgent(input: {
   archivedAt?: Date | null;
   createdAt?: Date;
   lastActivityAt?: Date;
+  labels?: Record<string, string>;
 }): Agent {
   const createdAt = input.createdAt ?? new Date("2026-03-04T00:00:00.000Z");
   const lastActivityAt = input.lastActivityAt ?? createdAt;
@@ -50,7 +51,7 @@ function makeAgent(input: {
     model: null,
     thinkingOptionId: null,
     parentAgentId: input.parentAgentId ?? null,
-    labels: {},
+    labels: input.labels ?? {},
     requiresAttention: false,
     attentionReason: null,
     attentionTimestamp: null,
@@ -85,6 +86,31 @@ describe("workspace agent visibility", () => {
     expect(result.activeAgentIds).toEqual(new Set(["parent-agent", "child-agent"]));
     expect(result.autoOpenAgentIds).toEqual(new Set(["parent-agent"]));
     expect(result.knownAgentIds).toEqual(new Set(["parent-agent", "child-agent"]));
+  });
+
+  it("auto-opens a subagent that carries the auto-open tab label", () => {
+    const parent = makeAgent({
+      id: "parent-agent",
+      cwd: "/repo/worktree",
+      workspaceId: WORKSPACE_ID,
+    });
+    const child = makeAgent({
+      id: "child-agent",
+      cwd: "/repo/worktree",
+      workspaceId: WORKSPACE_ID,
+      parentAgentId: "parent-agent",
+      labels: { "paseo.auto-open-agent-tab": "true" },
+    });
+
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map<string, Agent>([
+        [parent.id, parent],
+        [child.id, child],
+      ]),
+      workspaceId: WORKSPACE_ID,
+    });
+
+    expect(result.autoOpenAgentIds).toEqual(new Set(["parent-agent", "child-agent"]));
   });
 
   it("keeps archived subagents known but excludes them from active and auto-open", () => {

@@ -58,6 +58,14 @@ Responses put correlated result data under `payload`:
 
 Keep `requestId` in both request and response payloads. It is the correlation key.
 
+## UI Namespacing
+
+`ui.*` is the one domain where the daemon owns none of the state. `ui.tab.open.request` asks the attached app clients to open a tab; the daemon validates the workspace, broadcasts a `ui.command` push to every trusted client except the caller, and answers the caller with `ui.tab.open.response`. So a `ui.*` RPC has two outbound halves: a correlated response for the requester and an uncorrelated push for everyone else.
+
+The caller is usually a short-lived CLI process, which is why the push skips it. `deliveredTo` on the response counts the clients that got the push, so `0` means the daemon accepted the command and nothing was listening — not that it failed.
+
+Tab targets on the wire mirror the app's `WorkspaceTabTarget` union in `packages/app/src/workspace-tabs/model.ts`. Adding a tab kind to the app means adding it to `UiWorkspaceTabTargetSchema` too, or it cannot be opened from outside.
+
 ## Forge Namespacing
 
 Forge-neutral behavior currently uses `checkout.forge.*` for checkout-scoped operations and `forge.search.*` for forge search; forge-specific names belong here only after schema and session handlers exist:

@@ -94,7 +94,7 @@ export function toStoredAgentRecord(
       : null,
     internal: options?.internal,
     owner: agent.owner,
-    artifacts: agent.artifacts,
+    artifacts: agent.artifacts ?? [],
   } satisfies StoredAgentRecord;
 }
 
@@ -136,7 +136,7 @@ export function toAgentPayload(
     persistence: projectPersistenceHandleForWire(agent.persistence),
     title: options?.title ?? null,
     labels: agent.labels,
-    artifacts: agent.artifacts,
+    artifacts: agent.artifacts ?? [],
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -246,7 +246,7 @@ export function buildStoredAgentPayload(
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
-    artifacts: record.artifacts,
+    artifacts: record.artifacts ?? [],
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

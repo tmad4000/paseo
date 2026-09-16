@@ -1248,6 +1248,7 @@ export async function createPaseoDaemon(
   ): PaseoToolHostDependencies => ({
     agentManager,
     agentStorage,
+    agentQueueService,
     terminalManager,
     getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
     scheduleService,
@@ -1294,6 +1295,10 @@ export async function createPaseoDaemon(
     createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
     browserToolsEnabled: browserToolsPolicy.isEnabled(),
     browserToolsBroker,
+    uiCommands: {
+      serverId,
+      broadcast: (command) => wsServer?.broadcastToTrustedClients(wrapSessionMessage(command)) ?? 0,
+    },
     paseoHome: config.paseoHome,
     worktreesRoot: config.worktreesRoot,
     callerAgentId: runtime.callerAgentId,

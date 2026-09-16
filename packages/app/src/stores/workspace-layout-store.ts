@@ -42,7 +42,7 @@ import {
   type WorkspaceTabSnapshot,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-actions";
-import { normalizeWorkspaceTabTarget } from "@/workspace-tabs/identity";
+import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
 export {
@@ -115,6 +115,11 @@ interface WorkspaceLayoutStore {
   unpinAgent: (workspaceKey: string, agentId: string) => void;
   hideAgent: (workspaceKey: string, agentId: string) => void;
   unhideAgent: (workspaceKey: string, agentId: string) => void;
+  /**
+   * Close whatever tab shows this target, if one is open. Agent targets are
+   * also hidden so auto-open reconciliation cannot immediately reopen them.
+   */
+  closeTabByTarget: (workspaceKey: string, target: WorkspaceTabTarget) => void;
   purgeWorkspace: (workspaceKey: string) => void;
 }
 
@@ -933,6 +938,25 @@ export function createWorkspaceLayoutStore(
               ),
             };
           });
+        },
+        closeTabByTarget: (workspaceKey, target) => {
+          const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
+          const normalizedTarget = normalizeWorkspaceTabTarget(target);
+          if (!normalizedWorkspaceKey || !normalizedTarget) {
+            return;
+          }
+
+          if (normalizedTarget.kind === "agent") {
+            get().hideAgent(normalizedWorkspaceKey, normalizedTarget.agentId);
+          }
+
+          const layout = getWorkspaceLayout(get().layoutByWorkspace, normalizedWorkspaceKey);
+          const tab = collectAllTabs(layout.root).find((candidate) =>
+            workspaceTabTargetsEqual(candidate.target, normalizedTarget),
+          );
+          if (tab) {
+            get().closeTab(normalizedWorkspaceKey, tab.tabId);
+          }
         },
         hideAgent: (workspaceKey, agentId) => {
           const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);

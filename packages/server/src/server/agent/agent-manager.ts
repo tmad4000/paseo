@@ -479,6 +479,7 @@ interface WriteLabelsResult {
 interface AgentMetadataPatch {
   title?: string;
   labels?: AgentLabelPatch;
+  workspaceId?: string;
 }
 
 const SYSTEM_ERROR_PREFIX = "[System Error]";
@@ -1064,9 +1065,11 @@ export class AgentManager {
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
     }
-    const collection = await this.artifactCollector.scanExisting(agent.cwd, agent.artifacts, {
-      ...(options?.limit !== undefined ? { limit: options.limit } : {}),
-    });
+    const collection = await this.artifactCollector.scanExisting(
+      agent.cwd,
+      agent.artifacts,
+      options?.limit !== undefined ? { limit: options.limit } : {},
+    );
     if (!collection) {
       return { addedOrUpdated: 0, total: agent.artifacts?.length ?? 0 };
     }
@@ -1845,6 +1848,7 @@ export class AgentManager {
       ...record,
       ...(patch.title ? { title: patch.title } : {}),
       ...(patch.labels ? { labels: applyLabelPatch(record.labels, patch.labels) } : {}),
+      ...(patch.workspaceId ? { workspaceId: patch.workspaceId } : {}),
       updatedAt: this.nextStoredUpdatedAt(record),
     };
     await registry.upsert(nextRecord);
@@ -1993,13 +1997,7 @@ export class AgentManager {
     await this.unarchiveSnapshot(matched.id);
   }
 
-  async updateAgentMetadata(
-    agentId: string,
-    updates: {
-      title?: string;
-      labels?: Record<string, string>;
-    },
-  ): Promise<void> {
+  async updateAgentMetadata(agentId: string, updates: AgentMetadataPatch): Promise<void> {
     await this.runLifecycleMutation(agentId, () =>
       this.updateAgentMetadataUnlocked(agentId, updates),
     );
@@ -2007,10 +2005,7 @@ export class AgentManager {
 
   private async updateAgentMetadataUnlocked(
     agentId: string,
-    updates: {
-      title?: string;
-      labels?: Record<string, string>;
-    },
+    updates: AgentMetadataPatch,
   ): Promise<void> {
     const liveAgent = this.getAgent(agentId);
     if (liveAgent) {
@@ -2020,10 +2015,27 @@ export class AgentManager {
       if (updates.labels) {
         await this.writeLabels(agentId, updates.labels);
       }
+      if (updates.workspaceId) {
+        await this.moveAgentToWorkspaceUnlocked(agentId, updates.workspaceId);
+      }
       return;
     }
 
     await this.writeStoredMetadata(agentId, updates);
+  }
+
+  private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      return;
+    }
+    if (agent.workspaceId === workspaceId) {
+      return;
+    }
+    agent.workspaceId = workspaceId;
+    this.touchUpdatedAt(agent);
+    await this.persistSnapshot(agent);
+    this.emitState(agent, { persist: false });
   }
 
   private async runLifecycleMutation<T>(agentId: string, mutation: () => Promise<T>): Promise<T> {

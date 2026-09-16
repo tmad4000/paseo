@@ -1252,6 +1252,10 @@ export const SendAgentMessageRequestSchema = z.object({
   messageId: z.string().optional(), // Client-provided ID for deduplication
   images: z.array(ImageAttachmentSchema).optional(),
   attachments: AgentAttachmentsSchema,
+  // When the agent has a turn in flight: true cancels that turn (today's
+  // replace behavior); absent/false queues the message to deliver when the
+  // turn completes, so in-flight tool calls and subagents are never killed.
+  interrupt: z.boolean().optional(),
 });
 
 export const WaitForFinishRequestSchema = z.object({
@@ -2906,7 +2910,63 @@ export const HubExecutionControlRequestSchema = z.object({
 
 export type HubExecutionControlRequest = z.infer<typeof HubExecutionControlRequestSchema>;
 
+// ============================================================================
+// UI Commands
+//
+// A UI command asks a connected app client to change what it is showing. The
+// daemon holds no UI state, so these are pass-through: an external caller (the
+// CLI, a script, another agent) sends a request, the daemon validates the
+// target exists, and the resulting `ui.command` push is broadcast to every
+// trusted client. A headless daemon with no app attached simply drops it.
+//
+// The wire target mirrors the app's WorkspaceTabTarget union
+// (packages/app/src/workspace-tabs/model.ts). Keep the two in sync when a new
+// tab kind is added; the app normalizes and rejects anything it cannot open.
+// ============================================================================
+
+export const UiWorkspaceTabTargetSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("draft"),
+    // Omit to open a fresh draft; the app generates the id.
+    draftId: z.string().optional(),
+  }),
+  z.object({ kind: z.literal("agent"), agentId: z.string() }),
+  z.object({
+    kind: z.literal("provider_subagent"),
+    parentAgentId: z.string(),
+    subagentId: z.string(),
+  }),
+  z.object({ kind: z.literal("terminal"), terminalId: z.string() }),
+  z.object({ kind: z.literal("browser"), browserId: z.string() }),
+  z.object({
+    kind: z.literal("file"),
+    path: z.string(),
+    lineStart: z.number().int().positive().optional(),
+    lineEnd: z.number().int().positive().optional(),
+  }),
+  z.object({ kind: z.literal("working_diff"), focusPath: z.string().optional() }),
+  z.object({ kind: z.literal("setup"), workspaceId: z.string() }),
+  z.object({ kind: z.literal("commit_diff"), sha: z.string() }),
+]);
+
+export type UiWorkspaceTabTarget = z.infer<typeof UiWorkspaceTabTargetSchema>;
+
+export const UiTabOpenRequestMessageSchema = z.object({
+  type: z.literal("ui.tab.open.request"),
+  requestId: z.string(),
+  // Optional: the daemon fills in its own serverId when the caller omits it,
+  // and the client falls back to the connection it arrived on.
+  serverId: z.string().optional(),
+  workspaceId: z.string(),
+  target: UiWorkspaceTabTargetSchema,
+  // Default true. False opens the tab without stealing focus.
+  focus: z.boolean().optional(),
+});
+
+export type UiTabOpenRequestMessage = z.infer<typeof UiTabOpenRequestMessageSchema>;
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  UiTabOpenRequestMessageSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -3361,6 +3421,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
+        uiCommands: z.boolean().optional(),
       })
       .optional(),
   })
@@ -4304,6 +4366,9 @@ export const SendAgentMessageResponseMessageSchema = z.object({
     agentId: z.string(),
     accepted: z.boolean(),
     error: z.string().nullable(),
+    // True when the agent was mid-turn and the message went to its queue
+    // instead of starting a run.
+    queued: z.boolean().optional(),
   }),
 });
 
@@ -5864,7 +5929,46 @@ export function parseHubExecutionOutboundMessage(value: unknown): HubExecutionOu
 
 export type DaemonUpdateProgressMessage = z.infer<typeof DaemonUpdateProgressMessageSchema>;
 
+// See the "UI Commands" section above for why these are pass-through.
+export const UiTabOpenResponseMessageSchema = z.object({
+  type: z.literal("ui.tab.open.response"),
+  payload: z.object({
+    requestId: z.string(),
+    serverId: z.string(),
+    workspaceId: z.string(),
+    // How many trusted clients the command was broadcast to. Zero means the
+    // daemon accepted it but no app was attached to act on it.
+    deliveredTo: z.number().int().nonnegative(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type UiTabOpenResponseMessage = z.infer<typeof UiTabOpenResponseMessageSchema>;
+
+export const UiCommandMessageSchema = z.object({
+  type: z.literal("ui.command"),
+  payload: z.discriminatedUnion("command", [
+    z.object({
+      command: z.literal("tab.open"),
+      serverId: z.string().optional(),
+      workspaceId: z.string(),
+      target: UiWorkspaceTabTargetSchema,
+      focus: z.boolean().optional(),
+    }),
+    z.object({
+      command: z.literal("tab.close"),
+      serverId: z.string().optional(),
+      workspaceId: z.string(),
+      target: UiWorkspaceTabTargetSchema,
+    }),
+  ]),
+});
+
+export type UiCommandMessage = z.infer<typeof UiCommandMessageSchema>;
+
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  UiTabOpenResponseMessageSchema,
+  UiCommandMessageSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

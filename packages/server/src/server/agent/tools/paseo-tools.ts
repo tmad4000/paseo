@@ -12,9 +12,12 @@ import {
   AgentListItemPayloadSchema,
   AgentPermissionResponseSchema,
   AgentSnapshotPayloadSchema,
+  UiWorkspaceTabTargetSchema,
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
-import type { AgentListItemPayload } from "../../messages.js";
+import type { AgentListItemPayload, UiCommandMessage } from "../../messages.js";
+import { AUTO_OPEN_AGENT_TAB_LABEL, isOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
+import { resolveUiTabCloseCommand, resolveUiTabOpenCommand } from "../../ui-commands.js";
 import {
   buildStoredAgentPayload,
   toAgentListItemPayload,
@@ -60,7 +63,9 @@ import {
   toScheduleSummary,
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
-import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
+import { setupFinishNotification } from "../agent-prompt.js";
+import { sendOrQueuePromptToAgent } from "../../agent-queue/send-or-queue.js";
+import type { AgentQueueService } from "../../agent-queue/service.js";
 import { respondToAgentPermission } from "../permission-response.js";
 import {
   archiveAgentCommand,
@@ -96,6 +101,8 @@ import type {
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
   agentStorage: AgentStorage;
+  /** Busy agents get prompts queued here instead of having their turn replaced. */
+  agentQueueService?: AgentQueueService | null;
   terminalManager?: TerminalManager | null;
   getDaemonTcpPort?: () => number | null;
   scheduleService?: ScheduleService | null;
@@ -128,6 +135,14 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  /**
+   * Lets tools fan `ui.command` pushes out to attached app clients. The daemon
+   * holds no tab state, so open_tab/close_tab are pass-through plus a label.
+   */
+  uiCommands?: {
+    serverId: string;
+    broadcast: (command: UiCommandMessage) => number;
+  } | null;
   paseoHome?: string;
   worktreesRoot?: string;
   /**
@@ -542,6 +557,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   const {
     agentManager,
     agentStorage,
+    agentQueueService = null,
     terminalManager,
     workspaceScripts,
     scheduleService,
@@ -1101,6 +1117,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     agentId: z.string(),
     prompt: z.string(),
     sessionMode: z.string().optional().describe("Optional mode to set before running the prompt."),
+    interrupt: z
+      .boolean()
+      .optional()
+      .describe(
+        "If the target agent is mid-turn: true cancels its current turn (killing its in-flight tool calls and subagents); false (default) queues the prompt to deliver when the turn completes.",
+      ),
   };
   const agentToAgentSendAgentPromptInputSchema = {
     ...commonSendAgentPromptInputSchema,
@@ -1439,6 +1461,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           agentManager,
           agentStorage,
+          queueService: agentQueueService,
           logger: childLogger,
           paseoHome: options.paseoHome,
           worktreesRoot: options.worktreesRoot,
@@ -1878,24 +1901,43 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       agentId,
       prompt,
       sessionMode,
+      interrupt,
       background = Boolean(callerAgentId),
       notifyOnFinish = Boolean(callerAgentId),
     }) => {
       const shouldNotifyOnFinish = Boolean(callerAgentId && notifyOnFinish && background);
 
-      await sendPromptToAgent({
+      const dispatch = await sendOrQueuePromptToAgent({
         agentManager,
         agentStorage,
+        queueService: agentQueueService,
         agentId,
-        prompt,
-        sessionMode,
+        text: prompt,
+        ...(sessionMode ? { sessionMode } : {}),
+        ...(interrupt !== undefined ? { interrupt } : {}),
         logger: childLogger,
       });
+
+      if (dispatch.queued) {
+        const currentSnapshot = agentManager.getAgent(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({
+            success: true,
+            status: currentSnapshot?.lifecycle ?? "running",
+            lastMessage: null,
+            permission: null,
+            guidance:
+              "The agent is mid-turn, so the prompt was queued and will be delivered when its current turn completes. Do not resend; use get_agent_status to follow progress.",
+          }),
+        };
+      }
 
       if (shouldNotifyOnFinish && callerAgentId) {
         setupFinishNotification({
           agentManager,
           agentStorage,
+          queueService: agentQueueService,
           childAgentId: agentId,
           callerAgentId,
           logger: childLogger,
@@ -2136,11 +2178,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "update_agent",
     {
       title: "Update agent",
-      description: "Update an agent name, labels, and/or runtime settings.",
+      description:
+        "Update an agent name, labels, workspace, and/or runtime settings. Setting a label to null clears it (for example clearing paseo.parent-agent-id promotes a subagent to a workspace root). workspaceId moves the agent into another workspace.",
       inputSchema: {
         agentId: z.string(),
         name: z.string().optional(),
-        labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
+        labels: z
+          .record(z.string(), z.string().nullable())
+          .optional()
+          .describe("Labels to set on the agent; a null value clears the label"),
+        workspaceId: z
+          .string()
+          .optional()
+          .describe("Move the agent into this workspace (must exist)."),
         settings: UpdateAgentSettingsInputSchema.optional().describe(
           "Runtime settings to apply to the agent.",
         ),
@@ -2149,7 +2199,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         success: z.boolean(),
       },
     },
-    async ({ agentId, name, labels, settings }) => {
+    async ({ agentId, name, labels, workspaceId, settings }) => {
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }
@@ -2165,7 +2215,16 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         }
       }
 
-      await updateAgentCommand({ agentManager }, { agentId, name, labels });
+      if (workspaceId) {
+        if (!options.workspaceRegistry) {
+          throw new Error("Workspace registry is not configured");
+        }
+        if ((await options.workspaceRegistry.get(workspaceId)) == null) {
+          throw new Error(`Workspace not found: ${workspaceId}`);
+        }
+      }
+
+      await updateAgentCommand({ agentManager }, { agentId, name, labels, workspaceId });
 
       return {
         content: [],
@@ -2173,6 +2232,163 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       };
     },
   );
+
+  const uiCommands = options.uiCommands ?? null;
+  if (uiCommands) {
+    const workspaceExists = async (workspaceId: string): Promise<boolean> =>
+      options.workspaceRegistry
+        ? (await options.workspaceRegistry.get(workspaceId)) != null
+        : false;
+
+    const resolveAgentWorkspaceId = async (agentId: string): Promise<string | null> => {
+      const live = agentManager.getAgent(agentId);
+      if (live?.workspaceId) {
+        return live.workspaceId;
+      }
+      const stored = await agentStorage.get(agentId);
+      return stored?.workspaceId ?? null;
+    };
+
+    // Agent tabs must live in the agent's own workspace or client
+    // reconciliation drops them; everything else defaults to the caller.
+    const resolveTabWorkspaceId = async (
+      target: z.infer<typeof UiWorkspaceTabTargetSchema>,
+      explicitWorkspaceId: string | undefined,
+    ): Promise<string> => {
+      const explicit = explicitWorkspaceId?.trim();
+      const agentTargetId = target.kind === "agent" ? target.agentId : null;
+      const agentWorkspaceId = agentTargetId ? await resolveAgentWorkspaceId(agentTargetId) : null;
+      if (explicit) {
+        if (agentWorkspaceId && agentWorkspaceId !== explicit) {
+          throw new Error(
+            `Agent ${agentTargetId} lives in workspace ${agentWorkspaceId}, not ${explicit}. Move it first with update_agent { workspaceId: "${explicit}" }, then open the tab.`,
+          );
+        }
+        return explicit;
+      }
+      if (agentWorkspaceId) {
+        return agentWorkspaceId;
+      }
+      const workspaceId = callerAgentId ? await resolveAgentWorkspaceId(callerAgentId) : null;
+      if (!workspaceId) {
+        throw new Error("workspaceId is required when the caller has no workspace");
+      }
+      return workspaceId;
+    };
+
+    const tabTargetInputSchema = UiWorkspaceTabTargetSchema.describe(
+      "What the tab shows: an agent, a terminal, a file, a draft composer, the working diff, a commit diff, a browser pane, or workspace setup.",
+    );
+
+    registerTool(
+      "open_tab",
+      {
+        title: "Open tab",
+        description:
+          "Open (or focus) a tab in the workspace view every attached app client is showing. Defaults to your own workspace (agent targets default to the agent's workspace). Agent targets also get the auto-open label so clients that attach later reconcile the tab in.",
+        inputSchema: {
+          target: tabTargetInputSchema,
+          workspaceId: z
+            .string()
+            .optional()
+            .describe("Workspace whose view gets the tab. Defaults to your workspace."),
+          focus: z
+            .boolean()
+            .optional()
+            .describe("Default true. False opens the tab without stealing focus."),
+        },
+        outputSchema: {
+          workspaceId: z.string(),
+          delivered: z.number().int().nonnegative(),
+          guidance: z.string().optional(),
+        },
+      },
+      async ({ target, workspaceId, focus }) => {
+        const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
+        if (target.kind === "agent") {
+          await updateAgentCommand(
+            { agentManager },
+            { agentId: target.agentId, labels: { [AUTO_OPEN_AGENT_TAB_LABEL]: "true" } },
+          );
+        }
+        const result = await resolveUiTabOpenCommand(
+          {
+            workspaceId: resolvedWorkspaceId,
+            target,
+            ...(focus === false ? { focus: false } : {}),
+          },
+          { serverId: uiCommands.serverId, workspaceExists },
+        );
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        const delivered = uiCommands.broadcast(result.command);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({
+            workspaceId: result.workspaceId,
+            delivered,
+            ...(delivered === 0
+              ? {
+                  guidance:
+                    target.kind === "agent"
+                      ? "No app client is attached right now; the auto-open label makes the tab appear when one attaches."
+                      : "No app client is attached right now, so nothing acted on the command.",
+                }
+              : {}),
+          }),
+        };
+      },
+    );
+
+    registerTool(
+      "close_tab",
+      {
+        title: "Close tab",
+        description:
+          "Close a tab in the workspace view every attached app client is showing. Agent targets also lose their tab labels so reconciliation does not reopen them.",
+        inputSchema: {
+          target: tabTargetInputSchema,
+          workspaceId: z
+            .string()
+            .optional()
+            .describe("Workspace whose view loses the tab. Defaults to your workspace."),
+        },
+        outputSchema: {
+          workspaceId: z.string(),
+          delivered: z.number().int().nonnegative(),
+        },
+      },
+      async ({ target, workspaceId }) => {
+        const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
+        if (target.kind === "agent") {
+          const stored = await agentStorage.get(target.agentId);
+          const labels = agentManager.getAgent(target.agentId)?.labels ?? stored?.labels ?? {};
+          const patch: Record<string, string | null> = {
+            [AUTO_OPEN_AGENT_TAB_LABEL]: null,
+          };
+          for (const label of Object.keys(labels)) {
+            if (isOpenAgentTabLabel(label)) {
+              patch[label] = null;
+            }
+          }
+          await agentManager.updateAgentMetadata(target.agentId, { labels: patch });
+        }
+        const result = await resolveUiTabCloseCommand(
+          { workspaceId: resolvedWorkspaceId, target },
+          { serverId: uiCommands.serverId, workspaceExists },
+        );
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        const delivered = uiCommands.broadcast(result.command);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ workspaceId: result.workspaceId, delivered }),
+        };
+      },
+    );
+  }
 
   registerTool(
     "rename_workspace",
