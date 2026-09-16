@@ -78,6 +78,7 @@ import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
 import { colorMarkdownLinkChildren } from "@/components/markdown/link-children";
 import { createAssistantMarkdownParser } from "@/utils/assistant-markdown-parser";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
+import { getAssistantTurnFooterLabels } from "@/components/assistant-turn-footer-label";
 import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import { setAssistantMarkdownBlockHeight } from "@/utils/assistant-message-height-estimate";
@@ -566,6 +567,7 @@ export const UserMessage = memo(function UserMessage({
 
 interface AssistantTurnFooterProps {
   getContent: () => string;
+  startedAt?: Date;
   completedAt?: Date;
   durationMs?: number;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
@@ -605,12 +607,14 @@ const TIMESTAMP_REVEAL_MS = 3000;
 
 /**
  * Footer rendered next to the copy button at the end of an assistant turn.
- * Always shows the turn duration; swaps to the end timestamp on hover (web)
- * or tap (native). The hidden sizer keeps the label width stable while the
- * visible text swaps.
+ * Always shows the completion time and duration so a long response answers
+ * "when did this finish" without scrolling back to the top; swaps to the
+ * start time on hover (web) or tap (native). The hidden sizer keeps the
+ * label width stable while the visible text swaps.
  */
 export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   getContent,
+  startedAt,
   completedAt,
   durationMs,
   onFork,
@@ -628,17 +632,13 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     };
   }, []);
 
-  const durationLabel = useMemo(
-    () => (durationMs !== undefined ? `Worked for ${formatDuration(durationMs)}` : ""),
-    [durationMs],
-  );
-  const timestampLabel = useMemo(
-    () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
-    [completedAt],
+  const { label, hoverLabel } = useMemo(
+    () => getAssistantTurnFooterLabels({ startedAt, completedAt, durationMs }),
+    [startedAt, completedAt, durationMs],
   );
 
-  const canSwap = Boolean(timestampLabel);
-  const showTimestamp = canSwap && (isWeb ? hovered : pressedReveal);
+  const canSwap = Boolean(hoverLabel);
+  const showHoverLabel = canSwap && (isWeb ? hovered : pressedReveal);
 
   const handleHoverIn = useCallback(() => setHovered(true), []);
   const handleHoverOut = useCallback(() => setHovered(false), []);
@@ -668,22 +668,22 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
-      {durationLabel ? (
+      {label ? (
         <Pressable
           onPress={handlePress}
           onHoverIn={handleHoverIn}
           onHoverOut={handleHoverOut}
           accessibilityRole={canSwap ? "button" : undefined}
-          accessibilityLabel={canSwap ? `${durationLabel}, ended ${timestampLabel}` : durationLabel}
+          accessibilityLabel={canSwap ? `${label}, ${hoverLabel}` : label}
         >
           <View style={assistantTurnFooterStylesheet.labelWrapper}>
             {/* Sizer reserves space for whichever label is longer so the
                 container width is stable across hover transitions. */}
             <Text style={assistantTurnFooterStylesheet.labelSizer} aria-hidden>
-              {durationLabel.length >= timestampLabel.length ? durationLabel : timestampLabel}
+              {label.length >= hoverLabel.length ? label : hoverLabel}
             </Text>
             <Text style={assistantTurnFooterStylesheet.labelOverlay}>
-              {showTimestamp ? timestampLabel : durationLabel}
+              {showHoverLabel ? hoverLabel : label}
             </Text>
           </View>
         </Pressable>
