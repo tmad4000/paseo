@@ -2,10 +2,15 @@ import { describe, expect, test } from "vitest";
 import {
   getParentAgentIdFromLabels,
   getOpenAgentTabLabel,
+  getReviewNote,
+  getReviewStatus,
   hasOpenAgentTab,
   isDelegatedAgent,
   isOpenAgentTabLabel,
+  isReviewStatus,
   PARENT_AGENT_ID_LABEL,
+  REVIEW_NOTE_LABEL,
+  REVIEW_STATUS_LABEL,
 } from "./agent-labels.js";
 
 describe("agent label policy", () => {
@@ -35,5 +40,29 @@ describe("agent label policy", () => {
     expect(isOpenAgentTabLabel(getOpenAgentTabLabel("client-a"))).toBe(true);
     expect(isOpenAgentTabLabel("paseo.open-agent-tab")).toBe(false);
     expect(isOpenAgentTabLabel("custom.open-agent-tab.client-a")).toBe(false);
+  });
+
+  test("reads a valid review status and rejects anything else", () => {
+    expect(getReviewStatus({ [REVIEW_STATUS_LABEL]: "ready" })).toBe("ready");
+    expect(getReviewStatus({ [REVIEW_STATUS_LABEL]: "approved" })).toBe("approved");
+    expect(getReviewStatus({ [REVIEW_STATUS_LABEL]: "done" })).toBeNull();
+    expect(getReviewStatus({ [REVIEW_STATUS_LABEL]: 5 })).toBeNull();
+    expect(getReviewStatus({})).toBeNull();
+    expect(getReviewStatus(null)).toBeNull();
+  });
+
+  test("isReviewStatus guards the allowed set", () => {
+    expect(isReviewStatus("ready")).toBe(true);
+    expect(isReviewStatus("changes_requested")).toBe(true);
+    expect(isReviewStatus("clear")).toBe(false);
+    expect(isReviewStatus(undefined)).toBe(false);
+  });
+
+  test("reads a trimmed review note or null", () => {
+    expect(getReviewNote({ [REVIEW_NOTE_LABEL]: "  check the migration  " })).toBe(
+      "check the migration",
+    );
+    expect(getReviewNote({ [REVIEW_NOTE_LABEL]: "   " })).toBeNull();
+    expect(getReviewNote({})).toBeNull();
   });
 });

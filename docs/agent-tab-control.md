@@ -191,11 +191,38 @@ This lands as its own feature branch per FORK.md (it depends on the
 queue-mirror branch's `AgentQueueService`, so it stacks on that PR for any
 upstream submission).
 
+## Review status: "ready to review" instead of "done"
+
+An agent (usually a delegated subagent) can flag its work for review rather
+than just going idle, so an orchestrator or human distinguishes "the turn
+ended" from "the work is complete and wants a look."
+
+- Label-based, mirroring the auto-open pattern — no new lifecycle state, no
+  protocol-enum change. `paseo.review-status` holds one of `ready`,
+  `in_review`, `changes_requested`, `approved`; `paseo.review-note` holds an
+  optional reviewer note (`packages/protocol/src/agent-labels.ts`,
+  `getReviewStatus`/`getReviewNote`).
+- MCP tool `set_review_status { status, agentId?, note? }` — `agentId` defaults
+  to the caller, so a subagent marks its own work; `status: "clear"` removes
+  the marker (and the note). Writes through the same `update_agent` path
+  (nullable labels).
+- Surfacing: the label already flows through `list_agents[].labels`, and
+  `get_agent_status` gains a convenience `reviewStatus` field. An orchestrator
+  polls or lists to find `ready` agents, reviews, then sets `approved` /
+  `changes_requested`.
+- Deliberately not built: a distinct push notification or attention reason
+  (`finished`/`error`/`permission` is protocol-wide and rendered in
+  notifications). The child's existing finish notification still fires when it
+  goes idle; the review label enriches it. A dedicated "review ready"
+  notification to the parent is a possible follow-up.
+
 ## Branch map (fork model per FORK.md)
 
 - `feat/ui-tab-control` — shipped `ui.tab.open` end to end (v0.4.0 base).
-- `feat/agent-tab-control` — this branch: MCP `open_tab`/`close_tab`,
-  `tab.close` command, auto-open label stamping, `update_agent.workspaceId`.
+- `feat/agent-tab-control` — MCP `open_tab`/`close_tab`, `tab.close` command,
+  auto-open label stamping, `update_agent.workspaceId` + nullable labels.
+- `feat/agent-review-status` — stacked on `feat/agent-tab-control` (needs its
+  nullable-label support): the `set_review_status` tool + review labels.
 - `feat/queue-mirror-across-devices` — daemon-held queue (already merged into
   `jacob/daily`).
 - queue-instead-of-interrupt fix — new branch off v0.4.0, stacked on the
