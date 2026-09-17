@@ -3828,6 +3828,73 @@ describe("update_agent MCP tool", () => {
   });
 });
 
+describe("set_review_status MCP tool", () => {
+  const logger = createTestLogger();
+
+  it("marks the calling agent ready for review with a note", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger,
+    });
+    const tool = registeredTool(server, "set_review_status");
+
+    const response = await tool.handler({ status: "ready", note: "  check the migration  " });
+
+    expect(spies.agentManager.updateAgentMetadata).toHaveBeenCalledWith("agent-1", {
+      labels: {
+        "paseo.review-status": "ready",
+        "paseo.review-note": "check the migration",
+      },
+    });
+    expect(response.structuredContent).toEqual({ agentId: "agent-1", reviewStatus: "ready" });
+  });
+
+  it("marks an explicit agent and leaves the note untouched when omitted", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger,
+    });
+    const tool = registeredTool(server, "set_review_status");
+
+    const response = await tool.handler({ status: "approved", agentId: "child-agent" });
+
+    expect(spies.agentManager.updateAgentMetadata).toHaveBeenCalledWith("child-agent", {
+      labels: { "paseo.review-status": "approved" },
+    });
+    expect(response.structuredContent).toEqual({
+      agentId: "child-agent",
+      reviewStatus: "approved",
+    });
+  });
+
+  it("clears both the status and the note", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger,
+    });
+    const tool = registeredTool(server, "set_review_status");
+
+    const response = await tool.handler({ status: "clear" });
+
+    expect(spies.agentManager.updateAgentMetadata).toHaveBeenCalledWith("agent-1", {
+      labels: { "paseo.review-status": null, "paseo.review-note": null },
+    });
+    expect(response.structuredContent).toEqual({ agentId: "agent-1", reviewStatus: null });
+  });
+});
+
 describe("rename_workspace MCP tool", () => {
   const logger = createTestLogger();
 
@@ -5235,6 +5302,7 @@ describe("agent snapshot MCP serialization", () => {
 
     expect(response.structuredContent).toEqual({
       status: "closed",
+      reviewStatus: null,
       snapshot: expect.objectContaining({
         id: "archived-agent",
         archivedAt: "2026-04-12T00:00:00.000Z",

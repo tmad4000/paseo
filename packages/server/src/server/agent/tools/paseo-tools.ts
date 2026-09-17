@@ -16,7 +16,14 @@ import {
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
 import type { AgentListItemPayload, UiCommandMessage } from "../../messages.js";
-import { AUTO_OPEN_AGENT_TAB_LABEL, isOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
+import {
+  AUTO_OPEN_AGENT_TAB_LABEL,
+  isOpenAgentTabLabel,
+  getReviewStatus,
+  REVIEW_STATUS_LABEL,
+  REVIEW_NOTE_LABEL,
+  REVIEW_STATUSES,
+} from "@getpaseo/protocol/agent-labels";
 import { resolveUiTabCloseCommand, resolveUiTabOpenCommand } from "../../ui-commands.js";
 import {
   buildStoredAgentPayload,
@@ -2002,6 +2009,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
       outputSchema: {
         status: AgentStatusEnum,
+        reviewStatus: z.enum(REVIEW_STATUSES).nullable(),
         snapshot: AgentSnapshotPayloadSchema,
       },
     },
@@ -2017,6 +2025,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           content: [],
           structuredContent: ensureValidJson({
             status: snapshot.lifecycle,
+            reviewStatus: getReviewStatus(snapshot.labels),
             snapshot: structuredSnapshot,
           }),
         };
@@ -2035,6 +2044,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         content: [],
         structuredContent: ensureValidJson({
           status: structuredSnapshot.status,
+          reviewStatus: getReviewStatus(record.labels),
           snapshot: structuredSnapshot,
         }),
       };
@@ -2229,6 +2239,63 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       return {
         content: [],
         structuredContent: ensureValidJson({ success: true }),
+      };
+    },
+  );
+
+  registerTool(
+    "set_review_status",
+    {
+      title: "Set review status",
+      description:
+        "Mark an agent's work as ready for review (or move it through review) instead of just finishing. Defaults to yourself, so a subagent can flag its own work ready before going idle. Status is surfaced in list_agents/get_agent_status; the orchestrator can then review and approve. Pass status 'clear' to remove the marker.",
+      inputSchema: {
+        status: z
+          .enum([...REVIEW_STATUSES, "clear"])
+          .describe(
+            "ready = work complete, awaiting review; in_review = reviewer looking; changes_requested = needs work; approved = reviewed and accepted; clear = remove the marker.",
+          ),
+        agentId: z
+          .string()
+          .optional()
+          .describe("Agent to mark. Defaults to you (the calling agent)."),
+        note: z
+          .string()
+          .optional()
+          .describe("Optional short note for the reviewer (what to look at, caveats)."),
+      },
+      outputSchema: {
+        agentId: z.string(),
+        reviewStatus: z.enum(REVIEW_STATUSES).nullable(),
+      },
+    },
+    async ({ status, agentId, note }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) {
+        throw new Error("No agentId given and no calling agent to default to");
+      }
+
+      const clearing = status === "clear";
+      const labels: Record<string, string | null> = {
+        [REVIEW_STATUS_LABEL]: clearing ? null : status,
+      };
+      if (clearing) {
+        // The note only means something while a status is set.
+        labels[REVIEW_NOTE_LABEL] = null;
+      } else if (note !== undefined) {
+        const trimmed = note.trim();
+        labels[REVIEW_NOTE_LABEL] = trimmed.length > 0 ? trimmed : null;
+      }
+      // note === undefined on a real status leaves any existing note untouched.
+
+      await updateAgentCommand({ agentManager }, { agentId: targetAgentId, labels });
+
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: targetAgentId,
+          reviewStatus: clearing ? null : status,
+        }),
       };
     },
   );
