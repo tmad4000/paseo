@@ -11,9 +11,11 @@
 # --upload AND a real App Store Connect app id, because the fork's ASC app record
 # must be created once by hand first (see "Remaining Apple web step" below).
 #
-# Identity (from app.config.js, fork/ios-testflight):
-#   App name          : Paseo Fork
+# Identity:
+#   On-device app name : Paseo Fork          (CFBundleDisplayName, app.config.js)
+#   App Store listing  : Paseo Fork by Ideaflow  (globally-distinct ASC name)
 #   iOS bundle id      : io.ideaflow.paseo-fork
+#   ASC app id / SKU   : 6813662768 / paseo-fork-ios
 #   Encryption compliance: ITSAppUsesNonExemptEncryption = false (HTTPS-only)
 #
 # Signing / Apple (this M5 login keychain + ~/.appstoreconnect; see
@@ -25,25 +27,19 @@
 #
 # Usage:
 #   packages/app/scripts/testflight-fork.sh                 # archive + export .ipa only
-#   ASC_APP_ID=<id> packages/app/scripts/testflight-fork.sh --upload
+#   packages/app/scripts/testflight-fork.sh --upload        # archive + export + upload
 #
 # Env overrides:
 #   DEVELOPMENT_TEAM   default JESMXK96LG
 #   APP_VARIANT        default production
 #   ASC_KEY_ID         default KWJX4896S5
 #   ASC_ISSUER_ID      default $(cat ~/.appstoreconnect/issuer_id)
-#   ASC_APP_ID         required for --upload (the fork's App Store Connect app id)
+#   ASC_APP_ID         default 6813662768 (the fork's App Store Connect app id)
 #
-# Remaining Apple web step (one-time, cannot be automated on this account —
-# POST /v1/apps is FORBIDDEN, so create it in the App Store Connect UI):
-#   App Store Connect -> My Apps -> + -> New App -> iOS
-#     Name        : Paseo Fork
-#     Bundle ID   : io.ideaflow.paseo-fork   (register it first under the
-#                   JESMXK96LG team in Certificates, Identifiers & Profiles if it
-#                   is not offered in the dropdown)
-#     SKU         : paseo-fork-ios
-#     Primary language / user access: your choice
-#   Then re-run with:  ASC_APP_ID=<numeric id> ... --upload
+# The App Store Connect app record already exists (created by hand — POST /v1/apps
+# is FORBIDDEN on this account): "Paseo Fork by Ideaflow", bundle
+# io.ideaflow.paseo-fork, SKU paseo-fork-ios, app id 6813662768. Nothing else on
+# the Apple web side is required before uploading.
 #
 set -euo pipefail
 
@@ -59,6 +55,7 @@ EXPORT_DIR="$BUILD_DIR/export"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-JESMXK96LG}"
 APP_VARIANT="${APP_VARIANT:-production}"
 ASC_KEY_ID="${ASC_KEY_ID:-KWJX4896S5}"
+ASC_APP_ID="${ASC_APP_ID:-6813662768}"
 DO_UPLOAD=0
 for arg in "$@"; do
   case "$arg" in
@@ -147,17 +144,15 @@ if [ "$DO_UPLOAD" -ne 1 ]; then
 
 Archive + export complete. No upload performed.
 
-To upload to TestFlight, first create the App Store Connect app record (one-time,
-see the header of this script), then run:
+To upload this .ipa to TestFlight (App Store Connect app $ASC_APP_ID), run:
 
-  ASC_APP_ID=<numeric app id> $0 --upload
+  $0 --upload
 
 DONE
   exit 0
 fi
 
-[ -n "${ASC_APP_ID:-}" ] || fail "--upload requires ASC_APP_ID (the fork's App Store Connect app id).
-       Create the app record first (see this script's header), then pass ASC_APP_ID."
+[ -n "${ASC_APP_ID:-}" ] || fail "--upload needs a non-empty ASC_APP_ID (default 6813662768)."
 ASC_ISSUER_ID="${ASC_ISSUER_ID:-$(cat "$HOME/.appstoreconnect/issuer_id" 2>/dev/null || true)}"
 [ -n "$ASC_ISSUER_ID" ] || fail "No ASC issuer id (set ASC_ISSUER_ID or ~/.appstoreconnect/issuer_id)."
 
