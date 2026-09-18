@@ -65,10 +65,15 @@ function resolveSecretFile(params) {
   return undefined;
 }
 
+// Fork identity — see FORK.md. This build installs beside stock Paseo, so it
+// carries its own name and application identifiers. iOS bundle identifiers may
+// contain hyphens; Android application ids may not, so the two diverge here by
+// necessity (io.ideaflow.paseo-fork vs io.ideaflow.paseofork).
 const variants = {
   production: {
-    name: "Paseo",
-    packageId: "sh.paseo",
+    name: "Paseo Fork",
+    bundleIdentifier: "io.ideaflow.paseo-fork",
+    androidPackage: "io.ideaflow.paseofork",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
@@ -79,8 +84,9 @@ const variants = {
     }),
   },
   development: {
-    name: "Paseo Debug",
-    packageId: "sh.paseo.debug",
+    name: "Paseo Fork Debug",
+    bundleIdentifier: "io.ideaflow.paseo-fork.debug",
+    androidPackage: "io.ideaflow.paseofork.debug",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
       fallbackRelativePath: "./.secrets/google-services.debug.json",
@@ -111,7 +117,7 @@ export default {
         NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
         ITSAppUsesNonExemptEncryption: false,
       },
-      bundleIdentifier: variant.packageId,
+      bundleIdentifier: variant.bundleIdentifier,
       ...(variant.googleServiceInfoPlist
         ? { googleServicesFile: variant.googleServiceInfoPlist }
         : {}),
@@ -128,7 +134,7 @@ export default {
       // Allow HTTP connections for local network hosts (required for release builds)
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
-      package: variant.packageId,
+      package: variant.androidPackage,
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
@@ -189,10 +195,10 @@ export default {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       router: {},
-      eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
-      },
     },
-    owner: "getpaseo",
+    // No EAS `owner` / `extra.eas.projectId`: this fork ships iOS locally via
+    // scripts/testflight-fork.sh (archive/export/upload with the IdeaFlow
+    // signing team) rather than through upstream's getpaseo EAS project. Add
+    // your own Expo owner + projectId here if you later adopt EAS cloud builds.
   },
 };

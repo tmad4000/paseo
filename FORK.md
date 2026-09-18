@@ -69,6 +69,37 @@ The fork uses the same `~/.paseo` home and port `6767` as stock Paseo, so only o
 of the two can run at a time. That is deliberate: the fork is the daily driver and
 sees the real agent history.
 
+## iOS (TestFlight)
+
+The mobile app carries its own identity so it installs beside stock Paseo and does
+not touch upstream's App Store Connect app or getpaseo EAS project:
+
+|                        | Fork                     | Upstream                  |
+| ---------------------- | ------------------------ | ------------------------- |
+| App name               | `Paseo Fork`             | Paseo                     |
+| iOS bundle id          | `io.ideaflow.paseo-fork` | `sh.paseo`                |
+| Android application id | `io.ideaflow.paseofork`  | `sh.paseo`                |
+| EAS owner / projectId  | none (local build)       | `getpaseo` / `0e7f65ce-…` |
+
+Android application ids may not contain hyphens, so the two ids diverge on
+purpose. All of this lives in `packages/app/app.config.js` (`variants`).
+
+The fork ships iOS **locally**, not through EAS, under the IdeaFlow Apple team
+(`JESMXK96LG`) — see `packages/app/scripts/testflight-fork.sh`:
+
+```bash
+packages/app/scripts/testflight-fork.sh                 # archive + export .ipa
+ASC_APP_ID=<id> packages/app/scripts/testflight-fork.sh --upload   # then upload
+```
+
+One-time human step before the first upload: create the App Store Connect app
+record (the API forbids `POST /v1/apps` on this account). In App Store Connect →
+My Apps → **+** → New App → iOS: name `Paseo Fork`, bundle id
+`io.ideaflow.paseo-fork` (register it under the `JESMXK96LG` team first if the
+dropdown does not offer it), SKU `paseo-fork-ios`. Then pass the numeric app id
+as `ASC_APP_ID`. Signing/notary material is documented in
+`~/.claude/rules/ios-deploy.md`.
+
 ## Adding a feature
 
 ```bash
