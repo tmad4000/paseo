@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   Pressable,
   Text,
-  TextInput,
   View,
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
@@ -14,12 +13,13 @@ import { getIsElectronRuntime } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
 import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
+import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { useFindStore } from "@/find/find-store";
 
 const ThemedChevronUp = withUnistyles(ChevronUp);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedX = withUnistyles(X);
-const ThemedTextInput = withUnistyles(TextInput, (theme: Theme) => ({
+const ThemedTextInput = withUnistyles(EditingTextInput, (theme: Theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
   selectionColor: theme.colors.foreground,
 }));
@@ -51,7 +51,7 @@ export function FindBar() {
   const findNext = useFindStore((state) => state.findNext);
   const findPrevious = useFindStore((state) => state.findPrevious);
   const close = useFindStore((state) => state.close);
-  const inputRef = useRef<TextInput | null>(null);
+  const inputRef = useRef<EditingTextInputHandle | null>(null);
 
   const isDesktop = !isNative && getIsElectronRuntime();
 
@@ -94,7 +94,7 @@ export function FindBar() {
       <View style={styles.bar}>
         <ThemedTextInput
           ref={inputRef}
-          value={query}
+          initialValue={query}
           onChangeText={setQuery}
           onKeyPress={onKeyPress}
           placeholder={t("find.placeholder")}
@@ -163,7 +163,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 56,
     textAlign: "right",
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
     fontVariant: ["tabular-nums"],
   },
   counterEmpty: {

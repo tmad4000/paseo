@@ -34,6 +34,11 @@ export function toQueuedComposerAttachments(
     if (attachment.kind === "image") {
       continue;
     }
+    // Plugin resources are not part of the daemon queue wire schema; their bytes
+    // live in the plugin, so they are dropped from the queued payload.
+    if (attachment.kind === "plugin_resource") {
+      continue;
+    }
     result.push(attachment);
   }
   return result;

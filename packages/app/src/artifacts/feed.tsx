@@ -292,11 +292,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   path: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
   },
   metadata: {
     color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
   },
   openLabel: {
     color: theme.colors.foregroundMuted,

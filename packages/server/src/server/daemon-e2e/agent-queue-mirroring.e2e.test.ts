@@ -19,17 +19,31 @@ describe("agent message queue mirroring", () => {
   let ctx: DaemonTestContext;
   let secondDevice: DaemonClient;
   let cwd: string;
+  const queueEventSubscriptions: { release: () => Promise<void> }[] = [];
+
+  /** Subscribe a device to queue updates so the daemon mirrors them to it. */
+  async function observeQueueUpdates(client: DaemonClient): Promise<void> {
+    const subscription = client.observeEvents(["agent.queue.update"]);
+    subscription.subscribe({ snapshot: () => {}, update: () => {} });
+    await subscription.ready;
+    queueEventSubscriptions.push(subscription);
+  }
 
   beforeEach(async () => {
     ctx = await createDaemonTestContext();
     secondDevice = new DaemonClient({ url: `ws://127.0.0.1:${ctx.daemon.port}/ws` });
     await secondDevice.connect();
-    await secondDevice.fetchAgents({ subscribe: { subscriptionId: "second-device" } });
+    await secondDevice.fetchAgents({ subscribe: {} });
+    await observeQueueUpdates(ctx.client);
+    await observeQueueUpdates(secondDevice);
     cwd = mkdtempSync(path.join(tmpdir(), "queue-mirroring-e2e-"));
     writeFileSync(path.join(cwd, "permission.txt"), "ok", "utf8");
   }, 30000);
 
   afterEach(async () => {
+    for (const subscription of queueEventSubscriptions.splice(0)) {
+      await subscription.release().catch(() => undefined);
+    }
     await secondDevice?.close();
     if (ctx) await ctx.cleanup();
     if (cwd) rmSync(cwd, { recursive: true, force: true });

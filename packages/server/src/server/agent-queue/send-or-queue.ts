@@ -81,5 +81,5 @@ export async function sendOrQueuePromptToAgent(
     ...(params.unarchive !== undefined ? { unarchive: params.unarchive } : {}),
     logger: params.logger,
   });
-  return { queued: false, outOfBand: result.outOfBand };
+  return { queued: false, outOfBand: result.disposition === "out_of_band" };
 }

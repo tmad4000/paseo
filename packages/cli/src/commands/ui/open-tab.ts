@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import type { UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
 import { connectToDaemon, getDaemonHost } from "../../utils/client.js";
+import { selectDaemonTarget } from "../../utils/daemon-target.js";
 import type {
   CommandError,
   CommandOptions,
@@ -229,8 +230,9 @@ export async function runOpenTabCommand(
   }
 
   const target = resolveTarget(options);
-  const host = getDaemonHost({ host: options.host });
-  const client = await connectToDaemon({ host: options.host }).catch((error: unknown) => {
+  const daemonTarget = selectDaemonTarget(options);
+  const host = getDaemonHost({ target: daemonTarget });
+  const client = await connectToDaemon({ target: daemonTarget }).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     throw {
       code: "DAEMON_NOT_RUNNING",

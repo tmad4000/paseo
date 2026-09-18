@@ -3,6 +3,7 @@ import {
   type AttachmentMetadata,
   type UserComposerAttachment,
 } from "@/attachments/types";
+import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
 
 export const DRAFT_STORE_VERSION = 5;
@@ -29,6 +30,21 @@ export interface DraftRecord {
   lifecycle: DraftLifecycleState;
   updatedAt: number;
   version: number;
+}
+
+export function editDraftRecordText(
+  record: DraftRecord | undefined,
+  text: string,
+  now: number,
+): DraftRecord {
+  if (record?.lifecycle === "active" && record.input.text === text) return record;
+  const attachments = record?.lifecycle === "active" ? record.input.attachments : [];
+  return {
+    input: { text, attachments },
+    lifecycle: text.length > 0 || attachments.length > 0 ? "active" : "abandoned",
+    updatedAt: now,
+    version: (record?.version ?? 0) + 1,
+  };
 }
 
 export interface DraftStoreState {
@@ -95,6 +111,7 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
     z.strictObject({ kind: z.literal("forge_issue"), item: IssueItemSchema }),
     z.strictObject({ kind: z.literal("forge_change_request"), item: ChangeRequestItemSchema }),
     z.strictObject({ kind: z.literal("github_issue"), item: IssueItemSchema }),
+    PluginResourceComposerAttachmentSchema,
     z.strictObject({
       kind: z.literal("github_pr"),
       item: ChangeRequestItemSchema,

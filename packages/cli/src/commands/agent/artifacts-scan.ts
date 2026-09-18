@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { connectToDaemon, getDaemonHost, resolveAgentId } from "../../utils/client.js";
+import { selectDaemonTarget } from "../../utils/daemon-target.js";
 import type {
   CommandError,
   CommandOptions,
@@ -58,10 +59,11 @@ export async function runArtifactsScanCommand(
     limit = parsed;
   }
 
-  const host = getDaemonHost({ host: options.host });
+  const daemonTarget = selectDaemonTarget(options);
+  const host = getDaemonHost({ target: daemonTarget });
   let client: DaemonClient;
   try {
-    client = await connectToDaemon({ host: options.host });
+    client = await connectToDaemon({ target: daemonTarget });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw {

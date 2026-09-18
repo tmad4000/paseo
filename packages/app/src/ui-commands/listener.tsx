@@ -38,7 +38,11 @@ export function UiCommandListener() {
       if (!workspaceKey) {
         return;
       }
-      useWorkspaceLayoutStore.getState().openTabInBackground(workspaceKey, command.target);
+      useWorkspaceLayoutStore.getState().openTab({
+        workspaceKey,
+        target: command.target,
+        intent: "background",
+      });
       return;
     }
 
