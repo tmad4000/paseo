@@ -91,8 +91,9 @@ log "expo prebuild (APP_VARIANT=$APP_VARIANT)"
 
 WORKSPACE="$(ls -d "$APP_DIR"/ios/*.xcworkspace 2>/dev/null | head -1)"
 [ -n "$WORKSPACE" ] || fail "No .xcworkspace after prebuild (expected $APP_DIR/ios/*.xcworkspace)."
+WORKSPACE_NAME="$(basename "$WORKSPACE" .xcworkspace)"
 SCHEME="$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null \
-  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const w=JSON.parse(s).workspace;console.log((w.schemes||[])[0]||"")})')"
+  | node -e 'const expected=process.argv[1];let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const schemes=JSON.parse(s).workspace.schemes||[];console.log(schemes.includes(expected)?expected:"")})' "$WORKSPACE_NAME")"
 [ -n "$SCHEME" ] || fail "Could not determine an Xcode scheme from $WORKSPACE."
 log "Workspace: $WORKSPACE   Scheme: $SCHEME"
 
@@ -118,7 +119,7 @@ cat > "$EXPORT_OPTS" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>method</key><string>app-store</string>
+  <key>method</key><string>app-store-connect</string>
   <key>teamID</key><string>$DEVELOPMENT_TEAM</string>
   <key>signingStyle</key><string>automatic</string>
   <key>destination</key><string>export</string>
