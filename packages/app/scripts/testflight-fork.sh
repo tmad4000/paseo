@@ -108,6 +108,7 @@ xcodebuild \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE_PATH" \
   DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+  CODE_SIGN_IDENTITY="Apple Distribution" \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
   archive
