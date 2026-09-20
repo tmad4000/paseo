@@ -96,8 +96,8 @@ if [ -n "$ASC_ISSUER_ID" ] && [ -r "$ASC_KEY_PATH" ]; then
 fi
 
 # --- build workspace deps ----------------------------------------------------
-log "Building workspace client deps"
-( cd "$REPO_ROOT" && npm run build:client )
+log "Building app workspace deps"
+( cd "$REPO_ROOT" && npm run build:app-deps )
 
 # --- generate the native iOS project -----------------------------------------
 log "expo prebuild (APP_VARIANT=$APP_VARIANT)"
