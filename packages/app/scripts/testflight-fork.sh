@@ -34,6 +34,7 @@
 #   APP_VARIANT        default production
 #   ASC_KEY_ID         default KWJX4896S5
 #   ASC_ISSUER_ID      default $(cat ~/.appstoreconnect/issuer_id)
+#   ASC_KEY_PATH       default ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
 #   ASC_APP_ID         default 6813662768 (the fork's App Store Connect app id)
 #
 # The App Store Connect app record already exists (created by hand — POST /v1/apps
@@ -56,6 +57,8 @@ DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-JESMXK96LG}"
 APP_VARIANT="${APP_VARIANT:-production}"
 ASC_KEY_ID="${ASC_KEY_ID:-KWJX4896S5}"
 ASC_APP_ID="${ASC_APP_ID:-6813662768}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-$(cat "$HOME/.appstoreconnect/issuer_id" 2>/dev/null || true)}"
+ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
 DO_UPLOAD=0
 for arg in "$@"; do
   case "$arg" in
@@ -80,6 +83,17 @@ fi
 # Homebrew rsync 3.x shadows Apple's /usr/bin/rsync and breaks CreateIPAStep
 # ('Copy failed'); force Apple's rsync onto the front of PATH. See ios-deploy.md.
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+# Headless build machines can authenticate provisioning updates with an App
+# Store Connect API key instead of requiring an Apple account in Xcode.
+XCODE_AUTH_ARGS=()
+if [ -n "$ASC_ISSUER_ID" ] && [ -r "$ASC_KEY_PATH" ]; then
+  XCODE_AUTH_ARGS=(
+    -authenticationKeyPath "$ASC_KEY_PATH"
+    -authenticationKeyID "$ASC_KEY_ID"
+    -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+  )
+fi
 
 # --- build workspace deps ----------------------------------------------------
 log "Building workspace client deps"
@@ -113,6 +127,7 @@ xcodebuild \
   DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
+  "${XCODE_AUTH_ARGS[@]}" \
   archive
 
 # --- export a store-signed .ipa ----------------------------------------------
@@ -136,7 +151,8 @@ xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_DIR" \
   -exportOptionsPlist "$EXPORT_OPTS" \
-  -allowProvisioningUpdates
+  -allowProvisioningUpdates \
+  "${XCODE_AUTH_ARGS[@]}"
 
 IPA="$(ls -1 "$EXPORT_DIR"/*.ipa 2>/dev/null | head -1)"
 [ -n "$IPA" ] || fail "Export produced no .ipa in $EXPORT_DIR."
@@ -157,7 +173,6 @@ DONE
 fi
 
 [ -n "${ASC_APP_ID:-}" ] || fail "--upload needs a non-empty ASC_APP_ID (default 6813662768)."
-ASC_ISSUER_ID="${ASC_ISSUER_ID:-$(cat "$HOME/.appstoreconnect/issuer_id" 2>/dev/null || true)}"
 [ -n "$ASC_ISSUER_ID" ] || fail "No ASC issuer id (set ASC_ISSUER_ID or ~/.appstoreconnect/issuer_id)."
 
 log "Uploading to TestFlight via altool (app $ASC_APP_ID, key $ASC_KEY_ID)"
