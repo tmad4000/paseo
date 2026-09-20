@@ -72,6 +72,10 @@ import {
 } from "@/navigation/host-runtime-bootstrap";
 import { registerWorkspaceRouteNavigationRef } from "@/navigation/workspace-route-navigation";
 import { ThemedStack } from "@/navigation/themed-stack";
+import {
+  useNativeNavigationBackHandler,
+  useNavigationFocusHistoryTracker,
+} from "@/navigation/focus-history-runtime";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { AgentNavigationListener } from "@/desktop/agent-navigation";
 import { UiCommandListener } from "@/ui-commands/listener";
@@ -485,6 +489,8 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const isWorkspaceFocusModeEnabled = isWorkspaceRoute && isFocusModeEnabled;
   const chromeEnabled = chromeEnabledOverride ?? daemons.length > 0;
   const hasMountedDesktopSidebar = useLatchedBoolean(chromeEnabled);
+  useNavigationFocusHistoryTracker({ enabled: chromeEnabled });
+  useNativeNavigationBackHandler({ enabled: chromeEnabled });
   const toggleAgentList = isCompactLayout ? toggleMobileAgentList : toggleDesktopAgentList;
   const toggleDesktopSidebars = useCallback(() => {
     // The focused workspace owns its layout key, its checkout, and therefore the

@@ -157,6 +157,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   general: [
     "toggle-command-center",
     "search-files",
+    "navigation-back",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -217,6 +218,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-tab-close-current": "settings.shortcuts.help.closeCurrentTab",
   "workspace-jump-index": "settings.shortcuts.help.jumpToWorkspace",
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
+  "navigation-back": "common.actions.back",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
   "workspace-next": "settings.shortcuts.help.nextWorkspace",
   "workspace-tab-prev": "settings.shortcuts.help.previousTab",
@@ -611,6 +613,31 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       section: "tabs-panes",
       label: "Jump to tab",
       defaultDisplayKeys: ["alt", "shift", "1-9"],
+    },
+  },
+
+  // --- Focus-history Back (fork) ---
+  // Upstream owns Cmd+[ for "Previous workspace", so Back takes the chord it leaves free.
+  {
+    id: "navigation-back-cmd-alt-left-mac",
+    action: "navigation.back",
+    combo: "Cmd+Alt+ArrowLeft",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "navigation-back",
+      section: "general",
+      label: "Back",
+    },
+  },
+  {
+    id: "navigation-back-ctrl-alt-left-non-mac",
+    action: "navigation.back",
+    combo: "Ctrl+Alt+ArrowLeft",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "navigation-back",
+      section: "general",
+      label: "Back",
     },
   },
 

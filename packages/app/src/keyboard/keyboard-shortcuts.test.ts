@@ -210,6 +210,19 @@ describe("keyboard-shortcuts", () => {
       payload: { delta: -1 },
     },
     {
+      name: "matches workspace relative navigation on desktop via Mod+[",
+      event: { key: "[", code: "BracketLeft", ctrlKey: true },
+      context: { isDesktop: true },
+      action: "workspace.navigate.relative",
+      payload: { delta: -1 },
+    },
+    {
+      name: "matches navigation back via Mod+Alt+ArrowLeft",
+      event: { key: "ArrowLeft", code: "ArrowLeft", ctrlKey: true, altKey: true },
+      context: { isDesktop: true },
+      action: "navigation.back",
+    },
+    {
       name: "matches workspace relative navigation on desktop via Mod+]",
       event: { key: "]", code: "BracketRight", ctrlKey: true },
       context: { isDesktop: true },

@@ -94,6 +94,11 @@ export interface PanelState {
   toggleAgentListForLayout: (input: PanelLayoutInput) => void;
   openCompactFileExplorer: (checkout: ExplorerCheckoutContext) => void;
   toggleCompactFileExplorer: (checkout: ExplorerCheckoutContext) => void;
+  restoreNavigationView: (input: {
+    isCompact: boolean;
+    panel: MobilePanelView;
+    explorerTab: ExplorerTab;
+  }) => void;
 
   // File explorer settings actions
   setExplorerTab: (tab: ExplorerTab) => void;
@@ -226,6 +231,23 @@ export const usePanelStore = create<PanelState>()(
 
       toggleCompactFileExplorer: (checkout) =>
         set((state) => buildToggleFileExplorerPatch(state, checkout)),
+
+      restoreNavigationView: ({ isCompact, panel, explorerTab }) =>
+        set((state) => {
+          if (isCompact) {
+            return {
+              mobilePanel: setMobilePanelTarget(state.mobilePanel, panel),
+              explorerTab,
+            };
+          }
+          return {
+            desktop: {
+              ...state.desktop,
+              fileExplorerOpen: panel === "file-explorer",
+            },
+            explorerTab,
+          };
+        }),
 
       setExplorerTab: (tab) => set({ explorerTab: tab }),
       setExplorerTabForCheckout: ({ serverId, cwd, isGit, tab }) =>

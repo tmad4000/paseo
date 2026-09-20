@@ -25,6 +25,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import invariant from "tiny-invariant";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
+import { NavigationBackButton } from "@/components/headers/navigation-back-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HostBadge } from "@/hosts/host-badge";
@@ -250,7 +251,12 @@ const ThemedChevronDown = withUnistyles(ChevronDown);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-const GATED_WORKSPACE_HEADER_LEFT = <SidebarMenuToggle />;
+const GATED_WORKSPACE_HEADER_LEFT = (
+  <>
+    <SidebarMenuToggle />
+    <NavigationBackButton />
+  </>
+);
 
 interface WorkspaceScreenProps {
   serverId: string;
@@ -1773,7 +1779,6 @@ function WorkspaceScreenContent({
   });
 
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
-
   const activeExplorerCheckout = useMemo<ExplorerCheckoutContext | null>(() => {
     if (!normalizedServerId || !workspaceDirectory) {
       return null;
@@ -3885,6 +3890,7 @@ function WorkspaceScreenContent({
           left={
             <>
               <SidebarMenuToggle />
+              <NavigationBackButton />
               <WorkspaceHeaderTitleBar
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}

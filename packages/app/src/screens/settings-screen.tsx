@@ -134,6 +134,7 @@ import {
 import { useLastWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { returnFromSettings, type SettingsView } from "@/navigation/settings-navigation";
 import { isNative, isWeb } from "@/constants/platform";
+import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
 
 // ---------------------------------------------------------------------------
 // View model
@@ -1301,8 +1302,11 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   }, [view]);
 
   const handleBackToWorkspace = useCallback(() => {
+    if (navigateBackInFocusHistory({ isCompact: isCompactLayout })) {
+      return;
+    }
     returnFromSettings({ kind: "root" });
-  }, []);
+  }, [isCompactLayout]);
 
   const installedPlugins = useInstalledPlugins();
   const detailHeader = ((): {

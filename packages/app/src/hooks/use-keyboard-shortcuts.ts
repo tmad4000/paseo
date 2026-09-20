@@ -41,6 +41,7 @@ import {
   useActiveWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { dispatchTopWebOverlayKeyDown } from "@/lib/overlay-root";
+import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
 
 export function useKeyboardShortcuts({
   enabled,
@@ -152,6 +153,16 @@ export function useKeyboardShortcuts({
   };
 
   const callbacksByName: Record<ShortcutCallbackName, (() => void) | undefined> = {
+    "navigate-back": () => {
+      if (navigateBackInFocusHistory({ isCompact: isMobile })) {
+        return;
+      }
+      if (isMobile) {
+        router.back();
+        return;
+      }
+      navigateToLastWorkspace();
+    },
     "toggle-agent-list": toggleAgentList,
     "toggle-both-sidebars": toggleBothSidebars,
     "cycle-theme": cycleTheme,
