@@ -101,6 +101,9 @@ log "Workspace: $WORKSPACE   Scheme: $SCHEME"
 rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
 mkdir -p "$BUILD_DIR"
 log "Archiving (team $DEVELOPMENT_TEAM)"
+# Let Xcode choose the archive identity for automatic signing. Forcing Apple
+# Distribution here conflicts with Xcode 26's development-signed archive; the
+# export step below re-signs the app for App Store distribution.
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -108,7 +111,6 @@ xcodebuild \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE_PATH" \
   DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-  CODE_SIGN_IDENTITY="Apple Distribution" \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
   archive
