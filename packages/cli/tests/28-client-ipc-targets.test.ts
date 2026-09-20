@@ -1,6 +1,9 @@
 #!/usr/bin/env npx tsx
 
 import assert from "node:assert";
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   getDaemonHost,
   normalizeDaemonHost,
@@ -8,6 +11,12 @@ import {
   resolveDaemonTarget,
 } from "../src/utils/client.js";
 import { selectDaemonTarget } from "../src/utils/daemon-target.js";
+import {
+  clearDefaultDaemonTarget,
+  readDefaultDaemonTarget,
+  saveDefaultDaemonTarget,
+} from "../src/utils/client-target.js";
+import { normalizeDefaultDaemonTarget } from "../src/commands/target.js";
 import { resolveCliVersion } from "../src/version.js";
 
 console.log("=== CLI IPC Target Helpers ===\n");
@@ -137,6 +146,84 @@ console.log("=== CLI IPC Target Helpers ===\n");
     }
   }
   console.log("✓ daemon password resolution prefers TCP URI query, falls back to env\n");
+}
+
+{
+  console.log("Test 11: a persisted daemon target becomes the only implicit CLI destination");
+  const paseoHome = mkdtempSync(path.join(os.tmpdir(), "paseo-client-default-target-"));
+  const offerUrl =
+    "https://app.paseo.sh/#offer=eyJ2IjoyLCJzZXJ2ZXJJZCI6InNlcnZlci0xIiwicmVsYXkiOnsiZW5kcG9pbnQiOiJyZWxheS5leGFtcGxlOjQ0MyJ9LCJkYWVtb25QdWJsaWNLZXlCNjQiOiJwdWJsaWMta2V5In0";
+  try {
+    saveDefaultDaemonTarget(paseoHome, offerUrl);
+
+    assert.strictEqual(readDefaultDaemonTarget(paseoHome), offerUrl);
+    assert.deepStrictEqual(selectDaemonTarget({}, { PASEO_HOME: paseoHome }), {
+      kind: "endpoint",
+      host: offerUrl,
+    });
+    assert.strictEqual(statSync(path.join(paseoHome, "cli.json")).mode & 0o777, 0o600);
+  } finally {
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
+  console.log("✓ persisted target is authoritative and private\n");
+}
+
+{
+  console.log("Test 12: --host and PASEO_HOST override a persisted daemon target");
+  const paseoHome = mkdtempSync(path.join(os.tmpdir(), "paseo-client-env-target-"));
+  try {
+    saveDefaultDaemonTarget(paseoHome, "m4-mini.example:6767");
+    assert.deepStrictEqual(
+      selectDaemonTarget({}, { PASEO_HOME: paseoHome, PASEO_HOST: "override.example:7767" }),
+      { kind: "endpoint", host: "override.example:7767" },
+    );
+    assert.deepStrictEqual(
+      selectDaemonTarget({ host: "flag.example:7767" }, { PASEO_HOME: paseoHome }),
+      { kind: "endpoint", host: "flag.example:7767" },
+    );
+  } finally {
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
+  console.log("✓ environment target wins over persisted target\n");
+}
+
+{
+  console.log("Test 13: clearing a persisted daemon target restores the default home");
+  const paseoHome = mkdtempSync(path.join(os.tmpdir(), "paseo-client-clear-target-"));
+  try {
+    saveDefaultDaemonTarget(paseoHome, "m4-mini.example:6767");
+    assert.strictEqual(clearDefaultDaemonTarget(paseoHome), true);
+    assert.strictEqual(clearDefaultDaemonTarget(paseoHome), false);
+    assert.strictEqual(readDefaultDaemonTarget(paseoHome), null);
+    assert.deepStrictEqual(selectDaemonTarget({}, { PASEO_HOME: paseoHome }), {
+      kind: "instance",
+      home: paseoHome,
+    });
+  } finally {
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
+  console.log("✓ clearing target restores the default home\n");
+}
+
+{
+  console.log("Test 14: persisted targets accept relay offers and validate direct endpoints");
+  const payload = Buffer.from(
+    JSON.stringify({
+      v: 2,
+      serverId: "always-on-daemon",
+      daemonPublicKeyB64: "public-key",
+      relay: { endpoint: "relay.paseo.sh:443", useTls: true },
+    }),
+    "utf8",
+  ).toString("base64url");
+  const offerUrl = `https://app.paseo.sh/#offer=${payload}`;
+
+  assert.strictEqual(normalizeDefaultDaemonTarget(offerUrl), offerUrl);
+  assert.strictEqual(normalizeDefaultDaemonTarget("m4-mini:6767"), "m4-mini:6767");
+  assert.throws(() => normalizeDefaultDaemonTarget("m4-mini:70000"), /port must be between/);
+  assert.throws(() => normalizeDefaultDaemonTarget("https://example.com"), /Invalid daemon target/);
+  assert.throws(() => normalizeDefaultDaemonTarget("unix://"), /missing socket path/);
+  console.log("✓ relay and direct targets are validated before persistence\n");
 }
 
 console.log("=== All CLI IPC target tests passed ===");

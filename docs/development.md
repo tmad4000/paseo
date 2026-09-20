@@ -565,9 +565,15 @@ npm run cli -- --host ssh://user@host ls -a
 ```
 
 Set `PASEO_HOST` to use the same target across invocations. An explicit
-selector overrides both environment selectors. With both `PASEO_HOME` and `PASEO_HOST` set, pass an explicit selector. See [CLI target selection](../public-docs/cli.md#select-one-daemon).
+selector overrides both environment selectors. With both `PASEO_HOME` and `PASEO_HOST` set, pass an explicit selector. A target saved with `paseo target set` sits between the environment selectors and the default home. See [CLI target selection](../public-docs/cli.md#select-one-daemon).
 
 In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:6767`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
+
+For a durable remote default, `paseo target set <host-or-offer>` stores the target in
+`$PASEO_HOME/cli.json`. CLI target precedence is explicit `--host`/`--home`, `PASEO_HOST`/`PASEO_HOME`, the persisted
+target, then the default home. A persisted target is authoritative rather than
+a fallback: if the shared daemon is offline, commands fail instead of silently creating agents on a
+local daemon. `paseo target clear` restores the default home.
 
 Desktop integrations can focus an existing agent without creating one or
 sending a message. Use `paseo://h/<server-id>/agent/<agent-id>`, or run

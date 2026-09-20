@@ -313,7 +313,7 @@ Managed `start` ignores inherited daemon-setting overrides, including `PORT`, `P
 
 ### Select one daemon
 
-Every daemon-connected CLI command accepts global `--home` or `--host`, before or after the command. A home selects a local supervisor's published endpoint; a host selects an explicit endpoint. There is no configured-address or default-port fallback.
+Every daemon-connected CLI command accepts global `--home` or `--host`, before or after the command. A home selects a local supervisor's published endpoint; a host selects an explicit endpoint. A target saved with `paseo target set` is used when neither is given. There is no configured-address or default-port fallback.
 
 | Selectors                                  | Result                                                 |
 | ------------------------------------------ | ------------------------------------------------------ |
@@ -381,6 +381,19 @@ paseo --host "$OFFER_URL" run "fix the failing tests"
 ```
 
 You can also set it once via `PASEO_HOST` instead of passing `--host` on every command. An explicit flag overrides the environment variable.
+
+Persist a shared daemon as the CLI default instead of passing `--host` on every command:
+
+```bash
+paseo target set "$OFFER_URL"
+paseo target show
+paseo run --workspace <workspace-id> --background "fix the failing tests"
+```
+
+The target is stored in `$PASEO_HOME/cli.json`. An explicit `--host` has highest precedence,
+followed by `PASEO_HOST`, the persisted target, and finally the default daemon home. Run
+`paseo target clear` to return to the default home. See [Always-on daemon](/docs/always-on-daemon)
+for the complete phone and multi-computer setup.
 
 ## Multi-agent workflows
 

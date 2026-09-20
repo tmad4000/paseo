@@ -6,6 +6,11 @@ describe("canonical CLI surface", () => {
     expect(createCli().helpInformation()).toContain("--host <host>");
   });
 
+  it("exposes persistent daemon target management", () => {
+    const target = createCli().commands.find((command) => command.name() === "target");
+    expect(target?.commands.map((command) => command.name())).toEqual(["set", "show", "clear"]);
+  });
+
   it("shows project, workspace, and heartbeat commands while hiding worktree compatibility", () => {
     const cli = createCli();
     const help = cli.helpInformation();

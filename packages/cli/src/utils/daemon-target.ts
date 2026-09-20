@@ -1,4 +1,5 @@
 import { resolvePaseoHome } from "@getpaseo/server/daemon-control";
+import { readDefaultDaemonTarget } from "./client-target.js";
 
 export type DaemonTarget = { kind: "instance"; home: string } | { kind: "endpoint"; host: string };
 
@@ -33,7 +34,12 @@ export function selectDaemonTarget(
       message: "PASEO_HOME and PASEO_HOST are both set. Choose --home or --host explicitly.",
     };
   if (env.PASEO_HOST) return { kind: "endpoint", host: env.PASEO_HOST };
-  return { kind: "instance", home: resolvePaseoHome({ PASEO_HOME: env.PASEO_HOME }) };
+  const home = resolvePaseoHome({ PASEO_HOME: env.PASEO_HOME });
+  // A target saved with `paseo target set` is authoritative for implicit selection: when the
+  // shared daemon is offline, commands fail instead of silently acting on a local daemon.
+  const persistedTarget = readDefaultDaemonTarget(home);
+  if (persistedTarget) return { kind: "endpoint", host: persistedTarget };
+  return { kind: "instance", home };
 }
 
 export function describeDaemonTarget(target: DaemonTarget): string {
