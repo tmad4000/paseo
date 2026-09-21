@@ -1158,11 +1158,19 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
-  const selectedView = useAgentViewStore((state) => state.selectedViews[`${serverId}:${agentId}`] || "chat");
+  const selectedView = useAgentViewStore(
+    (state) => state.selectedViews[`${serverId}:${agentId}`] || "chat",
+  );
   const setSelectedView = useAgentViewStore((state) => state.setSelectedView);
-  const handleSetSelectedView = useCallback((view: "chat" | "artifacts") => {
-    setSelectedView(serverId, agentId, view);
-  }, [serverId, agentId, setSelectedView]);
+  const handleSetSelectedView = useCallback(
+    (view: "chat" | "artifacts") => {
+      setSelectedView(serverId, agentId, view);
+    },
+    [serverId, agentId, setSelectedView],
+  );
+  const handleReturnToChat = useCallback(() => {
+    handleSetSelectedView("chat");
+  }, [handleSetSelectedView]);
   const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
@@ -1272,7 +1280,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           artifacts={artifacts}
           isSupported={artifactFeedSupported}
           onOpenWorkspaceFile={onOpenWorkspaceFile}
-          onReturnToChat={() => handleSetSelectedView("chat")}
+          onReturnToChat={handleReturnToChat}
         />
       )}
     </View>

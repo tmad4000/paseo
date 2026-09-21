@@ -94,7 +94,9 @@ export function ArtifactFeed({
       <View style={styles.emptyState} testID="artifact-feed-offline">
         <ThemedArtifactKindIcon kind="html" size={22} uniProps={mutedIconMapping} />
         <Text style={styles.emptyTitle}>{t("agentPanel.states.offline") || "Offline"}</Text>
-        <Text style={styles.emptyDescription}>{t("agentPanel.states.offlineDescription") || "Cannot connect to the host."}</Text>
+        <Text style={styles.emptyDescription}>
+          {t("agentPanel.states.offlineDescription") || "Cannot connect to the host."}
+        </Text>
       </View>
     );
   }
@@ -231,7 +233,9 @@ function ArtifactImage({
     return (
       <View style={styles.previewState}>
         <ThemedArtifactKindIcon kind="image" size={24} uniProps={mutedIconMapping} />
-        <Text style={styles.missingPreviewText}>{t("agentPanel.artifacts.previewMissing") || "Preview unavailable"}</Text>
+        <Text style={styles.missingPreviewText}>
+          {t("agentPanel.artifacts.previewMissing") || "Preview unavailable"}
+        </Text>
       </View>
     );
   }
