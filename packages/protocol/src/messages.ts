@@ -17,6 +17,7 @@ export {
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
 import { z } from "zod";
+import { CompanionEntrySchema } from "./companion-stream.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
@@ -846,6 +847,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
+  companionEntries: z.array(CompanionEntrySchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -3920,6 +3922,8 @@ export const ServerInfoStatusPayloadSchema = z
         artifactFeed: z.boolean().optional(),
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: z.boolean().optional(),
+        // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
+        companionStream: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.

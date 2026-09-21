@@ -39,6 +39,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/file-icons.md](docs/file-icons.md)                             | Material icon theme integration for the file explorer                                                                          |
 | [docs/queue-mirroring.md](docs/queue-mirroring.md)                   | Moving the composer message queue onto the daemon so it mirrors across devices and drains with no client attached              |
 | [docs/agent-tab-control.md](docs/agent-tab-control.md)               | MCP open_tab/close_tab over the ui.command push, and the queue-instead-of-interrupt busy-send policy                           |
+| [docs/companion-stream.md](docs/companion-stream.md)                 | Per-chat Stream (fork) — captured questions, decisions, outcomes and files beside the chat; capture limits and compat            |
 | [docs/providers.md](docs/providers.md)                               | Adding a new agent provider end-to-end                                                                                         |
 | [docs/forge-providers.md](docs/forge-providers.md)                   | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
 | [docs/custom-providers.md](docs/custom-providers.md)                 | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |

@@ -135,5 +135,6 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     parentAgentId,
     labels: snapshot.labels,
     artifacts: snapshot.artifacts,
+    companionEntries: snapshot.companionEntries,
   };
 }

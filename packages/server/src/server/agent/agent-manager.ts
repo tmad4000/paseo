@@ -2,6 +2,8 @@ import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { CompanionStreamCollector, restoreCompanionEntries } from "./companion-stream.js";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -317,6 +319,7 @@ export interface CreateAgentOptions {
   workspaceId: string | undefined;
   owner?: AgentOwner;
   artifacts?: AgentArtifact[];
+  companionEntries?: CompanionEntry[];
 }
 
 export interface AgentManagerOptions {
@@ -449,6 +452,7 @@ interface ManagedAgentBase {
    */
   labels: Record<string, string>;
   artifacts: AgentArtifact[];
+  companionEntries?: CompanionEntry[];
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -750,6 +754,7 @@ export class AgentManager {
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private readonly artifactCollector = new AgentArtifactCollector();
+  private readonly companionCollector = new CompanionStreamCollector();
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
   private paseoToolsEnabled = true;
@@ -1329,6 +1334,7 @@ export class AgentManager {
       owner: options.owner,
       artifacts: options.artifacts,
       historyPrimed: true,
+      companionEntries: options.companionEntries,
     });
     if (!agent.internal) {
       this.pluginLifecycle?.emit("agent.created", {
@@ -1361,6 +1367,7 @@ export class AgentManager {
       owner?: AgentOwner;
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
+      companionEntries?: CompanionEntry[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1394,6 +1401,7 @@ export class AgentManager {
       owner?: AgentOwner;
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
+      companionEntries?: CompanionEntry[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1646,6 +1654,7 @@ export class AgentManager {
         attention: preservedAttention,
         artifacts: existing.artifacts,
         restoring: true,
+        companionEntries: existing.companionEntries,
       });
     } catch (error) {
       if (closedExisting) {
@@ -1963,6 +1972,7 @@ export class AgentManager {
         internal: record.internal,
         labels: record.labels,
         artifacts: record.artifacts ?? [],
+        companionEntries: restoreCompanionEntries(record),
       },
     });
   }
@@ -2461,6 +2471,9 @@ export class AgentManager {
     item = limitAgentTimelineItemContent(item);
     this.touchUpdatedAt(agent);
     const row = this.recordTimeline(agentId, item);
+    if (item.type === "user_message") {
+      this.collectCompanionEvent(agent, { type: "timeline", item, provider: agent.provider });
+    }
     this.dispatchStream(
       agentId,
       {
@@ -3527,6 +3540,7 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       artifacts?: AgentArtifact[];
+      companionEntries?: CompanionEntry[];
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3704,6 +3718,7 @@ export class AgentManager {
           workspaceId?: string;
           owner?: AgentOwner;
           artifacts?: AgentArtifact[];
+          companionEntries?: CompanionEntry[];
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -3745,6 +3760,7 @@ export class AgentManager {
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
       artifacts: resolveInitialArtifacts(options?.artifacts),
+      companionEntries: restoreCompanionEntries(options),
     } as ActiveManagedAgent;
   }
 
@@ -3799,6 +3815,7 @@ export class AgentManager {
 
   private discardRetainedAgentState(agentId: string): void {
     this.artifactCollector.cancelTurn(agentId);
+    this.companionCollector.clear(agentId);
     this.timelineStore.delete(agentId);
     this.paseoToolPolicies.delete(agentId);
     for (const event of this.providerSubagents.deleteParent(agentId)) {
@@ -4280,6 +4297,10 @@ export class AgentManager {
       await dispatchPromise;
     }
 
+    if (!options?.fromHistory && event.type !== "timeline") {
+      this.collectCompanionEvent(agent, event);
+    }
+
     if (!options?.fromHistory) {
       if (isTurnTerminalEvent(event)) {
         this.runs.settleTerminalRun(agent.id, eventTurnId);
@@ -4715,6 +4736,20 @@ export class AgentManager {
     }
   }
 
+  private collectCompanionEvent(agent: ManagedAgent, event: AgentStreamEvent): void {
+    const previous = agent.companionEntries ?? [];
+    const next = this.companionCollector.observe(
+      agent.id,
+      previous,
+      event,
+      new Date().toISOString(),
+    );
+    if (next !== previous) {
+      agent.companionEntries = next;
+      this.emitState(agent);
+    }
+  }
+
   private async collectArtifactsForTurn(agent: ActiveManagedAgent): Promise<void> {
     try {
       const collection = await this.artifactCollector.finishTurn(agent.id, agent.artifacts);
@@ -4754,6 +4789,8 @@ export class AgentManager {
       provider,
       ...(turnId !== undefined ? { turnId } : {}),
     };
+    const agent = this.agents.get(agentId);
+    if (agent) this.collectCompanionEvent(agent, event);
     this.dispatchStream(agentId, event, {
       seq: row.seq,
       epoch: this.timelineStore.getEpoch(agentId),
@@ -4766,7 +4803,6 @@ export class AgentManager {
       item.detail?.type === "shell" &&
       commandMayHaveChangedExternalState(item.detail.command)
     ) {
-      const agent = this.agents.get(agentId);
       if (agent) {
         this.onWorkspaceStateMayHaveChanged?.({ cwd: agent.cwd });
       }

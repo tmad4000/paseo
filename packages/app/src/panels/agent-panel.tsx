@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { TFunction } from "i18next";
-import { FileCode2, MessageSquare, SquarePen } from "lucide-react-native";
+import { ListFilter, MessageSquare, SquarePen } from "lucide-react-native";
 import React, {
   memo,
   type ReactNode,
@@ -22,10 +22,11 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
-import { ArtifactFeed } from "@/artifacts/feed";
+import { CompanionFeed } from "@/companion-stream/feed";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { ComposerDock } from "@/composer/dock";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
-import { useRetainedPanelActive } from "@/components/retained-panel";
+import { RetainedPanel, useRetainedPanelActive } from "@/components/retained-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { RetainedChatContent } from "./retained-chat-content";
 import { Composer } from "@/composer";
@@ -120,6 +121,7 @@ interface ChatAgentStateShape {
   features?: Agent["features"];
   lastError?: Agent["lastError"] | null;
   artifacts?: Agent["artifacts"];
+  companionEntries?: Agent["companionEntries"];
 }
 
 interface ChatAgentSelectedState extends ChatAgentStateShape {
@@ -180,6 +182,7 @@ function selectChatAgentState(
     features: agent.features,
     lastError: agent.lastError ?? null,
     artifacts: agent.artifacts,
+    companionEntries: agent.companionEntries,
     archivedAt: agent.archivedAt ?? null,
     requiresAttention: agent.requiresAttention ?? false,
     attentionReason: agent.attentionReason ?? null,
@@ -1109,6 +1112,8 @@ function ChatAgentContent({
   );
 }
 
+const EMPTY_COMPANION_ENTRIES: readonly CompanionEntry[] = [];
+
 const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   serverId,
   workspaceId,
@@ -1173,9 +1178,14 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     },
     [serverId, agentId, setSelectedView],
   );
+  const isCompact = useIsCompactFormFactor();
   const handleReturnToChat = useCallback(() => {
     handleSetSelectedView("chat");
   }, [handleSetSelectedView]);
+  const handleReplyInChat = useCallback(() => {
+    handleReturnToChat();
+    streamViewRef.current?.scrollToBottom("jump-to-bottom");
+  }, [handleReturnToChat, streamViewRef]);
   const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
@@ -1194,6 +1204,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
   });
+  // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
+  const companionStreamSupported = useHostFeature(serverId, "companionStream");
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1245,7 +1257,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       <AgentComposerSection
         agentId={agentId}
         serverId={serverId}
-        isPaneFocused={isPaneFocused}
+        isPaneFocused={isPaneFocused && selectedView !== "artifacts"}
         isArchivingCurrentAgent={isArchivingCurrentAgent}
         archivedAt={agentState.archivedAt}
         cwd={cwd}
@@ -1333,15 +1345,17 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       },
       {
         value: "artifacts" as const,
-        label: t("agentPanel.artifacts.tab", { count: artifacts.length }),
+        label: t("agentPanel.stream.tab"),
         icon: ({ color, size }: { color: string; size: number }) => (
-          <FileCode2 color={color} size={size} />
+          <ListFilter color={color} size={size} />
         ),
         testID: "agent-view-artifacts",
       },
     ],
-    [artifacts.length, t],
+    [t],
   );
+  const showViewSwitcher = companionStreamSupported || artifactFeedSupported;
+  const isChatVisible = selectedView === "chat";
 
   return (
     <RewindComposerRestoreProvider
@@ -1350,36 +1364,36 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       onRewindComplete={handleRewindComplete}
     >
       <View style={styles.root}>
-        {artifactFeedSupported ? (
-          <>
-            <View style={styles.viewSwitcher}>
-              <SegmentedControl
-                options={viewOptions}
-                value={selectedView}
-                onValueChange={setSelectedView}
-                size="xs"
-                testID="agent-view-switcher"
-              />
-  mobileSegmentedControl: {
-    flex: 1,
-  },
-            </View>
-            {selectedView === "chat" ? (
-              dock
-            ) : (
-              <ArtifactFeed
-                serverId={serverId}
-                cwd={cwd}
-                artifacts={artifacts}
-                isSupported={artifactFeedSupported}
-                onOpenWorkspaceFile={onOpenWorkspaceFile}
-                onReturnToChat={handleReturnToChat}
-              />
-            )}
-          </>
-        ) : (
-          dock
-        )}
+        {showViewSwitcher ? (
+          <View style={styles.viewSwitcher}>
+            <SegmentedControl
+              options={viewOptions}
+              value={selectedView}
+              onValueChange={handleSetSelectedView}
+              size={isCompact ? "md" : "xs"}
+              textWrap={isCompact}
+              testID="agent-view-switcher"
+              style={isCompact ? styles.mobileSegmentedControl : undefined}
+              segmentStyle={isCompact ? styles.compactSegment : undefined}
+            />
+          </View>
+        ) : null}
+        {/* The chat stays mounted behind the Stream so the draft, scroll position and
+            expanded state survive Back to chat and Reply in chat. */}
+        <RetainedPanel active={isChatVisible}>{dock}</RetainedPanel>
+        {!isChatVisible ? (
+          <CompanionFeed
+            serverId={serverId}
+            cwd={cwd}
+            entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
+            artifacts={artifacts}
+            isSupported={companionStreamSupported}
+            artifactsSupported={artifactFeedSupported}
+            onOpenWorkspaceFile={onOpenWorkspaceFile}
+            onReturnToChat={handleReturnToChat}
+            onReplyInChat={handleReplyInChat}
+          />
+        ) : null}
 
         {isArchivingCurrentAgent ? (
           <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
@@ -1813,8 +1827,10 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     ...(isWeb ? { userSelect: "none" as const } : {}),
   },
+  hiddenPane: { display: "none" },
+  compactSegment: { minHeight: 44 },
   viewSwitcher: {
-    minHeight: isWeb ? 40 : 56,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
