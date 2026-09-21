@@ -88,6 +88,7 @@ import type {
   WorkspacePanelTarget,
 } from "@/keyboard/keyboard-action-dispatcher";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { useVisibleAgentIds } from "./visible-agent-ids";
 import {
@@ -426,6 +427,7 @@ interface MobileWorkspaceTabSwitcherProps {
   onCloseTabsAbove: (tabId: string) => Promise<void> | void;
   onCloseTabsBelow: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  onViewArtifacts: (agentId: string) => void;
 }
 
 function MobileActiveTabTrigger({
@@ -533,6 +535,7 @@ function MobileWorkspaceTabOption({
   onCloseTabsAbove,
   onCloseTabsBelow,
   onCloseOtherTabs,
+  onViewArtifacts,
 }: {
   tab: WorkspaceTabDescriptor;
   tabIndex: number;
@@ -552,6 +555,7 @@ function MobileWorkspaceTabOption({
   onCloseTabsAbove: (tabId: string) => Promise<void> | void;
   onCloseTabsBelow: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  onViewArtifacts: (agentId: string) => void;
 }) {
   const { t } = useTranslation();
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
@@ -569,6 +573,7 @@ function MobileWorkspaceTabOption({
       reloadAgent: t("workspace.tabs.menu.reloadAgent"),
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
+      viewArtifacts: t("workspace.tabs.menu.viewArtifacts", { defaultValue: "View artifacts" }),
     }),
     [t],
   );
@@ -589,6 +594,7 @@ function MobileWorkspaceTabOption({
     onCloseTabsBefore: onCloseTabsAbove,
     onCloseTabsAfter: onCloseTabsBelow,
     onCloseOtherTabs,
+    onViewArtifacts,
     labels: tabMenuLabels,
   });
 
@@ -661,6 +667,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   onCloseTabsAbove,
   onCloseTabsBelow,
   onCloseOtherTabs,
+  onViewArtifacts,
 }: MobileWorkspaceTabSwitcherProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -718,6 +725,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCloseTabsAbove={onCloseTabsAbove}
           onCloseTabsBelow={onCloseTabsBelow}
           onCloseOtherTabs={onCloseOtherTabs}
+          onViewArtifacts={onViewArtifacts}
         />
       );
     },
@@ -737,6 +745,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCloseTabsAbove,
       onCloseTabsBelow,
       onCloseOtherTabs,
+      onViewArtifacts,
     ],
   );
 
@@ -2705,6 +2714,21 @@ function WorkspaceScreenContent({
     [toast, t],
   );
 
+  const setSelectedView = useAgentViewStore((state) => state.setSelectedView);
+  const handleViewArtifacts = useCallback(
+    (agentId: string) => {
+      setSelectedView(normalizedServerId, agentId, "artifacts");
+      if (persistenceKey) {
+        const tabTarget = { kind: "agent", agentId } as WorkspaceTabTarget;
+        const tabId = openWorkspaceTabFocused(persistenceKey, tabTarget);
+        if (tabId) {
+          navigateToTabId(tabId);
+        }
+      }
+    },
+    [normalizedServerId, persistenceKey, openWorkspaceTabFocused, navigateToTabId, setSelectedView],
+  );
+
   const handleCopyFilePath = useCallback(
     async (path: string) => {
       if (!path) return;
@@ -4065,6 +4089,7 @@ function WorkspaceScreenContent({
           onCloseTabsAbove={handleCloseTabsToLeft}
           onCloseTabsBelow={handleCloseTabsToRight}
           onCloseOtherTabs={handleCloseOtherTabs}
+          onViewArtifacts={handleViewArtifacts}
         />
       ) : null}
 

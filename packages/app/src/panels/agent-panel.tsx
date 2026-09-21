@@ -81,6 +81,7 @@ import {
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import {
   selectAgentTimelineState,
@@ -1162,7 +1163,19 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
-  const [selectedView, setSelectedView] = useState<"chat" | "artifacts">("chat");
+  const selectedView = useAgentViewStore(
+    (state) => state.selectedViews[`${serverId}:${agentId}`] || "chat",
+  );
+  const setSelectedView = useAgentViewStore((state) => state.setSelectedView);
+  const handleSetSelectedView = useCallback(
+    (view: "chat" | "artifacts") => {
+      setSelectedView(serverId, agentId, view);
+    },
+    [serverId, agentId, setSelectedView],
+  );
+  const handleReturnToChat = useCallback(() => {
+    handleSetSelectedView("chat");
+  }, [handleSetSelectedView]);
   const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
@@ -1347,6 +1360,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
                 size="xs"
                 testID="agent-view-switcher"
               />
+  mobileSegmentedControl: {
+    flex: 1,
+  },
             </View>
             {selectedView === "chat" ? (
               dock
@@ -1357,6 +1373,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
                 artifacts={artifacts}
                 isSupported={artifactFeedSupported}
                 onOpenWorkspaceFile={onOpenWorkspaceFile}
+                onReturnToChat={handleReturnToChat}
               />
             )}
           </>
@@ -1797,11 +1814,12 @@ const styles = StyleSheet.create((theme) => ({
     ...(isWeb ? { userSelect: "none" as const } : {}),
   },
   viewSwitcher: {
-    minHeight: 40,
+    minHeight: isWeb ? 40 : 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
@@ -1830,6 +1848,9 @@ const styles = StyleSheet.create((theme) => ({
   timelineSyncCalloutText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  mobileSegmentedControl: {
+    flex: 1,
+  },
   },
   historySyncOverlay: {
     position: "absolute",
