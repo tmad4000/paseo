@@ -16,6 +16,7 @@ class AudioEngine {
     public var onInputVolumeCallback: ((Float) -> Void)?
     public var onOutputVolumeCallback: ((Float) -> Void)?
     public var onAudioInterruptionCallback: ((String) -> Void)?
+    public var onPlaybackCompleteCallback: (() -> Void)?
     
     private var inputLevelTimer: Timer?
     private var outputLevelTimer: Timer?
@@ -267,6 +268,11 @@ class AudioEngine {
                 self.pendingPlaybackBuffers -= 1
             }
             self.playbackCountLock.unlock()
+            // Fire once the audio has actually been heard (.dataPlayedBack), so JS can
+            // settle playback without relying on a timer that the background suspends.
+            DispatchQueue.main.async {
+                self.onPlaybackCompleteCallback?()
+            }
         }
 
         if !speechPlayer.isPlaying {

@@ -53,6 +53,7 @@ class AudioEngine (context: Context) {
     var onInputVolumeCallback: ((Float) -> Unit)? = null
     var onOutputVolumeCallback: ((Float) -> Unit)? = null
     var onAudioInterruptionCallback: ((String) -> Unit)? = null
+    var onPlaybackCompleteCallback: (() -> Unit)? = null
 
     init {
         initializeAudio(context)
@@ -425,6 +426,7 @@ class AudioEngine (context: Context) {
                         playSample(data)
                         val audioVolume = calculateRMSLevel(data)
                         onOutputVolumeCallback?.invoke(audioVolume)
+                        onPlaybackCompleteCallback?.invoke()
                     }else{
                         break
                     }
