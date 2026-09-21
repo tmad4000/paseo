@@ -2634,6 +2634,8 @@ function ComposerContentImpl({
                   voiceServerId={serverId}
                   voiceAgentId={agentId}
                   isAgentRunning={isAgentRunning}
+                  isCancellingAgent={isCancellingAgent}
+                  onCancelAgent={handleCancelAgent}
                   defaultSendBehavior={activeSendBehavior}
                   onQueue={handleQueue}
                   onSubmitLoadingPress={submitLoadingPressHandler}

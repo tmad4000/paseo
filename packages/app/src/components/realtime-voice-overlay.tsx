@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Mic, MicOff, Square } from "lucide-react-native";
+import { Mic, MicOff, PhoneOff, Square } from "lucide-react-native";
 import { FOOTER_HEIGHT } from "@/constants/layout";
 import { useVoiceTelemetry } from "@/contexts/voice-context";
 import { VolumeMeter } from "./volume-meter";
@@ -11,8 +11,11 @@ import { VolumeMeter } from "./volume-meter";
 interface RealtimeVoiceOverlayProps {
   isMuted: boolean;
   isSwitching: boolean;
+  isAgentRunning?: boolean;
+  isCancellingAgent?: boolean;
   onToggleMute: () => void;
   onStop: () => void;
+  onCancelAgent?: () => void;
 }
 
 const OVERLAY_BUTTON_SIZE = 44;
@@ -21,8 +24,11 @@ const OVERLAY_VERTICAL_PADDING = (FOOTER_HEIGHT - OVERLAY_BUTTON_SIZE) / 2;
 export function RealtimeVoiceOverlay({
   isMuted,
   isSwitching,
+  isAgentRunning,
+  isCancellingAgent,
   onToggleMute,
   onStop,
+  onCancelAgent,
 }: RealtimeVoiceOverlayProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -52,6 +58,27 @@ export function RealtimeVoiceOverlay({
       </View>
 
       <View style={styles.actionsContainer}>
+        {isAgentRunning && onCancelAgent && (
+          <Pressable
+            onPress={onCancelAgent}
+            disabled={isCancellingAgent}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.cancel.stopAgent", { defaultValue: "Stop agent" })}
+            style={stopButtonStyle}
+          >
+            {isCancellingAgent ? (
+              <ActivityIndicator size="small" color={theme.colors.palette.white} />
+            ) : (
+              <Square
+                size={theme.iconSize.lg}
+                color={theme.colors.palette.white}
+                fill={theme.colors.palette.white}
+                strokeWidth={2.5}
+              />
+            )}
+          </Pressable>
+        )}
+
         <Pressable
           onPress={onToggleMute}
           disabled={isSwitching}
@@ -78,10 +105,9 @@ export function RealtimeVoiceOverlay({
           {isSwitching ? (
             <LoadingSpinner size="small" color={theme.colors.palette.white} />
           ) : (
-            <Square
+            <PhoneOff
               size={theme.iconSize.lg}
               color={theme.colors.palette.white}
-              fill={theme.colors.palette.white}
               strokeWidth={2.5}
             />
           )}
