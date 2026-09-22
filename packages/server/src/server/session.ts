@@ -2591,6 +2591,7 @@ export class Session {
       case "abort_request":
       case "audio_played":
       case "set_voice_mode":
+      case "voice.input.set_muted.request":
       case "dictation_stream_start":
       case "dictation_stream_chunk":
       case "dictation_stream_finish":

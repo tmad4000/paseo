@@ -1961,6 +1961,8 @@ export class VoiceAssistantWebSocketServer {
         explicitEventSubscriptions: true,
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: true,
+        // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
+        voiceVerbalMute: true,
         // COMPAT(stableProjectIdentity): added in v0.1.109, remove gate after 2027-01-15.
         stableProjectIdentity: true,
         // COMPAT(workspaceScriptManagement): added in v0.1.105, remove gate after 2027-01-10.

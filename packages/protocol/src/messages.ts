@@ -1047,9 +1047,26 @@ export const WorkspaceRecoveryRestoreRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const VoiceInputSetMutedRequestSchema = z.object({
+  type: z.literal("voice.input.set_muted.request"),
+  requestId: z.string(),
+  muted: z.boolean(),
+});
+
+export const VoiceInputSetMutedResponseSchema = z.object({
+  type: z.literal("voice.input.set_muted.response"),
+  payload: z.object({
+    requestId: z.string(),
+    muted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const SetVoiceModeMessageSchema = z.object({
   type: z.literal("set_voice_mode"),
   enabled: z.boolean(),
+  voiceCommandsEnabled: z.boolean().optional(),
+  isMuted: z.boolean().optional(),
   agentId: z.string().optional(),
   requestId: z.string().optional(),
 });
@@ -2162,6 +2179,8 @@ export const WorkspaceRecoveryRestoreResponseSchema = z.object({
 export const SetVoiceModeResponseMessageSchema = z.object({
   type: z.literal("set_voice_mode_response"),
   payload: z.object({
+    voiceCommandsEnabled: z.boolean().optional(),
+    isMuted: z.boolean().optional(),
     requestId: z.string(),
     enabled: z.boolean(),
     agentId: z.string().nullable(),
@@ -3451,6 +3470,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceRecoveryInspectRequestSchema,
   WorkspaceRecoveryRestoreRequestSchema,
   SetVoiceModeMessageSchema,
+  VoiceInputSetMutedRequestSchema,
   SendAgentMessageRequestSchema,
   WaitForFinishRequestSchema,
   DaemonGetStatusRequestSchema,
@@ -3689,6 +3709,8 @@ export const TranscriptionResultMessageSchema = z.object({
 export const VoiceInputStateMessageSchema = z.object({
   type: z.literal("voice_input_state"),
   payload: z.object({
+    error: z.string().optional(),
+    isMuted: z.boolean().optional(),
     isSpeaking: z.boolean(),
   }),
 });
@@ -3817,6 +3839,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
+        // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
+        voiceVerbalMute: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -7144,6 +7168,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceMarkUnreadResponseSchema,
   SendAgentMessageResponseMessageSchema,
   SetVoiceModeResponseMessageSchema,
+  VoiceInputSetMutedResponseSchema,
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
   DaemonConfigReloadResponseSchema,

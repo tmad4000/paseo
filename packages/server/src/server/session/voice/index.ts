@@ -10,6 +10,7 @@ type VoiceMessage = Extract<
       | "abort_request"
       | "audio_played"
       | "set_voice_mode"
+      | "voice.input.set_muted.request"
       | "dictation_stream_start"
       | "dictation_stream_chunk"
       | "dictation_stream_finish"
@@ -109,7 +110,14 @@ export class VoiceSessions {
       case "audio_played":
         return voice.handleAudioPlayed(message.id);
       case "set_voice_mode":
-        return voice.handleSetVoiceMode(message.enabled, message.agentId, message.requestId);
+        return voice.handleSetVoiceMode(
+          message.enabled,
+          message.agentId,
+          message.requestId,
+          message,
+        );
+      case "voice.input.set_muted.request":
+        return voice.handleSetInputMuted(message);
       case "dictation_stream_start":
         return voice.handleDictationStreamStart(message);
       case "dictation_stream_chunk":
@@ -133,6 +141,7 @@ function isVoiceOutput(message: SessionOutboundMessage): boolean {
     case "transcription_result":
     case "voice_input_state":
     case "set_voice_mode_response":
+    case "voice.input.set_muted.response":
     case "dictation_stream_ack":
     case "dictation_stream_partial":
     case "dictation_stream_final":

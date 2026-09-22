@@ -565,6 +565,9 @@ function MessageInputOverlay({
     | {
         isMuted: boolean;
         isVoiceSwitching: boolean;
+        voiceCommandsEnabled: boolean;
+        isMuteSwitching: boolean;
+        muteError: string | null;
         toggleMute: () => void;
       }
     | null
@@ -606,6 +609,9 @@ function MessageInputOverlay({
     return (
       <RealtimeVoiceOverlay
         isMuted={voice.isMuted}
+        voiceCommandsEnabled={voice.voiceCommandsEnabled}
+        isMuteSwitching={voice.isMuteSwitching}
+        muteError={voice.muteError}
         isSwitching={voice.isVoiceSwitching}
         isAgentRunning={isAgentRunning}
         isCancellingAgent={isCancellingAgent}
@@ -1736,9 +1742,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         styles.inputWrapper,
         readOnly && styles.inputWrapperReadOnly,
         inputWrapperStyle,
+        showRealtimeOverlay ? styles.inputWrapperBehindVoice : undefined,
         { opacity: surfacePresentation.input.opacity },
       ],
-      [inputWrapperStyle, readOnly, surfacePresentation.input.opacity],
+      [inputWrapperStyle, readOnly, surfacePresentation.input.opacity, showRealtimeOverlay],
     );
     // `withUnistyles` maps this component's `style` into a `.hash > *` child
     // rule, which ties on specificity with react-native-web's own
@@ -1764,8 +1771,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       [isSendButtonDisabled, submitLabel],
     );
     const overlayContainerStyle = useMemo(
-      () => [styles.overlayContainer, { opacity: surfacePresentation.overlay.opacity }],
-      [surfacePresentation.overlay.opacity],
+      () => [
+        showRealtimeOverlay ? styles.voiceOverlayContainer : styles.overlayContainer,
+        { opacity: surfacePresentation.overlay.opacity },
+      ],
+      [surfacePresentation.overlay.opacity, showRealtimeOverlay],
     );
 
     const renderAttachButtonIcon = useCallback(
@@ -2074,6 +2084,8 @@ const styles = StyleSheet.create((theme: Theme) => ({
   buttonDisabled: {
     opacity: 0.5,
   },
+  inputWrapperBehindVoice: { position: "absolute", left: 0, right: 0 },
+  voiceOverlayContainer: { width: "100%" },
   overlayContainer: {
     position: "absolute",
     display: "flex",
