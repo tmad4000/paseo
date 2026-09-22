@@ -116,7 +116,7 @@ export function createEncryptedTransport(
     void startHandshake();
   });
   base.onMessage((event) => {
-    relayTransport.onmessage?.(extractRelayMessageData(event));
+    const d = extractRelayMessageData(event); relayTransport.onmessage?.({ data: d, isBinary: typeof d !== 'string' });
   });
   base.onClose((event) => {
     const record = event as { code?: number; reason?: string } | undefined;

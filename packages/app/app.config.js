@@ -145,7 +145,7 @@ export default {
       ...(variant.googleServiceInfoPlist
         ? { googleServicesFile: variant.googleServiceInfoPlist }
         : {}),
-      buildNumber: '9000003',
+      buildNumber: '9000004',
     },
     android: {
       adaptiveIcon: {

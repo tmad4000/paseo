@@ -71,6 +71,19 @@ log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- preflight ---------------------------------------------------------------
+LOGIN_PW_FILE="$HOME/.config/m3-login.txt"
+LOGIN_PW=$(cat "$LOGIN_PW_FILE")
+security unlock-keychain -p "$LOGIN_PW" "$HOME/Library/Keychains/login.keychain-db"
+security set-keychain-settings -lut 21600 "$HOME/Library/Keychains/login.keychain-db"
+security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$LOGIN_PW" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1
+(
+  while true; do
+    sleep 60
+    security unlock-keychain -p "$LOGIN_PW" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null
+  done
+) &
+UNLOCK_PID=$!
+trap "kill $UNLOCK_PID 2>/dev/null" EXIT
 [ "$(uname -s)" = "Darwin" ] || fail "iOS builds require macOS."
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild not found (install Xcode)."
 
