@@ -35,6 +35,13 @@ export const CompanionEntrySchema = z.discriminatedUnion("kind", [
     kind: z.literal("pin"),
     sourceId: z.string().optional(),
   }),
+  z.object({
+    ...common,
+    kind: z.literal("q_and_a"),
+    answer: z.string().optional(),
+    questionMessageId: z.string().optional(),
+    answerMessageId: z.string().optional(),
+  }),
 ]);
 
 export type CompanionEntry = z.infer<typeof CompanionEntrySchema>;

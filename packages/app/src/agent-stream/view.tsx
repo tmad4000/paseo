@@ -421,6 +421,19 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       [agentId, client]
     );
 
+    const handleQAndA = useCallback(
+      (text: string, messageId?: string) => {
+        if (!agentId || !client) return;
+        client.updateCompanionEntry({ 
+          agentId, 
+          action: "add_q_and_a", 
+          text,
+          sourceId: messageId ? `msg:${messageId}` : undefined,
+        }).catch(() => {});
+      },
+      [agentId, client]
+    );
+
     const handleInlinePathPress = useStableEvent(
       (target: InlinePathTarget, disposition: OpenFileDisposition) => {
         if (!target.path) {
@@ -674,10 +687,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             isFirstInGroup={layoutItem.isFirstInUserGroup}
             isLastInGroup={layoutItem.isLastInUserGroup}
             onPin={handlePin}
+            onQAndA={handleQAndA}
           />
         );
       },
-      [context.capabilities, agentId, client, resolvedServerId, handlePin],
+      [context.capabilities, agentId, client, resolvedServerId, handlePin, handleQAndA],
     );
 
     const renderAssistantMessageItem = useCallback(

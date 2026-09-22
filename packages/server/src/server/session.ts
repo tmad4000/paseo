@@ -2437,6 +2437,7 @@ export class Session {
           action: msg.action,
           status: msg.status,
           text: msg.text,
+          answerText: msg.answerText,
           sourceId: msg.sourceId,
         }
       );

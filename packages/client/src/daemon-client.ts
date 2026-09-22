@@ -2447,9 +2447,10 @@ export class DaemonClient {
   async updateCompanionEntry(input: {
     agentId: string;
     entryId?: string;
-    action: "update_status" | "add_pin" | "remove_pin";
+    action: "update_status" | "add_pin" | "remove_pin" | "add_q_and_a";
     status?: "open" | "reviewed" | "done";
     text?: string;
+    answerText?: string;
     sourceId?: string;
   }): Promise<void> {
     const requestId = this.createRequestId();
@@ -2460,6 +2461,7 @@ export class DaemonClient {
       action: input.action,
       status: input.status,
       text: input.text,
+      answerText: input.answerText,
       sourceId: input.sourceId,
       requestId,
     });

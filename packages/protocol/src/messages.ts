@@ -830,9 +830,10 @@ export const UpdateCompanionEntryRequestMessageSchema = z.object({
   type: z.literal("update_companion_entry_request"),
   agentId: z.string(),
   entryId: z.string().optional(),
-  action: z.enum(["update_status", "add_pin", "remove_pin"]),
+  action: z.enum(["update_status", "add_pin", "remove_pin", "add_q_and_a"]),
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().optional(),
+  answerText: z.string().optional(),
   sourceId: z.string().optional(),
   requestId: z.string(),
 });

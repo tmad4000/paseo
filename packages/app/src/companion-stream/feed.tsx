@@ -29,7 +29,7 @@ interface CompanionFeedProps {
 const keyExtractor = (item: CompanionFeedItem) => item.id;
 
 type ViewTab = "stream" | "pinned";
-type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome";
+type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
 
 export function CompanionFeed({
   serverId,
@@ -159,6 +159,7 @@ export function CompanionFeed({
               options={[
                 { value: "all", label: "All" },
                 { value: "question", label: "Questions" },
+                { value: "q_and_a", label: "Q&A" },
                 { value: "feature_request", label: "Features" },
                 { value: "permission", label: "Decisions" },
                 { value: "outcome", label: "Outcomes" },
@@ -314,6 +315,8 @@ function EntryCard({
     );
   } else if (entry.kind === "pin") {
     title = "Pinned Note";
+  } else if (entry.kind === "q_and_a") {
+    title = "Q&A";
   } else {
     title = t(`agentPanel.stream.${entry.status}`);
   }
@@ -321,11 +324,29 @@ function EntryCard({
   let body = null;
   if (entry.text) {
     body = expanded ? (
-      <MarkdownRenderer text={entry.text} compact enableHtmlish={false} />
+      <View>
+        <MarkdownRenderer text={entry.text} compact enableHtmlish={false} />
+        {entry.kind === "q_and_a" && entry.answer && (
+          <View style={{ marginTop: 8, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: '#666' }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 4, fontSize: 12, color: '#aaa' }}>Answer:</Text>
+            <MarkdownRenderer text={entry.answer} compact enableHtmlish={false} />
+          </View>
+        )}
+      </View>
     ) : (
-      <Text selectable style={styles.body} numberOfLines={6}>
-        {entry.text}
-      </Text>
+      <View>
+        <Text selectable style={styles.body} numberOfLines={6}>
+          {entry.text}
+        </Text>
+        {entry.kind === "q_and_a" && entry.answer && (
+          <View style={{ marginTop: 8, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: '#666' }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 4, fontSize: 12, color: '#aaa' }}>Answer:</Text>
+            <Text selectable style={styles.body} numberOfLines={6}>
+              {entry.answer}
+            </Text>
+          </View>
+        )}
+      </View>
     );
   }
 

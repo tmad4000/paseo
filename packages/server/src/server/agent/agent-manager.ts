@@ -1933,9 +1933,10 @@ export class AgentManager {
   async updateCompanionEntry(input: {
     agentId: string;
     entryId?: string;
-    action: "update_status" | "add_pin" | "remove_pin";
+    action: "update_status" | "add_pin" | "remove_pin" | "add_q_and_a";
     status?: "open" | "reviewed" | "done";
     text?: string;
+    answerText?: string;
     sourceId?: string;
   }): Promise<void> {
     const liveAgent = this.getAgent(input.agentId);
@@ -1963,6 +1964,16 @@ export class AgentManager {
       next.push({ id: pinId, kind: "pin", timestamp: new Date().toISOString(), text: input.text ?? "", truncated: false, sourceId: input.sourceId });
     } else if (input.action === "remove_pin" && input.entryId) {
       next = next.filter((e) => !(e.id === input.entryId && e.kind === "pin"));
+    } else if (input.action === "add_q_and_a") {
+      const qnaId = `qa:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      next.push({ 
+        id: qnaId, 
+        kind: "q_and_a", 
+        timestamp: new Date().toISOString(), 
+        text: input.text ?? "", 
+        answer: input.answerText,
+        truncated: false,
+      });
     }
 
     if (liveAgent) {

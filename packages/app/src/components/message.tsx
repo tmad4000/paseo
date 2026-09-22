@@ -113,7 +113,7 @@ import { AttachmentLightbox } from "@/components/attachment-lightbox";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { isWeb, isNative } from "@/constants/platform";
 import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
-import { Pin } from "lucide-react-native";
+import { Pin, HelpCircle } from "lucide-react-native";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -130,6 +130,7 @@ interface UserMessageProps {
   attachments?: AgentAttachment[];
   timestamp: number;
   onPin?: (text: string) => void;
+  onQAndA?: (text: string, messageId?: string) => void;
   capabilities?: AgentCapabilityFlags;
   client?: DaemonClient | null;
   isFirstInGroup?: boolean;
@@ -428,6 +429,7 @@ export const UserMessage = memo(function UserMessage({
   attachments = [],
   timestamp,
   onPin,
+  onQAndA,
   capabilities,
   client,
   isFirstInGroup = true,
@@ -553,6 +555,12 @@ export const UserMessage = memo(function UserMessage({
             {onPin ? (
               <TurnPinButton
                 onPin={() => onPin(message)}
+                containerStyle={userMessageStylesheet.copyButton}
+              />
+            ) : null}
+            {onQAndA ? (
+              <TurnQAndAButton
+                onQAndA={() => onQAndA(message, messageId)}
                 containerStyle={userMessageStylesheet.copyButton}
               />
             ) : null}
@@ -1165,6 +1173,36 @@ export const TurnPinButton = memo(function TurnPinButton({
       accessibilityLabel="Pin to stream"
     >
       <ThemedIcon icon={Pin} size={14} uniProps={iconUniProps} />
+    </Pressable>
+  );
+});
+
+interface TurnQAndAButtonProps {
+  onQAndA: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
+}
+
+export const TurnQAndAButton = memo(function TurnQAndAButton({
+  onQAndA,
+  containerStyle,
+}: TurnQAndAButtonProps) {
+  const pressableStyle = useCallback(
+    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
+      containerStyle,
+      hovered && userMessageStylesheet.copyButtonHovered,
+      pressed && userMessageStylesheet.copyButtonPressed,
+    ],
+    [containerStyle],
+  );
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      style={pressableStyle}
+      onPress={onQAndA}
+      accessibilityLabel="Track Q&A"
+    >
+      <ThemedIcon icon={HelpCircle} size={14} uniProps={iconUniProps} />
     </Pressable>
   );
 });

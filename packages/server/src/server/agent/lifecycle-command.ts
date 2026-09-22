@@ -236,9 +236,10 @@ export async function updateCompanionEntryCommand(
   input: {
     agentId: string;
     entryId?: string;
-    action: "update_status" | "add_pin" | "remove_pin";
+    action: "update_status" | "add_pin" | "remove_pin" | "add_q_and_a";
     status?: "open" | "reviewed" | "done";
     text?: string;
+    answerText?: string;
     sourceId?: string;
   },
 ): Promise<{ accepted: boolean; error?: string }> {
