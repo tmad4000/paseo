@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   type GestureResponderEvent,
   type LayoutChangeEvent,
+  type TextLayoutEvent,
   StyleProp,
   ViewStyle,
   type TextStyle,
@@ -426,13 +427,19 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
   );
 }
 
-export function ClampedUserMessageText({ message, style }: { message: string; style: any }) {
+export function ClampedUserMessageText({
+  message,
+  style,
+}: {
+  message: string;
+  style: StyleProp<TextStyle>;
+}) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [clampState, setClampState] = useState<"measuring" | "clamped" | "unclamped">("measuring");
 
   const handleTextLayout = useCallback(
-    (e: any) => {
+    (e: TextLayoutEvent) => {
       if (clampState === "measuring") {
         if (e.nativeEvent.lines.length > 10) {
           setClampState("clamped");
@@ -441,19 +448,21 @@ export function ClampedUserMessageText({ message, style }: { message: string; st
         }
       }
     },
-    [clampState]
+    [clampState],
   );
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
 
-  const currentNumberOfLines =
-    clampState === "measuring"
-      ? 11
-      : clampState === "clamped" && !isExpanded
-        ? 10
-        : undefined;
+  let currentNumberOfLines: number | undefined;
+  if (clampState === "measuring") {
+    currentNumberOfLines = 11;
+  } else if (clampState === "clamped" && !isExpanded) {
+    currentNumberOfLines = 10;
+  } else {
+    currentNumberOfLines = undefined;
+  }
 
   return (
     <View>
@@ -468,7 +477,9 @@ export function ClampedUserMessageText({ message, style }: { message: string; st
       {clampState === "clamped" && (
         <Pressable onPress={toggleExpanded} style={userMessageStylesheet.showMoreButton}>
           <Text style={userMessageStylesheet.showMoreText}>
-            {isExpanded ? t("message.actions.showLess", "Show less") : t("message.actions.showMore", "Show more")}
+            {isExpanded
+              ? t("message.actions.showLess", "Show less")
+              : t("message.actions.showMore", "Show more")}
           </Text>
         </Pressable>
       )}
