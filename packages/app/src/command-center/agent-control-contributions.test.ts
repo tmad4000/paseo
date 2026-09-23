@@ -398,3 +398,58 @@ describe("Command Center agent-control contributions", () => {
     );
   });
 });
+
+describe("duplicate model rows", () => {
+  function geminiRow(modelId: string) {
+    return {
+      favoriteKey: `gemini:${modelId}`,
+      provider: "gemini",
+      providerLabel: "Gemini",
+      modelId,
+      modelLabel: "Gemini 3.5 Flash",
+      description: undefined,
+    };
+  }
+
+  // A repeated model row used to produce two identical contribution ids, which the
+  // Command Center registry rejects by throwing — crashing the render on new tab.
+  it("emits one contribution when a provider repeats a model id", () => {
+    const source = makeSource({
+      models: {
+        providers: [
+          {
+            id: "gemini",
+            label: "Gemini",
+            modelSelection: {
+              kind: "models",
+              rows: [geminiRow("gemini-3.5-flash"), geminiRow("gemini-3.5-flash")],
+            },
+          },
+        ],
+      },
+    });
+
+    const ids = buildAgentControlContributions(source)
+      .map((contribution) => contribution.id)
+      .filter((id) => id.startsWith("models:"));
+
+    expect(ids).toEqual(["models:gemini:gemini-3.5-flash"]);
+  });
+
+  it("emits one contribution when the same provider appears twice", () => {
+    const geminiProvider = {
+      id: "gemini",
+      label: "Gemini",
+      modelSelection: { kind: "models" as const, rows: [geminiRow("gemini-3.5-flash")] },
+    };
+    const source = makeSource({
+      models: { providers: [geminiProvider, geminiProvider] },
+    });
+
+    const ids = buildAgentControlContributions(source)
+      .map((contribution) => contribution.id)
+      .filter((id) => id.startsWith("models:"));
+
+    expect(ids).toEqual(["models:gemini:gemini-3.5-flash"]);
+  });
+});
