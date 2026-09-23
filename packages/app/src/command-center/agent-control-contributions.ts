@@ -142,6 +142,7 @@ function buildContributions(
 
 function buildModelGroup(source: AgentControlContributionSource): CommandCenterChoiceGroup {
   const choices: CommandCenterChoice[] = [];
+  const seen = new Set<string>();
   for (const provider of source.models.providers) {
     if (provider.modelSelection.kind !== "models") continue;
     const agentProvider = provider.id;
@@ -149,8 +150,14 @@ function buildModelGroup(source: AgentControlContributionSource): CommandCenterC
     for (const model of provider.modelSelection.rows) {
       if (!model.modelId) continue;
       const modelId = model.modelId;
+      const choiceId = `${provider.id}:${modelId}`;
+      // A provider can list the same model twice, and a repeated provider entry has
+      // the same effect. Both produce a duplicate contribution id, which the registry
+      // rejects by throwing — taking down the whole render. Keep the first occurrence.
+      if (seen.has(choiceId)) continue;
+      seen.add(choiceId);
       choices.push({
-        id: `${provider.id}:${modelId}`,
+        id: choiceId,
         path: [provider.label, model.modelLabel],
         keywords: [modelId],
         icon,
