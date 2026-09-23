@@ -69,6 +69,7 @@ export const TurnFooter = memo(function TurnFooter({
       startIndex={host.startIndex}
       supportsTimelineCursor={supportsTimelineCursor}
       onForkAssistantTurn={onForkAssistantTurn}
+      onPin={onPin}
     />
   );
 });
@@ -80,6 +81,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex,
   supportsTimelineCursor,
   onForkAssistantTurn,
+  onPin,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
@@ -87,6 +89,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  onPin?: (text: string) => void;
 }) {
   return (
     <TurnFooterRow>

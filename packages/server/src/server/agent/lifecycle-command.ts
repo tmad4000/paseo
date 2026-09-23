@@ -26,6 +26,15 @@ export interface LifecycleAgentManager {
   }>;
   notifyAgentState(agentId: string): void;
   setAgentMode(agentId: string, modeId: string): Promise<AgentProviderNotice | null>;
+  updateCompanionEntry(input: {
+    agentId: string;
+    entryId?: string;
+    action: "update_status" | "add_pin" | "remove_pin" | "add_q_and_a";
+    status?: "open" | "reviewed" | "done";
+    text?: string;
+    answerText?: string;
+    sourceId?: string;
+  }): Promise<void>;
   updateAgentMetadata(
     agentId: string,
     updates: {

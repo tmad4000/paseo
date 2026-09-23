@@ -135,6 +135,7 @@ export function ArtifactFeed({
           serverId={serverId}
           cwd={cwd}
           onOpen={handleOpen}
+          // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop
           onPin={onPinArtifact ? () => onPinArtifact(artifact) : undefined}
         />
       ))}

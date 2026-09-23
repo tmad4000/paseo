@@ -18,6 +18,7 @@ import {
   type ProjectPlacementPayload,
   type WorkspaceSetupSnapshot,
   type WorkspaceDescriptorPayload,
+  type UpdateCompanionEntryRequestMessage,
 } from "./messages.js";
 import type {
   TerminalManager,
@@ -2439,7 +2440,7 @@ export class Session {
           text: msg.text,
           answerText: msg.answerText,
           sourceId: msg.sourceId,
-        }
+        },
       );
 
       if (!result.accepted) {

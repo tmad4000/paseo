@@ -1956,21 +1956,28 @@ export class AgentManager {
     if (input.action === "update_status" && input.entryId && input.status) {
       next = next.map((e) =>
         e.id === input.entryId && (e.kind === "question" || e.kind === "feature_request")
-          ? { ...e, status: input.status as any }
-          : e
+          ? { ...e, status: input.status as "open" | "reviewed" | "done" }
+          : e,
       );
     } else if (input.action === "add_pin") {
       const pinId = `pin:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      next.push({ id: pinId, kind: "pin", timestamp: new Date().toISOString(), text: input.text ?? "", truncated: false, sourceId: input.sourceId });
+      next.push({
+        id: pinId,
+        kind: "pin",
+        timestamp: new Date().toISOString(),
+        text: input.text ?? "",
+        truncated: false,
+        sourceId: input.sourceId,
+      });
     } else if (input.action === "remove_pin" && input.entryId) {
       next = next.filter((e) => !(e.id === input.entryId && e.kind === "pin"));
     } else if (input.action === "add_q_and_a") {
       const qnaId = `qa:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      next.push({ 
-        id: qnaId, 
-        kind: "q_and_a", 
-        timestamp: new Date().toISOString(), 
-        text: input.text ?? "", 
+      next.push({
+        id: qnaId,
+        kind: "q_and_a",
+        timestamp: new Date().toISOString(),
+        text: input.text ?? "",
         answer: input.answerText,
         truncated: false,
       });

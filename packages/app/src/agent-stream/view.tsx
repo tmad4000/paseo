@@ -418,20 +418,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         if (!agentId || !client) return;
         client.updateCompanionEntry({ agentId, action: "add_pin", text }).catch(() => {});
       },
-      [agentId, client]
+      [agentId, client],
     );
 
     const handleQAndA = useCallback(
       (text: string, messageId?: string) => {
         if (!agentId || !client) return;
-        client.updateCompanionEntry({ 
-          agentId, 
-          action: "add_q_and_a", 
-          text,
-          sourceId: messageId ? `msg:${messageId}` : undefined,
-        }).catch(() => {});
+        client
+          .updateCompanionEntry({
+            agentId,
+            action: "add_q_and_a",
+            text,
+            sourceId: messageId ? `msg:${messageId}` : undefined,
+          })
+          .catch(() => {});
       },
-      [agentId, client]
+      [agentId, client],
     );
 
     const handleInlinePathPress = useStableEvent(

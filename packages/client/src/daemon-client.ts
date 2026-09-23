@@ -2465,7 +2465,7 @@ export class DaemonClient {
       sourceId: input.sourceId,
       requestId,
     });
-    this.send(message);
+    this.sendSessionMessage(message);
   }
 
   async renameProject(

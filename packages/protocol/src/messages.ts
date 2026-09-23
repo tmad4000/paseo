@@ -5582,7 +5582,9 @@ export type LoopStopRequest = z.infer<typeof LoopStopRequestSchema>;
 export type ResumeAgentRequestMessage = z.infer<typeof ResumeAgentRequestMessageSchema>;
 export type DeleteAgentRequestMessage = z.infer<typeof DeleteAgentRequestMessageSchema>;
 export type UpdateAgentRequestMessage = z.infer<typeof UpdateAgentRequestMessageSchema>;
-export type UpdateCompanionEntryRequestMessage = z.infer<typeof UpdateCompanionEntryRequestMessageSchema>;
+export type UpdateCompanionEntryRequestMessage = z.infer<
+  typeof UpdateCompanionEntryRequestMessageSchema
+>;
 export type ProjectRenameRequest = z.infer<typeof ProjectRenameRequestSchema>;
 export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;

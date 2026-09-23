@@ -455,6 +455,11 @@ export const UserMessage = memo(function UserMessage({
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const getMessageContent = useCallback(() => message, [message]);
+  const handlePin = useCallback(() => onPin?.(message), [onPin, message]);
+  const handleQAndA = useCallback(
+    () => onQAndA?.(message, messageId),
+    [onQAndA, message, messageId],
+  );
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
       return rewindMutation.rewindAgent(input);
@@ -553,14 +558,11 @@ export const UserMessage = memo(function UserMessage({
               />
             ) : null}
             {onPin ? (
-              <TurnPinButton
-                onPin={() => onPin(message)}
-                containerStyle={userMessageStylesheet.copyButton}
-              />
+              <TurnPinButton onPin={handlePin} containerStyle={userMessageStylesheet.copyButton} />
             ) : null}
             {onQAndA ? (
               <TurnQAndAButton
-                onQAndA={() => onQAndA(message, messageId)}
+                onQAndA={handleQAndA}
                 containerStyle={userMessageStylesheet.copyButton}
               />
             ) : null}
@@ -674,13 +676,18 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     },
     [onFork],
   );
+  const handlePin = useCallback(() => {
+    if (onPin && getContent) {
+      onPin(getContent());
+    }
+  }, [onPin, getContent]);
   const canFork = Boolean(onFork);
 
   return (
     <View style={assistantTurnFooterStylesheet.container}>
-      {onPin ? (
+      {onPin && getContent ? (
         <TurnPinButton
-          onPin={() => onPin(getContent())}
+          onPin={handlePin}
           containerStyle={assistantTurnFooterStylesheet.copyButton}
         />
       ) : null}
@@ -1156,12 +1163,8 @@ export const TurnPinButton = memo(function TurnPinButton({
   onPin,
   containerStyle,
 }: TurnPinButtonProps) {
-  const pressableStyle = useCallback(
-    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
-      containerStyle,
-      hovered && userMessageStylesheet.copyButtonHovered,
-      pressed && userMessageStylesheet.copyButtonPressed,
-    ],
+  const pressableStyle = useMemo(
+    () => [turnCopyButtonStylesheet.container, containerStyle],
     [containerStyle],
   );
 
@@ -1172,7 +1175,12 @@ export const TurnPinButton = memo(function TurnPinButton({
       onPress={onPin}
       accessibilityLabel="Pin to stream"
     >
-      <ThemedIcon icon={Pin} size={14} uniProps={iconUniProps} />
+      {({ hovered }) => {
+        const iconColor = hovered
+          ? turnCopyButtonStylesheet.iconHoveredColor.color
+          : turnCopyButtonStylesheet.iconColor.color;
+        return <Pin size={16} color={iconColor} />;
+      }}
     </Pressable>
   );
 });
@@ -1186,12 +1194,8 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
   onQAndA,
   containerStyle,
 }: TurnQAndAButtonProps) {
-  const pressableStyle = useCallback(
-    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
-      containerStyle,
-      hovered && userMessageStylesheet.copyButtonHovered,
-      pressed && userMessageStylesheet.copyButtonPressed,
-    ],
+  const pressableStyle = useMemo(
+    () => [turnCopyButtonStylesheet.container, containerStyle],
     [containerStyle],
   );
 
@@ -1202,7 +1206,12 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
       onPress={onQAndA}
       accessibilityLabel="Track Q&A"
     >
-      <ThemedIcon icon={HelpCircle} size={14} uniProps={iconUniProps} />
+      {({ hovered }) => {
+        const iconColor = hovered
+          ? turnCopyButtonStylesheet.iconHoveredColor.color
+          : turnCopyButtonStylesheet.iconColor.color;
+        return <HelpCircle size={16} color={iconColor} />;
+      }}
     </Pressable>
   );
 });
