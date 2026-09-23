@@ -122,8 +122,8 @@ export function CompanionFeed({
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: CompanionStreamItem }) =>
-      item.type === "artifact" ? (
+    ({ item }: { item: CompanionFeedItem }) =>
+      item.kind === "artifact" ? (
         <ArtifactCard
           artifact={item.artifact}
           serverId={serverId}

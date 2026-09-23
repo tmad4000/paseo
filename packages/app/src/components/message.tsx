@@ -677,7 +677,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     [onFork],
   );
   const handlePin = useCallback(() => {
-    if (onPin && getContent) {
+    if (onPin) {
       onPin(getContent());
     }
   }, [onPin, getContent]);
@@ -685,7 +685,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
 
   return (
     <View style={assistantTurnFooterStylesheet.container}>
-      {onPin && getContent ? (
+      {onPin ? (
         <TurnPinButton
           onPin={handlePin}
           containerStyle={assistantTurnFooterStylesheet.copyButton}
