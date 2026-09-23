@@ -108,7 +108,7 @@ export class VoiceSessions {
       case "abort_request":
         return voice.handleAbort();
       case "audio_played":
-        return voice.handleAudioPlayed(message.id);
+        return voice.handleAudioPlayed(message.id, message.error);
       case "set_voice_mode":
         return voice.handleSetVoiceMode(
           message.enabled,
