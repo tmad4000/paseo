@@ -180,6 +180,7 @@ const INBOUND_PERMISSION = {
   set_agent_thinking_request: "workspace.write",
   set_daemon_config_request: "daemon.manage",
   set_voice_mode: "workspace.write",
+  update_companion_entry_request: "workspace.write",
   shutdown_server_request: "daemon.manage",
   start_workspace_script_request: "workspace.write",
   stash_list_request: "workspace.read",

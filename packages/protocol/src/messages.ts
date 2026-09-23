@@ -956,6 +956,18 @@ export const ProjectIconSourceSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("upload"), data: z.string() }),
 ]);
 
+export const UpdateCompanionEntryRequestMessageSchema = z.object({
+  type: z.literal("update_companion_entry_request"),
+  agentId: z.string(),
+  entryId: z.string().optional(),
+  action: z.enum(["update_status", "add_pin", "remove_pin", "add_q_and_a"]),
+  status: z.enum(["open", "reviewed", "done"]).optional(),
+  text: z.string().optional(),
+  answerText: z.string().optional(),
+  sourceId: z.string().optional(),
+  requestId: z.string(),
+});
+
 export const ProjectRenameRequestSchema = z.object({
   type: z.literal("project.rename.request"),
   projectId: z.string(),
@@ -3460,6 +3472,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ArchiveAgentRequestMessageSchema,
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
+  UpdateCompanionEntryRequestMessageSchema,
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
@@ -7556,6 +7569,10 @@ export type ResumeAgentRequestMessage = z.infer<typeof ResumeAgentRequestMessage
 export type DeleteAgentRequestMessage = z.infer<typeof DeleteAgentRequestMessageSchema>;
 export type UpdateAgentRequestMessage = z.infer<typeof UpdateAgentRequestMessageSchema>;
 export type ProjectIconSource = z.infer<typeof ProjectIconSourceSchema>;
+
+export type UpdateCompanionEntryRequestMessage = z.infer<
+  typeof UpdateCompanionEntryRequestMessageSchema
+>;
 export type ProjectRenameRequest = z.infer<typeof ProjectRenameRequestSchema>;
 export type ProjectIconSetRequest = z.infer<typeof ProjectIconSetRequestSchema>;
 export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;

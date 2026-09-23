@@ -1384,6 +1384,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
         {!isChatVisible ? (
           <CompanionFeed
             serverId={serverId}
+            agentId={agentId}
             cwd={cwd}
             entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
             artifacts={artifacts}
