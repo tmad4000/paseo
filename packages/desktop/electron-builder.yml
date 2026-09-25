@@ -33,7 +33,7 @@ extraResources:
     to: editor-target-icons
 publish:
   provider: github
-  owner: getpaseo
+  owner: tmad4000
   repo: paseo
 mac:
   artifactName: "Paseo-Fork-${version}-${arch}.${ext}"

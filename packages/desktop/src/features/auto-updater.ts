@@ -35,7 +35,13 @@ export {
 
 let cachedStagingUserIdPromise: Promise<string> | null = null;
 
-const UPDATE_CHANNEL_NOT_PUBLISHED_CODE = "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
+// The fork publishes to tmad4000/paseo (see electron-builder.yml), which may hold no
+// release at all yet. electron-updater reports that as a missing latest version rather
+// than a missing channel file; both mean "nothing published", not an updater fault.
+const UPDATE_CHANNEL_NOT_PUBLISHED_CODES = new Set([
+  "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
+  "ERR_UPDATER_LATEST_VERSION_NOT_FOUND",
+]);
 
 interface AppUpdateLogSink {
   info(message: string, details: object): void;
@@ -84,7 +90,8 @@ function isUpdateChannelNotPublished(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    error.code === UPDATE_CHANNEL_NOT_PUBLISHED_CODE
+    typeof error.code === "string" &&
+    UPDATE_CHANNEL_NOT_PUBLISHED_CODES.has(error.code)
   );
 }
 
