@@ -2388,7 +2388,8 @@ export class AgentManager {
     answerText?: string;
     sourceId?: string;
   }): Promise<void> {
-    const liveAgent = this.getAgent(input.agentId);
+    // getAgent() hands out a copy; mutate the live record so the next snapshot carries the change.
+    const liveAgent = this.agents.get(input.agentId) ?? null;
     let entries = liveAgent?.companionEntries;
     if (!liveAgent) {
       if (!this.registry) return;
