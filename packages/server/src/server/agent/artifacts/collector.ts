@@ -1,4 +1,3 @@
-import { watch, type FSWatcher } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -45,7 +44,6 @@ interface ActiveTurn {
   cwd: string;
   startedAt: number;
   candidates: Set<string>;
-  watcher: FSWatcher | null;
 }
 
 export interface ArtifactCollectionResult {
@@ -64,17 +62,11 @@ export class AgentArtifactCollector {
       cwd: path.resolve(cwd),
       startedAt: Date.now(),
       candidates: new Set(),
-      watcher: null,
     };
-    try {
-      turn.watcher = watch(turn.cwd, { recursive: true }, (_eventType, fileName) => {
-        if (fileName) {
-          this.addCandidate(turn, fileName.toString());
-        }
-      });
-    } catch {
-      turn.watcher = null;
-    }
+    // No live watcher: tool-call paths plus the end-of-turn mtime scan already find every
+    // file the turn touched, and a raw recursive fs.watch is what docs/file-observation.md
+    // forbids on Linux (Node walks the tree in JS and throws an uncaught ENOENT when a
+    // directory vanishes mid-scan, which upstream's hub tests do while deleting temp repos).
     this.activeTurns.set(agentId, turn);
   }
 
@@ -100,7 +92,6 @@ export class AgentArtifactCollector {
       return null;
     }
     this.activeTurns.delete(agentId);
-    turn.watcher?.close();
 
     const recentPaths = await findRecentlyModifiedArtifacts(turn.cwd, turn.startedAt);
     for (const recentPath of recentPaths) {
@@ -133,7 +124,6 @@ export class AgentArtifactCollector {
 
   cancelTurn(agentId: string): void {
     const turn = this.activeTurns.get(agentId);
-    turn?.watcher?.close();
     this.activeTurns.delete(agentId);
   }
 
