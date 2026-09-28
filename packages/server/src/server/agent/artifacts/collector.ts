@@ -123,7 +123,6 @@ export class AgentArtifactCollector {
   }
 
   cancelTurn(agentId: string): void {
-    const turn = this.activeTurns.get(agentId);
     this.activeTurns.delete(agentId);
   }
 
