@@ -1134,6 +1134,7 @@ export const TurnPinButton = memo(function TurnPinButton({
   onPin,
   containerStyle,
 }: TurnPinButtonProps) {
+  const { t } = useTranslation();
   const pressableStyle = useMemo(
     () => [turnCopyButtonStylesheet.container, containerStyle],
     [containerStyle],
@@ -1144,7 +1145,7 @@ export const TurnPinButton = memo(function TurnPinButton({
       accessibilityRole="button"
       style={pressableStyle}
       onPress={onPin}
-      accessibilityLabel="Pin to stream"
+      accessibilityLabel={t("agentPanel.stream.pinToStream")}
     >
       {({ hovered }) => {
         const iconColor = hovered
@@ -1165,6 +1166,7 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
   onQAndA,
   containerStyle,
 }: TurnQAndAButtonProps) {
+  const { t } = useTranslation();
   const pressableStyle = useMemo(
     () => [turnCopyButtonStylesheet.container, containerStyle],
     [containerStyle],
@@ -1175,7 +1177,7 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
       accessibilityRole="button"
       style={pressableStyle}
       onPress={onQAndA}
-      accessibilityLabel="Track Q&A"
+      accessibilityLabel={t("agentPanel.stream.trackQAndA")}
     >
       {({ hovered }) => {
         const iconColor = hovered

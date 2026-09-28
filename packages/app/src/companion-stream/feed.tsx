@@ -1,11 +1,12 @@
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
 import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
-import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Text, View, TextInput } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { Button } from "@/components/ui/button";
+import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useHostRuntimeConnectionStatus, useHostRuntimeClient } from "@/runtime/host-runtime";
@@ -27,6 +28,9 @@ interface CompanionFeedProps {
 }
 
 const keyExtractor = (item: CompanionFeedItem) => item.id;
+const NoteInput = withUnistyles(EditingTextInput, (theme) => ({
+  placeholderTextColor: theme.colors.foregroundMuted,
+}));
 
 type ViewTab = "stream" | "pinned";
 type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
@@ -51,6 +55,7 @@ export function CompanionFeed({
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(true);
   const [pinText, setPinText] = useState("");
+  const noteInput = useRef<EditingTextInputHandle>(null);
 
   const items = useMemo(() => buildCompanionFeed(entries, artifacts), [entries, artifacts]);
 
@@ -160,6 +165,7 @@ export function CompanionFeed({
       ?.updateCompanionEntry({ agentId, action: "add_pin", text: pinText.trim() })
       .catch(() => {});
     setPinText("");
+    noteInput.current?.replaceText("");
   }, [client, agentId, pinText]);
 
   const header = useMemo(
@@ -179,8 +185,8 @@ export function CompanionFeed({
           value={viewTab}
           onValueChange={setViewTab}
           options={[
-            { value: "stream", label: "Queue" },
-            { value: "pinned", label: "Pinned" },
+            { value: "stream", label: t("agentPanel.stream.queueTab") },
+            { value: "pinned", label: t("agentPanel.stream.pinnedTab") },
           ]}
         />
 
@@ -191,12 +197,12 @@ export function CompanionFeed({
               onValueChange={setFilter}
               size="sm"
               options={[
-                { value: "all", label: "All" },
-                { value: "question", label: "Questions" },
-                { value: "q_and_a", label: "Q&A" },
-                { value: "feature_request", label: "Features" },
-                { value: "permission", label: "Decisions" },
-                { value: "outcome", label: "Outcomes" },
+                { value: "all", label: t("agentPanel.stream.filterAll") },
+                { value: "question", label: t("agentPanel.stream.filterQuestions") },
+                { value: "q_and_a", label: t("agentPanel.stream.filterQAndA") },
+                { value: "feature_request", label: t("agentPanel.stream.filterFeatures") },
+                { value: "permission", label: t("agentPanel.stream.filterDecisions") },
+                { value: "outcome", label: t("agentPanel.stream.filterOutcomes") },
               ]}
             />
             <Button
@@ -212,20 +218,20 @@ export function CompanionFeed({
 
         {viewTab === "pinned" && (
           <View style={styles.pinInputContainer}>
-            <TextInput
+            <NoteInput
+              ref={noteInput}
               style={styles.pinInput}
-              placeholder="Type a note or link..."
-              placeholderTextColor="#888"
-              value={pinText}
+              placeholder={t("agentPanel.stream.notePlaceholder")}
+              initialValue=""
               onChangeText={setPinText}
               onSubmitEditing={handleSubmitPin}
             />
-            <Button onPress={handleSubmitPin}>Add Note</Button>
+            <Button onPress={handleSubmitPin}>{t("agentPanel.stream.addNote")}</Button>
           </View>
         )}
       </View>
     ),
-    [connection, viewTab, filter, onlyOpen, pinText, t, handleToggleOnlyOpen, handleSubmitPin],
+    [connection, viewTab, filter, onlyOpen, t, handleToggleOnlyOpen, handleSubmitPin],
   );
 
   const empty = useMemo(
@@ -364,7 +370,7 @@ function EntryCard({
         <MarkdownRenderer text={entry.text} compact enableHtmlish={false} />
         {entry.kind === "q_and_a" && entry.answer && (
           <View style={styles.qaAnswerContainer}>
-            <Text style={styles.qaAnswerLabel}>Answer:</Text>
+            <Text style={styles.qaAnswerLabel}>{t("agentPanel.stream.answerLabel")}</Text>
             <MarkdownRenderer text={entry.answer} compact enableHtmlish={false} />
           </View>
         )}
@@ -376,7 +382,7 @@ function EntryCard({
         </Text>
         {entry.kind === "q_and_a" && entry.answer && (
           <View style={styles.qaAnswerContainer}>
-            <Text style={styles.qaAnswerLabel}>Answer:</Text>
+            <Text style={styles.qaAnswerLabel}>{t("agentPanel.stream.answerLabel")}</Text>
             <Text selectable style={styles.body} numberOfLines={6}>
               {entry.answer}
             </Text>
@@ -395,7 +401,7 @@ function EntryCard({
         <Text style={styles.eyebrow}>{formatMessageTimestamp(new Date(entry.timestamp))}</Text>
         {entry.kind === "pin" ? (
           <Button variant="ghost" size="sm" onPress={handleRemovePinLocal}>
-            <Text style={styles.description}>Unpin</Text>
+            <Text style={styles.description}>{t("agentPanel.stream.unpin")}</Text>
           </Button>
         ) : null}
       </View>
@@ -463,7 +469,7 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.semibold,
   },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
-  eyebrow: { color: theme.colors.foregroundExtraMuted, fontSize: theme.fontSize.xs },
+  eyebrow: { color: theme.colors.foregroundExtraMuted, fontSize: theme.fontSize.sm },
   card: {
     padding: theme.spacing[4],
     borderWidth: 1,
@@ -512,7 +518,7 @@ const styles = StyleSheet.create((theme) => ({
   qaAnswerLabel: {
     fontWeight: "bold",
     marginBottom: theme.spacing[1],
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
   entryHeaderRow: { flexDirection: "row", justifyContent: "space-between" },

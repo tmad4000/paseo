@@ -1325,8 +1325,11 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     </>
   );
 
+  // The chat stays mounted behind the Stream so the draft, scroll position and
+  // expanded state survive Back to chat and Reply in chat.
+  const isChatVisible = selectedView === "chat";
   const dock = (
-    <ChatSurface disabled={isArchivingCurrentAgent}>
+    <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
       {composerSection}
       {dockOverlay}
@@ -1355,7 +1358,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     [t],
   );
   const showViewSwitcher = companionStreamSupported || artifactFeedSupported;
-  const isChatVisible = selectedView === "chat";
 
   return (
     <RewindComposerRestoreProvider
@@ -1378,9 +1380,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             />
           </View>
         ) : null}
-        {/* The chat stays mounted behind the Stream so the draft, scroll position and
-            expanded state survive Back to chat and Reply in chat. */}
-        <RetainedPanel active={isChatVisible}>{dock}</RetainedPanel>
+        {dock}
         {!isChatVisible ? (
           <CompanionFeed
             serverId={serverId}
@@ -1411,14 +1411,19 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
 function ChatSurface({
   children,
   disabled,
+  active,
 }: {
   children: [ReactNode, ReactNode, ReactNode];
   disabled: boolean;
+  /** Inactive keeps the chat mounted but hidden and inert, e.g. behind the Stream. */
+  active: boolean;
 }) {
   return (
-    <FileDropZone style={styles.container} disabled={disabled}>
-      <ComposerDock>{children}</ComposerDock>
-    </FileDropZone>
+    <RetainedPanel active={active}>
+      <FileDropZone style={styles.container} disabled={disabled}>
+        <ComposerDock>{children}</ComposerDock>
+      </FileDropZone>
+    </RetainedPanel>
   );
 }
 
@@ -1840,6 +1845,9 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  mobileSegmentedControl: {
+    flex: 1,
+  },
   timelineSyncCalloutRail: {
     width: "100%",
     alignItems: "center",
@@ -1865,9 +1873,9 @@ const styles = StyleSheet.create((theme) => ({
   timelineSyncCalloutText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
-  mobileSegmentedControl: {
-    flex: 1,
-  },
+    mobileSegmentedControl: {
+      flex: 1,
+    },
   },
   historySyncOverlay: {
     position: "absolute",

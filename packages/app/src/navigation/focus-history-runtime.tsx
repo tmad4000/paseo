@@ -64,14 +64,15 @@ function getTrackableRouteLocation(pathname: string): NavigationFocusLocation | 
 function resolveNavigationPanel(input: {
   isCompact: boolean;
   mobilePanel: NavigationViewState["panel"];
-  desktopExplorerOpen: boolean;
 }): NavigationViewState["panel"] {
   if (input.isCompact) {
     // The agent list is transient navigation chrome. Selecting a workspace from
     // it should return to the prior workspace, not reopen the drawer first.
     return input.mobilePanel === "agent-list" ? "agent" : input.mobilePanel;
   }
-  return input.desktopExplorerOpen ? "file-explorer" : "agent";
+  // On desktop the explorer is a sidebar pane inside the workspace layout, which the
+  // pane/tab focus already captures.
+  return "agent";
 }
 
 export interface RestoreNavigationFocusLocationDeps {
@@ -155,14 +156,13 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
     workspaceKey ? (state.layoutByWorkspace[workspaceKey] ?? null) : null,
   );
   const mobilePanel = usePanelStore((state) => state.mobilePanel.target);
-  const desktopExplorerOpen = usePanelStore((state) => state.desktop.fileExplorerOpen);
   const explorerTab = usePanelStore((state) => state.explorerTab);
   const view = useMemo<NavigationViewState>(
     () => ({
-      panel: resolveNavigationPanel({ isCompact, mobilePanel, desktopExplorerOpen }),
+      panel: resolveNavigationPanel({ isCompact, mobilePanel }),
       explorerTab,
     }),
-    [desktopExplorerOpen, explorerTab, isCompact, mobilePanel],
+    [explorerTab, isCompact, mobilePanel],
   );
 
   useEffect(() => {

@@ -524,6 +524,10 @@ function requireWebSocketServices(params: {
 /**
  * WebSocket server that only accepts sockets + parses/forwards messages to the session layer.
  */
+function orNull<T>(value: T | null | undefined): T | null {
+  return value ?? null;
+}
+
 export class VoiceAssistantWebSocketServer {
   private readonly logger: pino.Logger;
   private readonly wss: WebSocketServer;
@@ -677,8 +681,8 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.credentialSource = auth;
     this.daemonRuntimeConfig = daemonRuntimeConfig;
-    this.browserToolsBroker = browserToolsBroker ?? null;
-    this.hubRelationships = hubRelationships ?? null;
+    this.browserToolsBroker = orNull(browserToolsBroker);
+    this.hubRelationships = orNull(hubRelationships);
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
     this.agentManager = agentManager;
@@ -698,7 +702,7 @@ export class VoiceAssistantWebSocketServer {
       checkoutDiffManager,
     });
     this.scheduleService = requiredServices.scheduleService;
-    this.agentQueueService = agentQueueService ?? null;
+    this.agentQueueService = orNull(agentQueueService);
     this.checkoutDiffManager = requiredServices.checkoutDiffManager;
     this.github = github ?? createGitHubService();
     this.workspaceGitService = workspaceGitService ?? createFallbackWorkspaceGitService();

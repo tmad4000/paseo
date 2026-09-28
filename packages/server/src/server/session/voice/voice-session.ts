@@ -22,7 +22,7 @@ import type { LocalSpeechModelId } from "../../speech/providers/local/models.js"
 import { toResolver, type Resolvable } from "../../speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot, SpeechReadinessState } from "../../speech/speech-runtime.js";
 
-import { isVoiceInputCommandPrefix, parseVoiceInputCommand } from "./voice-input-command.js";
+import { parseVoiceInputCommand } from "./voice-input-command.js";
 
 const PCM_SAMPLE_RATE = 16000;
 const PCM_CHANNELS = 1;

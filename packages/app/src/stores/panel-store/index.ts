@@ -240,13 +240,7 @@ export const usePanelStore = create<PanelState>()(
               explorerTab,
             };
           }
-          return {
-            desktop: {
-              ...state.desktop,
-              fileExplorerOpen: panel === "file-explorer",
-            },
-            explorerTab,
-          };
+          return { explorerTab };
         }),
 
       setExplorerTab: (tab) => set({ explorerTab: tab }),

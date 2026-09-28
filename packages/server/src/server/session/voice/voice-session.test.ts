@@ -199,6 +199,7 @@ describe("VoiceSession streaming transcription", () => {
       await voiceSession.cleanup();
       await playback.catch(() => {});
     }
+  });
 
   test.each(["openai", "custom-cloud"])(
     "never enables verbal mute with %s STT",

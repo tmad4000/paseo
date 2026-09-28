@@ -6,7 +6,7 @@ vi.mock("expo-router", () => ({
 }));
 
 import { createDefaultLayout } from "@/stores/workspace-layout-store";
-import { openTabInLayoutFocused } from "@/stores/workspace-layout-actions";
+import { FOCUSED_PANE_PLACEMENT, openTabInLayoutFocused } from "@/stores/workspace-layout-actions";
 import {
   buildWorkspaceFocusLocation,
   restoreNavigationFocusLocation,
@@ -29,7 +29,10 @@ describe("workspace focus locations", () => {
       layout: createDefaultLayout(),
       target: { kind: "agent", agentId: "agent-a" },
       now: 1,
+      placement: FOCUSED_PANE_PLACEMENT,
+      explorerSidebarPaneId: null,
     });
+    if (!opened) throw new Error("expected the tab to open");
 
     expect(
       buildWorkspaceFocusLocation({

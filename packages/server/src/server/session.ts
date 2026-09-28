@@ -2638,6 +2638,8 @@ export class Session {
 
   private dispatchAgentQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
+      case "update_companion_entry_request":
+        return this.handleUpdateCompanionEntryRequest(msg);
       case "agent.queue.enqueue.request":
       case "agent.queue.remove.request":
       case "agent.queue.list.request":
@@ -2770,8 +2772,6 @@ export class Session {
         return this.handleCloseItemsRequest(msg);
       case "update_agent_request":
         return this.handleUpdateAgentRequest(msg.agentId, msg.name, msg.labels, msg.requestId);
-      case "update_companion_entry_request":
-        return this.handleUpdateCompanionEntryRequest(msg);
       case "project.rename.request":
         return this.handleProjectRenameRequest(msg.projectId, msg.customName, msg.requestId);
       case "project.icon.set.request":

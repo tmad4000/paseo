@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {

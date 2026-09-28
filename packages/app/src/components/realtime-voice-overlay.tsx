@@ -182,8 +182,8 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
-  hint: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
-  error: { color: theme.colors.destructive, fontSize: theme.fontSize.xs },
+  hint: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  error: { color: theme.colors.destructive, fontSize: theme.fontSize.sm },
   container: {
     flexDirection: "row",
     alignItems: "center",
