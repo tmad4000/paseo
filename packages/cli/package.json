@@ -3,6 +3,7 @@
   "version": "0.10.0-beta.1",
   "description": "Paseo CLI - control your AI coding agents from the command line",
   "bin": {
+    "paseo": "bin/paseo",
     "paseo-fork": "bin/paseo"
   },
   "files": [

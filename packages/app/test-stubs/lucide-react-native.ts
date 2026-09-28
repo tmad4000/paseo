@@ -88,6 +88,7 @@ export const RefreshCcw = StubIcon;
 export const RefreshCw = StubIcon;
 export const RotateCw = StubIcon;
 export const Scan = StubIcon;
+export const FileCode2 = StubIcon;
 export const Search = StubIcon;
 export const Server = StubIcon;
 export const Settings = StubIcon;

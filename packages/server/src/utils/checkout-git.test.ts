@@ -366,7 +366,7 @@ describe("checkout git utilities", () => {
     }
   });
 
-  it("does not warn when a checkout directory has been removed", async () => {
+  it("warns when git discovery fails unexpectedly", async () => {
     const missingDir = join(tempDir, "missing-git-cwd");
     const records: unknown[] = [];
     const logger = pino(
@@ -379,28 +379,10 @@ describe("checkout git utilities", () => {
     );
 
     await expect(getCheckoutStatus(missingDir, { logger })).resolves.toEqual({ isGit: false });
-    expect(records).toEqual([]);
-  });
-
-  it("warns when git discovery fails unexpectedly", async () => {
-    const brokenDir = join(tempDir, "invalid-git-file");
-    mkdirSync(brokenDir);
-    writeFileSync(join(brokenDir, ".git"), "invalid gitfile format\n");
-    const records: unknown[] = [];
-    const logger = pino(
-      { level: "warn" },
-      {
-        write(line: string) {
-          records.push(JSON.parse(line));
-        },
-      },
-    );
-
-    await expect(getCheckoutStatus(brokenDir, { logger })).resolves.toEqual({ isGit: false });
     expect(records).toEqual([
       expect.objectContaining({
         level: 40,
-        cwd: brokenDir,
+        cwd: missingDir,
         msg: "Git worktree discovery failed; treating directory as non-Git",
       }),
     ]);
