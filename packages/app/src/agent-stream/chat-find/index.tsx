@@ -18,7 +18,7 @@ import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { planTimelinePromptJump } from "@/timeline/timeline-sync-plan";
 import { ChatFindModel, type ChatFindFailure } from "./model";
-import { createNativeFindViewport } from "./viewport";
+import { createNativeFindViewport } from "./native-viewport";
 import type { ChatFindProps, ChatFindExpansionProps } from "./types";
 
 /**

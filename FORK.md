@@ -9,12 +9,12 @@ stock Paseo rather than replacing it.
 
 Every branch starts from an upstream release tag, never from another fork branch.
 
-| Branch          | Base                       | Contents                                                                    | Goes upstream? |
-| --------------- | -------------------------- | --------------------------------------------------------------------------- | -------------- |
-| `main`          | —                          | Stale pre-0.4.0 history. Kept for reference only.                           | no             |
-| `feat/<name>`   | upstream tag               | One self-contained feature. One per PR.                                     | **yes**        |
-| `fork/branding` | upstream tag               | Fork identity: app name, icon, `paseo-fork` CLI and URL scheme, FORK badge. | **never**      |
-| `jacob/daily`   | `feat/*` + `fork/branding` | The integration branch. This is what gets built and installed.              | no             |
+| Branch          | Base                         | Contents                                                                        | Goes upstream? |
+| --------------- | ---------------------------- | ------------------------------------------------------------------------------- | -------------- |
+| `main`          | upstream tag + fork features | **The canonical branch.** What gets built, installed, and cut to TestFlight.    | no             |
+| `feat/<name>`   | upstream tag                 | One self-contained feature. One per PR.                                         | **yes**        |
+| `fork/branding` | upstream tag                 | Fork identity: app name, icon, `paseo-fork` CLI and URL scheme, FORK badge.     | **never**      |
+| `jacob/daily`   | retired 2026-09-28           | Former integration branch. Everything it carried is on `main`; do not build it. | no             |
 
 Current feature branches:
 
@@ -24,18 +24,32 @@ Current feature branches:
 
 A feature branch has to be reviewable by upstream in isolation, so it may only
 contain that feature. The branding is the opposite: it renames the app and the
-CLI, so it must never reach an upstream PR. Keeping them apart means the daily
-build can carry both while each feature stays independently submittable.
+CLI, so it must never reach an upstream PR. Keeping them apart means `main` can
+carry both while each feature stays independently submittable.
 
-`jacob/daily` is a merge, not a rebase. Merging keeps each feature branch's
-identity stable, so a branch that has already been pushed for review is not
-rewritten every time the daily build is refreshed.
+`main` is a merge, not a rebase. Merging keeps each feature branch's identity
+stable, so a branch that has already been pushed for review is not rewritten
+every time `main` is refreshed.
+
+There used to be two integration lineages: `main` (where PRs landed) and
+`jacob/daily` (what the daemons and desktop were built from). Features merged to
+one never ran on the other, which is how "Update the host to use Stream" appeared
+on a phone built from `main` against a daemon built from `daily`. One branch is
+built and one branch is targeted, and both are `main`.
+
+### Upstream wins
+
+When upstream ships something a fork feature was for, take upstream's and delete
+ours; the fork augments upstream, it never keeps a rival implementation alive
+behind a flag. Chat find is the worked example: the fork's search scaffold and
+its `agent.timeline.search` schema were dropped for upstream's, and only the
+native wrapper (`packages/app/src/agent-stream/chat-find/index.tsx`) is fork
+code. Ambiguous cases resolve to upstream.
 
 ## Rules
 
-- **Never commit to `jacob/daily` directly.** Commit to a feature branch or to
-  `fork/branding`, then merge. A commit made only on the integration branch
-  cannot be sent upstream and will be lost on the next rebase.
+- **Land on `main` through a PR from a feature branch.** A commit made only on
+  the integration branch cannot be sent upstream in isolation.
 - **One feature, one branch, one PR.** If a change needs the branding to work, it
   belongs in `fork/branding`, not in the feature.
 - **Anything that hardcodes the name "Paseo" is a branding concern.** Bundle
@@ -45,10 +59,15 @@ rewritten every time the daily build is refreshed.
 ## Build and install
 
 ```bash
-git checkout jacob/daily
+git checkout main
 npm install                  # after any upstream bump — dist/ goes stale across versions
 npm run build                # builds all packages, then signs and packages the desktop app
 ```
+
+The always-on daemon on the M4 runs from the checkout that `~/.npm-global/bin/paseo`
+points at (see `~/Library/LaunchAgents/sh.paseo.daemon.plist`). After a `main`
+update, rebuild that checkout on `main` and restart the daemon; a daemon built from
+any other branch will not carry the fork features the app expects.
 
 The signed bundle lands at `packages/desktop/release/mac-arm64/Paseo Fork.app`,
 with a `.dmg` and `.zip` beside it.
@@ -106,17 +125,16 @@ documented in `~/.claude/rules/ios-deploy.md`.
 
 ```bash
 git fetch upstream --tags
-git checkout -b feat/<name> v0.4.0        # branch from the release tag, not from a fork branch
+git checkout -b feat/<name> v0.10.0-beta.1 # branch from the release tag, not from a fork branch
 # ...build the feature, with tests...
-git checkout jacob/daily
-git merge --no-ff feat/<name>
-npm run build                              # then install as above
+git push -u origin feat/<name>             # open a PR against main
+npm run build                              # then install as above once it lands
 ```
 
 Before merging, confirm the branch is clean against upstream:
 
 ```bash
-git diff --name-only v0.4.0..feat/<name>   # should list only your feature's files
+git diff --name-only v0.10.0-beta.1..feat/<name>   # should list only your feature's files
 ```
 
 ## Submitting a feature upstream
@@ -135,8 +153,7 @@ applies cleanly. Do not include `fork/branding` in the PR.
 git fetch upstream --tags
 git rebase --onto v<new> v<old> feat/<name>     # repeat per feature branch
 git rebase --onto v<new> v<old> fork/branding
-git branch -f jacob/daily feat/<first>
-git checkout jacob/daily && git merge --no-ff <each other branch>
+git checkout main && git merge --no-ff upstream/main    # then merge each rebased branch
 npm install && npm run build
 ```
 

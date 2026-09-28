@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StreamItem } from "@/types/stream";
 import type { StreamViewportHandle } from "../strategy";
-import { createNativeFindViewport } from "./viewport";
+import { createNativeFindViewport } from "./native-viewport";
 
 function userMessage(id: string, text: string): StreamItem {
   return {
