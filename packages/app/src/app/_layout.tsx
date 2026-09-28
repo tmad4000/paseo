@@ -106,7 +106,6 @@ import {
   getHostRuntimeStore,
   hasConfiguredLocalDaemonOverride,
   useHostRegistryLoaded,
-  useHostMutations,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
   useHosts,
@@ -132,7 +131,6 @@ import {
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { ForkBadge } from "@/components/desktop/fork-badge";
-import { FindBar } from "@/find/find-bar";
 import { PluginCatalogSync } from "@/plugins";
 import {
   ensureOsNotificationPermission,
@@ -669,13 +667,11 @@ function MobileGestureWrapper({
 }
 
 function ProvidersWrapper({ children }: { children: ReactNode }) {
-  const { upsertConnectionFromOfferUrl } = useHostMutations();
-
   return (
     <AppearanceProvider>
       <VoiceProvider>
         <DesktopWindowControlsSync />
-        <OfferLinkListener upsertDaemonFromOfferUrl={upsertConnectionFromOfferUrl} />
+        <OfferLinkListener />
         <HostSessionManager />
         <FaviconStatusSync />
         {children}
@@ -702,45 +698,36 @@ function DesktopWindowControlsSync() {
   return null;
 }
 
-function OfferLinkListener({
-  upsertDaemonFromOfferUrl,
-}: {
-  upsertDaemonFromOfferUrl: (offerUrlOrFragment: string) => Promise<unknown>;
-}) {
+function OfferLinkListener() {
   const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
-    const handleUrl = (url: string | null) => {
+    const handleUrl = async (url: string | null) => {
       if (!url) return;
-      if (!url.includes("#offer=")) return;
-      void upsertDaemonFromOfferUrl(url)
-        .then((profile) => {
-          if (cancelled) return;
-          const serverId = (profile as { serverId?: unknown } | null)?.serverId;
-          if (typeof serverId !== "string" || !serverId) return;
-          router.replace(buildOpenProjectRoute());
-          return;
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          console.warn("[Linking] Failed to import pairing offer", error);
-        });
+      if (!url.includes("#offer=") && !url.includes("#connect=") && !url.startsWith("relay://"))
+        return;
+      try {
+        const result = await getHostRuntimeStore().importConnectionLink(url, "openProject");
+        if (!cancelled && result.status === "connected") router.replace(buildOpenProjectRoute());
+      } catch (error) {
+        console.warn("[OfferLinkListener] Pairing link failed", error);
+      }
     };
 
     void Linking.getInitialURL()
-      .then(handleUrl)
+      .then((url) => handleUrl(url))
       .catch(() => undefined);
 
     const subscription = Linking.addEventListener("url", (event) => {
-      handleUrl(event.url);
+      void handleUrl(event.url);
     });
 
     return () => {
       cancelled = true;
       subscription.remove();
     };
-  }, [router, upsertDaemonFromOfferUrl]);
+  }, [router]);
 
   return null;
 }
@@ -988,7 +975,6 @@ function RootAppTree() {
           <RuntimeProviders>
             <AppShell />
             <ForkBadge />
-            <FindBar />
           </RuntimeProviders>
         </RootProviders>
       </View>

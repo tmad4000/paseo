@@ -7,6 +7,7 @@ import type {
 } from "@/keyboard/actions";
 import {
   chordStringToShortcutKeys,
+  isModifierKeyCode,
   type KeyCombo,
   parseChordString,
 } from "@/keyboard/shortcut-string";
@@ -156,7 +157,6 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   general: [
     "toggle-command-center",
     "search-files",
-    "toggle-find",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -884,31 +884,6 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     },
   },
 
-  // --- Find in page ---
-  {
-    id: "find-toggle-cmd-f-mac",
-    action: "find.toggle",
-    combo: "Cmd+F",
-    when: { mac: true },
-    help: {
-      id: "toggle-find",
-      section: "general",
-      label: "Find in page",
-    },
-  },
-  {
-    id: "find-toggle-ctrl-f-non-mac",
-    action: "find.toggle",
-    combo: "Ctrl+F",
-    // Terminals bind Ctrl+F to cursor-forward, so the terminal scope keeps it.
-    when: { mac: false, terminal: false },
-    help: {
-      id: "toggle-find",
-      section: "general",
-      label: "Find in page",
-    },
-  },
-
   // --- Keyboard shortcuts dialog ---
   {
     id: "shortcuts-dialog-toggle-question-mark",
@@ -1255,12 +1230,31 @@ export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShor
     if (binding.repeat === false && lastCombo) {
       lastCombo.repeat = false;
     }
+    const when = withoutDefaultComboGuard(binding.when);
     if (!binding.help?.defaultDisplayKeys) {
-      return { ...binding, combo: override, parsedChord };
+      return { ...binding, combo: override, parsedChord, when };
     }
     const { defaultDisplayKeys: _defaultDisplayKeys, ...help } = binding.help;
-    return { ...binding, combo: override, parsedChord, help };
+    return { ...binding, combo: override, parsedChord, when, help };
   });
+}
+
+/**
+ * `editable: false` is a statement about a binding's *default* combo, not
+ * about its action: the pane-focus defaults carry it so that Cmd+Shift+Arrow
+ * keeps selecting text in a field instead of moving pane focus. An override
+ * replaces that combo, so the guard no longer describes anything and has to
+ * go, the same way `defaultDisplayKeys` does — otherwise the combo the user
+ * picked in Settings silently refuses to fire wherever they are typing.
+ *
+ * The other guards stay. Platform, command center, terminal and focus scope
+ * are properties of the action and of where it makes sense, and none of them
+ * change because the keys did.
+ */
+function withoutDefaultComboGuard(when: ShortcutWhen | undefined): ShortcutWhen | undefined {
+  if (when?.editable !== false) return when;
+  const { editable: _editable, ...rest } = when;
+  return rest;
 }
 
 // --- Matching engine ---
@@ -1543,6 +1537,13 @@ export function resolveKeyboardShortcut(input: {
   preventDefault: boolean;
 } {
   const { event, context, chordState, onChordReset, bindings = DEFAULT_BINDINGS } = input;
+  // Pressing a modifier emits its own keydown before the combo that holds it,
+  // so a chord waiting on `Ctrl+J` sees a bare `Control` first. That keydown
+  // matches no combo, and resolving it would drop the chord back to its first
+  // step. It decides nothing: leave the chord where it is.
+  if (isModifierKeyCode(event.code)) {
+    return { match: null, nextChordState: chordState, preventDefault: false };
+  }
   if (chordState.step === 0) {
     return resolveInitialChordStep({ event, context, chordState, onChordReset, bindings });
   }

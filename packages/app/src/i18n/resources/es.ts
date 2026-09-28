@@ -3,13 +3,14 @@ import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
   paneFind: {
-    searchFailed:
+    connectionFailure:
       "No se pudo buscar en este chat. Comprueba la conexión con el host y vuelve a intentarlo.",
+    historyChangedFailure: "El chat cambió durante la búsqueda. Vuelve a buscar.",
+    revealFailure: "No se pudo mostrar esta coincidencia. Vuelve a intentarlo.",
     searching: "Buscando…",
     loading: "Cargando…",
     failed: "Error",
     retry: "Reintentar",
-    chatPosition: "{{current}} de {{total}} en el mensaje",
 
     title: "Buscar",
     placeholder: "Buscar en el panel",
@@ -285,13 +286,6 @@ export const es: TranslationResources = {
       open: "Abrir {{name}}",
       openLabel: "Abrir",
     },
-  },
-  find: {
-    placeholder: "Buscar",
-    counter: "{{active}}/{{total}}",
-    next: "Coincidencia siguiente",
-    previous: "Coincidencia anterior",
-    close: "Cerrar búsqueda",
   },
   sessions: {
     title: "Historial",
@@ -1675,6 +1669,10 @@ export const es: TranslationResources = {
     },
   },
   pairing: {
+    hostPassword: {
+      title: "Contraseña de {{host}}",
+      label: "Contraseña del host",
+    },
     connectionMethods: {
       title: "Agregar conexión",
       direct: {
@@ -2013,8 +2011,11 @@ export const es: TranslationResources = {
     groupInfo: "Acerca de{{title}}",
     sections: {
       general: "General",
+      chat: "Chat",
       appearance: "Apariencia",
-      layout: en.settings.sections.layout,
+      sidebar: "Barra lateral",
+      terminal: "Terminal",
+      browser: "Navegador",
       editor: "Editor",
       shortcuts: "Atajos",
       integrations: "Integraciones",
@@ -2073,6 +2074,7 @@ export const es: TranslationResources = {
     },
     general: {
       title: "General",
+      sending: "Envío",
       browserData: {
         title: "Datos del navegador",
         siteData: "Cookies y datos de sitios",
@@ -2103,8 +2105,6 @@ export const es: TranslationResources = {
         },
       },
       serviceUrls: {
-        label: "URL de servicio",
-        description: "Dónde abrir URL desde scripts en ejecución",
         options: {
           ask: "Preguntar",
           inApp: "EnPaseo",
@@ -2124,7 +2124,6 @@ export const es: TranslationResources = {
       toolCallDetail: {
         label: "Visualización de llamadas a herramientas",
         description: "Cómo aparecen las llamadas a herramientas en la cronología",
-        accessibilityLabel: "Seleccionar visualización de llamadas a herramientas ({{value}})",
         options: {
           overview: "Resumen",
           detailed: "Detalle completo",
@@ -2364,6 +2363,9 @@ export const es: TranslationResources = {
       },
     },
     host: {
+      password: {
+        guidance: "Elimina este host y vuelve a añadirlo con la contraseña que pide este daemon.",
+      },
       appearance: {
         title: "Apariencia",
         name: {
