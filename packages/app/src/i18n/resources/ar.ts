@@ -13,6 +13,7 @@ export const ar: TranslationResources = {
 
     title: "بحث",
     placeholder: "بحث في اللوحة",
+    updateHost: "حدّث المضيف لاستخدام البحث",
     close: "إغلاق البحث",
     matches: "نتائج البحث",
     previous: "التطابق السابق",
@@ -701,6 +702,7 @@ export const ar: TranslationResources = {
         reloadAgentTooltip: "قم بإعادة تحميل الوكيل لتحديث المهارات أو MCPs أو حالة تسجيل الدخول.",
         close: "يغلق",
         viewArtifacts: "View artifacts",
+        findInChat: "بحث في الدردشة",
         renameTerminal: "إعادة تسمية المحطة",
         renameAgent: "إعادة تسمية الوكيل",
       },

@@ -14,6 +14,7 @@ export const fr: TranslationResources = {
 
     title: "Rechercher",
     placeholder: "Rechercher dans le panneau",
+    updateHost: "Mettez à jour l’hôte pour utiliser la recherche",
     close: "Fermer la recherche",
     matches: "Résultats de recherche",
     previous: "Résultat précédent",
@@ -711,6 +712,7 @@ export const fr: TranslationResources = {
           "Rechargez l'agent pour mettre à jour les compétences, les MCP ou le statut de connexion.",
         close: "Fermer",
         viewArtifacts: "View artifacts",
+        findInChat: "Rechercher dans la discussion",
         renameTerminal: "Renommer le terminal",
         renameAgent: "Renommer l'agent",
       },

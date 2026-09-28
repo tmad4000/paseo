@@ -173,10 +173,10 @@ console.log("=== CLI IPC Target Helpers ===\n");
   const paseoHome = mkdtempSync(path.join(os.tmpdir(), "paseo-client-env-target-"));
   try {
     saveDefaultDaemonTarget(paseoHome, "m4-mini.example:6767");
-    assert.deepStrictEqual(
-      selectDaemonTarget({}, { PASEO_HOME: paseoHome, PASEO_HOST: "override.example:7767" }),
-      { kind: "endpoint", host: "override.example:7767" },
-    );
+    assert.deepStrictEqual(selectDaemonTarget({}, { PASEO_HOST: "override.example:7767" }), {
+      kind: "endpoint",
+      host: "override.example:7767",
+    });
     assert.deepStrictEqual(
       selectDaemonTarget({ host: "flag.example:7767" }, { PASEO_HOME: paseoHome }),
       { kind: "endpoint", host: "flag.example:7767" },

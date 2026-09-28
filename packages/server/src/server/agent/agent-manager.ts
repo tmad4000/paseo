@@ -4005,7 +4005,10 @@ export class AgentManager {
     const shouldNotifyWaiters = await this.handleStreamEvent(agent, event);
 
     if (isTurnTerminalEvent(event)) {
-      await this.collectArtifactsForTurn(agent);
+      // Artifact collection walks the working directory. Never hold the turn's waiters
+      // on it: upstream settles and notifies at the terminal event, and a steer or
+      // replace admitted during the walk must see the run already settled.
+      void this.collectArtifactsForTurn(agent);
     }
 
     if (!shouldNotifyWaiters) {

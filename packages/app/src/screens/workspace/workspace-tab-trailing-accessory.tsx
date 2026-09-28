@@ -6,6 +6,8 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Copy,
+  FileCode2,
+  Search,
   CopyX,
   Ellipsis,
   Pencil,
@@ -30,6 +32,8 @@ const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedX = withUnistyles(X);
+const ThemedFileCode2 = withUnistyles(FileCode2);
+const ThemedSearch = withUnistyles(Search);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -61,6 +65,10 @@ function MobileTabDropdownMenuItem({
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
+      case "file-code-2":
+        return <ThemedFileCode2 size={16} uniProps={mutedColorMapping} />;
+      case "search":
+        return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }

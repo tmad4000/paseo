@@ -13,6 +13,7 @@ export const ko: TranslationResources = {
 
     title: "찾기",
     placeholder: "패널에서 찾기",
+    updateHost: "찾기를 사용하려면 호스트를 업데이트하세요",
     close: "찾기 닫기",
     matches: "검색 결과",
     previous: "이전 일치 항목",
@@ -693,6 +694,7 @@ export const ko: TranslationResources = {
         copyAgentId: "에이전트 ID 복사",
         copyTerminalId: "터미널 ID 복사",
         viewArtifacts: "산출물 보기",
+        findInChat: "채팅에서 찾기",
         copyFilePath: "파일 경로 복사",
         rename: "이름 변경",
         closeAbove: "위쪽 탭 닫기",

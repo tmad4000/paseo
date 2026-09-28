@@ -15,6 +15,8 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Copy,
+  FileCode2,
+  Search,
   Pencil,
   RotateCw,
   Columns2,
@@ -114,6 +116,8 @@ const AGENT_TOOLTIP_TITLE_MAX_LENGTH = 80;
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedX = withUnistyles(X);
+const ThemedFileCode2 = withUnistyles(FileCode2);
+const ThemedSearch = withUnistyles(Search);
 const ThemedCopy = withUnistyles(Copy);
 
 const ThemedRotateCw = withUnistyles(RotateCw);
@@ -415,6 +419,10 @@ function TabContextMenuItem({
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
+      case "file-code-2":
+        return <ThemedFileCode2 size={16} uniProps={mutedColorMapping} />;
+      case "search":
+        return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
@@ -1081,6 +1089,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
     () => ({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
+      findInChat: t("workspace.tabs.menu.findInChat"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),

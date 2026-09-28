@@ -715,25 +715,29 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const renderUserMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "user_message" }>) => {
         return (
-          <UserMessage
-            serverId={resolvedServerId}
-            agentId={agentId}
-            messageId={item.messageId}
-            message={item.text}
-            images={item.images}
-            attachments={item.attachments}
-            timestamp={item.timestamp.getTime()}
-            capabilities={context.capabilities}
-            client={client}
-            isFirstInGroup={layoutItem.isFirstInUserGroup}
-            isLastInGroup={layoutItem.isLastInUserGroup}
-            isPending={
-              item.clientMessageId !== undefined &&
-              pendingClientMessageIds.has(item.clientMessageId)
-            }
-            onPin={handlePin}
-            onQAndA={handleQAndA}
-          />
+          <ChatFindExpansion messageId={getStreamItemMessageId(item)}>
+            {() => (
+              <UserMessage
+                serverId={resolvedServerId}
+                agentId={agentId}
+                messageId={item.messageId}
+                message={item.text}
+                images={item.images}
+                attachments={item.attachments}
+                timestamp={item.timestamp.getTime()}
+                capabilities={context.capabilities}
+                client={client}
+                isFirstInGroup={layoutItem.isFirstInUserGroup}
+                isLastInGroup={layoutItem.isLastInUserGroup}
+                isPending={
+                  item.clientMessageId !== undefined &&
+                  pendingClientMessageIds.has(item.clientMessageId)
+                }
+                onPin={handlePin}
+                onQAndA={handleQAndA}
+              />
+            )}
+          </ChatFindExpansion>
         );
       },
       [

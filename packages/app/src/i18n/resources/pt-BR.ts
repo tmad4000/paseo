@@ -14,6 +14,7 @@ export const ptBR: TranslationResources = {
 
     title: "Buscar",
     placeholder: "Buscar no painel",
+    updateHost: "Atualize o host para usar Localizar",
     close: "Fechar busca",
     matches: "Correspondências",
     previous: "Correspondência anterior",
@@ -709,6 +710,7 @@ export const ptBR: TranslationResources = {
         reloadAgentTooltip: "Recarregue o agente para atualizar skills, MCPs ou status de login.",
         close: "Fechar",
         viewArtifacts: "View artifacts",
+        findInChat: "Localizar no chat",
         renameTerminal: "Renomear terminal",
         renameAgent: "Renomear agente",
       },

@@ -26,6 +26,7 @@ vi.mock("@getpaseo/expo-two-way-audio", () => ({
   resumePlayback: vi.fn(),
   stopPlayback: vi.fn(),
   tearDown: vi.fn(),
+  releaseAudioSession: vi.fn(),
 }));
 
 function source(arrayBuffer: () => Promise<ArrayBuffer>): AudioPlaybackSource {

@@ -428,6 +428,7 @@ interface MobileWorkspaceTabSwitcherProps {
   onCloseTabsBelow: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
   onViewArtifacts: (agentId: string) => void;
+  onFindInChat: (agentId: string) => void;
 }
 
 function MobileActiveTabTrigger({
@@ -536,6 +537,7 @@ function MobileWorkspaceTabOption({
   onCloseTabsBelow,
   onCloseOtherTabs,
   onViewArtifacts,
+  onFindInChat,
 }: {
   tab: WorkspaceTabDescriptor;
   tabIndex: number;
@@ -556,6 +558,7 @@ function MobileWorkspaceTabOption({
   onCloseTabsBelow: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
   onViewArtifacts: (agentId: string) => void;
+  onFindInChat: (agentId: string) => void;
 }) {
   const { t } = useTranslation();
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
@@ -574,6 +577,7 @@ function MobileWorkspaceTabOption({
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
       viewArtifacts: t("agentPanel.stream.viewStream"),
+      findInChat: t("workspace.tabs.menu.findInChat"),
     }),
     [t],
   );
@@ -595,6 +599,7 @@ function MobileWorkspaceTabOption({
     onCloseTabsAfter: onCloseTabsBelow,
     onCloseOtherTabs,
     onViewArtifacts,
+    onFindInChat,
     labels: tabMenuLabels,
   });
 
@@ -668,6 +673,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   onCloseTabsBelow,
   onCloseOtherTabs,
   onViewArtifacts,
+  onFindInChat,
 }: MobileWorkspaceTabSwitcherProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -726,6 +732,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCloseTabsBelow={onCloseTabsBelow}
           onCloseOtherTabs={onCloseOtherTabs}
           onViewArtifacts={onViewArtifacts}
+          onFindInChat={onFindInChat}
         />
       );
     },
@@ -746,6 +753,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCloseTabsBelow,
       onCloseOtherTabs,
       onViewArtifacts,
+      onFindInChat,
     ],
   );
 
@@ -2728,6 +2736,28 @@ function WorkspaceScreenContent({
     },
     [normalizedServerId, persistenceKey, openWorkspaceTabFocused, navigateToTabId, setSelectedView],
   );
+  const setFindOpen = useAgentViewStore((state) => state.setFindOpen);
+  const handleFindInChat = useCallback(
+    (agentId: string) => {
+      setSelectedView(normalizedServerId, agentId, "chat");
+      setFindOpen(normalizedServerId, agentId, true);
+      if (persistenceKey) {
+        const tabTarget = { kind: "agent", agentId } as WorkspaceTabTarget;
+        const tabId = openWorkspaceTabFocused(persistenceKey, tabTarget);
+        if (tabId) {
+          navigateToTabId(tabId);
+        }
+      }
+    },
+    [
+      normalizedServerId,
+      persistenceKey,
+      openWorkspaceTabFocused,
+      navigateToTabId,
+      setSelectedView,
+      setFindOpen,
+    ],
+  );
 
   const handleCopyFilePath = useCallback(
     async (path: string) => {
@@ -4090,6 +4120,7 @@ function WorkspaceScreenContent({
           onCloseTabsBelow={handleCloseTabsToRight}
           onCloseOtherTabs={handleCloseOtherTabs}
           onViewArtifacts={handleViewArtifacts}
+          onFindInChat={handleFindInChat}
         />
       ) : null}
 

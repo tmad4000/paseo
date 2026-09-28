@@ -116,6 +116,12 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../relay/src/index.ts"),
       },
       { find: "@", replacement: path.resolve(__dirname, "src") },
+      // The Expo module ships from build/, which unit tests never produce; resolve the
+      // source entry so vi.mock has a module id to replace.
+      {
+        find: /^@getpaseo\/expo-two-way-audio$/,
+        replacement: path.resolve(__dirname, "../expo-two-way-audio/src/index.ts"),
+      },
       // Keep keyboard-controller's imports in Vite so native aliases and platform extensions apply.
       {
         find: /^react-native-keyboard-controller$/,
