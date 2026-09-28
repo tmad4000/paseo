@@ -119,13 +119,30 @@ describe("desktop packaging", () => {
     expect(runtimeTrace).toContain('"packages/server/dist/server/skills/**"');
   });
 
+  it("brands the fork build without touching upstream's builder config", async () => {
+    // electron-builder.yml stays upstream's so its Linux packaging pipeline and CI
+    // smoke keep working; the fork identity is applied programmatically.
+    const fork = (await import("../../electron-builder.fork.cjs")).default as {
+      productName: string;
+      executableName: string;
+      protocols: { schemes: string[] }[];
+      mac: { extraResources: { to: string }[]; icon: string };
+      publish: { owner: string };
+    };
+    expect(fork.productName).toBe("Paseo Fork");
+    expect(fork.executableName).toBe("Paseo Fork");
+    expect(fork.protocols.flatMap((entry) => entry.schemes)).toEqual(["paseo-fork"]);
+    expect(fork.mac.extraResources.map((entry) => entry.to)).toContain("bin/paseo-fork");
+    expect(fork.mac.extraResources.map((entry) => entry.to)).not.toContain("bin/paseo");
+    expect(fork.mac.icon).toBe("assets/icon-fork.icns");
+    expect(fork.publish.owner).toBe("tmad4000");
+  });
+
   it("registers Paseo agent links with the operating system", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 
-    // The fork registers its own scheme so it does not take over paseo:// links
-    // from a stock Paseo install sitting next to it.
-    expect(config).toContain("name: Paseo Fork agent link");
-    expect(config).toContain("- paseo-fork");
+    expect(config).toContain("name: Paseo agent link");
+    expect(config).toContain("- paseo");
   });
 
   // electron-builder packs production dependencies declared in package.json into

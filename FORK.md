@@ -69,6 +69,14 @@ points at (see `~/Library/LaunchAgents/sh.paseo.daemon.plist`). After a `main`
 update, rebuild that checkout on `main` and restart the daemon; a daemon built from
 any other branch will not carry the fork features the app expects.
 
+The desktop branding (app id, product and executable name, `paseo-fork://` scheme,
+icons, artifact names, updater feed) lives in `packages/desktop/electron-builder.fork.cjs`,
+which this package's `build` script uses. `packages/desktop/electron-builder.yml`
+stays byte-for-byte upstream's: upstream's packaging scripts and CI smoke jobs are
+welded to the literal `Paseo` identity (Linux launcher rename, `/opt/Paseo`,
+`Paseo.desktop`, `dpkg --remove paseo`), so the branded config must never be what
+they extend.
+
 The signed bundle lands at `packages/desktop/release/mac-arm64/Paseo Fork.app`,
 with a `.dmg` and `.zip` beside it.
 

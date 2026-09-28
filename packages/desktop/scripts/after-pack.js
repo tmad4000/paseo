@@ -5,7 +5,15 @@ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 
 const { installLinuxLauncher } = require("./linux-sandbox");
 
-const EXECUTABLE_NAME = "Paseo";
+// Names come from the builder context so a rebranded build (electron-builder.fork.cjs)
+// prunes and installs the same way as the stock one.
+function packagedNames(context) {
+  const productFilename = context.packager.appInfo.productFilename;
+  return {
+    appBundle: `${productFilename}.app`,
+    executableName: context.packager.executableName ?? productFilename,
+  };
+}
 
 // electron-builder arch enum → Node.js arch string
 const ARCH_MAP = { 0: "ia32", 1: "x64", 2: "armv7l", 3: "arm64", 4: "universal" };
@@ -75,10 +83,10 @@ function pruneSharpLibvips(nodeModules, platform, arch) {
   }
 }
 
-function pruneNativeModules(appOutDir, platform, arch) {
+function pruneNativeModules(appOutDir, platform, arch, appBundle) {
   const resourcesDir =
     platform === "darwin"
-      ? path.join(appOutDir, `${EXECUTABLE_NAME}.app`, "Contents", "Resources")
+      ? path.join(appOutDir, appBundle, "Contents", "Resources")
       : path.join(appOutDir, "resources");
 
   const nodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
@@ -115,10 +123,11 @@ exports.default = async function afterPack(context) {
   const platform = context.electronPlatformName;
   const arch = ARCH_MAP[context.arch] || process.arch;
 
-  pruneNativeModules(context.appOutDir, platform, arch);
+  const names = packagedNames(context);
+  pruneNativeModules(context.appOutDir, platform, arch, names.appBundle);
 
   if (platform === "linux") {
-    installLinuxLauncher(context.appOutDir);
+    installLinuxLauncher(context.appOutDir, names.executableName);
   }
 
   if (platform === "linux" || platform === "win32") {
