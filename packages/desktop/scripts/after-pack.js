@@ -6,12 +6,14 @@ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 const { installLinuxLauncher } = require("./linux-sandbox");
 
 // Names come from the builder context so a rebranded build (electron-builder.fork.cjs)
-// prunes and installs the same way as the stock one.
+// prunes and installs the same way as the stock one. Tests call the hook with a bare
+// context, which keeps upstream's literal.
+const DEFAULT_PRODUCT_FILENAME = "Paseo";
 function packagedNames(context) {
-  const productFilename = context.packager.appInfo.productFilename;
+  const productFilename = context.packager?.appInfo?.productFilename ?? DEFAULT_PRODUCT_FILENAME;
   return {
     appBundle: `${productFilename}.app`,
-    executableName: context.packager.executableName ?? productFilename,
+    executableName: context.packager?.executableName ?? productFilename,
   };
 }
 

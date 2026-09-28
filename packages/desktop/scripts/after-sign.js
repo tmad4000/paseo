@@ -12,6 +12,9 @@ exports.default = async function afterSign(context) {
   }
 
   await smokePackagedDesktopApp({
-    appPath: path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`),
+    appPath: path.join(
+      context.appOutDir,
+      `${context.packager?.appInfo?.productFilename ?? "Paseo"}.app`,
+    ),
   });
 };
