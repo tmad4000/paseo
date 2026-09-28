@@ -123,9 +123,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "system",
-  // Queue by default: a mid-turn send should never silently kill the turn's
-  // in-flight tool calls and subagents. Interrupt stays one setting away.
-  sendBehavior: "queue",
+  sendBehavior: "steer",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,
@@ -200,8 +198,7 @@ const StoredAppSettingsSchema = z
     language: z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
-    // The fork defaults to queueing mid-turn sends (daemon-side queue); keep the fallback in step.
-    sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("queue"),
+    sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
       MIN_TERMINAL_SCROLLBACK_LINES,

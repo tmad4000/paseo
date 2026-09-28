@@ -1366,16 +1366,17 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       onRewindComplete={handleRewindComplete}
     >
       <View style={styles.root}>
+        {/* Floats over the chat instead of sitting in its vertical stack: the host
+            capability can arrive after the first prompt has painted, and a band that
+            appears then would shift every row (upstream's hydration specs pin that). */}
         {showViewSwitcher ? (
-          <View style={styles.viewSwitcher}>
+          <View style={styles.viewSwitcher} pointerEvents="box-none">
             <SegmentedControl
               options={viewOptions}
               value={selectedView}
               onValueChange={handleSetSelectedView}
-              size={isCompact ? "md" : "xs"}
-              textWrap={isCompact}
+              size={isCompact ? "sm" : "xs"}
               testID="agent-view-switcher"
-              style={isCompact ? styles.mobileSegmentedControl : undefined}
               segmentStyle={isCompact ? styles.compactSegment : undefined}
             />
           </View>
@@ -1836,17 +1837,12 @@ const styles = StyleSheet.create((theme) => ({
   hiddenPane: { display: "none" },
   compactSegment: { minHeight: 44 },
   viewSwitcher: {
-    minHeight: 40,
+    position: "absolute",
+    top: theme.spacing[2],
+    left: theme.spacing[3],
+    zIndex: 20,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  mobileSegmentedControl: {
-    flex: 1,
+    alignItems: "flex-start",
   },
   timelineSyncCalloutRail: {
     width: "100%",

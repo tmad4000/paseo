@@ -32,6 +32,7 @@ export const ja: TranslationResources = {
     loading: "読み込み中...",
     actions: {
       back: "戻る",
+      navigateBack: "戻る",
       cancel: "キャンセル",
       close: "閉じる",
       copy: "コピー",

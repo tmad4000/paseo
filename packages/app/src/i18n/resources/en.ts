@@ -27,6 +27,7 @@ export const en = {
     loading: "Loading...",
     actions: {
       back: "Back",
+      navigateBack: "Go back",
       cancel: "Cancel",
       close: "Close",
       copy: "Copy",

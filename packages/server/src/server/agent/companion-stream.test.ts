@@ -8,6 +8,47 @@ import {
 } from "./companion-stream.js";
 
 describe("conversation companion stream", () => {
+  it("returns the same entries reference when an event changes nothing", () => {
+    const collector = new CompanionStreamCollector();
+    const timestamp = "2026-09-21T12:00:00.000Z";
+    const settled: CompanionEntry[] = [
+      {
+        id: "turn:t0:question",
+        kind: "question",
+        timestamp,
+        text: "Ship it?",
+        truncated: false,
+        status: "reply_sent",
+      },
+    ];
+    // A user message only moves open questions to reply_sent; with none open, the
+    // agent manager must not emit a fresh agent state for it.
+    const afterUserMessage = collector.observe(
+      "agent",
+      settled,
+      {
+        type: "timeline",
+        provider: "codex",
+        turnId: "t1",
+        item: { type: "user_message", id: "u1", messageId: "u1", text: "go", timestamp },
+      } as never,
+      timestamp,
+    );
+    expect(afterUserMessage).toBe(settled);
+    const afterUnrelatedResolution = collector.observe(
+      "agent",
+      settled,
+      {
+        type: "permission_resolved",
+        provider: "codex",
+        requestId: "not-tracked",
+        resolution: { behavior: "allow" },
+      } as never,
+      timestamp,
+    );
+    expect(afterUnrelatedResolution).toBe(settled);
+  });
+
   it("keeps a question open until the provider resolves its permission request", () => {
     const collector = new CompanionStreamCollector();
     const timestamp = "2026-09-21T12:00:00.000Z";

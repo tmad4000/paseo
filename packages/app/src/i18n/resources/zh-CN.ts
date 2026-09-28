@@ -31,6 +31,7 @@ export const zhCN: TranslationResources = {
     loading: "加载中...",
     actions: {
       back: "返回",
+      navigateBack: "返回上一步",
       cancel: "取消",
       close: "关闭",
       copy: "复制",

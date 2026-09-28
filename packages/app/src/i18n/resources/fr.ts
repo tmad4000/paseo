@@ -32,6 +32,7 @@ export const fr: TranslationResources = {
     loading: "Chargement...",
     actions: {
       back: "Dos",
+      navigateBack: "Revenir en arrière",
       cancel: "Annuler",
       close: "Fermer",
       copy: "Copie",

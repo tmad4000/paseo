@@ -89,7 +89,7 @@ export class CompanionStreamCollector {
       return upsert(entries, entry);
     }
     if (event.type === "permission_resolved") {
-      return entries.map((entry) =>
+      return mapChanged(entries, (entry) =>
         entry.kind === "permission" && entry.requestId === event.requestId
           ? { ...entry, status: event.resolution.behavior === "allow" ? "allowed" : "denied" }
           : entry,
@@ -131,7 +131,7 @@ export class CompanionStreamCollector {
       turns.delete(turnKey);
     }
     if (item.type === "user_message") {
-      return entries.map((entry) =>
+      return mapChanged(entries, (entry) =>
         entry.kind === "question" && entry.status === "open"
           ? { ...entry, status: "reply_sent" }
           : entry,
@@ -151,7 +151,7 @@ function collectOutcome(
   if (entries.some((entry) => entry.id === id)) return entries;
   let next = entries;
   if (event.type !== "turn_completed") {
-    next = next.map(expirePendingPermission);
+    next = mapChanged(next, expirePendingPermission);
   }
   const text = draft?.text.trim() ?? "";
   // Plain prose questions are a hint, never a claim that a later reply resolved a decision.
@@ -187,6 +187,25 @@ function collectOutcome(
         : outcomeText.length > COMPANION_TEXT_LIMIT,
     status,
   });
+}
+
+/**
+ * Returns the input array itself when no element changed. The agent manager emits a
+ * fresh agent state whenever the entries reference changes, and an emit that carries
+ * no change still tells every client the agent is running before the authoritative
+ * turn and status messages arrive.
+ */
+function mapChanged(
+  entries: CompanionEntry[],
+  update: (entry: CompanionEntry) => CompanionEntry,
+): CompanionEntry[] {
+  let changed = false;
+  const next = entries.map((entry) => {
+    const updated = update(entry);
+    if (updated !== entry) changed = true;
+    return updated;
+  });
+  return changed ? next : entries;
 }
 
 function upsert(entries: CompanionEntry[], entry: CompanionEntry): CompanionEntry[] {

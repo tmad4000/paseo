@@ -74,7 +74,6 @@ import { useRevealedText } from "@/hooks/use-revealed-text";
 import { colorMarkdownLinkChildren } from "@/components/markdown/link-children";
 import { createAssistantMarkdownParser } from "@/utils/assistant-markdown-parser";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
-import { getAssistantTurnFooterLabels } from "@/components/assistant-turn-footer-label";
 import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import { setAssistantMarkdownBlockHeight } from "@/utils/assistant-message-height-estimate";
@@ -716,11 +715,9 @@ const TIMESTAMP_REVEAL_MS = 3000;
  */
 export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   getContent,
-  startedAt,
   completedAt,
   durationMs,
   onFork,
-  onPin,
 }: AssistantTurnFooterProps) {
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
@@ -735,14 +732,21 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     };
   }, []);
 
-  const { label, hoverLabel } = useMemo(
+  const durationLabel = useMemo(
     () =>
-      getAssistantTurnFooterLabels({ startedAt, completedAt, durationMs: durationMs ?? undefined }),
-    [startedAt, completedAt, durationMs],
+      durationMs !== undefined && durationMs !== null
+        ? `Worked for ${formatDuration(durationMs)}`
+        : "",
+    [durationMs],
+  );
+  const timestampLabel = useMemo(
+    () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
+    [completedAt],
   );
 
-  const canSwap = Boolean(hoverLabel);
-  const showHoverLabel = canSwap && (isWeb ? hovered : pressedReveal);
+  const primaryLabel = durationLabel || timestampLabel;
+  const canSwap = Boolean(durationLabel && timestampLabel);
+  const showTimestamp = canSwap && (isWeb ? hovered : pressedReveal);
 
   const handleHoverIn = useCallback(() => setHovered(true), []);
   const handleHoverOut = useCallback(() => setHovered(false), []);
@@ -763,42 +767,31 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     },
     [onFork],
   );
-  const handlePin = useCallback(() => {
-    if (onPin) {
-      onPin(getContent());
-    }
-  }, [onPin, getContent]);
   const canFork = Boolean(onFork);
 
   return (
     <View style={assistantTurnFooterStylesheet.container}>
-      {onPin ? (
-        <TurnPinButton
-          onPin={handlePin}
-          containerStyle={assistantTurnFooterStylesheet.copyButton}
-        />
-      ) : null}
       <TurnCopyButton
         getContent={getContent}
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
-      {label ? (
+      {primaryLabel ? (
         <Pressable
           onPress={handlePress}
           onHoverIn={handleHoverIn}
           onHoverOut={handleHoverOut}
           accessibilityRole={canSwap ? "button" : undefined}
-          accessibilityLabel={canSwap ? `${label}, ${hoverLabel}` : label}
+          accessibilityLabel={canSwap ? `${durationLabel}, ended ${timestampLabel}` : primaryLabel}
         >
           <View style={assistantTurnFooterStylesheet.labelWrapper}>
             {/* Sizer reserves space for whichever label is longer so the
                 container width is stable across hover transitions. */}
             <Text style={assistantTurnFooterStylesheet.labelSizer} aria-hidden>
-              {label.length >= hoverLabel.length ? label : hoverLabel}
+              {primaryLabel.length >= timestampLabel.length ? primaryLabel : timestampLabel}
             </Text>
             <Text style={assistantTurnFooterStylesheet.labelOverlay}>
-              {showHoverLabel ? hoverLabel : label}
+              {showTimestamp ? timestampLabel : primaryLabel}
             </Text>
           </View>
         </Pressable>
