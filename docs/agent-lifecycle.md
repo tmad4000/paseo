@@ -249,6 +249,7 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                   |
 | `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach |
 | `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label   |
+| `labels["paseo.auto-open-agent-tab"]`        | `"true"?`     | Cross-client hint, stamped by `paseo run`, to auto-open the agent as a workspace tab |
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                           |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.

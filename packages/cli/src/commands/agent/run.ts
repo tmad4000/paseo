@@ -4,6 +4,7 @@ import {
   StructuredAgentResponseError,
 } from "@getpaseo/server/agent-response";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import { AUTO_OPEN_AGENT_TAB_LABEL } from "@getpaseo/protocol/agent-labels";
 import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
 import { connectToDaemon } from "../../utils/client.js";
 import type {
@@ -447,6 +448,18 @@ function loadRunImages(
   });
 }
 
+/**
+ * Every CLI-created agent carries the cross-client placement hint so it becomes a
+ * workspace tab in each connected client, from live updates and reconnect alike.
+ * The marker stays authoritative over a user label of the same name.
+ */
+export function buildRunAgentLabels(labelFlags: string[] | undefined): Record<string, string> {
+  return {
+    ...parseRunLabels(labelFlags),
+    [AUTO_OPEN_AGENT_TAB_LABEL]: "true",
+  };
+}
+
 function parseRunLabels(labelFlags: string[] | undefined): Record<string, string> {
   return parseKeyValueFlags(labelFlags, {
     flagName: "--label",
@@ -607,7 +620,7 @@ export async function runRunCommand(
 
     const images = loadRunImages(options.image);
 
-    const labels = parseRunLabels(options.label);
+    const labels = buildRunAgentLabels(options.label);
     const env = parseRunEnv(options.env);
     const requestEnv = Object.keys(env).length > 0 ? env : undefined;
 

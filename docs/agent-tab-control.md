@@ -54,9 +54,10 @@ linked under the caller but never as first-class tabs.
 - The daemon learns a tab exists only through agent labels:
   `paseo.open-agent-tab.<clientId>` (`packages/protocol/src/agent-labels.ts`),
   written by `packages/app/src/subagents/use-open-agent-tab-labels.ts` whenever
-  a client has an agent tab open. Upstream PR #5 (`fm/paseo-cli-tabs`) adds a
-  `paseo.auto-open-agent-tab` placement hint that CLI-created agents carry and
-  the client honors during reconciliation.
+  a client has an agent tab open. `paseo run` stamps the
+  `paseo.auto-open-agent-tab` placement hint (`buildRunAgentLabels` in
+  `packages/cli/src/commands/agent/run.ts`) so CLI-created agents become tabs in
+  every client during reconciliation.
 
 ### What `feat/ui-tab-control` already shipped (commit 0def68bd9)
 
