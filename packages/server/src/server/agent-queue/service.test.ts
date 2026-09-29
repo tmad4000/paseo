@@ -235,6 +235,10 @@ describe("AgentQueueService", () => {
     });
     await harness.service.flushDrains();
     expect(harness.sent).toEqual([]);
+    await expect(
+      harness.service.waitForPendingDispatch(AGENT_ID, new AbortController().signal),
+    ).resolves.toBeUndefined();
+    expect(harness.agents.pendingPermissions).toBe(1);
     expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
       "attachment:a",
     ]);
@@ -324,6 +328,21 @@ describe("AgentQueueService", () => {
     expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
       "item-1",
       "item-2",
+    ]);
+  });
+
+  test("a dispatch observer reports an unknown outcome without retrying it", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.failSends(new Error("provider accepted, connection lost"));
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "uncertain", text: "once" });
+    await expect(
+      harness.service.waitForPendingDispatch(AGENT_ID, new AbortController().signal),
+    ).rejects.toThrow("not been confirmed submitted");
+    expect(await receipts.get(AGENT_ID, "uncertain")).toBe("pending");
+    expect(harness.attempts).toHaveLength(1);
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "uncertain",
     ]);
   });
 

@@ -113,6 +113,11 @@ durable receipt confirms provider submission. If a competing turn reserves the r
 head in place and retry at the next idle boundary. A pending permission blocks drain even without a
 foreground run. An ambiguous provider outcome remains unknown and is not retried automatically.
 
+`wait_for_finish` observes pending dispatch before checking the provider's state. Admission can
+precede run reservation, so an idle provider alone does not mean accepted input finished. A waiter's
+timeout or disconnect stops only the observation; it cannot cancel delivery. An unresolved queued
+outcome returns an error instead of a false idle result.
+
 The client must stop draining when the feature is on, or both sides send. `drainQueuedAgentMessage`
 becomes a no-op on hosts that advertise `agentMessageQueue`.
 

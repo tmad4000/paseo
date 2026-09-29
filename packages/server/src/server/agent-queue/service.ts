@@ -324,6 +324,47 @@ export class AgentQueueService {
     }
   }
 
+  /** Bridge durable admission to the provider run observed by wait-for-finish. */
+  async waitForPendingDispatch(agentId: string, signal: AbortSignal): Promise<void> {
+    const aborted = () => new DOMException("Queue dispatch wait aborted", "AbortError");
+    while (true) {
+      if (signal.aborted) throw aborted();
+      const pending = this.drainTails.get(agentId);
+      if (pending) {
+        // Abort only this observer. Delivery belongs to the daemon, not its socket.
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            signal.removeEventListener("abort", onAbort);
+            reject(aborted());
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+          void pending.then(() => {
+            signal.removeEventListener("abort", onAbort);
+            resolve();
+            return;
+          });
+        });
+        continue;
+      }
+      const queue = await this.store.get(agentId);
+      if (this.drainTails.has(agentId)) continue;
+      if (signal.aborted) throw aborted();
+      const agent = this.agentManager.getAgent(agentId);
+      if (
+        queue.items.length > 0 &&
+        (!agent || agent.lifecycle === "idle" || agent.lifecycle === "closed") &&
+        !this.agentManager.hasInFlightRun?.(agentId) &&
+        !this.agentManager.getPendingPermissions?.(agentId).length
+      ) {
+        // An uncertain or failed dispatch is still queued; it is not completion.
+        throw new Error(
+          "Queued input has not been confirmed submitted; inspect its delivery outcome",
+        );
+      }
+      return;
+    }
+  }
+
   /**
    * Sends the head of the queue when the agent is free. Serialized per agent so a
    * burst of state events cannot send the same item twice.

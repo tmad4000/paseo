@@ -8516,6 +8516,13 @@ export class Session {
     }
   }
 
+  private async hasLiveOrQueuedAgent(agentId: string): Promise<boolean> {
+    return (
+      Boolean(this.agentManager.getAgent(agentId)) ||
+      Boolean((await this.agentQueueService?.list(agentId))?.items.length)
+    );
+  }
+
   private async handleWaitForFinish(
     agentIdOrIdentifier: string,
     requestId: string,
@@ -8539,8 +8546,7 @@ export class Session {
     }
 
     const agentId = resolved.agentId;
-    const live = this.agentManager.getAgent(agentId);
-    if (!live) {
+    if (!(await this.hasLiveOrQueuedAgent(agentId))) {
       const record = await this.agentStorage.get(agentId);
       if (!record || record.internal) {
         this.emit({
@@ -8581,8 +8587,10 @@ export class Session {
       : null;
 
     try {
+      const signal = AbortSignal.any([abortController.signal, sourceSignal]);
+      await this.agentQueueService?.waitForPendingDispatch(agentId, signal);
       let result = await this.agentManager.waitForAgentEvent(agentId, {
-        signal: AbortSignal.any([abortController.signal, sourceSignal]),
+        signal,
         waitForActive: true,
       });
       let final = await this.getAgentPayloadById(agentId);

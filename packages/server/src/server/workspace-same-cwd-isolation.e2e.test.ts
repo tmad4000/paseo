@@ -1,4 +1,5 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
+import { MessageReceipts } from "./message-receipts/index.js";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -627,3 +628,51 @@ test("two workspaces sharing one cwd compute agent status per workspaceId", asyn
     rmSync(cwd, { recursive: true, force: true });
   }
 }, 180000);
+
+test("wait for finish includes admitted input before provider reservation and preserves permissions", async () => {
+  const daemon = await createTestPaseoDaemon({
+    isDev: true,
+    agentClients: { mock: new MockLoadTestAgentClient() },
+  });
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const originalSend = MessageReceipts.prototype.send;
+  const send = vi
+    .spyOn(MessageReceipts.prototype, "send")
+    .mockImplementation(async function (params) {
+      await gate;
+      return originalSend.call(this, params);
+    });
+  try {
+    await client.connect();
+    const agent = await client.createAgent({
+      provider: "mock",
+      cwd: daemon.staticDir,
+      model: "ten-second-stream",
+      modeId: "load-test",
+    });
+    await client.sendMessage(agent.id, "Emit synthetic plan approval.");
+    await expect.poll(() => send.mock.calls.length).toBe(1);
+    // The accepted input is durable, but no provider run is reserved yet.
+    // Timing out this observer must not abort daemon-owned dispatch.
+    expect((await client.waitForFinish(agent.id, 50)).status).toBe("timeout");
+    const waiting = client.waitForFinish(agent.id, 10_000);
+    release();
+    const parked = await waiting;
+    expect(parked.status).toBe("permission");
+    const requestId = parked.final?.pendingPermissions[0]?.id;
+    expect(requestId).toBeTruthy();
+    expect((await client.waitForFinish(agent.id, 1000)).final?.pendingPermissions[0]?.id).toBe(
+      requestId,
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+  } finally {
+    release();
+    send.mockRestore();
+    await client.close();
+    await daemon.close();
+  }
+}, 20_000);
