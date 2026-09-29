@@ -389,17 +389,78 @@ describe("VoiceSession streaming transcription", () => {
       await settle();
 
       expect(host.spokenInput).toEqual([]);
-      expect(host.emitted).toContainEqual(
-        expect.objectContaining({
-          type: "transcription_result",
-          payload: expect.objectContaining({ text: "" }),
-        }),
+      const transcriptIndex = host.emitted.findIndex(
+        (message) => message.type === "transcription_result" && message.payload.text === "",
       );
+      const issueIndex = host.emitted.findIndex(
+        (message) =>
+          message.type === "voice_input_state" && message.payload.recognitionIssue === "timed_out",
+      );
+      expect(transcriptIndex).toBeGreaterThanOrEqual(0);
+      // The issue follows the empty transcript, which is what returns the app to listening.
+      expect(issueIndex).toBeGreaterThan(transcriptIndex);
 
       await voiceSession.cleanup();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("reports a long utterance that recognized nothing, but not a short noise", async () => {
+    vi.useFakeTimers();
+    try {
+      const { voiceSession, detector, sttSession, host } = createVoiceSession();
+      await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID, "start", {
+        voiceCommandsEnabled: true,
+      });
+      async function utterance(segmentId: string, speechMs: number) {
+        detector.emit("speech_started");
+        await settle();
+        await vi.advanceTimersByTimeAsync(speechMs);
+        detector.emit("speech_stopped");
+        await settle();
+        sttSession.emitCommitted({ segmentId, previousSegmentId: null });
+        sttSession.emitTranscript({
+          segmentId,
+          transcript: "",
+          isFinal: true,
+          isLowConfidence: true,
+        });
+        await settle();
+        await settle();
+      }
+      function issues() {
+        return host.emitted.flatMap((message) =>
+          message.type === "voice_input_state" && message.payload.recognitionIssue
+            ? [message.payload.recognitionIssue]
+            : [],
+        );
+      }
+
+      await utterance("cough", 1_100);
+      expect(issues()).toEqual([]);
+      await utterance("mumble", 2_500);
+      expect(issues()).toEqual(["nothing_recognized"]);
+      expect(host.spokenInput).toEqual([]);
+
+      await voiceSession.cleanup();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("reports a recognizer error without pausing clients that lack verbal commands", async () => {
+    const { voiceSession, sttSession, host } = createVoiceSession();
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+
+    sttSession.emit("error", new Error("speech worker exited"));
+    await settle();
+
+    expect(host.emitted).toContainEqual({
+      type: "voice_input_state",
+      payload: { isSpeaking: false, recognitionIssue: "failed" },
+    });
+    await voiceSession.cleanup();
   });
 
   test("filters a low-confidence streaming final without submitting to the agent", async () => {

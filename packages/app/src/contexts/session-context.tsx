@@ -740,6 +740,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (message.payload.error) {
         voiceRuntime?.onInputError(serverId, message.payload.error);
       }
+      if (message.payload.recognitionIssue) {
+        voiceRuntime?.onRecognitionIssue(serverId, message.payload.recognitionIssue);
+      }
       voiceRuntime?.onServerSpeechStateChanged(serverId, message.payload.isSpeaking);
     });
 

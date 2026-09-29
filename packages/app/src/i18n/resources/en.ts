@@ -1855,6 +1855,15 @@ export const en = {
       "Listening on your host only for “unmute microphone”. Other speech is discarded. Stop voice to turn the mic off.",
     commandsUnavailable:
       "Verbal mute needs an updated host with local speech recognition. Use the microphone button here.",
+    notListening: "Not listening",
+    failure: {
+      "nothing-recognized": "Didn't catch that. Say it again.",
+      "recognition-stalled": "Speech recognition stopped responding. Stop and restart voice.",
+      "recognition-failed": "Speech recognition failed. Stop and restart voice.",
+      "recognition-unavailable": "Speech recognition is unavailable on the host.",
+      "host-disconnected": "Host disconnected. Microphone input is paused until it reconnects.",
+      "microphone-lost": "Microphone lost. Voice stopped.",
+    },
     actions: {
       mute: "Mute realtime voice",
       unmute: "Unmute realtime voice",

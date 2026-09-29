@@ -1847,6 +1847,15 @@ export const ja: TranslationResources = {
       "ホスト上で「unmute microphone」だけを認識します。他の発話は破棄されます。マイクをオフにするには音声セッションを終了してください。",
     commandsUnavailable:
       "音声ミュートには、更新済みのホストとローカル音声認識が必要です。マイクボタンを使用してください。",
+    notListening: "聞き取り停止中",
+    failure: {
+      "nothing-recognized": "聞き取れませんでした。もう一度話してください。",
+      "recognition-stalled": "音声認識が応答しなくなりました。音声を停止して再開してください。",
+      "recognition-failed": "音声認識に失敗しました。音声を停止して再開してください。",
+      "recognition-unavailable": "ホストで音声認識を利用できません。",
+      "host-disconnected": "ホストとの接続が切れました。再接続までマイク入力は一時停止します。",
+      "microphone-lost": "マイクが使えなくなりました。音声を停止しました。",
+    },
     actions: {
       mute: "リアルタイム音声をミュート",
       unmute: "リアルタイム音声のミュートを解除",

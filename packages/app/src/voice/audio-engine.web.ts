@@ -341,6 +341,13 @@ export function createAudioEngine(
         processor.connect(gain);
         gain.connect(context.destination);
 
+        // A track ends by itself when the device is unplugged or access is revoked.
+        for (const track of stream.getAudioTracks()) {
+          track.addEventListener("ended", () => {
+            if (refs.stream === stream) callbacks.onInterruption?.();
+          });
+        }
+
         refs.started = true;
         refs.stream = stream;
         refs.source = source;

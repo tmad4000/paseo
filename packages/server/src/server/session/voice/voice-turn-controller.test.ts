@@ -527,7 +527,36 @@ describe("voice turn controller", () => {
         expect.objectContaining({
           segmentId: "segment-1",
           transcript: "hello",
+          timedOut: true,
         }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports the detector's speech duration apart from recognition latency", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createControllerHarness();
+
+      await harness.controller.start();
+      harness.detector.emit("speech_started");
+      await settleSerialQueue();
+      await vi.advanceTimersByTimeAsync(2_000);
+      harness.detector.emit("speech_stopped");
+      await settleSerialQueue();
+      await vi.advanceTimersByTimeAsync(700);
+      harness.sttSessions[0]?.emitCommitted({ segmentId: "segment-1", previousSegmentId: null });
+      harness.sttSessions[0]?.emitTranscript({
+        segmentId: "segment-1",
+        transcript: "hello",
+        isFinal: true,
+      });
+      await settleSerialQueue();
+
+      expect(harness.onFinalTranscript).toHaveBeenCalledWith(
+        expect.objectContaining({ speechMs: 2_000, durationMs: 2_700, timedOut: false }),
       );
     } finally {
       vi.useRealTimers();

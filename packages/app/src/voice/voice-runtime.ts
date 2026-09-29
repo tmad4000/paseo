@@ -3,7 +3,13 @@ import type { AgentStreamEventPayload, SessionOutboundMessage } from "@getpaseo/
 import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities";
 import type { DaemonServerInfo } from "@/stores/session-store";
 import { createMicrophoneCue } from "@/voice/microphone-cue";
-import type { AudioEngine } from "@/voice/audio-engine-types";
+import {
+  createVoiceFailureTracker,
+  voiceFailureFromRecognitionIssue,
+  type VoiceFailureKind,
+} from "@/voice/voice-failure";
+import { createVoiceFailureCue, createVoiceReconnectedCue } from "@/voice/voice-failure-cue";
+import type { AudioEngine, AudioPlaybackSource } from "@/voice/audio-engine-types";
 import {
   THINKING_TONE_NATIVE_PCM_BASE64,
   THINKING_TONE_NATIVE_PCM_DURATION_MS,
@@ -27,6 +33,9 @@ const DISPLAY_VOLUME_PUBLISH_INTERVAL_MS = 120;
 const DISPLAY_VOLUME_CHANGE_EPSILON = 0.02;
 const DISPLAY_VOLUME_ATTACK = 0.35;
 const DISPLAY_VOLUME_RELEASE = 0.18;
+// Before voice stops over a failure, give its spoken cue this long to finish. A player that
+// never settles, such as one blocked by a phone call, must not hold the stop.
+const FAILURE_CUE_BEFORE_STOP_MAX_MS = 4_000;
 
 type TurnEventType = Extract<
   AgentStreamEventPayload["type"],
@@ -50,6 +59,8 @@ export interface VoiceRuntimeSnapshot {
   voiceCommandsEnabled: boolean;
   isMuteSwitching: boolean;
   muteError: string | null;
+  /** The input problem to show in the voice panel; also spoken when it begins. */
+  failure: VoiceFailureKind | null;
   activeServerId: string | null;
   activeAgentId: string | null;
 }
@@ -145,6 +156,7 @@ const INITIAL_SNAPSHOT: VoiceRuntimeSnapshot = {
   voiceCommandsEnabled: false,
   isMuteSwitching: false,
   muteError: null,
+  failure: null,
   activeServerId: null,
   activeAgentId: null,
 };
@@ -166,6 +178,7 @@ function snapshotsEqual(left: VoiceRuntimeSnapshot, right: VoiceRuntimeSnapshot)
     left.voiceCommandsEnabled === right.voiceCommandsEnabled &&
     left.isMuteSwitching === right.isMuteSwitching &&
     left.muteError === right.muteError &&
+    left.failure === right.failure &&
     left.activeServerId === right.activeServerId &&
     left.activeAgentId === right.activeAgentId
   );
@@ -204,6 +217,9 @@ export interface VoiceRuntime {
   onServerSpeechStateChanged(serverId: string, isSpeaking: boolean): void;
   onInputMutedChanged(serverId: string, muted: boolean): void;
   onInputError(serverId: string, error: string): void;
+  onRecognitionIssue(serverId: string, issue: string): void;
+  /** The device stopped delivering microphone audio. Announces it, then stops voice. */
+  handleMicrophoneLost(): Promise<void>;
   onTurnEvent(serverId: string, agentId: string, eventType: TurnEventType): void;
 }
 
@@ -236,6 +252,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     timeout: null,
     playing: false,
   };
+  const failures = createVoiceFailureTracker();
   const cuePcm16 = Uint8Array.from(Buffer.from(THINKING_TONE_NATIVE_PCM_BASE64, "base64"));
   const cueSource = {
     size: cuePcm16.byteLength,
@@ -540,6 +557,44 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     cue.timeout = setTimeout(playNext, THINKING_TONE_MIN_SILENCE_MS);
   }
 
+  function playLocalCue(source: AudioPlaybackSource, label: string): Promise<void> {
+    return deps.engine.play(source).then(
+      () => undefined,
+      (error) => {
+        console.warn(`[VoiceRuntime#${instanceId}] ${label} cue failed:`, error);
+      },
+    );
+  }
+
+  /** Shows the failure, and speaks it when it starts a new episode. */
+  function reportFailure(kind: VoiceFailureKind): Promise<void> {
+    const announce = failures.report(kind);
+    patchSnapshot({ failure: failures.current() });
+    if (!announce) {
+      return Promise.resolve();
+    }
+    // The thinking tone would otherwise suggest the agent is still working on what was said.
+    stopCue();
+    return playLocalCue(createVoiceFailureCue(kind), "Failure");
+  }
+
+  function clearFailures(kinds: readonly VoiceFailureKind[]): VoiceFailureKind[] {
+    const recovered = failures.clear(kinds);
+    patchSnapshot({ failure: failures.current() });
+    return recovered;
+  }
+
+  async function reportFailureBeforeStopping(kind: VoiceFailureKind): Promise<void> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      reportFailure(kind),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, FAILURE_CUE_BEFORE_STOP_MAX_MS);
+      }),
+    ]);
+    clearTimeout(timeout);
+  }
+
   const uploader: ContinuousVoiceUploader = {
     reset() {},
     pushPcmChunk(chunk) {
@@ -562,6 +617,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   };
 
   function resetToDisabledState(): void {
+    failures.reset();
     state.transportReady = false;
     state.turnInProgress = false;
     state.serverSpeechDetected = false;
@@ -632,18 +688,29 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         : await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
       if (generation !== state.generation) return;
       if (state.snapshot.voiceCommandsEnabled && !response.voiceCommandsEnabled) {
-        throw new Error("Local speech recognition is unavailable. Start voice again to reconnect.");
+        void reportFailure("recognition-unavailable");
+        return;
       }
       state.transportReady = true;
       patchSnapshot({ muteError: null });
+      // The host re-created its recognizer, so every earlier failure is stale.
+      const recovered = clearFailures([
+        "host-disconnected",
+        "recognition-unavailable",
+        "recognition-failed",
+        "recognition-stalled",
+        "nothing-recognized",
+      ]);
+      if (recovered.includes("host-disconnected")) {
+        void playLocalCue(createVoiceReconnectedCue(), "Reconnected");
+      }
       if (!playback.activeGroupId) {
         patchSnapshot((prev) => ({ ...prev, phase: "listening" }));
       }
     } catch (error) {
       if (generation !== state.generation) return;
-      patchSnapshot({
-        muteError: error instanceof Error ? error.message : "Voice reconnect failed.",
-      });
+      console.warn(`[VoiceRuntime#${instanceId}] Voice reconnect failed:`, error);
+      void reportFailure("host-disconnected");
     } finally {
       if (generation === state.generation) {
         patchSnapshot((prev) => ({ ...prev, isVoiceSwitching: false }));
@@ -700,9 +767,6 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       }
       if (!connected) {
         state.transportReady = false;
-        patchSnapshot({
-          muteError: "Host disconnected. Microphone input is paused until reconnected.",
-        });
         if (!state.snapshot.isVoiceMode) return;
         state.generation += 1;
         state.turnInProgress = false;
@@ -713,6 +777,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         deps.engine.stop();
         deps.engine.clearQueue();
         session.adapter.setAssistantAudioPlaying(false);
+        void reportFailure("host-disconnected");
         return;
       }
       void resyncVoiceMode(serverId);
@@ -845,12 +910,22 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         await deps.engine.initialize();
         // COMPAT(voiceVerbalMute): added in fork v0.2.0, remove gate after 2027-03-21.
         const supportsCommands = serverInfo?.features?.voiceVerbalMute === true;
-        const response = supportsCommands
-          ? await session.adapter.setVoiceMode(true, agentId, {
-              voiceCommandsEnabled: true,
-              isMuted: false,
-            })
-          : await session.adapter.setVoiceMode(true, agentId);
+        let response: { voiceCommandsEnabled?: boolean; isMuted?: boolean };
+        try {
+          response = supportsCommands
+            ? await session.adapter.setVoiceMode(true, agentId, {
+                voiceCommandsEnabled: true,
+                isMuted: false,
+              })
+            : await session.adapter.setVoiceMode(true, agentId);
+        } catch (error) {
+          // The host starts its recognizer while enabling voice mode, so a rejection with the
+          // host still connected means recognition could not start there.
+          await reportFailureBeforeStopping(
+            session.connected ? "recognition-unavailable" : "host-disconnected",
+          );
+          throw error;
+        }
         enabledCurrentVoiceMode = true;
         await deps.engine.startCapture();
         if (state.generation !== generation) {
@@ -870,6 +945,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           voiceCommandsEnabled: response.voiceCommandsEnabled === true,
           isMuteSwitching: false,
           muteError: null,
+          failure: null,
         }));
       } catch (error) {
         if (enabledCurrentVoiceMode) {
@@ -960,8 +1036,23 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
     onInputError(serverId, error) {
       if (serverId !== state.snapshot.activeServerId || !state.snapshot.isVoiceMode) return;
+      console.warn(`[VoiceRuntime#${instanceId}] Host input error: ${error}`);
       state.transportReady = false;
-      patchSnapshot({ muteError: error });
+      void reportFailure("recognition-failed");
+    },
+
+    onRecognitionIssue(serverId, issue) {
+      if (serverId !== state.snapshot.activeServerId || !state.snapshot.isVoiceMode) return;
+      const kind = voiceFailureFromRecognitionIssue(issue);
+      // Muted speech is discarded by design; a miss while muted is not news.
+      if (!kind || (kind === "nothing-recognized" && state.snapshot.isMuted)) return;
+      void reportFailure(kind);
+    },
+
+    async handleMicrophoneLost() {
+      if (!state.snapshot.isVoiceMode) return;
+      await reportFailureBeforeStopping("microphone-lost");
+      await api.stopVoice();
     },
 
     onInputMutedChanged(serverId, muted) {
@@ -1037,6 +1128,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       }
 
       if (text.trim()) {
+        // Recognition works again, so the next miss or stall is a new episode.
+        clearFailures(["nothing-recognized", "recognition-stalled", "recognition-failed"]);
         state.turnInProgress = true;
         patchSnapshot((prev) => ({ ...prev, phase: "waiting" }));
         reconcileCue();

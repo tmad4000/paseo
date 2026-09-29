@@ -1883,6 +1883,17 @@ export const fr: TranslationResources = {
       "Votre hôte écoute uniquement « unmute microphone ». Toute autre parole est ignorée. Arrêtez la session vocale pour couper le micro.",
     commandsUnavailable:
       "La commande vocale nécessite un hôte à jour avec reconnaissance locale. Utilisez le bouton du micro.",
+    notListening: "N’écoute pas",
+    failure: {
+      "nothing-recognized": "Je n’ai pas compris. Répétez.",
+      "recognition-stalled":
+        "La reconnaissance vocale ne répond plus. Arrêtez et relancez la voix.",
+      "recognition-failed": "La reconnaissance vocale a échoué. Arrêtez et relancez la voix.",
+      "recognition-unavailable": "La reconnaissance vocale n’est pas disponible sur l’hôte.",
+      "host-disconnected":
+        "Hôte déconnecté. L’entrée du micro est suspendue jusqu’à la reconnexion.",
+      "microphone-lost": "Micro perdu. La session vocale s’est arrêtée.",
+    },
     actions: {
       mute: "Couper la voix en temps réel",
       unmute: "Réactiver la voix en temps réel",

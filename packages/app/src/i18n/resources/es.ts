@@ -1879,6 +1879,16 @@ export const es: TranslationResources = {
       "Tu equipo escucha solo «unmute microphone». El resto se descarta. Detén la sesión de voz para apagar el micrófono.",
     commandsUnavailable:
       "El silencio por voz requiere un equipo actualizado con reconocimiento local. Usa el botón del micrófono.",
+    notListening: "No escucha",
+    failure: {
+      "nothing-recognized": "No lo entendí. Dilo otra vez.",
+      "recognition-stalled": "El reconocimiento de voz dejó de responder. Detén y reinicia la voz.",
+      "recognition-failed": "Falló el reconocimiento de voz. Detén y reinicia la voz.",
+      "recognition-unavailable": "El reconocimiento de voz no está disponible en el host.",
+      "host-disconnected":
+        "Host desconectado. La entrada del micrófono está en pausa hasta que se reconecte.",
+      "microphone-lost": "Se perdió el micrófono. La voz se detuvo.",
+    },
     actions: {
       mute: "Silenciar voz en tiempo real",
       unmute: "Activar voz en tiempo real",

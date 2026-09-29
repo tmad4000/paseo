@@ -1864,6 +1864,15 @@ export const ptBR: TranslationResources = {
       "Seu host escuta apenas “unmute microphone”. As outras falas são descartadas. Encerre a sessão de voz para desligar o microfone.",
     commandsUnavailable:
       "O comando de silenciar exige um host atualizado com reconhecimento local. Use o botão do microfone.",
+    notListening: "Não está ouvindo",
+    failure: {
+      "nothing-recognized": "Não entendi. Diga de novo.",
+      "recognition-stalled": "O reconhecimento de voz parou de responder. Pare e reinicie a voz.",
+      "recognition-failed": "O reconhecimento de voz falhou. Pare e reinicie a voz.",
+      "recognition-unavailable": "O reconhecimento de voz não está disponível no host.",
+      "host-disconnected": "Host desconectado. A entrada do microfone está pausada até reconectar.",
+      "microphone-lost": "Microfone perdido. A voz foi interrompida.",
+    },
     actions: {
       mute: "Silenciar voz em tempo real",
       unmute: "Ativar voz em tempo real",

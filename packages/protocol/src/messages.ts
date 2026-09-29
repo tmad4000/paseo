@@ -3728,6 +3728,9 @@ export const VoiceInputStateMessageSchema = z.object({
     error: z.string().optional(),
     isMuted: z.boolean().optional(),
     isSpeaking: z.boolean(),
+    // "nothing_recognized" | "timed_out" | "failed". A string so later hosts can add values
+    // that older clients ignore instead of rejecting the message.
+    recognitionIssue: z.string().optional(),
   }),
 });
 

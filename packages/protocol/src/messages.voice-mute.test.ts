@@ -28,6 +28,12 @@ describe("voice mute wire compatibility", () => {
       payload: { isSpeaking: false, isMuted: true, error: "Recognition failed" },
     },
     { type: "voice_input_state", payload: { isSpeaking: false, isMuted: true } },
+    { type: "voice_input_state", payload: { isSpeaking: false, recognitionIssue: "timed_out" } },
+    // A value a later host adds must not make an older client reject the message.
+    {
+      type: "voice_input_state",
+      payload: { isSpeaking: false, recognitionIssue: "a_later_issue" },
+    },
     {
       type: "voice.input.set_muted.response",
       payload: { requestId: "r", muted: true, error: null },

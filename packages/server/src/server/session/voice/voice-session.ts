@@ -23,6 +23,10 @@ import { toResolver, type Resolvable } from "../../speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot, SpeechReadinessState } from "../../speech/speech-runtime.js";
 
 import { parseVoiceInputCommand } from "./voice-input-command.js";
+import {
+  resolveVoiceRecognitionIssue,
+  type VoiceRecognitionIssue,
+} from "./voice-recognition-issue.js";
 
 const PCM_SAMPLE_RATE = 16000;
 const PCM_CHANNELS = 1;
@@ -690,11 +694,18 @@ export class VoiceSession {
           transcript,
           language,
           durationMs,
+          speechMs,
+          timedOut,
           avgLogprob,
           isLowConfidence,
         }) => {
           const requestId = uuidv4();
           const transcriptText = isLowConfidence ? "" : transcript.trim();
+          const recognitionIssue = this.resolveRecognitionIssue({
+            transcript: transcriptText,
+            speechMs,
+            timedOut,
+          });
           if (this.voiceCommandsEnabled) {
             const command = parseVoiceInputCommand(transcriptText);
             if (command || this.inputMuted) {
@@ -704,6 +715,7 @@ export class VoiceSession {
                 // Reset failures are already surfaced by the controller's onError callback.
                 void this.voiceTurnController?.resetInput(this.inputMuted).catch(() => undefined);
               }
+              if (this.isVoiceMode) this.emitRecognitionIssue(recognitionIssue);
               return;
             }
           }
@@ -737,6 +749,8 @@ export class VoiceSession {
             ...(avgLogprob !== undefined ? { avgLogprob } : {}),
             ...(isLowConfidence !== undefined ? { isLowConfidence } : {}),
           });
+          // After the empty transcription_result, which returns the app to listening.
+          this.emitRecognitionIssue(recognitionIssue);
         },
         onError: (error) => {
           this.sessionLogger.error({ err: error }, "Voice turn controller failed");
@@ -747,8 +761,12 @@ export class VoiceSession {
                 isSpeaking: false,
                 isMuted: this.inputMuted,
                 error: "Speech recognition failed. Stop and restart voice to reconnect.",
+                recognitionIssue: "failed",
               },
             });
+          } else {
+            // Without `error`, clients keep uploading so the controller's reconnect can recover.
+            this.emitRecognitionIssue("failed");
           }
         },
       },
@@ -771,6 +789,29 @@ export class VoiceSession {
     this.voiceTurnController = null;
     this.controllerSupportsInputCommands = false;
     await controller.stop();
+  }
+
+  private resolveRecognitionIssue(input: {
+    transcript: string;
+    speechMs: number;
+    timedOut: boolean;
+  }): VoiceRecognitionIssue | null {
+    const recognitionIssue = resolveVoiceRecognitionIssue({
+      ...input,
+      inputMuted: this.inputMuted,
+    });
+    if (recognitionIssue) {
+      this.sessionLogger.warn(
+        { recognitionIssue, speechMs: input.speechMs, timedOut: input.timedOut },
+        "Voice utterance produced no text",
+      );
+    }
+    return recognitionIssue;
+  }
+
+  private emitRecognitionIssue(recognitionIssue: VoiceRecognitionIssue | null): void {
+    if (!recognitionIssue) return;
+    this.emit({ type: "voice_input_state", payload: { isSpeaking: false, recognitionIssue } });
   }
 
   private handleVoiceSpeechStopped(): void {

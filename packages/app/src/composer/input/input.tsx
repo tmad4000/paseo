@@ -28,6 +28,7 @@ import { RealtimeVoiceOverlay } from "@/components/realtime-voice-overlay";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useSessionStore } from "@/stores/session-store";
 import { useVoiceOptional } from "@/contexts/voice-context";
+import type { VoiceFailureKind } from "@/voice/voice-failure";
 import { useToast } from "@/contexts/toast-context";
 import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities";
 import {
@@ -568,6 +569,7 @@ function MessageInputOverlay({
         voiceCommandsEnabled: boolean;
         isMuteSwitching: boolean;
         muteError: string | null;
+        failure: VoiceFailureKind | null;
         toggleMute: () => void;
       }
     | null
@@ -612,6 +614,7 @@ function MessageInputOverlay({
         voiceCommandsEnabled={voice.voiceCommandsEnabled}
         isMuteSwitching={voice.isMuteSwitching}
         muteError={voice.muteError}
+        failure={voice.failure}
         isSwitching={voice.isVoiceSwitching}
         isAgentRunning={isAgentRunning}
         isCancellingAgent={isCancellingAgent}

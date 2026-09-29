@@ -1839,6 +1839,16 @@ export const ko: TranslationResources = {
     mutedHint:
       "호스트에서 “unmute microphone”만 듣고 있습니다. 다른 음성은 무시됩니다. 마이크를 끄려면 음성을 중지하세요.",
     commandsUnavailable: "음성 명령을 사용하려면 로컬 음성 인식이 필요합니다.",
+    notListening: "듣지 않는 중",
+    failure: {
+      "nothing-recognized": "알아듣지 못했습니다. 다시 말해 주세요.",
+      "recognition-stalled": "음성 인식이 응답하지 않습니다. 음성을 중지했다가 다시 시작하세요.",
+      "recognition-failed": "음성 인식에 실패했습니다. 음성을 중지했다가 다시 시작하세요.",
+      "recognition-unavailable": "호스트에서 음성 인식을 사용할 수 없습니다.",
+      "host-disconnected":
+        "호스트 연결이 끊어졌습니다. 다시 연결될 때까지 마이크 입력이 일시 중지됩니다.",
+      "microphone-lost": "마이크를 사용할 수 없습니다. 음성이 중지되었습니다.",
+    },
     actions: {
       mute: "실시간 음성 음소거",
       unmute: "실시간 음성 음소거 해제",

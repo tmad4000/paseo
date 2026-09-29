@@ -34,6 +34,7 @@ describe("voice microphone controls", () => {
     voiceCommandsEnabled: true,
     isMuteSwitching: false,
     muteError: null,
+    failure: null,
     onToggleMute,
     onStop,
   };
@@ -83,6 +84,30 @@ describe("voice microphone controls", () => {
     const stop = container.querySelector<HTMLElement>('[aria-label="Stop realtime voice"]')!;
     await act(async () => stop.click());
     expect(onStop).toHaveBeenCalledOnce();
+  });
+
+  it("says it is not listening and why when input stops reaching the agent", async () => {
+    await render({ isMuted: false, failure: "host-disconnected" });
+    expect(container.textContent).toContain("Not listening");
+    expect(container.textContent).not.toContain("Microphone on");
+    // Instructions for a working microphone would contradict the failure.
+    expect(container.textContent).not.toContain("Say “mute microphone”");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Host disconnected. Microphone input is paused until it reconnects.",
+    );
+    await render({ isMuted: true, failure: "recognition-stalled" });
+    expect(container.textContent).toContain("Not listening");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Speech recognition stopped responding. Stop and restart voice.",
+    );
+  });
+
+  it("keeps listening status for a single missed utterance", async () => {
+    await render({ isMuted: false, failure: "nothing-recognized" });
+    expect(container.textContent).toContain("Microphone on");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Didn't catch that. Say it again.",
+    );
   });
 
   it("prevents duplicate tap requests while a mute change is pending", async () => {

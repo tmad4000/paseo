@@ -7,6 +7,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { FOOTER_HEIGHT } from "@/constants/layout";
 import { useVoiceTelemetry } from "@/contexts/voice-context";
 import type { Theme } from "@/styles/theme";
+import { isVoiceFailureBlocking, type VoiceFailureKind } from "@/voice/voice-failure";
 import { VolumeMeter } from "./volume-meter";
 
 interface RealtimeVoiceOverlayProps {
@@ -15,6 +16,7 @@ interface RealtimeVoiceOverlayProps {
   voiceCommandsEnabled: boolean;
   isMuteSwitching: boolean;
   muteError: string | null;
+  failure: VoiceFailureKind | null;
   isAgentRunning?: boolean;
   isCancellingAgent?: boolean;
   onToggleMute: () => void;
@@ -50,6 +52,7 @@ export function RealtimeVoiceOverlay({
   voiceCommandsEnabled,
   isMuteSwitching,
   muteError,
+  failure,
   isAgentRunning,
   isCancellingAgent,
   onToggleMute,
@@ -79,17 +82,28 @@ export function RealtimeVoiceOverlay({
     () => [styles.actionButton, styles.stopButton, isSwitching ? styles.buttonDisabled : undefined],
     [isSwitching],
   );
+  const notListening = failure !== null && isVoiceFailureBlocking(failure);
+  let statusLabel = t("realtimeVoice.listening");
+  if (notListening) statusLabel = t("realtimeVoice.notListening");
+  else if (isMuted) statusLabel = t("realtimeVoice.muted");
   return (
     <View style={styles.panel}>
       <View accessibilityLiveRegion="polite" style={styles.status}>
-        <Text style={isMuted ? styles.mutedLabel : styles.label}>
-          {isMuted ? t("realtimeVoice.muted") : t("realtimeVoice.listening")}
+        <Text style={isMuted || notListening ? styles.mutedLabel : styles.label}>
+          {statusLabel}
         </Text>
-        <Text style={styles.hint}>
-          {voiceCommandsEnabled
-            ? t(isMuted ? "realtimeVoice.mutedHint" : "realtimeVoice.commandHint")
-            : t("realtimeVoice.commandsUnavailable")}
-        </Text>
+        {!notListening && (
+          <Text style={styles.hint}>
+            {voiceCommandsEnabled
+              ? t(isMuted ? "realtimeVoice.mutedHint" : "realtimeVoice.commandHint")
+              : t("realtimeVoice.commandsUnavailable")}
+          </Text>
+        )}
+        {failure && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {t(`realtimeVoice.failure.${failure}`)}
+          </Text>
+        )}
         {muteError && (
           <Text accessibilityRole="alert" style={styles.error}>
             {muteError}

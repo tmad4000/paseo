@@ -1,6 +1,7 @@
 export interface AudioEngineCallbacks {
   onCaptureData(pcm: Uint8Array): void;
   onVolumeLevel(level: number): void;
+  /** Capture ended without being asked: an OS audio interruption or the input device going away. */
   onInterruption?(): void;
   onError?(error: Error): void;
 }
