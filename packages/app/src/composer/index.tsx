@@ -2037,7 +2037,7 @@ function ComposerContentImpl({
             return;
           }
           if (result.status === "taken") {
-            setUserInput(result.text);
+            replaceUserInput(result.text);
             setSelectedAttachments(result.attachments);
           }
         })();
@@ -2061,7 +2061,6 @@ function ComposerContentImpl({
       replaceUserInput,
       serverId,
       setSelectedAttachments,
-      setUserInput,
       supportsAgentMessageQueue,
     ],
   );

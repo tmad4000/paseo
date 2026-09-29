@@ -37,6 +37,7 @@ import {
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { hasGithubAuth, createTempGithubRepo } from "../support/helpers/github-fixtures";
 import { getServerId } from "../support/helpers/server-id";
+import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { openFileExplorer } from "../support/helpers/file-explorer";
 import { attachFileFromMenu, controlFileUploadCompletion } from "../support/helpers/composer";
 
@@ -222,6 +223,83 @@ test.describe("Composer attachments", () => {
       await expectQueuedMessageButton(page);
       await expectComposerDraft(page, "");
     } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("editing a queued message opens its text and attachments for resubmission", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while a disposable queued message is edited.",
+    });
+    try {
+      await fillComposerDraft(page, "Original queued text");
+      await attachImageFromMenu(page, TEST_IMAGE);
+      await expectAttachmentPill(page, "composer-image-attachment-pill");
+      await sendDraftToQueue(page);
+      await expectQueuedMessageButton(page);
+      await expectComposerDraft(page, "");
+
+      await page.getByRole("button", { name: "Edit queued message" }).click();
+      await expectComposerDraft(page, "Original queued text");
+      await expectAttachmentPill(page, "composer-image-attachment-pill");
+      await expect(page.getByRole("button", { name: "Edit queued message" })).toHaveCount(0);
+
+      await fillComposerDraft(page, "Revised queued text");
+      await sendDraftToQueue(page);
+      await expectQueuedMessageButton(page);
+      await expectComposerDraft(page, "");
+      await page.getByRole("button", { name: "Edit queued message" }).click();
+      await expectComposerDraft(page, "Revised queued text");
+      await expectAttachmentPill(page, "composer-image-attachment-pill");
+      await pressInterruptShortcut(page);
+      await expectAgentIdle(page, 15_000);
+      await expectComposerDraft(page, "Revised queued text");
+      await expectAttachmentPill(page, "composer-image-attachment-pill");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("a disconnected queued Edit keeps the message available for retry", async ({ page }) => {
+    test.setTimeout(120_000);
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-retry-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while a disposable queued Edit disconnects.",
+    });
+    try {
+      await fillComposerDraft(page, "Keep this queued message");
+      await sendDraftToQueue(page);
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(1);
+      const edit = page.getByRole("button", { name: "Edit queued message" });
+      gate.holdNextServerMessage("agent.queue.get_item_images.response");
+      await edit.click();
+      await gate.waitForHeldServerMessage("agent.queue.get_item_images.response");
+      await gate.drop();
+      await expect(
+        page.getByRole("alert").filter({ hasText: /socket|connect|closed/i }),
+      ).toBeVisible();
+      await expect(edit).toBeVisible();
+      await expectComposerDraft(page, "");
+      expect(
+        (await agent.client.listQueuedAgentMessages(agent.agentId)).items.map((item) => item.text),
+      ).toEqual(["Keep this queued message"]);
+
+      gate.restoreFresh();
+      await gate.waitForServerMessage("fetch_agent_timeline_response", 2);
+      await edit.click();
+      await expectComposerDraft(page, "Keep this queued message");
+      await expect(edit).toHaveCount(0);
+    } finally {
+      gate.restore();
       await agent.cleanup();
     }
   });

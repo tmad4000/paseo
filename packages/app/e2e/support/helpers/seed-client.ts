@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
+import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import { connectDaemonClient } from "./daemon-client-loader";
 import { withProjectOwnership } from "./project-ownership";
 import { createTempDirectory, createTempGitRepo } from "./workspace";
@@ -28,6 +29,7 @@ interface SeedProjectDescriptor {
  * prefer those wrappers over reaching for this client directly.
  */
 export interface SeedDaemonClient {
+  listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot>;
   connect(): Promise<void>;
   close(): Promise<void>;
   addProject(cwd: string): Promise<{
