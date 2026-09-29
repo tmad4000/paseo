@@ -243,6 +243,34 @@ describe("AgentQueueService", () => {
     expect(harness.sent.map((item) => item.messageId)).toEqual(["attachment:a"]);
   });
 
+  test("permission state resolution without a stream event wakes an idle queue", async () => {
+    harness.service.setMessageReceipts(new MessageReceipts(join(dir, "agent-requests")));
+    harness.agents.pendingPermissions = 1;
+    harness.agents.emitLifecycle("idle");
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "yes", text: "yes" });
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+    harness.agents.pendingPermissions = 0;
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent.map((item) => item.messageId)).toEqual(["yes"]);
+  });
+
+  test("a pre-upgrade direct-send receipt suppresses a default typed retry", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    await receipts.send({
+      agentId: AGENT_ID,
+      messageId: "old-direct",
+      request: { prompt: "original", activeTurnBehavior: "interrupt" },
+      send: async () => {},
+    });
+    harness.service.setMessageReceipts(receipts);
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "old-direct", text: "original" });
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
   test("a competing run retains the head and clears only its pre-provider receipt", async () => {
     const receipts = new MessageReceipts(join(dir, "agent-requests"));
     harness.service.setMessageReceipts(receipts);

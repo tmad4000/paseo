@@ -152,7 +152,8 @@ export const fr: TranslationResources = {
       unmuteVoice: "Réactiver la voix",
       muteVoice: "Voix muette",
       dictation: "Dictée",
-      interruptBeforeVoice: "Interrompre l'agent avant de démarrer le mode vocal",
+      interruptBeforeVoice:
+        "Mettez à jour l’hôte pour utiliser la voix pendant que l’agent travaille",
     },
     attachments: {
       addImage: "Ajouter une image",

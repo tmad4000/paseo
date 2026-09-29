@@ -138,6 +138,62 @@ async function settle(): Promise<void> {
 }
 
 describe("VoiceSession streaming transcription", () => {
+  test("a negotiated attachment rejects missing tokens and stale mute/stop requests", async () => {
+    const { voiceSession, host } = createVoiceSession();
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID, "start", {
+      attachmentId: "attachment",
+      voiceCommandsEnabled: true,
+    });
+    expect(voiceSession.acceptsInput()).toBe(false);
+    expect(voiceSession.acceptsInput("attachment", "test-generation")).toBe(true);
+    await voiceSession.handleSetInputMuted({
+      muted: true,
+      requestId: "stale",
+      attachmentId: "old",
+      generation: "old",
+    });
+    await voiceSession.handleSetVoiceMode(false, VOICE_AGENT_ID, "stale-stop", {
+      attachmentId: "old",
+      generation: "old",
+    });
+    expect(voiceSession.isActiveForAgent(VOICE_AGENT_ID)).toBe(true);
+    expect(host.emitted).toContainEqual(
+      expect.objectContaining({
+        type: "voice.input.set_muted.response",
+        payload: expect.objectContaining({ muted: false, error: expect.any(String) }),
+      }),
+    );
+    await voiceSession.cleanup();
+  });
+
+  test("stopping aborts synthesis before it can emit into a later attachment", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const start = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tts: TextToSpeechProvider = {
+      async synthesizeSpeech() {
+        started();
+        await barrier;
+        return { stream: Readable.from([Buffer.from("audio")]), format: "pcm;rate=24000" };
+      },
+    };
+    const { voiceSession, host, speak } = createVoiceSession(tts);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    const pending = speak({ text: "old attachment", callerAgentId: VOICE_AGENT_ID });
+    await start;
+    await voiceSession.handleSetVoiceMode(false, VOICE_AGENT_ID);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    release();
+    await pending.catch(() => undefined);
+    expect(host.emitted.filter(isAudioOutput)).toEqual([]);
+    await voiceSession.cleanup();
+  });
+
   test("reads new visible assistant text at turn end for a live session without speak", async () => {
     const tts: TextToSpeechProvider = {
       async synthesizeSpeech() {
@@ -146,12 +202,16 @@ describe("VoiceSession streaming transcription", () => {
     };
     const { voiceSession, host } = createVoiceSession(tts);
     await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
-    voiceSession.handleAgentEvent({ type: "turn_started" } as AgentStreamEvent);
-    voiceSession.handleAgentEvent({
-      type: "timeline",
-      item: { type: "assistant_message", text: "Visible answer." },
-    } as AgentStreamEvent);
-    voiceSession.handleAgentEvent({ type: "turn_completed" } as AgentStreamEvent);
+    voiceSession.handleAgentEvent({ type: "turn_started", turnId: "turn" } as AgentStreamEvent);
+    voiceSession.handleAgentEvent(
+      {
+        type: "timeline",
+        item: { type: "assistant_message", text: "Visible answer." },
+        turnId: "turn",
+      } as AgentStreamEvent,
+      { seq: 1, epoch: "epoch" },
+    );
+    voiceSession.handleAgentEvent({ type: "turn_completed", turnId: "turn" } as AgentStreamEvent);
     try {
       await waitForAudioOutput(host);
       const audio = host.emitted.find((message) => message.type === "audio_output");
@@ -162,6 +222,80 @@ describe("VoiceSession streaming transcription", () => {
     } finally {
       await voiceSession.cleanup();
     }
+  });
+
+  test("fallback excludes other turns, reasoning, tool text and duplicate timeline delivery", async () => {
+    const read: string[] = [];
+    const tts: TextToSpeechProvider = {
+      async synthesizeSpeech(text) {
+        read.push(text);
+        return { stream: Readable.from([Buffer.from("audio")]), format: "pcm;rate=24000" };
+      },
+    };
+    const { voiceSession, host } = createVoiceSession(tts);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    voiceSession.handleAgentEvent({ type: "turn_started", provider: "codex", turnId: "current" });
+    for (const item of [
+      { type: "reasoning", text: "PRIVATE REASONING" },
+      { type: "tool_call", name: "shell", input: { text: "PRIVATE TOOL" } },
+    ])
+      voiceSession.handleAgentEvent(
+        { type: "timeline", provider: "codex", turnId: "current", item } as AgentStreamEvent,
+        { seq: 1, epoch: "e" },
+      );
+    voiceSession.handleAgentEvent(
+      {
+        type: "timeline",
+        provider: "codex",
+        turnId: "old",
+        item: { type: "assistant_message", text: "PRIVATE OLD TURN" },
+      },
+      { seq: 2, epoch: "e" },
+    );
+    const visible = {
+      type: "timeline",
+      provider: "codex",
+      turnId: "current",
+      item: { type: "assistant_message", text: "Visible." },
+    } as const;
+    voiceSession.handleAgentEvent(visible, { seq: 3, epoch: "e" });
+    voiceSession.handleAgentEvent(visible, { seq: 3, epoch: "e" });
+    voiceSession.handleAgentEvent({ type: "turn_completed", provider: "codex", turnId: "old" });
+    expect(read).toEqual([]);
+    voiceSession.handleAgentEvent({ type: "turn_completed", provider: "codex", turnId: "current" });
+    await waitForAudioOutput(host);
+    expect(read).toEqual(["Visible."]);
+    await voiceSession.cleanup();
+  });
+
+  test("an interrupted speak suppresses fallback for that same turn", async () => {
+    const tts: TextToSpeechProvider = {
+      async synthesizeSpeech() {
+        return { stream: Readable.from([Buffer.from("audio")]), format: "pcm;rate=24000" };
+      },
+    };
+    const { voiceSession, host, speak } = createVoiceSession(tts);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    voiceSession.handleAgentEvent({ type: "turn_started", provider: "codex", turnId: "turn" });
+    const playback = speak({ text: "Already attempted", callerAgentId: VOICE_AGENT_ID });
+    await waitForAudioOutput(host);
+    await voiceSession.handleAbort();
+    expect(await playback).toEqual({ ok: false, reason: "interrupted" });
+    // A duplicate start event must not reset the invocation marker.
+    voiceSession.handleAgentEvent({ type: "turn_started", provider: "codex", turnId: "turn" });
+    voiceSession.handleAgentEvent(
+      {
+        type: "timeline",
+        provider: "codex",
+        turnId: "turn",
+        item: { type: "assistant_message", text: "Already attempted" },
+      },
+      { seq: 1, epoch: "e" },
+    );
+    voiceSession.handleAgentEvent({ type: "turn_completed", provider: "codex", turnId: "turn" });
+    await settle();
+    expect(host.emitted.filter(isAudioOutput)).toHaveLength(1);
+    await voiceSession.cleanup();
   });
 
   test("barge-in stops playback while the active turn and child keep working", async () => {
@@ -345,7 +479,7 @@ describe("VoiceSession streaming transcription", () => {
       expect.objectContaining({
         agentId: VOICE_AGENT_ID,
         text: "continue working",
-        messageId: expect.stringContaining(":command-5"),
+        messageId: expect.any(String),
       }),
     ]);
     await voiceSession.cleanup();
@@ -400,7 +534,7 @@ describe("VoiceSession streaming transcription", () => {
       expect.objectContaining({
         agentId: VOICE_AGENT_ID,
         text: "ship the streaming final",
-        messageId: expect.stringContaining(":segment-1"),
+        messageId: expect.any(String),
       }),
     ]);
     expect(host.emitted).toContainEqual(

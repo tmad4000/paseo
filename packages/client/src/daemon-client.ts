@@ -3955,7 +3955,12 @@ export class DaemonClient {
   async setVoiceMode(
     enabled: boolean,
     agentId?: string,
-    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string },
+    input?: {
+      voiceCommandsEnabled?: boolean;
+      isMuted?: boolean;
+      attachmentId?: string;
+      generation?: string;
+    },
   ): Promise<SetVoiceModePayload> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
@@ -3988,11 +3993,14 @@ export class DaemonClient {
     return response;
   }
 
-  async setVoiceInputMuted(muted: boolean): Promise<boolean> {
+  async setVoiceInputMuted(
+    muted: boolean,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<boolean> {
     const requestId = this.createRequestId();
     const response = await this.sendRequest({
       requestId,
-      message: { type: "voice.input.set_muted.request", requestId, muted },
+      message: { type: "voice.input.set_muted.request", requestId, muted, ...transport },
       select: (msg) =>
         msg.type === "voice.input.set_muted.response" && msg.payload.requestId === requestId
           ? msg.payload
@@ -4242,8 +4250,8 @@ export class DaemonClient {
     this.sendSessionMessageStrict({ type: "dictation_stream_cancel", dictationId });
   }
 
-  async abortRequest(): Promise<void> {
-    this.sendSessionMessage({ type: "abort_request" });
+  async abortRequest(transport?: { attachmentId: string; generation: string }): Promise<void> {
+    this.sendSessionMessage({ type: "abort_request", ...transport });
   }
 
   async audioPlayed(

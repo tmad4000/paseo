@@ -150,7 +150,7 @@ export const ru: TranslationResources = {
       unmuteVoice: "Включить звук",
       muteVoice: "Отключить голос",
       dictation: "Диктовка",
-      interruptBeforeVoice: "Остановите агента перед запуском голосового режима",
+      interruptBeforeVoice: "Обновите хост, чтобы использовать голос, пока агент работает",
     },
     attachments: {
       addImage: "Добавить изображение",

@@ -13,6 +13,7 @@ import {
   isSystemInjectedEnvelope,
   setupFinishNotification,
   waitForAgentRunStartWithTimeout,
+  startAgentRun,
 } from "./agent-prompt.js";
 import type { AgentManagerEvent, ManagedAgent } from "./agent-manager.js";
 import type {
@@ -660,6 +661,75 @@ class SlowStartAgentClient implements AgentClient {
     return await this.createSession();
   }
 }
+
+test("queue acceptance waits on its own reserved provider run", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "queued-run-acceptance-"));
+  const client = new SlowStartAgentClient(null);
+  const manager = new AgentManager({ clients: { codex: client }, logger: createTestLogger() });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  try {
+    let accepted = false;
+    const pending = startAgentRun(manager, agent.id, "one", createTestLogger(), {
+      replaceRunning: false,
+      awaitRunStart: true,
+    }).then(() => {
+      accepted = true;
+      return undefined;
+    });
+    await vi.waitFor(() => expect(manager.hasInFlightRun(agent.id)).toBe(true));
+    expect(accepted).toBe(false);
+    await expect(
+      startAgentRun(manager, agent.id, "competing", createTestLogger(), {
+        replaceRunning: false,
+        awaitRunStart: true,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_RUN_BUSY" });
+    expect(accepted).toBe(false);
+    client.sessions[0].release();
+    await pending;
+    expect(accepted).toBe(true);
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("queue reservation preserves a pending permission without a foreground run", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "queued-permission-reservation-"));
+  const client = new SlowStartAgentClient(null);
+  const manager = new AgentManager({ clients: { codex: client }, logger: createTestLogger() });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  try {
+    client.sessions[0].pushEvent({
+      type: "permission_requested",
+      provider: "codex",
+      request: {
+        id: "approval-key",
+        provider: "codex",
+        kind: "tool",
+        name: "shell",
+        input: { command: "controlled" },
+      },
+    });
+    await vi.waitFor(() => expect(manager.getPendingPermissions(agent.id)).toHaveLength(1));
+    expect(manager.hasInFlightRun(agent.id)).toBe(false);
+    expect(() =>
+      manager.streamAgent(agent.id, "yes", { requireNoPendingPermissions: true }),
+    ).toThrow(/active run/);
+    expect(manager.getPendingPermissions(agent.id).map((request) => request.id)).toEqual([
+      "approval-key",
+    ]);
+    await manager.respondToPermission(agent.id, "approval-key", { behavior: "deny" });
+    expect(manager.getPendingPermissions(agent.id)).toEqual([]);
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
 
 /**
  * Real AgentManager driving a real agent, so the run-start wait exercises the production

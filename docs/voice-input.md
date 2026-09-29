@@ -28,7 +28,10 @@ an active attachment without the current owner releasing it.
 
 Speech stops current playback, not agent work. A later reply can still play. If the agent did not use
 the speak tool during a turn, the attached voice session reads only its visible final assistant text.
-The speak tool remains available before attachment and returns promptly if voice is detached.
+The speak tool is available before attachment when provider tools and speak are enabled, and returns
+promptly if voice is detached. Provider tool disablement still applies. Fallback reading is scoped to
+the current turn and live timeline sequence; reasoning, tool payloads and prior turns are excluded.
+An interrupted speak reports interrupted audio and suppresses a second fallback reading.
 
 ## When input fails
 

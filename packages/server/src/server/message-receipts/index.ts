@@ -10,6 +10,7 @@ const ReceiptSchema = z.object({
   agentId: z.string(),
   messageId: z.string().optional(),
   attachmentId: z.string().optional(),
+  voiceOwner: z.string().optional(),
   createdAt: z.string().optional(),
 });
 interface SendMessageInput {
@@ -17,6 +18,8 @@ interface SendMessageInput {
   messageId: string;
   request: unknown;
   attachmentId?: string;
+  voiceOwner?: string;
+  createdAt?: string;
   send: () => Promise<void>;
   prepare?: () => Promise<void>;
 }
@@ -29,8 +32,13 @@ export class MessageReceipts {
   async listForAttachment(input: {
     agentId: string;
     attachmentId: string;
+    voiceOwner?: string;
   }): Promise<
-    Array<{ messageId: string; state: "pending" | "completed" | "removed"; createdAt: string }>
+    Array<{
+      messageId: string;
+      state: "pending" | "sending" | "completed" | "removed";
+      createdAt: string;
+    }>
   > {
     const files = await readdir(this.directory).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
@@ -39,12 +47,7 @@ export class MessageReceipts {
     const records = await Promise.all(
       files
         .filter((name) => name.endsWith(".json"))
-        .map(async (name) => {
-          const parsed = ReceiptSchema.safeParse(
-            JSON.parse(await readFile(path.join(this.directory, name), "utf8")),
-          );
-          return parsed.success ? parsed.data : null;
-        }),
+        .map((name) => readReceipt(path.join(this.directory, name))),
     );
     return records
       .filter((record): record is NonNullable<typeof record> => record !== null)
@@ -52,11 +55,16 @@ export class MessageReceipts {
         (record) =>
           record.agentId === input.agentId &&
           record.attachmentId === input.attachmentId &&
+          record.voiceOwner === input.voiceOwner &&
           !!record.messageId,
       )
       .map((record) => ({
         messageId: record.messageId!,
-        state: record.state,
+        state:
+          record.state === "pending" &&
+          this.pending.has(digest(["send", record.agentId, record.messageId]))
+            ? ("sending" as const)
+            : record.state,
         createdAt: record.createdAt ?? "",
       }));
   }
@@ -79,6 +87,8 @@ export class MessageReceipts {
     messageId: string;
     request: unknown;
     attachmentId?: string;
+    voiceOwner?: string;
+    createdAt?: string;
   }): Promise<boolean> {
     const key = digest(["send", input.agentId, input.messageId]);
     const previous = this.pending.get(key);
@@ -96,13 +106,16 @@ export class MessageReceipts {
           state: "removed",
           agentId: input.agentId,
           messageId: input.messageId,
-          ...(input.attachmentId ? { attachmentId: input.attachmentId } : {}),
-          createdAt: new Date().toISOString(),
+          ...(input.attachmentId
+            ? { attachmentId: input.attachmentId, voiceOwner: input.voiceOwner }
+            : {}),
+          createdAt: input.createdAt ?? new Date().toISOString(),
         });
         return true;
       },
     );
     const tracked = result.then(() => undefined);
+    void tracked.catch(() => undefined);
     this.pending.set(key, tracked);
     try {
       return await result;
@@ -142,8 +155,10 @@ export class MessageReceipts {
       fingerprint,
       agentId: input.agentId,
       messageId: input.messageId,
-      ...(input.attachmentId ? { attachmentId: input.attachmentId } : {}),
-      createdAt: new Date().toISOString(),
+      ...(input.attachmentId
+        ? { attachmentId: input.attachmentId, voiceOwner: input.voiceOwner }
+        : {}),
+      createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await writeJsonFileAtomic(file, { ...receipt, state: "pending" });
     try {
@@ -151,7 +166,11 @@ export class MessageReceipts {
     } catch (error) {
       // A competing run rejected the synchronous reservation before provider dispatch.
       // This is the only post-receipt error safe to retry automatically.
-      if (error instanceof Error && "code" in error && error.code === "AGENT_RUN_BUSY") {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error.code === "AGENT_RUN_BUSY" || error.code === "AGENT_PROMPT_NOT_SUBMITTED")
+      ) {
         await rm(file, { force: true });
       }
       throw error;

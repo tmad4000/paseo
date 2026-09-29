@@ -122,3 +122,69 @@ test("known reservation loss clears the pending receipt but provider ambiguity d
   await requests.send({ ...input, send: async () => {} });
   expect(await requests.get("agent", "retryable")).toBe("completed");
 });
+
+test("attachment receipts retain client authority across owner reconstruction", async () => {
+  const { requests, directory } = await fixture();
+  await requests.send({
+    agentId: "agent",
+    messageId: "attachment:one",
+    attachmentId: "attachment",
+    voiceOwner: "principal/client-a",
+    request: {},
+    send: async () => {},
+  });
+  const reopened = new MessageReceipts(directory);
+  expect(
+    await reopened.listForAttachment({
+      agentId: "agent",
+      attachmentId: "attachment",
+      voiceOwner: "principal/client-b",
+    }),
+  ).toEqual([]);
+  expect(
+    await reopened.listForAttachment({
+      agentId: "agent",
+      attachmentId: "attachment",
+      voiceOwner: "principal/client-a",
+    }),
+  ).toHaveLength(1);
+});
+
+test("pre-dispatch preparation failure stays retryable, active dispatch is not unknown", async () => {
+  const { requests } = await fixture();
+  const input = {
+    agentId: "agent",
+    messageId: "attachment:one",
+    attachmentId: "attachment",
+    request: {},
+  };
+  await expect(
+    requests.send({
+      ...input,
+      send: async () => {
+        throw Object.assign(new Error("load failed"), { code: "AGENT_PROMPT_NOT_SUBMITTED" });
+      },
+    }),
+  ).rejects.toThrow("load failed");
+  expect(await requests.get(input.agentId, input.messageId)).toBe("absent");
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const pending = requests.send({
+    ...input,
+    send: async () => {
+      entered();
+      await barrier;
+    },
+  });
+  await started;
+  expect((await requests.listForAttachment(input))[0].state).toBe("sending");
+  release();
+  await pending;
+  expect((await requests.listForAttachment(input))[0].state).toBe("completed");
+});

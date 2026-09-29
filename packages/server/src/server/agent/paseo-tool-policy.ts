@@ -15,9 +15,6 @@ export function isPaseoToolEnabled(
   policy: ProviderPaseoToolsPolicy | undefined,
   toolName: string,
 ): boolean {
-  if (toolName === "speak") {
-    return true;
-  }
   if (!isPaseoToolPolicyEnabled(policy)) {
     return false;
   }

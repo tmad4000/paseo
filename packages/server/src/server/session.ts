@@ -218,6 +218,7 @@ import type { Resolvable } from "./speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
+import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
@@ -436,6 +437,7 @@ const nodeSessionFileSystem: SessionFileSystem = {
 type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
+  voiceOwner?: string;
   browserToolsBroker?: BrowserToolsBroker | null;
   clientId: string;
   permissions: readonly DaemonPermission[];
@@ -551,6 +553,7 @@ export interface SessionOptions {
     ) => void;
     unregisterVoiceCallerContext?: (agentId: string, generation: string) => void;
     isCurrent?: (agentId: string, generation: string) => boolean;
+    hasSpokenInTurn?: (agentId: string, turnId: string) => boolean;
   };
   dictation?: {
     finalTimeoutMs?: number;
@@ -822,6 +825,7 @@ export class Session {
   private readonly daemonSession: DaemonSession;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
+  private readonly voiceOwner?: string;
   private readonly messageReceipts: Pick<MessageReceipts, "send" | "listForAttachment">;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
   private readonly daemonServerId: string | undefined;
@@ -904,6 +908,7 @@ export class Session {
     this.pushNotifications = pushNotifications;
     this.paseoHome = paseoHome;
     this.messageReceipts = options.messageReceipts;
+    this.voiceOwner = options.voiceOwner;
     this.creationService = options.creationService;
     this.projectIcons = new ProjectIconReader(paseoHome);
     this.worktreesRoot = worktreesRoot;
@@ -1210,11 +1215,16 @@ export class Session {
             }),
           sendSpokenInput: async (agentId, text, messageId) => {
             if (!this.agentQueueService) throw new Error("Agent message queue is unavailable");
-            await this.agentQueueService.enqueue({
+            await sendOrQueuePromptToAgent({
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              queueService: this.agentQueueService,
+              logger: this.sessionLogger,
               agentId,
-              itemId: messageId,
+              messageId,
               text,
               origin: "voice",
+              voiceOwner: options.voiceOwner,
             });
           },
         },
@@ -1948,7 +1958,7 @@ export class Session {
           return;
         }
 
-        this.voiceSessions.handleAgentEvent(event.agentId, event.event);
+        this.voiceSessions.handleAgentEvent(event.agentId, event.event, event);
 
         if (
           this.voiceSessions.isActiveForAgent(event.agentId) &&
@@ -2690,10 +2700,15 @@ export class Session {
     }
     try {
       const [queue, receipts] = await Promise.all([
-        this.agentQueueService?.list(resolved.agentId),
+        this.agentQueueService?.listVoiceInputs(
+          resolved.agentId,
+          msg.attachmentId,
+          this.voiceOwner,
+        ),
         this.messageReceipts.listForAttachment({
           agentId: resolved.agentId,
           attachmentId: msg.attachmentId,
+          voiceOwner: this.voiceOwner,
         }),
       ]);
       const byId = new Map<
@@ -2704,13 +2719,14 @@ export class Session {
           createdAt: string;
         }
       >();
-      for (const item of queue?.items ?? []) {
+      for (const item of queue ?? []) {
         if (item.origin === "voice" && item.id.startsWith(`${msg.attachmentId}:`)) {
           byId.set(item.id, { messageId: item.id, state: "queued", createdAt: item.createdAt });
         }
       }
       for (const receipt of receipts) {
-        let state: "submitted" | "removed" | "unknown" = "unknown";
+        let state: "queued" | "submitted" | "removed" | "unknown" = "unknown";
+        if (receipt.state === "sending") state = "queued";
         if (receipt.state === "completed") state = "submitted";
         else if (receipt.state === "removed") state = "removed";
         byId.set(receipt.messageId, {
@@ -8417,9 +8433,13 @@ export class Session {
         msg.activeTurnBehavior !== "steer" &&
         this.agentQueueService
       ) {
-        await this.agentQueueService.enqueue({
+        const result = await sendOrQueuePromptToAgent({
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          queueService: this.agentQueueService,
+          logger: this.sessionLogger,
           agentId,
-          itemId: msg.messageId ?? uuidv4(),
+          messageId: msg.messageId,
           text: msg.text,
           ...(msg.images ? { images: msg.images } : {}),
           ...(msg.attachments ? { attachments: msg.attachments } : {}),
@@ -8431,7 +8451,7 @@ export class Session {
             agentId,
             accepted: true,
             error: null,
-            queued: true,
+            ...(result.queued ? { queued: true } : {}),
           },
         });
         return;

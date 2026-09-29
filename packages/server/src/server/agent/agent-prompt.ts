@@ -30,6 +30,8 @@ export type AgentRunController = Pick<
 
 export interface StartAgentRunOptions {
   replaceRunning?: boolean;
+  /** Wait on this iterator's accepted turn, never a later run on the same agent. */
+  awaitRunStart?: boolean;
   activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
   /** Ask the provider to deny permissions blocking this steer. */
@@ -77,9 +79,25 @@ async function startOrReplaceRun(
   replaced: boolean;
 }> {
   const replaced = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
-  const iterator = replaced
-    ? await agentManager.replaceAgentRun(agentId, prompt, options?.runOptions)
-    : agentManager.streamAgent(agentId, prompt, options?.runOptions);
+  let iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>;
+  if (replaced) {
+    iterator = await agentManager.replaceAgentRun(agentId, prompt, options?.runOptions);
+  } else {
+    try {
+      iterator = agentManager.streamAgent(agentId, prompt, options?.runOptions);
+    } catch (cause) {
+      // streamAgent reserves synchronously; an exception here preceded startTurn.
+      if (
+        options?.replaceRunning === false &&
+        !(cause instanceof Error && "code" in cause && cause.code === "AGENT_RUN_BUSY")
+      ) {
+        throw Object.assign(new Error("Agent run reservation failed", { cause }), {
+          code: "AGENT_PROMPT_NOT_SUBMITTED",
+        });
+      }
+      throw cause;
+    }
+  }
   return { iterator, replaced };
 }
 
@@ -120,7 +138,7 @@ export async function startAgentRun(
   try {
     return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
   } catch (error) {
-    if (!isStaleProviderSessionError(error)) throw error;
+    if (options?.replaceRunning === false || !isStaleProviderSessionError(error)) throw error;
     logger.info({ agentId, err: error }, "Provider session went stale; reopening from persistence");
     // The live session belongs to a retired plugin runtime. Reload swaps in a
     // fresh session on the current runtime while preserving history and labels.
@@ -153,12 +171,24 @@ async function startAgentRunInner(
     },
     "agent.session.start_stream.iterator_returned",
   );
+  let resolveStart!: () => void;
+  let rejectStart!: (error: unknown) => void;
+  const started = new Promise<void>((resolve, reject) => {
+    resolveStart = resolve;
+    rejectStart = reject;
+  });
+  void started.catch(() => undefined);
   void (async () => {
     try {
       try {
+        // The first yield of this reserved iterator is its accepted turn_started.
+        const first = await iterator.next();
+        if (first.done || first.value.type !== "turn_started")
+          throw new Error("Reserved agent run ended before acceptance");
+        resolveStart();
         await drainAgentRunIterator(iterator);
       } catch (error) {
-        if (!isStaleProviderSessionError(error)) throw error;
+        if (options?.replaceRunning === false || !isStaleProviderSessionError(error)) throw error;
         logger.info(
           { agentId, err: error },
           "Provider session went stale; reopening from persistence",
@@ -176,6 +206,7 @@ async function startAgentRunInner(
         "agent.session.iterator.drained",
       );
     } catch (error) {
+      rejectStart(error);
       logger.trace(
         {
           agentId,
@@ -188,6 +219,22 @@ async function startAgentRunInner(
       logger.error({ err: error, agentId }, "Agent stream failed");
     }
   })();
+  if (options?.awaitRunStart) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        started,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Provider submission outcome unknown: run start timed out")),
+            AGENT_RUN_START_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   return { disposition: "turn_started" };
 }
 
@@ -246,6 +293,7 @@ export interface SendPromptToAgentParams {
   replaceRunning?: boolean;
   /** Queue delivery waits while a provider permission request is pending. */
   blockPendingPermissions?: boolean;
+  awaitRunStart?: boolean;
   logger: Logger;
 }
 
@@ -314,31 +362,40 @@ export async function sendPromptToAgent(
 ): Promise<{ disposition: PromptDispatchDisposition }> {
   const unarchive = params.unarchive ?? true;
 
-  const record = await params.agentStorage.get(params.agentId);
-  if (record?.archivedAt) {
-    if (!unarchive) {
-      return { disposition: "turn_started" };
+  try {
+    const record = await params.agentStorage.get(params.agentId);
+    if (record?.archivedAt) {
+      if (!unarchive) {
+        return { disposition: "turn_started" };
+      }
+      await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
     }
-    await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
-  }
 
-  await ensureAgentLoaded(params.agentId, {
-    agentManager: params.agentManager,
-    agentStorage: params.agentStorage,
-    logger: params.logger,
-  });
+    await ensureAgentLoaded(params.agentId, {
+      agentManager: params.agentManager,
+      agentStorage: params.agentStorage,
+      logger: params.logger,
+    });
 
-  if (params.sessionMode) {
-    await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
-  }
+    if (params.sessionMode) {
+      await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
+    }
 
-  if (
-    params.blockPendingPermissions &&
-    params.agentManager.getPendingPermissions(params.agentId).length
-  ) {
-    const error = new Error(`Agent ${params.agentId} is waiting for permission`);
-    Object.assign(error, { code: "AGENT_RUN_BUSY" });
-    throw error;
+    if (
+      params.blockPendingPermissions &&
+      params.agentManager.getPendingPermissions(params.agentId).length
+    ) {
+      const error = new Error(`Agent ${params.agentId} is waiting for permission`);
+      Object.assign(error, { code: "AGENT_RUN_BUSY" });
+      throw error;
+    }
+  } catch (cause) {
+    // No prompt dispatch has happened; a queue can safely retain and retry this head.
+    if (params.replaceRunning === false)
+      throw Object.assign(new Error("Agent prompt preparation failed", { cause }), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      });
+    throw cause;
   }
 
   const runOptions = params.messageId
@@ -349,7 +406,10 @@ export async function sendPromptToAgent(
     replaceRunning: params.replaceRunning ?? true,
     activeTurnBehavior: params.activeTurnBehavior,
     clearPendingPermissions: params.clearPendingPermissions,
-    runOptions,
+    runOptions: params.blockPendingPermissions
+      ? { ...runOptions, requireNoPendingPermissions: true }
+      : runOptions,
+    awaitRunStart: params.awaitRunStart,
   });
 }
 

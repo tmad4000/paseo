@@ -5528,6 +5528,38 @@ describe("provider MCP tools", () => {
 describe("speak MCP tool", () => {
   const logger = createTestLogger();
 
+  it.each([{ enabled: false }, { disabledTools: ["speak"] }])(
+    "honors speak disablement in native and MCP catalogs: %j",
+    async (paseoToolPolicy) => {
+      const { agentManager, agentStorage } = createTestDeps();
+      const options = {
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: "voice-agent",
+        paseoToolPolicy,
+        logger,
+      };
+      const catalog = createPaseoToolCatalog(options);
+      expect(catalog.getTool("speak")).toBeUndefined();
+      const server = await createAgentMcpServer(options);
+      const client = await connectInMemoryMcpClient(server);
+      try {
+        if ("enabled" in paseoToolPolicy && paseoToolPolicy.enabled === false) {
+          await expect(client.listTools()).rejects.toThrow("Method not found");
+        } else {
+          expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain("speak");
+          expect(
+            (await client.callTool({ name: "speak", arguments: { text: "Private" } })).isError,
+          ).toBe(true);
+        }
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
   it("invokes registered speak handler for caller agent", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const speak = vi.fn().mockResolvedValue(undefined);

@@ -78,14 +78,22 @@ export interface VoiceSessionAdapter {
   setVoiceMode(
     enabled: boolean,
     agentId?: string,
-    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string },
+    input?: {
+      voiceCommandsEnabled?: boolean;
+      isMuted?: boolean;
+      attachmentId?: string;
+      generation?: string;
+    },
   ): Promise<{
     voiceCommandsEnabled?: boolean;
     isMuted?: boolean;
     attachmentId?: string;
     generation?: string;
   }>;
-  setVoiceInputMuted(muted: boolean): Promise<boolean>;
+  setVoiceInputMuted(
+    muted: boolean,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<boolean>;
   sendVoiceAudioChunk(
     audioData: string,
     mimeType: string,
@@ -110,7 +118,7 @@ export interface VoiceSessionAdapter {
     }>;
     nextCursor: string | null;
   }>;
-  abortRequest(): Promise<void>;
+  abortRequest(transport?: { attachmentId: string; generation: string }): Promise<void>;
   setAssistantAudioPlaying(isPlaying: boolean): void;
 }
 
@@ -299,6 +307,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   const failures = createVoiceFailureTracker();
   const inputStatuses = new Map<string, "queued" | "sent" | "removed" | "unknown">();
   let receiptReadTail = Promise.resolve();
+  let voiceLifecycleTail = Promise.resolve();
   const cuePcm16 = Uint8Array.from(Buffer.from(THINKING_TONE_NATIVE_PCM_BASE64, "base64"));
   const cueSource = {
     size: cuePcm16.byteLength,
@@ -671,6 +680,21 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     },
   };
 
+  function disableVoice(
+    adapter: VoiceSessionAdapter,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<unknown> {
+    return transport
+      ? adapter.setVoiceMode(false, undefined, transport)
+      : adapter.setVoiceMode(false);
+  }
+
+  function voiceTransport(): { attachmentId: string; generation: string } | undefined {
+    return state.attachmentId && state.transportGeneration
+      ? { attachmentId: state.attachmentId, generation: state.transportGeneration }
+      : undefined;
+  }
+
   function resetToDisabledState(): void {
     failures.reset();
     inputStatuses.clear();
@@ -691,7 +715,12 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     playCue: boolean,
   ): void {
     const previous = inputStatuses.get(messageId);
-    if (previous && previous !== "queued" && status === "queued") return;
+    if (
+      previous === "sent" ||
+      previous === "removed" ||
+      (previous === "unknown" && status === "queued")
+    )
+      return;
     if (previous === status) return;
     inputStatuses.set(messageId, status);
     patchSnapshot({ lastInputStatus: status });
@@ -795,7 +824,12 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       await deps.engine.initialize();
       if (generation !== state.generation) return;
       let options:
-        | { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string }
+        | {
+            voiceCommandsEnabled?: boolean;
+            isMuted?: boolean;
+            attachmentId?: string;
+            generation?: string;
+          }
         | undefined;
       if (state.snapshot.voiceCommandsEnabled) {
         options = {
@@ -809,7 +843,14 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       const response = options
         ? await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId, options)
         : await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
-      if (generation !== state.generation) return;
+      if (generation !== state.generation) {
+        if (response.attachmentId && response.generation)
+          await activeSession.adapter.setVoiceMode(false, undefined, {
+            attachmentId: response.attachmentId,
+            generation: response.generation,
+          });
+        return;
+      }
       if (
         state.attachmentId &&
         (response.attachmentId !== state.attachmentId || !response.generation)
@@ -953,8 +994,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       ) {
         return;
       }
-      if (state.transportGeneration && payload.generation !== state.transportGeneration) return;
-      if (state.attachmentId && payload.attachmentId !== state.attachmentId) return;
+      if (!api.acceptsVoiceTransport(serverId, payload)) return;
 
       const groupId = payload.groupId ?? payload.id;
       const chunkIndex = payload.chunkIndex ?? 0;
@@ -994,155 +1034,185 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     // Capture admission, generation checks, and rollback are one transition.
     // oxlint-disable-next-line complexity
     async startVoice(serverId, agentId) {
-      const session = sessions.get(serverId);
-      if (!session) {
-        throw new Error(`Voice runtime is not ready for host ${serverId}`);
-      }
-      if (!session.connected) {
-        throw new Error(`Host ${serverId} is not connected`);
-      }
-
-      const serverInfo = deps.getServerInfo(serverId);
-      const unavailableMessage = resolveVoiceUnavailableMessage({
-        serverInfo,
-        mode: "voice",
-      });
-      if (unavailableMessage) {
-        throw new Error(unavailableMessage);
-      }
-
-      const previousServerId = state.snapshot.activeServerId;
-      const previousAgentId = state.snapshot.activeAgentId;
-      const generation = state.generation + 1;
-      let enabledCurrentVoiceMode = false;
-      state.generation = generation;
-      state.attachmentId =
-        serverInfo?.features?.voiceConcurrentInput === true ? crypto.randomUUID() : null;
-      state.transportGeneration = null;
-      state.transportReady = false;
-      patchSnapshot((prev) => ({
-        ...prev,
-        isVoiceSwitching: true,
-        phase: "starting",
-        activeServerId: serverId,
-        activeAgentId: agentId,
-      }));
-
-      try {
-        if (
-          state.snapshot.isVoiceMode &&
-          previousServerId &&
-          (previousServerId !== serverId || previousAgentId !== agentId)
-        ) {
-          const previousSession = sessions.get(previousServerId);
-          if (previousSession) {
-            previousSession.adapter.setAssistantAudioPlaying(false);
-            await previousSession.adapter.setVoiceMode(false);
+      const requestedGeneration = ++state.generation;
+      const operation = voiceLifecycleTail
+        .catch(() => undefined)
+        // Capture admission and rollback must remain in the same serialized transition.
+        // oxlint-disable-next-line complexity
+        .then(async () => {
+          if (requestedGeneration !== state.generation) return undefined;
+          const session = sessions.get(serverId);
+          if (!session) {
+            throw new Error(`Voice runtime is not ready for host ${serverId}`);
           }
-        }
+          if (!session.connected) {
+            throw new Error(`Host ${serverId} is not connected`);
+          }
 
-        await deps.activateKeepAwake(KEEP_AWAKE_TAG).catch((error) => {
-          console.warn("[VoiceRuntime] Failed to activate keep-awake:", error);
-        });
+          const serverInfo = deps.getServerInfo(serverId);
+          const unavailableMessage = resolveVoiceUnavailableMessage({
+            serverInfo,
+            mode: "voice",
+          });
+          if (unavailableMessage) {
+            throw new Error(unavailableMessage);
+          }
 
-        await deps.engine.initialize();
-        // COMPAT(voiceVerbalMute): added in fork v0.2.0, remove gate after 2027-03-21.
-        const supportsCommands = serverInfo?.features?.voiceVerbalMute === true;
-        let response: {
-          voiceCommandsEnabled?: boolean;
-          isMuted?: boolean;
-          attachmentId?: string;
-          generation?: string;
-        };
-        try {
-          let options:
-            | { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string }
-            | undefined;
-          if (supportsCommands) {
-            options = {
-              voiceCommandsEnabled: true,
-              isMuted: false,
-              ...(state.attachmentId ? { attachmentId: state.attachmentId } : {}),
+          const previousTransport = voiceTransport();
+          const previousServerId = state.snapshot.activeServerId;
+          const previousAgentId = state.snapshot.activeAgentId;
+          const generation = requestedGeneration;
+          let enabledCurrentVoiceMode = false;
+          state.generation = generation;
+          inputStatuses.clear();
+          state.attachmentId =
+            serverInfo?.features?.voiceConcurrentInput === true ? crypto.randomUUID() : null;
+          state.transportGeneration = null;
+          state.transportReady = false;
+          patchSnapshot((prev) => ({
+            ...prev,
+            isVoiceSwitching: true,
+            phase: "starting",
+            activeServerId: serverId,
+            activeAgentId: agentId,
+          }));
+
+          try {
+            if (
+              state.snapshot.isVoiceMode &&
+              previousServerId &&
+              (previousServerId !== serverId || previousAgentId !== agentId)
+            ) {
+              const previousSession = sessions.get(previousServerId);
+              if (previousSession) {
+                previousSession.adapter.setAssistantAudioPlaying(false);
+                await disableVoice(previousSession.adapter, previousTransport);
+              }
+            }
+
+            await deps.activateKeepAwake(KEEP_AWAKE_TAG).catch((error) => {
+              console.warn("[VoiceRuntime] Failed to activate keep-awake:", error);
+            });
+
+            await deps.engine.initialize();
+            if (generation !== state.generation) return undefined;
+            // COMPAT(voiceVerbalMute): added in fork v0.2.0, remove gate after 2027-03-21.
+            const supportsCommands = serverInfo?.features?.voiceVerbalMute === true;
+            let response: {
+              voiceCommandsEnabled?: boolean;
+              isMuted?: boolean;
+              attachmentId?: string;
+              generation?: string;
             };
-          } else if (state.attachmentId) {
-            options = { attachmentId: state.attachmentId };
-          }
-          response = options
-            ? await session.adapter.setVoiceMode(true, agentId, options)
-            : await session.adapter.setVoiceMode(true, agentId);
-        } catch (error) {
-          // The host starts its recognizer while enabling voice mode, so a rejection with the
-          // host still connected means recognition could not start there.
-          await reportFailureBeforeStopping(
-            session.connected ? "recognition-unavailable" : "host-disconnected",
-          );
-          throw error;
-        }
-        enabledCurrentVoiceMode = true;
-        if (
-          state.attachmentId &&
-          (response.attachmentId !== state.attachmentId || !response.generation)
-        )
-          throw new Error("Host did not acknowledge this voice attachment");
-        await deps.engine.startCapture();
-        if (state.generation !== generation) {
-          return;
-        }
+            try {
+              let options:
+                | {
+                    voiceCommandsEnabled?: boolean;
+                    isMuted?: boolean;
+                    attachmentId?: string;
+                    generation?: string;
+                  }
+                | undefined;
+              if (supportsCommands) {
+                options = {
+                  voiceCommandsEnabled: true,
+                  isMuted: false,
+                  ...(state.attachmentId ? { attachmentId: state.attachmentId } : {}),
+                };
+              } else if (state.attachmentId) {
+                options = { attachmentId: state.attachmentId };
+              }
+              response = options
+                ? await session.adapter.setVoiceMode(true, agentId, options)
+                : await session.adapter.setVoiceMode(true, agentId);
+            } catch (error) {
+              // The host starts its recognizer while enabling voice mode, so a rejection with the
+              // host still connected means recognition could not start there.
+              await reportFailureBeforeStopping(
+                session.connected ? "recognition-unavailable" : "host-disconnected",
+              );
+              throw error;
+            }
+            enabledCurrentVoiceMode = true;
+            state.transportGeneration = response.generation ?? null;
+            if (generation !== state.generation) {
+              await disableVoice(session.adapter, voiceTransport());
+              return undefined;
+            }
+            if (
+              state.attachmentId &&
+              (response.attachmentId !== state.attachmentId || !response.generation)
+            )
+              throw new Error("Host did not acknowledge this voice attachment");
+            await deps.engine.startCapture();
+            if (state.generation !== generation) {
+              return undefined;
+            }
 
-        state.transportReady = true;
-        state.transportGeneration = response.generation ?? null;
-        reconcileInputReceipts(false);
-        state.turnInProgress = false;
-        uploader.reset();
-        resetCaptureTelemetry();
-        patchSnapshot((prev) => ({
-          ...prev,
-          isVoiceMode: true,
-          isVoiceSwitching: false,
-          phase: "listening",
-          isMuted: response.isMuted ?? deps.engine.isMuted(),
-          voiceCommandsEnabled: response.voiceCommandsEnabled === true,
-          isMuteSwitching: false,
-          muteError: null,
-          failure: null,
-        }));
-      } catch (error) {
-        if (enabledCurrentVoiceMode) {
-          await session.adapter.setVoiceMode(false).catch(() => undefined);
-        }
-        await performLocalStop();
-        throw error;
-      }
+            state.transportReady = true;
+            state.transportGeneration = response.generation ?? null;
+            reconcileInputReceipts(false);
+            state.turnInProgress = false;
+            uploader.reset();
+            resetCaptureTelemetry();
+            patchSnapshot((prev) => ({
+              ...prev,
+              isVoiceMode: true,
+              isVoiceSwitching: false,
+              phase: "listening",
+              isMuted: response.isMuted ?? deps.engine.isMuted(),
+              voiceCommandsEnabled: response.voiceCommandsEnabled === true,
+              isMuteSwitching: false,
+              muteError: null,
+              failure: null,
+            }));
+          } catch (error) {
+            if (enabledCurrentVoiceMode) {
+              await disableVoice(session.adapter, voiceTransport()).catch(() => undefined);
+            }
+            await performLocalStop();
+            throw error;
+          }
+          return undefined;
+        });
+      voiceLifecycleTail = operation;
+      return operation;
     },
 
     async stopVoice() {
-      const activeSession = getActiveSession();
-      const generation = state.generation + 1;
-      state.generation = generation;
-      patchSnapshot((prev) => ({
-        ...prev,
-        isVoiceSwitching: true,
-        phase: "stopping",
-      }));
+      const requestedGeneration = ++state.generation;
+      const stopCurrentVoice = async () => {
+        const activeSession = getActiveSession();
+        const generation = requestedGeneration;
+        patchSnapshot((prev) => ({
+          ...prev,
+          isVoiceSwitching: true,
+          phase: "stopping",
+        }));
 
-      try {
-        stopCue();
-        uploader.reset();
-        state.transportReady = false;
-        resetPlaybackState();
-        deps.engine.stop();
-        deps.engine.clearQueue();
-        activeSession?.adapter.setAssistantAudioPlaying(false);
-        if (activeSession) {
-          await activeSession.adapter.setVoiceMode(false);
+        try {
+          stopCue();
+          uploader.reset();
+          state.transportReady = false;
+          resetPlaybackState();
+          deps.engine.stop();
+          deps.engine.clearQueue();
+          activeSession?.adapter.setAssistantAudioPlaying(false);
+          if (activeSession) {
+            await disableVoice(activeSession.adapter, voiceTransport());
+          }
+        } finally {
+          await deps.engine.stopCapture().catch(() => undefined);
+          await deps.deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
+          if (state.generation === generation) {
+            resetToDisabledState();
+          }
         }
-        await deps.engine.stopCapture();
-        await deps.deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
-      } finally {
-        if (state.generation === generation) {
-          resetToDisabledState();
-        }
-      }
+        return undefined;
+      };
+      const operation = voiceLifecycleTail.catch(() => undefined).then(stopCurrentVoice);
+      voiceLifecycleTail = operation;
+      return operation;
     },
 
     async destroy() {
@@ -1178,7 +1248,10 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       // Drop new audio until the host has applied the transition and cleared old input.
       state.transportReady = false;
       try {
-        const muted = await session.adapter.setVoiceInputMuted(nextMuted);
+        const transport = voiceTransport();
+        const muted = transport
+          ? await session.adapter.setVoiceInputMuted(nextMuted, transport)
+          : await session.adapter.setVoiceInputMuted(nextMuted);
         if (state.generation !== generation) return;
         api.onInputMutedChanged(serverId, muted);
         state.transportReady = session.connected;
@@ -1279,8 +1352,9 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
     acceptsVoiceTransport(serverId, payload) {
       if (serverId !== state.snapshot.activeServerId) return false;
-      if (!state.transportGeneration) return true;
+      if (!state.attachmentId) return true;
       return (
+        !!state.transportGeneration &&
         payload.generation === state.transportGeneration &&
         payload.attachmentId === state.attachmentId
       );
@@ -1294,8 +1368,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       ) {
         return;
       }
-      if (state.transportGeneration && payload?.generation !== state.transportGeneration) return;
-      if (state.attachmentId && payload?.attachmentId !== state.attachmentId) return;
+      if (!api.acceptsVoiceTransport(serverId, payload ?? {})) return;
       if (state.transportGeneration && text.trim() && payload?.queued !== true) return;
 
       if (payload?.messageId && payload.queued) {

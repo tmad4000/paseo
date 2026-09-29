@@ -16,6 +16,8 @@ export interface SendOrQueuePromptParams {
   queueService: AgentQueueService | null;
   agentId: string;
   text: string;
+  origin?: "voice";
+  voiceOwner?: string;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: AgentAttachment[];
   messageId?: string;
@@ -49,9 +51,13 @@ export async function sendOrQueuePromptToAgent(
   params: SendOrQueuePromptParams,
 ): Promise<SendOrQueueResult> {
   const { queueService } = params;
-  if (!params.interrupt && queueService && params.agentManager.hasInFlightRun(params.agentId)) {
+  if (!params.interrupt && queueService) {
     const prompt = buildAgentPrompt(params.text, params.images, params.attachments);
-    if (params.agentManager.tryRunOutOfBand(params.agentId, prompt, params.runOptions)) {
+    if (
+      params.origin !== "voice" &&
+      params.agentManager.getAgent(params.agentId) &&
+      params.agentManager.tryRunOutOfBand(params.agentId, prompt, params.runOptions)
+    ) {
       return { queued: false, outOfBand: true };
     }
     if (params.sessionMode) {
@@ -63,6 +69,8 @@ export async function sendOrQueuePromptToAgent(
       agentId: params.agentId,
       itemId: params.messageId ?? randomUUID(),
       text: params.text,
+      origin: params.origin,
+      voiceOwner: params.voiceOwner,
       ...(params.images?.length ? { images: params.images } : {}),
       ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     });

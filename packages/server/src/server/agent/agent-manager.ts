@@ -97,7 +97,7 @@ import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
-import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import { isPaseoToolPolicyEnabled, isPaseoToolEnabled } from "./paseo-tool-policy.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -2635,7 +2635,11 @@ export class AgentManager {
       },
       "agent.manager.stream.request",
     );
-    if (existingAgent.activeForegroundTurnId || this.runs.hasRun(agentId)) {
+    if (
+      existingAgent.activeForegroundTurnId ||
+      this.runs.hasRun(agentId) ||
+      (options?.requireNoPendingPermissions && existingAgent.pendingPermissions.size > 0)
+    ) {
       this.logger.trace(
         {
           agentId,
@@ -5387,7 +5391,15 @@ export class AgentManager {
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
-    if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(paseoToolPolicy)) {
+    const capabilities = this.clients.get(storedConfig.provider)?.capabilities;
+    const hasSpeakTransport =
+      (capabilities?.supportsNativePaseoTools && !!this.paseoToolCatalogFactory) ||
+      (capabilities?.supportsMcpServers && !!this.mcpBaseUrl);
+    if (
+      hasSpeakTransport &&
+      this.paseoToolsEnabled &&
+      isPaseoToolEnabled(paseoToolPolicy, "speak")
+    ) {
       launchConfig.daemonAppendSystemPrompt = [
         launchConfig.daemonAppendSystemPrompt,
         VOICE_AVAILABLE_INSTRUCTION,

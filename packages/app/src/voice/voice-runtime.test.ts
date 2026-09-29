@@ -105,6 +105,33 @@ function createRuntime(options?: {
 }
 
 describe("voice runtime", () => {
+  it("a stopped delayed start never restarts microphone capture", async () => {
+    const adapter = createSessionAdapter();
+    let acknowledge!: () => void;
+    const acknowledgement = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    vi.mocked(adapter.setVoiceMode).mockImplementation(async (enabled, _agentId, input) => {
+      if (enabled) await acknowledgement;
+      return { attachmentId: input?.attachmentId, generation: "g1" };
+    });
+    const { runtime, engine } = createRuntime({
+      getServerInfo: () => ({ ...createServerInfo(), features: { voiceConcurrentInput: true } }),
+    });
+    runtime.registerSession(adapter);
+    const start = runtime.startVoice("server-1", "agent-1");
+    await vi.waitFor(() => expect(adapter.setVoiceMode).toHaveBeenCalledTimes(1));
+    const stop = runtime.stopVoice();
+    acknowledge();
+    await Promise.all([start, stop]);
+    expect(engine.startCapture).not.toHaveBeenCalled();
+    expect(runtime.getSnapshot().isVoiceMode).toBe(false);
+    expect(adapter.setVoiceMode).toHaveBeenCalledWith(false, undefined, {
+      attachmentId: expect.any(String),
+      generation: "g1",
+    });
+  });
+
   it("uses one logical attachment across reconnect and ignores stale transport output", async () => {
     const adapter = createSessionAdapter();
     let generation = "g1";
@@ -136,6 +163,13 @@ describe("voice runtime", () => {
     expect(runtime.getSnapshot()).toMatchObject({ phase: "listening", lastInputStatus: "queued" });
     generation = "g2";
     runtime.updateSessionConnection("server-1", false);
+    vi.mocked(engine.play).mockClear();
+    runtime.handleAudioOutput("server-1", {
+      ...createAudioPayload({ id: "in-gap", groupId: "in-gap", chunkIndex: 0, isLastChunk: true }),
+      attachmentId,
+      generation: "g1",
+    });
+    expect(engine.play).not.toHaveBeenCalled();
     runtime.updateSessionConnection("server-1", true);
     await vi.waitFor(() => expect(adapter.setVoiceMode).toHaveBeenCalledTimes(2));
     expect(vi.mocked(adapter.setVoiceMode).mock.calls[1]?.[2]?.attachmentId).toBe(attachmentId);

@@ -585,6 +585,7 @@ export class VoiceAssistantWebSocketServer {
       revoke: () => void;
     }
   >();
+  private readonly spokenTurns = new Map<string, string>();
   private readonly voiceCallerContexts = new Map<string, VoiceCallerContext>();
   private readonly workspaceSetupSnapshots = new Map<string, WorkspaceSetupSnapshot>();
   private readonly workspaceSetupRuntime: WorkspaceSetupRuntime;
@@ -1529,6 +1530,7 @@ export class VoiceAssistantWebSocketServer {
       agentManager: this.agentManager,
       agentStorage: this.agentStorage,
       messageReceipts: this.messageReceipts,
+      voiceOwner: JSON.stringify([options.principalId, options.clientId]),
       creationService: this.creationService,
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
@@ -1605,6 +1607,7 @@ export class VoiceAssistantWebSocketServer {
             this.voiceCallerContexts.delete(agentId);
           }
         },
+        hasSpokenInTurn: (agentId, turnId) => this.spokenTurns.get(agentId) === turnId,
         isCurrent: (agentId, generation) =>
           this.voiceSpeakHandlers.get(agentId)?.generation === generation,
       },
@@ -2099,6 +2102,9 @@ export class VoiceAssistantWebSocketServer {
   }
 
   public resolveVoiceSpeakHandler(callerAgentId: string): VoiceSpeakHandler | null {
+    // Record actual tool invocation even while detached, so reconnect cannot read it twice.
+    const turnId = this.agentManager.getAgent(callerAgentId)?.activeForegroundTurnId;
+    if (turnId) this.spokenTurns.set(callerAgentId, turnId);
     return this.voiceSpeakHandlers.get(callerAgentId)?.handler ?? null;
   }
 

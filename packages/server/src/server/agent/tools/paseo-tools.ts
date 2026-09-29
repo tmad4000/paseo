@@ -1240,14 +1240,16 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             structuredContent: ensureValidJson({ ok: false }),
           };
         }
-        await handler({
+        const outcome = await handler({
           text: args.text,
           callerAgentId,
           signal: context?.signal,
         });
         return {
-          content: [],
-          structuredContent: ensureValidJson({ ok: true }),
+          content: outcome
+            ? [{ type: "text", text: `Audio ${outcome.reason}. Continue in the chat.` }]
+            : [],
+          structuredContent: ensureValidJson({ ok: !outcome }),
         };
       },
     );

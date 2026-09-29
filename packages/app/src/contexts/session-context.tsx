@@ -358,9 +358,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         }
         return client.setVoiceMode(enabled, agentId, input);
       },
-      setVoiceInputMuted: async (muted) => {
+      setVoiceInputMuted: async (muted, transport) => {
         if (!client) throw new Error(t("common.errors.daemonUnavailable"));
-        return client.setVoiceInputMuted(muted);
+        return client.setVoiceInputMuted(muted, transport);
       },
       sendVoiceAudioChunk: async (audioData, mimeType, transport) => {
         if (!client) {
@@ -378,11 +378,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         if (!client) throw new Error(t("common.errors.daemonUnavailable"));
         return client.readVoiceInputReceipts(input);
       },
-      abortRequest: async () => {
+      abortRequest: async (transport) => {
         if (!client) {
           throw new Error(t("common.errors.daemonUnavailable"));
         }
-        await client.abortRequest();
+        await client.abortRequest(transport);
       },
       setAssistantAudioPlaying: (isPlaying) => {
         setIsPlayingAudio(serverId, isPlaying);

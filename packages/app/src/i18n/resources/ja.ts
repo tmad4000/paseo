@@ -150,7 +150,7 @@ export const ja: TranslationResources = {
       unmuteVoice: "音声のミュートを解除",
       muteVoice: "音声をミュート",
       dictation: "音声入力",
-      interruptBeforeVoice: "音声モードを開始する前にエージェントを中断してください",
+      interruptBeforeVoice: "エージェントの作業中に音声を使うにはホストを更新してください",
     },
     attachments: {
       addImage: "画像を追加",

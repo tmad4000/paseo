@@ -907,6 +907,8 @@ export const VoiceAudioChunkMessageSchema = z.object({
 
 export const AbortRequestMessageSchema = z.object({
   type: z.literal("abort_request"),
+  attachmentId: z.string().optional(),
+  generation: z.string().optional(),
 });
 
 export const AudioPlayedMessageSchema = z.object({
@@ -1067,6 +1069,8 @@ export const WorkspaceRecoveryRestoreRequestSchema = z.object({
 });
 
 export const VoiceInputSetMutedRequestSchema = z.object({
+  attachmentId: z.string().optional(),
+  generation: z.string().optional(),
   type: z.literal("voice.input.set_muted.request"),
   requestId: z.string(),
   muted: z.boolean(),
@@ -1112,6 +1116,7 @@ export const VoiceInputReceiptsReadResponseSchema = z.object({
 export const SetVoiceModeMessageSchema = z.object({
   type: z.literal("set_voice_mode"),
   attachmentId: z.string().optional(),
+  generation: z.string().optional(),
   enabled: z.boolean(),
   voiceCommandsEnabled: z.boolean().optional(),
   isMuted: z.boolean().optional(),

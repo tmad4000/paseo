@@ -149,7 +149,7 @@ export const zhCN: TranslationResources = {
       unmuteVoice: "取消静音",
       muteVoice: "静音",
       dictation: "听写",
-      interruptBeforeVoice: "启动语音模式前请先中断 Agent",
+      interruptBeforeVoice: "更新主机以在 Agent 工作时使用语音",
     },
     attachments: {
       addImage: "添加图片",

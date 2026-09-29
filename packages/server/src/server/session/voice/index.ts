@@ -62,10 +62,14 @@ export class VoiceSessions {
     );
   }
 
-  handleAgentEvent(agentId: string, event: AgentStreamEvent): void {
+  handleAgentEvent(
+    agentId: string,
+    event: AgentStreamEvent,
+    metadata: { seq?: number; epoch?: string } = {},
+  ): void {
     for (const source of this.sources.values()) {
       if (!source.closing && source.voice.isActiveForAgent(agentId)) {
-        source.voice.handleAgentEvent(event);
+        source.voice.handleAgentEvent(event, metadata);
       }
     }
   }
@@ -97,7 +101,7 @@ export class VoiceSessions {
     const owner = this.delivery.operation(isVoiceOutput, async () => {
       active.closing = true;
       this.demandChanged();
-      // Cancel input immediately; restore agent configuration after bootstrap has settled.
+      // Cancel audio immediately; release the lease after bootstrap has settled.
       try {
         active.voice.cancel();
       } finally {
@@ -138,7 +142,9 @@ export class VoiceSessions {
           ? voice.handleAudioChunk(message)
           : Promise.resolve();
       case "abort_request":
-        return voice.handleAbort();
+        return voice.acceptsInput(message.attachmentId, message.generation)
+          ? voice.handleAbort()
+          : Promise.resolve();
       case "audio_played":
         if (voice.acceptsInput(message.attachmentId, message.generation)) {
           voice.handleAudioPlayed(message.id, message.error);

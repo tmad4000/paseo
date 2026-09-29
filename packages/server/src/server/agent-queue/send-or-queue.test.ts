@@ -114,7 +114,7 @@ describe("sendOrQueuePromptToAgent", () => {
     expect((await harness.service.list(AGENT_ID)).items).toHaveLength(0);
   });
 
-  test("sends immediately when the agent is idle", async () => {
+  test("admits idle input through the same durable queue", async () => {
     const state: FakeManagerState = { inFlight: false, outOfBandAccepts: false, modeChanges: [] };
     const harness = createHarness(state);
 
@@ -128,8 +128,9 @@ describe("sendOrQueuePromptToAgent", () => {
       send: harness.send,
     });
 
-    expect(result).toEqual({ queued: false, outOfBand: false });
-    expect(harness.sends).toHaveLength(1);
+    expect(result).toEqual({ queued: true, outOfBand: false });
+    expect(harness.sends).toHaveLength(0);
+    await harness.service.flushDrains();
     expect((await harness.service.list(AGENT_ID)).items).toHaveLength(0);
   });
 

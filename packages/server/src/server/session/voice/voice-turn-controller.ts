@@ -72,6 +72,8 @@ interface TranscriptSegmentMeta {
 }
 
 interface VoiceFinalTranscript {
+  /** Controller-owned identity survives provider segment reuse and finalization retries. */
+  utteranceId: string;
   segmentId: string;
   transcript: string;
   language?: string;
@@ -198,6 +200,7 @@ export function createVoiceTurnController(params: {
       orderedFinalMeta.every((meta) => meta.isLowConfidence === true);
 
     return {
+      utteranceId: turn.turnId,
       segmentId: turn.committedSegmentIds[0] ?? orderedFinalSegmentIds[0] ?? turn.turnId,
       transcript,
       ...(language ? { language } : {}),

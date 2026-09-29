@@ -67,7 +67,7 @@ or list exact tool IDs in `disabledTools` to remove selected tools. Custom profi
 this policy from `extends`; configure each custom provider ID separately.
 
 Browser tools still require browser tools to be enabled and a connected browser host. The
-voice-only `speak` tool is separate from this policy.
+`speak` tool follows this policy too, including when voice is attached.
 
 This setting limits the catalog presented to an agent. It is not a security boundary for an agent
 that can access the host through a shell.

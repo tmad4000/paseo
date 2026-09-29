@@ -149,7 +149,7 @@ export const ar: TranslationResources = {
       unmuteVoice: "إلغاء كتم الصوت",
       muteVoice: "كتم الصوت",
       dictation: "الإملاء",
-      interruptBeforeVoice: "قم بمقاطعة الوكيل قبل بدء الوضع الصوتي",
+      interruptBeforeVoice: "حدّث المضيف لاستخدام الصوت أثناء عمل الوكيل",
     },
     attachments: {
       addImage: "أضف صورة",
