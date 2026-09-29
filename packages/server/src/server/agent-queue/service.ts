@@ -169,6 +169,34 @@ export class AgentQueueService {
     return toAgentQueueSnapshot(result.queue);
   }
 
+  async edit(
+    agentId: string,
+    itemId: string,
+    expectedText: string,
+    text: string,
+  ): Promise<AgentQueueSnapshot> {
+    const trimmed = text.trim();
+    const result = await this.store.mutate(agentId, (current) => {
+      const index = current.items.findIndex((item) => item.id === itemId);
+      if (index === -1) {
+        throw new Error("This message is no longer queued.");
+      }
+      const item = current.items[index];
+      if (item.text !== expectedText) {
+        throw new Error("This queued message changed on another device. Review it and try again.");
+      }
+      if (!trimmed && !item.attachments?.length && !item.images?.length) {
+        throw new Error("A queued message cannot be empty.");
+      }
+      if (item.text === trimmed) return current;
+      const items = [...current.items];
+      items[index] = { ...item, text: trimmed };
+      return { ...current, items };
+    });
+    this.publish(result);
+    return toAgentQueueSnapshot(result.queue);
+  }
+
   async reorder(agentId: string, itemIds: string[]): Promise<AgentQueueSnapshot> {
     const result = await this.store.mutate(agentId, (current) => {
       const byId = new Map(current.items.map((item) => [item.id, item]));
@@ -262,37 +290,42 @@ export class AgentQueueService {
 
     // Claim the head before sending so a concurrent drain cannot send it twice.
     // Remembering the drained id makes a late enqueue retry of this item a no-op.
-    const claimed = await this.store.mutate(agentId, (current) =>
-      current.items[0]?.id === next.id
-        ? {
-            ...current,
-            items: current.items.slice(1),
-            drainedIds: recordDrainedId(current.drainedIds, next.id),
-          }
-        : // Someone else changed the head while we were reading; try again later.
-          current,
-    );
+    let claimedItem: StoredQueuedMessage | undefined;
+    const claimed = await this.store.mutate(agentId, (current) => {
+      if (current.items[0]?.id !== next.id) return current;
+      claimedItem = current.items[0];
+      return {
+        ...current,
+        items: current.items.slice(1),
+        drainedIds: recordDrainedId(current.drainedIds, next.id),
+      };
+    });
     if (!claimed.changed) {
       return;
     }
+    const sendItem = claimedItem!;
     this.publish(claimed);
 
     try {
       await this.sendPrompt({
         agentId,
-        prompt: buildAgentPrompt(next.text, next.images, next.attachments as AgentAttachment[]),
-        messageId: next.id,
+        prompt: buildAgentPrompt(
+          sendItem.text,
+          sendItem.images,
+          sendItem.attachments as AgentAttachment[],
+        ),
+        messageId: sendItem.id,
       });
     } catch (error) {
       this.logger.warn(
-        { err: error, agentId, itemId: next.id },
+        { err: error, agentId, itemId: sendItem.id },
         "Queued agent message failed to send; returning it to the front of the queue",
       );
       const restored = await this.store.mutate(agentId, (current) => ({
         ...current,
-        items: [next, ...current.items],
+        items: [sendItem, ...current.items],
         // The item is queued again, so its id must not read as already-delivered.
-        drainedIds: (current.drainedIds ?? []).filter((id) => id !== next.id),
+        drainedIds: (current.drainedIds ?? []).filter((id) => id !== sendItem.id),
       }));
       this.publish(restored);
     }

@@ -62,6 +62,7 @@ defined there, and a separate module would import them in a cycle.
 | ------------------------------------- | --------- | ---------------------------------------------- |
 | `agent.queue.enqueue.request`         | in        | Append an item                                 |
 | `agent.queue.remove.request`          | in        | Cancel one item                                |
+| `agent.queue.edit.request`            | in        | Edit an item's text without moving it          |
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
 | `agent.queue.get_item_images.request` | in        | Fetch one item's image bytes                   |
@@ -74,6 +75,13 @@ push.
 Broadcast the whole queue for one agent, not deltas. Queues are a handful of items; a full snapshot
 is self-healing and removes an entire class of drift. Carry a per-agent `revision` that increments on
 every mutation so a client can drop a stale broadcast that arrives out of order.
+
+Editing uses `itemId`, `expectedText`, and the replacement text. The daemon rejects a stale edit
+or an item already claimed for delivery. It changes only the text, preserving the item's ID,
+`createdAt`, attachments, images, and position. Both clients receive the next full snapshot.
+If an edit fails while the item is still queued, the editor remains open so the user can copy or
+revise the draft. The capability flag
+`queueEdit` prevents a newer client from sending this RPC to an older daemon.
 
 The wire item:
 
@@ -202,6 +210,10 @@ and drops its row rather than retrying forever.
 
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
 affordance; adding one is a separate change.
+
+The inline editor currently changes text only. Attachments stay on the queued item. A message
+that is claimed for delivery while its editor is open disappears from the queue and cannot be
+edited afterward.
 
 Nothing drains on daemon startup. Queues persist across a restart, but a leftover item waits for the
 next running → idle edge or the next enqueue rather than resuming the agent at boot. Auto-starting

@@ -119,6 +119,48 @@ describe("agent message queue mirroring", () => {
     }
   }, 30000);
 
+  test("editing on the second device updates the first without moving the item", async () => {
+    const agent = await createBusyAgent();
+    const { snapshots, unsub } = collectQueueUpdates(ctx.client, agent.id);
+
+    try {
+      await ctx.client.enqueueAgentMessage({ agentId: agent.id, itemId: "item-1", text: "first" });
+      const before = await ctx.client.enqueueAgentMessage({
+        agentId: agent.id,
+        itemId: "item-2",
+        text: "second",
+      });
+
+      const edited = await secondDevice.editQueuedAgentMessage({
+        agentId: agent.id,
+        itemId: "item-1",
+        expectedText: "first",
+        text: "revised first",
+      });
+      const mirrored = await waitFor(
+        () => findSnapshotWithRevision(snapshots, edited.revision),
+        "the edit to reach the first device",
+      );
+      expect(mirrored.items.map((item) => [item.id, item.text])).toEqual([
+        ["item-1", "revised first"],
+        ["item-2", "second"],
+      ]);
+      expect(mirrored.items.map((item) => item.createdAt)).toEqual(
+        before.items.map((item) => item.createdAt),
+      );
+      await expect(
+        ctx.client.editQueuedAgentMessage({
+          agentId: agent.id,
+          itemId: "item-1",
+          expectedText: "first",
+          text: "stale edit",
+        }),
+      ).rejects.toThrow(/changed on another device/);
+    } finally {
+      unsub();
+    }
+  }, 30000);
+
   test("the daemon sends the queued message once the agent frees up", async () => {
     const agent = await createBusyAgent();
 
@@ -181,6 +223,13 @@ function findSnapshotWith(
   itemId: string,
 ): AgentQueueSnapshot | undefined {
   return snapshots.find((snapshot) => hasItem(snapshot, itemId));
+}
+
+function findSnapshotWithRevision(
+  snapshots: AgentQueueSnapshot[],
+  revision: number,
+): AgentQueueSnapshot | undefined {
+  return snapshots.find((snapshot) => snapshot.revision === revision);
 }
 
 function findLastSnapshotWithout(

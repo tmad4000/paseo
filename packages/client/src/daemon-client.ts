@@ -2930,6 +2930,19 @@ export class DaemonClient {
     );
   }
 
+  async editQueuedAgentMessage(input: {
+    agentId: string;
+    itemId: string;
+    expectedText: string;
+    text: string;
+  }): Promise<AgentQueueSnapshot> {
+    return this.requireAgentQueuePayload(
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.edit.response">({
+        message: { type: "agent.queue.edit.request", ...input },
+      }),
+    );
+  }
+
   async reorderQueuedAgentMessages(
     agentId: string,
     itemIds: string[],

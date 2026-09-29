@@ -25,7 +25,7 @@ import {
   uploadFileAttachments,
   cancelComposerAgent,
   dispatchComposerAgentMessage,
-  editQueuedComposerMessage,
+  updateQueuedComposerMessage,
   findForgeItemByOption,
   isAttachmentSelectedForForgeItem,
   openComposerAttachment,
@@ -760,17 +760,23 @@ describe("queueComposerMessage", () => {
   });
 });
 
-describe("editQueuedComposerMessage", () => {
-  it("returns null and leaves the queue untouched when the message id is missing", () => {
+describe("updateQueuedComposerMessage", () => {
+  it("leaves the queue untouched when the message id is missing", () => {
     const queue = createFakeQueue(
       new Map([["agent", [{ id: "other", text: "other", attachments: [] }]]]),
     );
-    const result = editQueuedComposerMessage({ agentId: "agent", messageId: "missing", queue });
-    expect(result).toBeNull();
+    const result = updateQueuedComposerMessage({
+      agentId: "agent",
+      messageId: "missing",
+      expectedText: "other",
+      text: "revised",
+      queue,
+    });
+    expect(result).toBe(false);
     expect(queue.state.get("agent")).toHaveLength(1);
   });
 
-  it("returns the text and only user attachments, removing the queued entry", () => {
+  it("updates the text in place without changing identity, order, or attachments", () => {
     const review = reviewWorkspaceAttachment("Queued snapshot.");
     const image = imageWithId("img-queued-edit");
     const queue = createFakeQueue(
@@ -778,6 +784,7 @@ describe("editQueuedComposerMessage", () => {
         [
           "agent",
           [
+            { id: "before", text: "first", attachments: [] },
             {
               id: "msg-1",
               text: "queued draft",
@@ -788,12 +795,20 @@ describe("editQueuedComposerMessage", () => {
       ]),
     );
 
-    const result = editQueuedComposerMessage({ agentId: "agent", messageId: "msg-1", queue });
-    expect(result).toEqual({
-      text: "queued draft",
-      attachments: [{ kind: "image", metadata: image }],
+    const result = updateQueuedComposerMessage({
+      agentId: "agent",
+      messageId: "msg-1",
+      expectedText: "queued draft",
+      text: " revised draft ",
+      queue,
     });
-    expect(queue.state.get("agent")).toEqual([]);
+    expect(result).toBe(true);
+    expect(queue.state.get("agent")?.map((item) => item.id)).toEqual(["before", "msg-1"]);
+    expect(queue.state.get("agent")?.[1]).toEqual({
+      id: "msg-1",
+      text: "revised draft",
+      attachments: [{ kind: "image", metadata: image }, review],
+    });
   });
 });
 

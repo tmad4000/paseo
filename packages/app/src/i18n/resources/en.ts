@@ -153,6 +153,7 @@ export const en = {
       dropImagesHere: "Drop images here",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
+      saveQueuedMessage: "Save queued message",
       sendQueuedMessageNow: "Send queued message now",
       openImage: "Open image attachment",
       removeImage: "Remove image attachment",
@@ -167,6 +168,8 @@ export const en = {
     },
     errors: {
       failedToSend: "Failed to send message",
+      queueEditRequiresUpdatedHost: "Update this Paseo host to edit queued messages in place.",
+      queueEditFailed: "Failed to edit queued message",
       steerRequiresUpdatedHost:
         "Update this Paseo host to steer without interrupting its active turn.",
       failedToCreateAgent: "Failed to create agent",

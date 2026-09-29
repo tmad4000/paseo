@@ -10,6 +10,10 @@ import {
   StyleSheet as RNStyleSheet,
   type PressableStateCallbackType,
 } from "react-native";
+import {
+  EditingTextInput as TextInput,
+  type EditingTextInputHandle,
+} from "@/components/ui/text-input";
 import type { TFunction } from "i18next";
 import {
   useState,
@@ -67,7 +71,6 @@ import { focusWithRetries } from "@/utils/web-focus";
 import {
   cancelComposerAgent,
   dispatchComposerAgentMessage,
-  editQueuedComposerMessage,
   findForgeItemByOption,
   isAttachmentSelectedForForgeItem,
   openComposerAttachment,
@@ -77,6 +80,7 @@ import {
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
   takeQueuedComposerMessage,
+  updateQueuedComposerMessage,
   toggleForgeAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
@@ -400,15 +404,24 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 
 interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
-  handleEditQueuedMessage: (id: string) => void;
+  handleSaveQueuedMessage: (id: string, expectedText: string, text: string) => Promise<boolean>;
   handleSendQueuedNow: (id: string) => Promise<void>;
   editLabel: string;
+  saveLabel: string;
+  cancelLabel: string;
   sendNowLabel: string;
 }
 
 function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
-  const { queuedMessages, handleEditQueuedMessage, handleSendQueuedNow, editLabel, sendNowLabel } =
-    args;
+  const {
+    queuedMessages,
+    handleSaveQueuedMessage,
+    handleSendQueuedNow,
+    editLabel,
+    saveLabel,
+    cancelLabel,
+    sendNowLabel,
+  } = args;
   if (queuedMessages.length === 0) return null;
   return (
     <View style={styles.queueTrack}>
@@ -416,9 +429,11 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
         <QueuedMessageRow
           key={item.id}
           item={item}
-          onEdit={handleEditQueuedMessage}
+          onSave={handleSaveQueuedMessage}
           onSendNow={handleSendQueuedNow}
           editLabel={editLabel}
+          saveLabel={saveLabel}
+          cancelLabel={cancelLabel}
           sendNowLabel={sendNowLabel}
         />
       ))}
@@ -688,25 +703,87 @@ function resolveMessageInputPassthroughAction(
 
 interface QueuedMessageRowProps {
   item: QueuedMessage;
-  onEdit: (id: string) => void;
+  onSave: (id: string, expectedText: string, text: string) => Promise<boolean>;
   onSendNow: (id: string) => void;
   editLabel: string;
+  saveLabel: string;
+  cancelLabel: string;
   sendNowLabel: string;
 }
 
 function QueuedMessageRow({
   item,
-  onEdit,
+  onSave,
   onSendNow,
   editLabel,
+  saveLabel,
+  cancelLabel,
   sendNowLabel,
 }: QueuedMessageRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(item.text);
+  const [expectedText, setExpectedText] = useState(item.text);
+  const [isSaving, setIsSaving] = useState(false);
+  const editInputRef = useRef<EditingTextInputHandle | null>(null);
   const handleEdit = useCallback(() => {
-    onEdit(item.id);
-  }, [onEdit, item.id]);
+    setDraft(item.text);
+    setExpectedText(item.text);
+    setIsEditing(true);
+  }, [item.text]);
+  const handleCancel = useCallback(() => {
+    setIsEditing(false);
+    setDraft(item.text);
+  }, [item.text]);
+  const handleSave = useCallback(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      if (await onSave(item.id, expectedText, editInputRef.current?.getText() ?? draft)) {
+        setIsEditing(false);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [draft, expectedText, isSaving, item.id, onSave]);
   const handleSendNow = useCallback(() => {
     onSendNow(item.id);
   }, [onSendNow, item.id]);
+  if (isEditing) {
+    return (
+      <View style={[styles.queueItem, styles.queueEditItem]}>
+        <TextInput
+          ref={editInputRef}
+          initialValue={item.text}
+          onChangeText={setDraft}
+          multiline
+          autoFocus
+          editable={!isSaving}
+          accessibilityLabel={editLabel}
+          style={styles.queueEditInput}
+        />
+        <View style={styles.queueActions}>
+          <Pressable
+            onPress={handleCancel}
+            disabled={isSaving}
+            style={styles.queueEditTextButton}
+            accessibilityRole="button"
+            accessibilityLabel={cancelLabel}
+          >
+            <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSave}
+            disabled={isSaving}
+            style={[styles.queueEditTextButton, styles.queueEditSaveButton]}
+            accessibilityRole="button"
+            accessibilityLabel={saveLabel}
+          >
+            <Text style={styles.queueEditSaveButtonLabel}>{saveLabel}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.queueItem}>
       <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
@@ -1352,6 +1429,9 @@ function ComposerContentImpl({
   // the client keeps its own against those hosts.
   const supportsAgentMessageQueue = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
+  const supportsQueueEdit = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.queueEdit === true,
   );
   const applyAgentQueueSnapshot = useSessionStore((state) => state.applyAgentQueueSnapshot);
   const forgeAutoAttachRef = useRef<ReturnType<typeof useComposerForgeAutoAttach>>(null);
@@ -2025,49 +2105,49 @@ function ComposerContentImpl({
     });
   }, [agentId, hasAgent, isConnected, serverId, voice]);
 
-  const handleEditQueuedMessage = useCallback(
-    (id: string) => {
+  const handleSaveQueuedMessage = useCallback(
+    async (id: string, expectedText: string, text: string): Promise<boolean> => {
       if (supportsAgentMessageQueue && client) {
-        void (async () => {
-          const result = await takeQueuedComposerMessage({
-            client,
+        if (!supportsQueueEdit) {
+          setSendError(t("composer.errors.queueEditRequiresUpdatedHost"));
+          return false;
+        }
+        try {
+          const snapshot = await client.editQueuedAgentMessage({
             agentId,
-            messageId: id,
-            queue: queueWriter,
-            persistImage: persistAttachmentFromDataUrl,
-            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+            itemId: id,
+            expectedText,
+            text,
           });
-          if (result.status === "failed") {
-            setSendError(result.errorMessage);
-            return;
-          }
-          if (result.status === "taken") {
-            setUserInput(result.text);
-            setSelectedAttachments(result.attachments);
-          }
-        })();
-        return;
+          applyAgentQueueSnapshot(serverId, snapshot);
+          return true;
+        } catch (error) {
+          setSendError(
+            error instanceof Error ? error.message : t("composer.errors.queueEditFailed"),
+          );
+          return false;
+        }
       }
 
-      const result = editQueuedComposerMessage({
+      const updated = updateQueuedComposerMessage({
         agentId,
         messageId: id,
+        expectedText,
+        text,
         queue: queueWriter,
       });
-      if (!result) return;
-      replaceUserInput(result.text);
-      setSelectedAttachments(result.attachments);
+      if (!updated) setSendError(t("composer.errors.queueEditFailed"));
+      return updated;
     },
     [
       agentId,
       applyAgentQueueSnapshot,
       client,
       queueWriter,
-      replaceUserInput,
       serverId,
-      setSelectedAttachments,
-      setUserInput,
       supportsAgentMessageQueue,
+      supportsQueueEdit,
+      t,
     ],
   );
 
@@ -2521,9 +2601,11 @@ function ComposerContentImpl({
     () =>
       renderQueueTrack({
         queuedMessages,
-        handleEditQueuedMessage,
+        handleSaveQueuedMessage,
         handleSendQueuedNow,
         editLabel: t("composer.attachments.editQueuedMessage"),
+        saveLabel: t("composer.attachments.saveQueuedMessage"),
+        cancelLabel: t("common.actions.cancel"),
         sendNowLabel:
           appSettings.sendBehavior === "queue" && isAgentRunning
             ? t("composer.input.sendAndSteer")
@@ -2531,7 +2613,7 @@ function ComposerContentImpl({
       }),
     [
       appSettings.sendBehavior,
-      handleEditQueuedMessage,
+      handleSaveQueuedMessage,
       handleSendQueuedNow,
       isAgentRunning,
       queuedMessages,
@@ -2819,6 +2901,39 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
     gap: theme.spacing[2],
+  },
+  queueEditItem: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
+  queueEditInput: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    minHeight: 64,
+    width: "100%",
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    textAlignVertical: "top",
+  },
+  queueEditTextButton: {
+    minHeight: 32,
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surface2,
+  },
+  queueEditTextButtonLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  queueEditSaveButton: {
+    backgroundColor: theme.colors.accent,
+  },
+  queueEditSaveButtonLabel: {
+    color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.sm,
   },
   queueText: {
     flex: 1,
