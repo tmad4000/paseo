@@ -362,17 +362,21 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         if (!client) throw new Error(t("common.errors.daemonUnavailable"));
         return client.setVoiceInputMuted(muted);
       },
-      sendVoiceAudioChunk: async (audioData, mimeType) => {
+      sendVoiceAudioChunk: async (audioData, mimeType, transport) => {
         if (!client) {
           throw new Error(t("common.errors.daemonUnavailable"));
         }
-        await client.sendVoiceAudioChunk(audioData, mimeType);
+        await client.sendVoiceAudioChunk(audioData, mimeType, false, transport);
       },
-      audioPlayed: async (chunkId, error) => {
+      audioPlayed: async (chunkId, error, transport) => {
         if (!client) {
           throw new Error(t("common.errors.daemonUnavailable"));
         }
-        await client.audioPlayed(chunkId, error);
+        await client.audioPlayed(chunkId, error, transport);
+      },
+      readVoiceInputReceipts: async (input) => {
+        if (!client) throw new Error(t("common.errors.daemonUnavailable"));
+        return client.readVoiceInputReceipts(input);
       },
       abortRequest: async () => {
         if (!client) {
@@ -574,6 +578,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
     const unsubAgentQueueUpdate = client.on("agent.queue.update", (message) => {
       if (message.type !== "agent.queue.update") return;
+      voiceRuntime?.onQueueChanged(serverId, message.payload.agentId);
       useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
     });
 
@@ -729,11 +734,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (message.type !== "transcription_result") return;
 
       const transcriptText = message.payload.text.trim();
-      voiceRuntime?.onTranscriptionResult(serverId, transcriptText);
+      voiceRuntime?.onTranscriptionResult(serverId, transcriptText, message.payload);
     });
 
     const unsubVoiceInputState = client.on("voice_input_state", (message) => {
       if (message.type !== "voice_input_state") return;
+      if (voiceRuntime && !voiceRuntime.acceptsVoiceTransport(serverId, message.payload)) return;
       if (message.payload.isMuted !== undefined) {
         voiceRuntime?.onInputMutedChanged(serverId, message.payload.isMuted);
       }

@@ -17,6 +17,7 @@ interface RealtimeVoiceOverlayProps {
   isMuteSwitching: boolean;
   muteError: string | null;
   failure: VoiceFailureKind | null;
+  lastInputStatus?: "queued" | "sent" | "removed" | "unknown" | null;
   isAgentRunning?: boolean;
   isCancellingAgent?: boolean;
   onToggleMute: () => void;
@@ -45,6 +46,12 @@ const spinnerProps = (theme: Theme) => ({ color: theme.colors.palette.white });
 
 const OVERLAY_BUTTON_SIZE = 44;
 const OVERLAY_VERTICAL_PADDING = (FOOTER_HEIGHT - OVERLAY_BUTTON_SIZE) / 2;
+const inputStatusLabels = {
+  queued: { key: "realtimeVoice.inputQueued", defaultValue: "Speech queued for agent" },
+  sent: { key: "realtimeVoice.inputSent", defaultValue: "Speech sent to agent" },
+  removed: { key: "realtimeVoice.inputRemoved", defaultValue: "Speech removed from queue" },
+  unknown: { key: "realtimeVoice.inputUnknown", defaultValue: "Speech delivery uncertain" },
+} as const;
 
 export function RealtimeVoiceOverlay({
   isMuted,
@@ -53,6 +60,7 @@ export function RealtimeVoiceOverlay({
   isMuteSwitching,
   muteError,
   failure,
+  lastInputStatus,
   isAgentRunning,
   isCancellingAgent,
   onToggleMute,
@@ -109,6 +117,13 @@ export function RealtimeVoiceOverlay({
             {muteError}
           </Text>
         )}
+        {lastInputStatus && (
+          <Text accessibilityLiveRegion="polite" style={styles.hint}>
+            {t(inputStatusLabels[lastInputStatus].key, {
+              defaultValue: inputStatusLabels[lastInputStatus].defaultValue,
+            })}
+          </Text>
+        )}
       </View>
       <View style={styles.container}>
         <View style={styles.meterContainer}>
@@ -126,7 +141,9 @@ export function RealtimeVoiceOverlay({
               onPress={onCancelAgent}
               disabled={isCancellingAgent}
               accessibilityRole="button"
-              accessibilityLabel={t("composer.cancel.stopAgent", { defaultValue: "Stop agent" })}
+              accessibilityLabel={t("realtimeVoice.actions.interruptAgent", {
+                defaultValue: "Interrupt agent",
+              })}
               style={stopButtonStyle}
             >
               {isCancellingAgent ? (

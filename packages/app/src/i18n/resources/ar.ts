@@ -1829,6 +1829,10 @@ export const ar: TranslationResources = {
     commandsUnavailable:
       "يتطلب الكتم الصوتي مضيفًا محدّثًا مع تعرف محلي على الكلام. استخدم زر الميكروفون هنا.",
     notListening: "لا يستمع",
+    inputQueued: "تمت إضافة الكلام إلى قائمة انتظار الوكيل",
+    inputSent: "أُرسل الكلام إلى الوكيل",
+    inputRemoved: "أُزيل الكلام من قائمة الانتظار",
+    inputUnknown: "حالة تسليم الكلام غير مؤكدة",
     failure: {
       "nothing-recognized": "لم أفهم ذلك. قلها مرة أخرى.",
       "recognition-stalled": "توقف التعرف على الكلام عن الاستجابة. أوقف الصوت وابدأه من جديد.",
@@ -1838,6 +1842,7 @@ export const ar: TranslationResources = {
       "microphone-lost": "فُقد الميكروفون. توقف الصوت.",
     },
     actions: {
+      interruptAgent: "مقاطعة الوكيل",
       mute: "كتم صوت الوقت الحقيقي",
       unmute: "إلغاء كتم صوت الوقت الحقيقي",
       stop: "إيقاف الجلسة الصوتية",

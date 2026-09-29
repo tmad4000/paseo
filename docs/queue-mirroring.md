@@ -1,12 +1,12 @@
 # Queue Mirroring
 
-Queued composer messages belong to the agent, not to the device that typed them. This doc describes
-moving the message queue from client memory onto the daemon so every connected client sees the same
-queue and the daemon drains it with no client attached.
+Queued composer messages belong to the agent, not to the device that typed them. The daemon stores
+the queue, broadcasts snapshots to connected clients, and drains it with no client attached. Voice
+follow-ups use this same queue and [voice attachment receipts](voice-input.md#voice-while-an-agent-works).
 
-## What it looks like today
+## Why the queue moved
 
-The queue is entirely client-side and in memory:
+Before daemon ownership, the queue was entirely client-side and in memory:
 
 - State is `queuedMessages: Map<agentId, QueuedComposerMessage[]>` on the per-server session slice in
   `packages/app/src/stores/session-store.ts`. Nothing persists it — not AsyncStorage, not
@@ -20,9 +20,8 @@ The queue is entirely client-side and in memory:
 Two consequences, and they are one bug:
 
 1. Queue on the phone and the desktop never sees it.
-2. If the phone disconnects, backgrounds, or the tab closes before the agent frees up, the message is
-   never sent. Nothing else will send it — no other client has the item, and the daemon was never
-   told.
+2. If the phone disconnected, backgrounded, or the tab closed before the agent freed up, the message
+   was never sent. Nothing else could send it because the daemon did not know the item.
 
 Mirroring and delivery are the same fix. Moving ownership to the daemon gets both.
 
@@ -109,8 +108,10 @@ The daemon. `AgentQueueService` subscribes to `agentManager.subscribe()` and wat
 `send_agent_message_request` handler uses. Same prompt construction, same provider path, identical
 agent-facing result.
 
-Serialize drains per agent so a burst of state events cannot double-send. On send failure, put the
-item back at the head and broadcast; do not silently drop.
+Serialize drains per agent so a burst of state events cannot double-send. Keep the head until a
+durable receipt confirms provider submission. If a competing turn reserves the run first, leave the
+head in place and retry at the next idle boundary. A pending permission blocks drain even without a
+foreground run. An ambiguous provider outcome remains unknown and is not retried automatically.
 
 The client must stop draining when the feature is on, or both sides send. `drainQueuedAgentMessage`
 becomes a no-op on hosts that advertise `agentMessageQueue`.

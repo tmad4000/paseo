@@ -898,6 +898,8 @@ export type RecentProviderSessionDescriptorPayload = z.infer<
 
 export const VoiceAudioChunkMessageSchema = z.object({
   type: z.literal("voice_audio_chunk"),
+  attachmentId: z.string().optional(),
+  generation: z.string().optional(),
   audio: z.string(), // base64 encoded
   format: z.string(),
   isLast: z.boolean(),
@@ -909,6 +911,8 @@ export const AbortRequestMessageSchema = z.object({
 
 export const AudioPlayedMessageSchema = z.object({
   type: z.literal("audio_played"),
+  attachmentId: z.string().optional(),
+  generation: z.string().optional(),
   id: z.string(),
   error: z.string().optional(),
 });
@@ -1077,8 +1081,37 @@ export const VoiceInputSetMutedResponseSchema = z.object({
   }),
 });
 
+export const VoiceInputReceiptsReadRequestSchema = z.object({
+  type: z.literal("voice.input.receipts.read.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  attachmentId: z.string(),
+  generation: z.string(),
+  after: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+export const VoiceInputReceiptsReadResponseSchema = z.object({
+  type: z.literal("voice.input.receipts.read.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    attachmentId: z.string(),
+    items: z.array(
+      z.object({
+        messageId: z.string(),
+        state: z.enum(["queued", "submitted", "removed", "unknown"]),
+        createdAt: z.string(),
+      }),
+    ),
+    nextCursor: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const SetVoiceModeMessageSchema = z.object({
   type: z.literal("set_voice_mode"),
+  attachmentId: z.string().optional(),
   enabled: z.boolean(),
   voiceCommandsEnabled: z.boolean().optional(),
   isMuted: z.boolean().optional(),
@@ -2197,6 +2230,8 @@ export const SetVoiceModeResponseMessageSchema = z.object({
     voiceCommandsEnabled: z.boolean().optional(),
     isMuted: z.boolean().optional(),
     requestId: z.string(),
+    attachmentId: z.string().optional(),
+    generation: z.string().optional(),
     enabled: z.boolean(),
     agentId: z.string().nullable(),
     accepted: z.boolean(),
@@ -2559,6 +2594,7 @@ export const QueuedComposerAttachmentSchema = z.discriminatedUnion("kind", [
 export const QueuedAgentMessageSchema = z.object({
   id: z.string(),
   text: z.string(),
+  origin: z.literal("voice").optional(),
   attachments: z.array(AgentAttachmentWireSchema).optional(),
   composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
   images: z.array(QueuedAgentMessageImageSchema).optional(),
@@ -3487,6 +3523,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceRecoveryRestoreRequestSchema,
   SetVoiceModeMessageSchema,
   VoiceInputSetMutedRequestSchema,
+  VoiceInputReceiptsReadRequestSchema,
   SendAgentMessageRequestSchema,
   WaitForFinishRequestSchema,
   DaemonGetStatusRequestSchema,
@@ -3700,6 +3737,8 @@ export const AudioOutputMessageSchema = z.object({
     audio: z.string(), // base64 encoded
     format: z.string(),
     id: z.string(),
+    attachmentId: z.string().optional(),
+    generation: z.string().optional(),
     isVoiceMode: z.boolean(), // Mode when audio was generated (for drift protection)
     groupId: z.string().optional(), // Logical utterance id
     chunkIndex: z.number().int().nonnegative().optional(),
@@ -3714,6 +3753,10 @@ export const TranscriptionResultMessageSchema = z.object({
     language: z.string().optional(),
     duration: z.number().optional(),
     requestId: z.string(), // Echoed back from request for tracking
+    attachmentId: z.string().optional(),
+    generation: z.string().optional(),
+    messageId: z.string().optional(),
+    queued: z.boolean().optional(),
     avgLogprob: z.number().optional(),
     isLowConfidence: z.boolean().optional(),
     byteLength: z.number().optional(),
@@ -3728,6 +3771,8 @@ export const VoiceInputStateMessageSchema = z.object({
     error: z.string().optional(),
     isMuted: z.boolean().optional(),
     isSpeaking: z.boolean(),
+    attachmentId: z.string().optional(),
+    generation: z.string().optional(),
     // "nothing_recognized" | "timed_out" | "failed". A string so later hosts can add values
     // that older clients ignore instead of rejecting the message.
     recognitionIssue: z.string().optional(),
@@ -3860,6 +3905,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceTerminals: z.boolean().optional(),
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: z.boolean().optional(),
+        // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
+        voiceConcurrentInput: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -7190,6 +7237,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SendAgentMessageResponseMessageSchema,
   SetVoiceModeResponseMessageSchema,
   VoiceInputSetMutedResponseSchema,
+  VoiceInputReceiptsReadResponseSchema,
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
   DaemonConfigReloadResponseSchema,

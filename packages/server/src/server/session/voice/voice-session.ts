@@ -14,10 +14,9 @@ import {
   type DictationStreamOutboundMessage,
 } from "../../dictation/dictation-stream-manager.js";
 import { createVoiceTurnController, type VoiceTurnController } from "./voice-turn-controller.js";
-import { buildVoiceModeSystemPrompt, stripVoiceModeSystemPrompt } from "../../voice-config.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
-import type { AgentSessionConfig } from "../../agent/agent-sdk-types.js";
+import type { AgentStreamEvent } from "../../agent/agent-sdk-types.js";
 import type { LocalSpeechModelId } from "../../speech/providers/local/models.js";
 import { toResolver, type Resolvable } from "../../speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot, SpeechReadinessState } from "../../speech/speech-runtime.js";
@@ -39,10 +38,6 @@ const MIN_STREAMING_SEGMENT_BYTES = Math.round(
 const AgentIdSchema = z.guid();
 
 type ProcessingPhase = "idle" | "transcribing";
-
-interface VoiceModeBaseConfig {
-  systemPrompt?: string;
-}
 
 interface AudioBufferState {
   chunks: Buffer[];
@@ -123,18 +118,12 @@ function convertPCMToWavBuffer(
  * The agent-facing operations VoiceSession needs from the session that owns it.
  * VoiceSession owns all voice/audio state; it reaches back through this narrow
  * seam only to deliver transcripts to the agent, drive TTS playback, and
- * abort/inspect the active agent run.
+ * manage the audio attachment. Agent work has a separate lifetime.
  */
 export interface VoiceSessionHost {
   emit(msg: SessionOutboundMessage): void;
   loadAgent(agentId: string): Promise<ManagedAgent>;
-  reloadAgentSession(
-    agentId: string,
-    overrides: Partial<AgentSessionConfig>,
-  ): Promise<ManagedAgent>;
-  sendSpokenInput(agentId: string, text: string): Promise<void>;
-  interruptAgentIfRunning(agentId: string): Promise<void>;
-  hasActiveAgentRun(agentId: string | null): boolean;
+  sendSpokenInput(agentId: string, text: string, messageId: string): Promise<void>;
 }
 
 export interface VoiceSessionOptions {
@@ -149,10 +138,20 @@ export interface VoiceSessionOptions {
     turnDetection?: Resolvable<TurnDetectionProvider | null>;
   };
   voiceBridge?: {
-    registerVoiceSpeakHandler?: (agentId: string, handler: VoiceSpeakHandler) => void;
-    unregisterVoiceSpeakHandler?: (agentId: string) => void;
-    registerVoiceCallerContext?: (agentId: string, context: VoiceCallerContext) => void;
-    unregisterVoiceCallerContext?: (agentId: string) => void;
+    registerVoiceSpeakHandler?: (
+      agentId: string,
+      attachmentId: string,
+      handler: VoiceSpeakHandler,
+      revoke: () => void,
+    ) => string;
+    unregisterVoiceSpeakHandler?: (agentId: string, generation: string) => void;
+    registerVoiceCallerContext?: (
+      agentId: string,
+      generation: string,
+      context: VoiceCallerContext,
+    ) => void;
+    unregisterVoiceCallerContext?: (agentId: string, generation: string) => void;
+    isCurrent?: (agentId: string, generation: string) => boolean;
   };
   dictation?: {
     finalTimeoutMs?: number;
@@ -186,6 +185,8 @@ export class VoiceSession {
   private inputMuted = false;
   private inputRevision = 0;
   private speechInProgress = false;
+  private spokeThisTurn = false;
+  private visibleReply = "";
 
   private readonly dictationStreamManager: DictationStreamManager;
   private readonly resolveVoiceTurnDetection: () => TurnDetectionProvider | null;
@@ -207,18 +208,23 @@ export class VoiceSession {
 
   private readonly registerVoiceSpeakHandler?: (
     agentId: string,
+    attachmentId: string,
     handler: VoiceSpeakHandler,
-  ) => void;
-  private readonly unregisterVoiceSpeakHandler?: (agentId: string) => void;
+    revoke: () => void,
+  ) => string;
+  private readonly unregisterVoiceSpeakHandler?: (agentId: string, generation: string) => void;
   private readonly registerVoiceCallerContext?: (
     agentId: string,
+    generation: string,
     context: VoiceCallerContext,
   ) => void;
-  private readonly unregisterVoiceCallerContext?: (agentId: string) => void;
+  private readonly unregisterVoiceCallerContext?: (agentId: string, generation: string) => void;
+  private readonly isCurrent?: (agentId: string, generation: string) => boolean;
   private readonly getSpeechReadiness?: () => SpeechReadinessSnapshot;
 
   private voiceModeAgentId: string | null = null;
-  private voiceModeBaseConfig: VoiceModeBaseConfig | null = null;
+  private voiceModeAttachmentId: string | null = null;
+  private voiceModeGeneration: string | null = null;
 
   constructor(options: VoiceSessionOptions) {
     const { host, logger, sessionId, sttLanguage, tts, stt, voice, voiceBridge, dictation } =
@@ -235,6 +241,7 @@ export class VoiceSession {
     this.unregisterVoiceSpeakHandler = voiceBridge?.unregisterVoiceSpeakHandler;
     this.registerVoiceCallerContext = voiceBridge?.registerVoiceCallerContext;
     this.unregisterVoiceCallerContext = voiceBridge?.unregisterVoiceCallerContext;
+    this.isCurrent = voiceBridge?.isCurrent;
     this.getSpeechReadiness = dictation?.getSpeechReadiness;
 
     this.ttsManager = new TTSManager(this.sessionId, this.sessionLogger, tts);
@@ -260,6 +267,48 @@ export class VoiceSession {
       this.audioBuffer !== null ||
       this.pendingAudioSegments.length > 0
     );
+  }
+
+  acceptsInput(attachmentId?: string, generation?: string): boolean {
+    if (!attachmentId && !generation) return !this.closed;
+    return (
+      this.currentAttachment() &&
+      attachmentId === this.voiceModeAttachmentId &&
+      generation === this.voiceModeGeneration
+    );
+  }
+
+  handleAgentEvent(event: AgentStreamEvent): void {
+    if (!this.currentAttachment()) return;
+    if (event.type === "turn_started") {
+      this.spokeThisTurn = false;
+      this.visibleReply = "";
+    } else if (event.type === "timeline" && event.item.type === "assistant_message") {
+      this.visibleReply = [this.visibleReply, event.item.text]
+        .filter(Boolean)
+        .join("\n")
+        .slice(-4000);
+    } else if (event.type === "turn_completed") {
+      const reply = this.visibleReply.trim();
+      if (reply && !this.spokeThisTurn) {
+        this.spokeThisTurn = true;
+        void this.speakFallback(reply);
+      }
+      this.visibleReply = "";
+    }
+  }
+
+  private async speakFallback(text: string): Promise<void> {
+    try {
+      await this.ttsManager.generateAndWaitForPlayback(
+        text,
+        (message) => this.emit(message),
+        this.abortController.signal,
+        true,
+      );
+    } catch (error) {
+      this.sessionLogger.warn({ err: error }, "Voice fallback playback failed");
+    }
   }
 
   isActiveForAgent(agentId: string): boolean {
@@ -361,11 +410,13 @@ export class VoiceSession {
   /**
    * Handle voice mode toggle
    */
+  // Attachment ownership and controller startup must share one failure cleanup path.
+  // oxlint-disable-next-line complexity
   async handleSetVoiceMode(
     enabled: boolean,
     agentId?: string,
     requestId?: string,
-    input: { voiceCommandsEnabled?: boolean; isMuted?: boolean } = {},
+    input: { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string } = {},
   ): Promise<void> {
     const startedAt = Date.now();
     try {
@@ -394,10 +445,11 @@ export class VoiceSession {
             },
             "set_voice_mode disabling previous active voice agent",
           );
-          await this.disableVoiceModeForActiveAgent(true);
+          await this.disableVoiceModeForActiveAgent();
         }
 
         if (!this.isVoiceMode || this.voiceModeAgentId !== normalizedAgentId) {
+          this.voiceModeAttachmentId = input.attachmentId ?? uuidv4();
           this.sessionLogger.info(
             { agentId: normalizedAgentId, elapsedMs: Date.now() - startedAt },
             "set_voice_mode enabling voice for agent",
@@ -405,7 +457,7 @@ export class VoiceSession {
           const refreshedAgentId = await this.enableVoiceModeForAgent(normalizedAgentId);
           this.voiceModeAgentId = refreshedAgentId;
           if (this.closed) {
-            await this.disableVoiceModeForActiveAgent(true);
+            await this.disableVoiceModeForActiveAgent();
             return;
           }
           this.sessionLogger.info(
@@ -423,6 +475,10 @@ export class VoiceSession {
           { agentId: this.voiceModeAgentId, elapsedMs: Date.now() - startedAt },
           "set_voice_mode voice turn controller started",
         );
+        if (this.closed) {
+          await this.disableVoiceModeForActiveAgent();
+          return;
+        }
         this.isVoiceMode = !this.closed;
         await this.configureInputCommands(input);
         this.sessionLogger.info(
@@ -441,6 +497,8 @@ export class VoiceSession {
               voiceCommandsEnabled: this.voiceCommandsEnabled,
               isMuted: this.inputMuted,
               agentId: this.voiceModeAgentId,
+              ...(this.voiceModeAttachmentId ? { attachmentId: this.voiceModeAttachmentId } : {}),
+              ...(this.voiceModeGeneration ? { generation: this.voiceModeGeneration } : {}),
               accepted: true,
               error: null,
             },
@@ -453,7 +511,7 @@ export class VoiceSession {
         { agentId: this.voiceModeAgentId, elapsedMs: Date.now() - startedAt },
         "set_voice_mode disabling active voice mode",
       );
-      await this.disableVoiceModeForActiveAgent(true);
+      await this.disableVoiceModeForActiveAgent();
       this.isVoiceMode = false;
       this.voiceCommandsEnabled = false;
       this.inputMuted = false;
@@ -471,6 +529,9 @@ export class VoiceSession {
         });
       }
     } catch (error) {
+      if (!this.isVoiceMode && this.voiceModeAgentId) {
+        await this.disableVoiceModeForActiveAgent();
+      }
       const errorMessage = error instanceof Error ? error.message : "Failed to set voice mode";
       const unavailable = this.getVoiceFeatureUnavailableResponseMetadata(error);
       this.sessionLogger.error(
@@ -519,62 +580,23 @@ export class VoiceSession {
     );
 
     this.registerVoiceBridgeForAgent(agentId);
-
-    const baseConfig: VoiceModeBaseConfig = {
-      systemPrompt: stripVoiceModeSystemPrompt(existing.config.systemPrompt),
-    };
-    this.voiceModeBaseConfig = baseConfig;
-    const refreshOverrides: Partial<AgentSessionConfig> = {
-      systemPrompt: buildVoiceModeSystemPrompt(baseConfig.systemPrompt, true),
-    };
-
-    try {
-      this.sessionLogger.info(
-        { agentId, elapsedMs: Date.now() - startedAt },
-        "enableVoiceModeForAgent.reloadAgentSession.start",
-      );
-      const refreshed = await this.host.reloadAgentSession(agentId, refreshOverrides);
-      this.sessionLogger.info(
-        { agentId, refreshedAgentId: refreshed.id, elapsedMs: Date.now() - startedAt },
-        "enableVoiceModeForAgent.reloadAgentSession.done",
-      );
-      return refreshed.id;
-    } catch (error) {
-      this.unregisterVoiceSpeakHandler?.(agentId);
-      this.unregisterVoiceCallerContext?.(agentId);
-      this.voiceModeBaseConfig = null;
-      throw error;
-    }
+    return existing.id;
   }
 
-  private async disableVoiceModeForActiveAgent(restoreAgentConfig: boolean): Promise<void> {
+  private async disableVoiceModeForActiveAgent(): Promise<void> {
     await this.stopVoiceTurnController();
     this.ttsManager.cancelPendingPlaybacks("voice mode disabled");
 
     const agentId = this.voiceModeAgentId;
-    if (!agentId) {
-      this.voiceModeBaseConfig = null;
-      return;
-    }
+    if (!agentId) return;
 
-    if (restoreAgentConfig && this.voiceModeBaseConfig) {
-      const baseConfig = this.voiceModeBaseConfig;
-      try {
-        await this.host.reloadAgentSession(agentId, {
-          systemPrompt: buildVoiceModeSystemPrompt(baseConfig.systemPrompt, false),
-        });
-      } catch (error) {
-        this.sessionLogger.warn(
-          { err: error, agentId },
-          "Failed to restore agent config while disabling voice mode",
-        );
-      }
+    if (this.voiceModeGeneration) {
+      this.unregisterVoiceSpeakHandler?.(agentId, this.voiceModeGeneration);
+      this.unregisterVoiceCallerContext?.(agentId, this.voiceModeGeneration);
     }
-
-    this.unregisterVoiceSpeakHandler?.(agentId);
-    this.unregisterVoiceCallerContext?.(agentId);
-    this.voiceModeBaseConfig = null;
     this.voiceModeAgentId = null;
+    this.voiceModeAttachmentId = null;
+    this.voiceModeGeneration = null;
   }
 
   private async configureInputCommands(input: {
@@ -691,6 +713,7 @@ export class VoiceSession {
           });
         },
         onFinalTranscript: async ({
+          segmentId,
           transcript,
           language,
           durationMs,
@@ -699,7 +722,7 @@ export class VoiceSession {
           avgLogprob,
           isLowConfidence,
         }) => {
-          const requestId = uuidv4();
+          const requestId = segmentId;
           const transcriptText = isLowConfidence ? "" : transcript.trim();
           const recognitionIssue = this.resolveRecognitionIssue({
             transcript: transcriptText,
@@ -1108,24 +1131,27 @@ export class VoiceSession {
     if (this.inputMuted) return;
     const transcriptText = result.text.trim();
 
-    this.emit({
-      type: "transcription_result",
-      payload: {
-        text: result.text,
-        ...(result.language ? { language: result.language } : {}),
-        ...(result.duration !== undefined ? { duration: result.duration } : {}),
-        requestId: result.requestId,
-        ...(result.avgLogprob !== undefined ? { avgLogprob: result.avgLogprob } : {}),
-        ...(result.isLowConfidence !== undefined
-          ? { isLowConfidence: result.isLowConfidence }
-          : {}),
-        ...(result.byteLength !== undefined ? { byteLength: result.byteLength } : {}),
-        ...(result.format ? { format: result.format } : {}),
-        ...(result.debugRecordingPath ? { debugRecordingPath: result.debugRecordingPath } : {}),
-      },
-    });
+    const emitTranscript = (messageId?: string) =>
+      this.emit({
+        type: "transcription_result",
+        payload: {
+          text: result.text,
+          ...(result.language ? { language: result.language } : {}),
+          ...(result.duration !== undefined ? { duration: result.duration } : {}),
+          requestId: result.requestId,
+          ...(messageId ? { messageId, queued: true } : {}),
+          ...(result.avgLogprob !== undefined ? { avgLogprob: result.avgLogprob } : {}),
+          ...(result.isLowConfidence !== undefined
+            ? { isLowConfidence: result.isLowConfidence }
+            : {}),
+          ...(result.byteLength !== undefined ? { byteLength: result.byteLength } : {}),
+          ...(result.format ? { format: result.format } : {}),
+          ...(result.debugRecordingPath ? { debugRecordingPath: result.debugRecordingPath } : {}),
+        },
+      });
 
     if (!transcriptText) {
+      emitTranscript();
       this.sessionLogger.debug("Empty transcription (false positive), not aborting");
       this.setPhase("idle");
       this.clearSpeechInProgress("empty transcription");
@@ -1153,20 +1179,6 @@ export class VoiceSession {
       });
     }
 
-    this.emit({
-      type: "activity_log",
-      payload: {
-        id: uuidv4(),
-        timestamp: new Date(),
-        type: "transcript",
-        content: result.text,
-        metadata: {
-          ...(result.language ? { language: result.language } : {}),
-          ...(result.duration !== undefined ? { duration: result.duration } : {}),
-        },
-      },
-    });
-
     this.clearSpeechInProgress("transcription complete");
     this.setPhase("idle");
     if (!this.isVoiceMode) {
@@ -1188,12 +1200,34 @@ export class VoiceSession {
       return;
     }
 
-    await this.host.sendSpokenInput(agentId, result.text);
+    if (!this.currentAttachment()) return;
+    const messageId = `${this.voiceModeAttachmentId}:${result.requestId}`;
+    try {
+      await this.host.sendSpokenInput(agentId, result.text, messageId);
+    } catch (error) {
+      this.emit({
+        type: "voice_input_state",
+        payload: { isSpeaking: false, error: `Could not queue speech: ${getErrorMessage(error)}` },
+      });
+      return;
+    }
+    emitTranscript(messageId);
+    this.emit({
+      type: "activity_log",
+      payload: {
+        id: uuidv4(),
+        timestamp: new Date(),
+        type: "transcript",
+        content: result.text,
+        metadata: { messageId },
+      },
+    });
     await this.flushPendingAudioSegments("transcription complete");
   }
 
   private registerVoiceBridgeForAgent(agentId: string): void {
-    this.registerVoiceSpeakHandler?.(agentId, async ({ text, signal }) => {
+    const handler: VoiceSpeakHandler = async ({ text, signal }) => {
+      this.spokeThisTurn = true;
       this.sessionLogger.info(
         {
           agentId,
@@ -1235,13 +1269,35 @@ export class VoiceSession {
           content: text,
         },
       });
-    });
+    };
 
-    this.registerVoiceCallerContext?.(agentId, {
-      childAgentDefaultLabels: {},
-      allowCustomCwd: false,
-      enableVoiceTools: true,
-    });
+    this.voiceModeGeneration =
+      this.registerVoiceSpeakHandler?.(
+        agentId,
+        this.voiceModeAttachmentId ?? uuidv4(),
+        handler,
+        () => {
+          void this.cleanup().catch((error) =>
+            this.sessionLogger.warn({ err: error }, "Failed to revoke old voice attachment"),
+          );
+        },
+      ) ?? uuidv4();
+
+    if (this.voiceModeGeneration)
+      this.registerVoiceCallerContext?.(agentId, this.voiceModeGeneration, {
+        childAgentDefaultLabels: {},
+        allowCustomCwd: false,
+        enableVoiceTools: true,
+      });
+  }
+
+  private currentAttachment(): boolean {
+    return (
+      !this.closed &&
+      !!this.voiceModeAgentId &&
+      !!this.voiceModeGeneration &&
+      (this.isCurrent?.(this.voiceModeAgentId, this.voiceModeGeneration) ?? true)
+    );
   }
 
   /**
@@ -1255,26 +1311,7 @@ export class VoiceSession {
 
     this.abortController.abort();
     this.ttsManager.cancelPendingPlaybacks("abort request");
-
-    // Voice abort should always interrupt active agent output immediately.
-    if (this.isVoiceMode && this.voiceModeAgentId) {
-      try {
-        await this.host.interruptAgentIfRunning(this.voiceModeAgentId);
-      } catch (error) {
-        const message = `Voice interruption failed: ${getErrorMessage(error)}`;
-        this.emit({
-          type: "activity_log",
-          payload: {
-            id: uuidv4(),
-            timestamp: new Date(),
-            type: "error",
-            content: message,
-            metadata: { voiceAbortFailed: true },
-          },
-        });
-        throw error;
-      }
-    }
+    this.createAbortController();
 
     if (this.processingPhase === "transcribing") {
       // Still in STT phase - we'll buffer the next audio
@@ -1297,7 +1334,7 @@ export class VoiceSession {
   }
 
   /**
-   * Mark speech detection start and abort any active playback/agent run.
+   * Mark speech detection start and stop only active playback.
    */
   private async handleVoiceSpeechStart(): Promise<void> {
     if (this.speechInProgress) {
@@ -1306,10 +1343,9 @@ export class VoiceSession {
 
     const chunkReceivedAt = Date.now();
     const phaseBeforeAbort = this.processingPhase;
-    const hadActiveStream = this.host.hasActiveAgentRun(this.voiceModeAgentId);
 
     this.speechInProgress = true;
-    this.sessionLogger.debug("Voice speech detected – aborting playback and active agent run");
+    this.sessionLogger.debug("Voice speech detected – aborting playback");
 
     if (this.pendingAudioSegments.length > 0) {
       this.sessionLogger.debug(
@@ -1331,13 +1367,12 @@ export class VoiceSession {
 
     this.clearBufferTimeout();
 
-    this.abortController.abort();
     await this.handleAbort();
 
     const latencyMs = Date.now() - chunkReceivedAt;
     this.sessionLogger.debug(
-      { latencyMs, phaseBeforeAbort, hadActiveStream },
-      "[Telemetry] barge_in.llm_abort_latency",
+      { latencyMs, phaseBeforeAbort },
+      "[Telemetry] barge_in.audio_abort_latency",
     );
   }
 
@@ -1465,6 +1500,22 @@ export class VoiceSession {
         }
       }
     }
+    if (
+      msg.type === "audio_output" ||
+      msg.type === "transcription_result" ||
+      msg.type === "voice_input_state"
+    ) {
+      if (!this.currentAttachment()) return;
+      this.host.emit({
+        ...msg,
+        payload: {
+          ...msg.payload,
+          attachmentId: this.voiceModeAttachmentId ?? undefined,
+          generation: this.voiceModeGeneration ?? undefined,
+        },
+      } as SessionOutboundMessage);
+      return;
+    }
     this.host.emit(msg);
   }
 
@@ -1499,7 +1550,7 @@ export class VoiceSession {
       try {
         await this.stopVoiceTurnController();
       } finally {
-        await this.disableVoiceModeForActiveAgent(true);
+        await this.disableVoiceModeForActiveAgent();
         this.isVoiceMode = false;
       }
     }

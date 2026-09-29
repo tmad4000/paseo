@@ -18,7 +18,6 @@ import { formatPluginSourceReference } from "@getpaseo/protocol/plugin-source-re
 import {
   serializeAgentStreamEvent,
   type AgentSnapshotPayload,
-  type AgentAttachment,
   type FirstAgentContext,
   type SessionInboundMessage,
   type SessionOutboundMessage,
@@ -131,7 +130,6 @@ import {
   getAgentStreamEventTurnId,
   type AgentPersistenceHandle,
   type AgentPermissionResponse,
-  type AgentRunOptions,
   type AgentSessionConfig,
 } from "./agent/agent-sdk-types.js";
 import type { StoredAgentRecord } from "./agent/agent-storage.js";
@@ -159,7 +157,6 @@ import {
   type WorkspaceMutation,
   type WorkspaceRegistry,
 } from "./workspace-registry.js";
-import { wrapSpokenInput } from "./voice-config.js";
 import { isVoicePermissionAllowed } from "./voice-permission-policy.js";
 import {
   ProjectIconReader,
@@ -222,7 +219,6 @@ import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
-import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
   createGitHubService,
@@ -459,7 +455,7 @@ export interface SessionOptions {
   worktreesRoot?: string;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
-  messageReceipts: Pick<MessageReceipts, "send">;
+  messageReceipts: Pick<MessageReceipts, "send" | "listForAttachment">;
   creationService: Pick<CreationService, "create" | "subscribe">;
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
@@ -541,10 +537,20 @@ export interface SessionOptions {
     turnDetection?: Resolvable<TurnDetectionProvider | null>;
   };
   voiceBridge?: {
-    registerVoiceSpeakHandler?: (agentId: string, handler: VoiceSpeakHandler) => void;
-    unregisterVoiceSpeakHandler?: (agentId: string) => void;
-    registerVoiceCallerContext?: (agentId: string, context: VoiceCallerContext) => void;
-    unregisterVoiceCallerContext?: (agentId: string) => void;
+    registerVoiceSpeakHandler?: (
+      agentId: string,
+      attachmentId: string,
+      handler: VoiceSpeakHandler,
+      revoke: () => void,
+    ) => string;
+    unregisterVoiceSpeakHandler?: (agentId: string, generation: string) => void;
+    registerVoiceCallerContext?: (
+      agentId: string,
+      generation: string,
+      context: VoiceCallerContext,
+    ) => void;
+    unregisterVoiceCallerContext?: (agentId: string, generation: string) => void;
+    isCurrent?: (agentId: string, generation: string) => boolean;
   };
   dictation?: {
     finalTimeoutMs?: number;
@@ -816,7 +822,7 @@ export class Session {
   private readonly daemonSession: DaemonSession;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
-  private readonly messageReceipts: Pick<MessageReceipts, "send">;
+  private readonly messageReceipts: Pick<MessageReceipts, "send" | "listForAttachment">;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
   private readonly daemonServerId: string | undefined;
   private readonly broadcastToClients: ((message: SessionOutboundMessage) => number) | undefined;
@@ -1202,21 +1208,15 @@ export class Session {
               agentStorage: this.agentStorage,
               logger: this.sessionLogger,
             }),
-          reloadAgentSession: (agentId, overrides) =>
-            this.agentManager.reloadAgentSession(agentId, overrides),
-          sendSpokenInput: async (agentId, text) => {
-            await this.handleSendAgentMessage(
+          sendSpokenInput: async (agentId, text, messageId) => {
+            if (!this.agentQueueService) throw new Error("Agent message queue is unavailable");
+            await this.agentQueueService.enqueue({
               agentId,
+              itemId: messageId,
               text,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              { spokenInput: true },
-            );
+              origin: "voice",
+            });
           },
-          interruptAgentIfRunning: (agentId) => this.interruptAgentIfRunning(agentId),
-          hasActiveAgentRun: (agentId) => this.hasActiveAgentRun(agentId),
         },
         logger: this.sessionLogger,
         sessionId: this.sessionId,
@@ -1622,13 +1622,6 @@ export class Session {
     }
   }
 
-  private hasActiveAgentRun(agentId: string | null): boolean {
-    if (!agentId) {
-      return false;
-    }
-    return this.agentManager.hasInFlightRun(agentId);
-  }
-
   private handleAgentRunError(agentId: string, error: unknown, context: string): void {
     const message = errorToFriendlyMessage(error);
     this.sessionLogger.error({ err: error, agentId, context }, `${context} for agent ${agentId}`);
@@ -1954,6 +1947,8 @@ export class Session {
           this.forwardProviderSubagentUpdate(event.event);
           return;
         }
+
+        this.voiceSessions.handleAgentEvent(event.agentId, event.event);
 
         if (
           this.voiceSessions.isActiveForAgent(event.agentId) &&
@@ -2638,6 +2633,8 @@ export class Session {
 
   private dispatchAgentQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
+      case "voice.input.receipts.read.request":
+        return this.handleVoiceInputReceiptsRead(msg);
       case "update_companion_entry_request":
         return this.handleUpdateCompanionEntryRequest(msg);
       case "agent.queue.enqueue.request":
@@ -2649,6 +2646,90 @@ export class Session {
         return this.handleAgentQueueGetItemImagesRequest(msg);
       default:
         return undefined;
+    }
+  }
+
+  private async handleVoiceInputReceiptsRead(
+    msg: Extract<SessionInboundMessage, { type: "voice.input.receipts.read.request" }>,
+  ): Promise<void> {
+    const respond = (
+      items: Array<{
+        messageId: string;
+        state: "queued" | "submitted" | "removed" | "unknown";
+        createdAt: string;
+      }>,
+      nextCursor: string | null,
+      error: string | null,
+    ) =>
+      this.emit({
+        type: "voice.input.receipts.read.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          attachmentId: msg.attachmentId,
+          items,
+          nextCursor,
+          error,
+        },
+      });
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      respond([], null, resolved.error);
+      return;
+    }
+    if (
+      !this.voiceSessions.ownsAttachment(
+        this.delivery.currentSource,
+        resolved.agentId,
+        msg.attachmentId,
+        msg.generation,
+      )
+    ) {
+      respond([], null, "Voice attachment is no longer owned by this connection.");
+      return;
+    }
+    try {
+      const [queue, receipts] = await Promise.all([
+        this.agentQueueService?.list(resolved.agentId),
+        this.messageReceipts.listForAttachment({
+          agentId: resolved.agentId,
+          attachmentId: msg.attachmentId,
+        }),
+      ]);
+      const byId = new Map<
+        string,
+        {
+          messageId: string;
+          state: "queued" | "submitted" | "removed" | "unknown";
+          createdAt: string;
+        }
+      >();
+      for (const item of queue?.items ?? []) {
+        if (item.origin === "voice" && item.id.startsWith(`${msg.attachmentId}:`)) {
+          byId.set(item.id, { messageId: item.id, state: "queued", createdAt: item.createdAt });
+        }
+      }
+      for (const receipt of receipts) {
+        let state: "submitted" | "removed" | "unknown" = "unknown";
+        if (receipt.state === "completed") state = "submitted";
+        else if (receipt.state === "removed") state = "removed";
+        byId.set(receipt.messageId, {
+          messageId: receipt.messageId,
+          state,
+          createdAt: receipt.createdAt,
+        });
+      }
+      const all = [...byId.values()].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt) || a.messageId.localeCompare(b.messageId),
+      );
+      const offset = msg.after
+        ? Math.max(0, all.findIndex((item) => item.messageId === msg.after) + 1)
+        : 0;
+      const limit = msg.limit ?? 50;
+      const page = all.slice(offset, offset + limit);
+      respond(page, all[offset + limit] ? (page.at(-1)?.messageId ?? null) : null, null);
+    } catch (error) {
+      respond([], null, errorToFriendlyMessage(error));
     }
   }
 
@@ -4018,60 +4099,6 @@ export class Session {
           error: message,
         },
       });
-    }
-  }
-
-  /**
-   * Handle text message to agent (with optional image attachments)
-   */
-  private async handleSendAgentMessage(
-    agentId: string,
-    text: string,
-    messageId?: string,
-    images?: Array<{ data: string; mimeType: string }>,
-    attachments?: AgentAttachment[],
-    runOptions?: AgentRunOptions,
-    options?: { spokenInput?: boolean },
-  ): Promise<{ ok: true } | { ok: false; error: string }> {
-    this.sessionLogger.info(
-      {
-        agentId,
-        textPreview: text.substring(0, 50),
-        imageCount: images?.length ?? 0,
-        attachmentCount: attachments?.length ?? 0,
-      },
-      `Sending text to agent ${agentId}${
-        images && images.length > 0 ? ` with ${images.length} image attachment(s)` : ""
-      }${
-        attachments && attachments.length > 0
-          ? ` and ${attachments.length} structured attachment(s)`
-          : ""
-      }`,
-    );
-
-    const promptText = options?.spokenInput ? wrapSpokenInput(text) : text;
-    const prompt = buildAgentPrompt(promptText, images, attachments);
-
-    try {
-      await sendPromptToAgent({
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        agentId,
-        prompt,
-        messageId,
-        runOptions,
-        // A typed or spoken message from the human answers any permission the
-        // agent is blocked on.
-        clearPendingPermissions: true,
-        logger: this.sessionLogger,
-      });
-      return { ok: true };
-    } catch (error) {
-      this.handleAgentRunError(agentId, error, "Failed to send agent message");
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
     }
   }
 
@@ -8383,28 +8410,19 @@ export class Session {
         },
         "agent.session.send_agent_message",
       );
-      const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
-
-      // Fork busy-policy: unless the client explicitly interrupts or steers the
-      // in-flight turn, a mid-turn send is queued on the daemon and delivered
-      // when the turn finishes, so its running tool calls and subagents are not
-      // aborted. See docs/queue-mirroring.md.
+      // Ordinary input enters the daemon queue even while idle. This gives
+      // typed and spoken messages the same durable admission boundary.
       if (
         msg.activeTurnBehavior !== "interrupt" &&
         msg.activeTurnBehavior !== "steer" &&
-        this.agentQueueService &&
-        this.agentManager.hasInFlightRun(agentId)
+        this.agentQueueService
       ) {
-        const dispatchResult = await sendOrQueuePromptToAgent({
-          agentManager: this.agentManager,
-          agentStorage: this.agentStorage,
-          queueService: this.agentQueueService,
+        await this.agentQueueService.enqueue({
           agentId,
+          itemId: msg.messageId ?? uuidv4(),
           text: msg.text,
           ...(msg.images ? { images: msg.images } : {}),
           ...(msg.attachments ? { attachments: msg.attachments } : {}),
-          ...(msg.messageId ? { messageId: msg.messageId } : {}),
-          logger: this.sessionLogger,
         });
         this.emit({
           type: "send_agent_message_response",
@@ -8413,11 +8431,13 @@ export class Session {
             agentId,
             accepted: true,
             error: null,
-            ...(dispatchResult.queued ? { queued: true } : {}),
+            queued: true,
           },
         });
         return;
       }
+
+      const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
 
       const send = async () => {
         const result = await sendPromptToAgent({

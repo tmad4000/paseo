@@ -28,6 +28,7 @@ describe("voice microphone controls", () => {
   const i18n = createInstance();
   const onToggleMute = vi.fn();
   const onStop = vi.fn();
+  const onCancelAgent = vi.fn();
   const baseProps = {
     isMuted: true,
     isSwitching: false,
@@ -116,5 +117,24 @@ describe("voice microphone controls", () => {
     expect(unmute.getAttribute("aria-disabled")).toBe("true");
     await act(async () => unmute.click());
     expect(onToggleMute).not.toHaveBeenCalled();
+  });
+
+  it("shows delivery status and keeps Interrupt agent separate from Stop voice", async () => {
+    await render({
+      isMuted: false,
+      lastInputStatus: "queued",
+      isAgentRunning: true,
+      onCancelAgent,
+    });
+    expect(container.textContent).toContain("Speech queued for agent");
+    const interrupt = container.querySelector<HTMLElement>('[aria-label="Interrupt agent"]')!;
+    const stop = container.querySelector<HTMLElement>('[aria-label="Stop realtime voice"]')!;
+    await act(async () => stop.click());
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onCancelAgent).not.toHaveBeenCalled();
+    await act(async () => interrupt.click());
+    expect(onCancelAgent).toHaveBeenCalledOnce();
+    await render({ isMuted: false, lastInputStatus: "sent", isAgentRunning: true, onCancelAgent });
+    expect(container.textContent).toContain("Speech sent to agent");
   });
 });

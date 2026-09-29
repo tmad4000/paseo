@@ -5,6 +5,17 @@ import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { CompanionStreamCollector, restoreCompanionEntries } from "./companion-stream.js";
 import { randomUUID } from "node:crypto";
+import { stripVoiceModeSystemPrompt, VOICE_AVAILABLE_INSTRUCTION } from "../voice-config.js";
+
+/** The run reservation rejected a competing prompt before the provider saw it. */
+export class AgentRunBusyError extends Error {
+  readonly code = "AGENT_RUN_BUSY";
+
+  constructor(agentId: string) {
+    super(`Agent ${agentId} already has an active run`);
+    this.name = "AgentRunBusyError";
+  }
+}
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import {
@@ -2636,7 +2647,7 @@ export class AgentManager {
         },
         "agent.manager.stream.reject",
       );
-      throw new Error(`Agent ${agentId} already has an active run`);
+      throw new AgentRunBusyError(agentId);
     }
 
     const agent = existingAgent;
@@ -5357,6 +5368,11 @@ export class AgentManager {
       env: options.env,
       purpose: options.purpose,
     });
+    // Older voice toggles persisted a speech-only prompt block. Remove it only
+    // when a provider is naturally created or resumed.
+    const systemPrompt = stripVoiceModeSystemPrompt(storedConfig.systemPrompt);
+    if (systemPrompt) storedConfig.systemPrompt = systemPrompt;
+    else delete storedConfig.systemPrompt;
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
@@ -5371,6 +5387,14 @@ export class AgentManager {
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
+    if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(paseoToolPolicy)) {
+      launchConfig.daemonAppendSystemPrompt = [
+        launchConfig.daemonAppendSystemPrompt,
+        VOICE_AVAILABLE_INSTRUCTION,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
     return { storedConfig, launchConfig, paseoToolPolicy };
   }
 

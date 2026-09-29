@@ -6,6 +6,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { VoiceSession, type VoiceSessionHost } from "./voice-session.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
+import type { AgentStreamEvent } from "../../agent/agent-sdk-types.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 import type {
   SpeechToTextProvider,
@@ -59,26 +60,26 @@ class FakeVoiceSttSession extends EventEmitter implements StreamingTranscription
 
 interface FakeVoiceHost extends VoiceSessionHost {
   readonly emitted: SessionOutboundMessage[];
-  readonly spokenInput: Array<{ agentId: string; text: string }>;
+  readonly spokenInput: Array<{ agentId: string; text: string; messageId: string }>;
+  readonly worker: { turnId: string; childHeartbeat: number; running: boolean };
 }
 
 function createFakeHost(): FakeVoiceHost {
   const emitted: SessionOutboundMessage[] = [];
-  const spokenInput: Array<{ agentId: string; text: string }> = [];
+  const spokenInput: Array<{ agentId: string; text: string; messageId: string }> = [];
+  const worker = { turnId: "active-turn", childHeartbeat: 1, running: true };
   return {
     emitted,
     spokenInput,
+    worker,
     emit: (msg) => {
       emitted.push(msg);
     },
     loadAgent: async (agentId) =>
       ({ id: agentId, config: { systemPrompt: undefined } }) as unknown as ManagedAgent,
-    reloadAgentSession: async (agentId) => ({ id: agentId }) as unknown as ManagedAgent,
-    sendSpokenInput: async (agentId, text) => {
-      spokenInput.push({ agentId, text });
+    sendSpokenInput: async (agentId, text, messageId) => {
+      spokenInput.push({ agentId, text, messageId });
     },
-    interruptAgentIfRunning: async () => {},
-    hasActiveAgentRun: () => false,
   };
 }
 
@@ -102,8 +103,9 @@ function createVoiceSession(tts: TextToSpeechProvider | null = null, sttProvider
     sttLanguage: "en",
     tts,
     voiceBridge: {
-      registerVoiceSpeakHandler: (_id, handler) => {
+      registerVoiceSpeakHandler: (_id, _attachmentId, handler) => {
         speakHandler = handler;
+        return "test-generation";
       },
     },
     stt,
@@ -136,30 +138,61 @@ async function settle(): Promise<void> {
 }
 
 describe("VoiceSession streaming transcription", () => {
-  test("interrupts playback and the agent on speech detection without partial transcripts", async () => {
+  test("reads new visible assistant text at turn end for a live session without speak", async () => {
+    const tts: TextToSpeechProvider = {
+      async synthesizeSpeech() {
+        return { stream: Readable.from([Buffer.from("audio")]), format: "pcm;rate=24000" };
+      },
+    };
+    const { voiceSession, host } = createVoiceSession(tts);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    voiceSession.handleAgentEvent({ type: "turn_started" } as AgentStreamEvent);
+    voiceSession.handleAgentEvent({
+      type: "timeline",
+      item: { type: "assistant_message", text: "Visible answer." },
+    } as AgentStreamEvent);
+    voiceSession.handleAgentEvent({ type: "turn_completed" } as AgentStreamEvent);
+    try {
+      await waitForAudioOutput(host);
+      const audio = host.emitted.find((message) => message.type === "audio_output");
+      if (audio?.type !== "audio_output") throw new Error("Missing fallback playback");
+      voiceSession.handleAudioPlayed(audio.payload.id);
+      await settle();
+      expect(host.emitted.filter(isAudioOutput)).toHaveLength(1);
+    } finally {
+      await voiceSession.cleanup();
+    }
+  });
+
+  test("barge-in stops playback while the active turn and child keep working", async () => {
     const tts: TextToSpeechProvider = {
       async synthesizeSpeech() {
         return { stream: Readable.from([Buffer.from("audio")]), format: "pcm;rate=24000" };
       },
     };
     const { voiceSession, detector, host, speak } = createVoiceSession(tts);
-    const interrupted: string[] = [];
-    async function recordInterruption(agentId: string) {
-      interrupted.push(agentId);
-    }
-    host.interruptAgentIfRunning = recordInterruption;
+    const worker = host.worker;
     await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
     const playback = speak({ text: "A spoken response." });
     try {
       await waitForAudioOutput(host);
       detector.emit("speech_started");
       await settle();
-      expect(host.emitted).toContainEqual({
-        type: "voice_input_state",
-        payload: { isSpeaking: true },
-      });
-      expect(interrupted).toEqual([VOICE_AGENT_ID]);
+      expect(host.emitted).toContainEqual(
+        expect.objectContaining({
+          type: "voice_input_state",
+          payload: expect.objectContaining({ isSpeaking: true }),
+        }),
+      );
+      expect(host.worker).toBe(worker);
+      expect(host.worker).toEqual({ turnId: "active-turn", childHeartbeat: 1, running: true });
       await playback;
+      const nextPlayback = speak({ text: "The next response still plays." });
+      await vi.waitFor(() => expect(host.emitted.filter(isAudioOutput)).toHaveLength(2));
+      const latest = host.emitted.findLast((message) => message.type === "audio_output");
+      if (latest?.type !== "audio_output") throw new Error("Missing next audio output");
+      voiceSession.handleAudioPlayed(latest.payload.id);
+      await nextPlayback;
     } finally {
       await voiceSession.cleanup();
       await playback.catch(() => {});
@@ -268,7 +301,6 @@ describe("VoiceSession streaming transcription", () => {
 
   test("verbal mute discards private speech and hears unmute without sending either command", async () => {
     const { voiceSession, detector, sttSession, host } = createVoiceSession();
-    host.interruptAgentIfRunning = vi.fn(async () => {});
     await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID, "start", {
       voiceCommandsEnabled: true,
     });
@@ -288,51 +320,59 @@ describe("VoiceSession streaming transcription", () => {
     }
 
     await say("Mute microphone.");
-    expect(host.emitted).toContainEqual({
-      type: "voice_input_state",
-      payload: { isSpeaking: false, isMuted: true },
-    });
+    expect(host.emitted).toContainEqual(
+      expect.objectContaining({
+        type: "voice_input_state",
+        payload: expect.objectContaining({ isSpeaking: false, isMuted: true }),
+      }),
+    );
     host.emitted.length = 0;
     await say("private conversation");
     await say("please explain how to unmute microphone");
     expect(host.emitted).toEqual([]);
-    expect(host.interruptAgentIfRunning).not.toHaveBeenCalled();
     expect(host.spokenInput).toEqual([]);
 
     await say("Unmute microphone!");
-    expect(host.emitted).toContainEqual({
-      type: "voice_input_state",
-      payload: { isSpeaking: false, isMuted: false },
-    });
+    expect(host.emitted).toContainEqual(
+      expect.objectContaining({
+        type: "voice_input_state",
+        payload: expect.objectContaining({ isSpeaking: false, isMuted: false }),
+      }),
+    );
     expect(host.spokenInput).toEqual([]);
     await say("continue working");
-    expect(host.spokenInput).toEqual([{ agentId: VOICE_AGENT_ID, text: "continue working" }]);
+    expect(host.spokenInput).toEqual([
+      expect.objectContaining({
+        agentId: VOICE_AGENT_ID,
+        text: "continue working",
+        messageId: expect.stringContaining(":command-5"),
+      }),
+    ]);
     await voiceSession.cleanup();
   });
 
-  test("surfaces a refused voice-mode agent interruption", async () => {
+  test("abort leaves the worker and its child alive", async () => {
     const { voiceSession, host } = createVoiceSession();
-    host.interruptAgentIfRunning = vi.fn(async () => {
-      throw new Error("active run cancellation was not acknowledged");
-    });
-
+    const worker = host.worker;
     await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID);
+    await voiceSession.handleAbort();
+    expect(host.worker).toBe(worker);
+    expect(host.worker.running).toBe(true);
+    expect(host.worker.childHeartbeat).toBe(1);
 
-    await expect(voiceSession.handleAbort()).rejects.toThrow(
-      "active run cancellation was not acknowledged",
-    );
-    expect(host.interruptAgentIfRunning).toHaveBeenCalledWith(VOICE_AGENT_ID);
-    expect(host.emitted).toContainEqual(
-      expect.objectContaining({
-        type: "activity_log",
-        payload: expect.objectContaining({
-          type: "error",
-          content: "Voice interruption failed: active run cancellation was not acknowledged",
-          metadata: { voiceAbortFailed: true },
-        }),
-      }),
-    );
+    await voiceSession.cleanup();
+  });
 
+  test("stopping and restarting voice preserves the provider turn and child", async () => {
+    const { voiceSession, host } = createVoiceSession();
+    const worker = host.worker;
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID, "start");
+    await voiceSession.handleSetVoiceMode(false, VOICE_AGENT_ID, "stop");
+    expect(host.worker).toBe(worker);
+    expect(host.worker.running).toBe(true);
+    await voiceSession.handleSetVoiceMode(true, VOICE_AGENT_ID, "restart");
+    expect(host.worker.turnId).toBe("active-turn");
+    expect(host.worker.childHeartbeat).toBe(1);
     await voiceSession.cleanup();
   });
 
@@ -357,7 +397,11 @@ describe("VoiceSession streaming transcription", () => {
 
     expect(sttSession.commitCount).toBe(1);
     expect(host.spokenInput).toEqual([
-      { agentId: VOICE_AGENT_ID, text: "ship the streaming final" },
+      expect.objectContaining({
+        agentId: VOICE_AGENT_ID,
+        text: "ship the streaming final",
+        messageId: expect.stringContaining(":segment-1"),
+      }),
     ]);
     expect(host.emitted).toContainEqual(
       expect.objectContaining({
@@ -456,10 +500,12 @@ describe("VoiceSession streaming transcription", () => {
     sttSession.emit("error", new Error("speech worker exited"));
     await settle();
 
-    expect(host.emitted).toContainEqual({
-      type: "voice_input_state",
-      payload: { isSpeaking: false, recognitionIssue: "failed" },
-    });
+    expect(host.emitted).toContainEqual(
+      expect.objectContaining({
+        type: "voice_input_state",
+        payload: expect.objectContaining({ isSpeaking: false, recognitionIssue: "failed" }),
+      }),
+    );
     await voiceSession.cleanup();
   });
 

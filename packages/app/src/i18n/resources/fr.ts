@@ -1884,6 +1884,10 @@ export const fr: TranslationResources = {
     commandsUnavailable:
       "La commande vocale nécessite un hôte à jour avec reconnaissance locale. Utilisez le bouton du micro.",
     notListening: "N’écoute pas",
+    inputQueued: "Parole en attente pour l’agent",
+    inputSent: "Parole envoyée à l’agent",
+    inputRemoved: "Parole retirée de la file",
+    inputUnknown: "Envoi de la parole incertain",
     failure: {
       "nothing-recognized": "Je n’ai pas compris. Répétez.",
       "recognition-stalled":
@@ -1895,6 +1899,7 @@ export const fr: TranslationResources = {
       "microphone-lost": "Micro perdu. La session vocale s’est arrêtée.",
     },
     actions: {
+      interruptAgent: "Interrompre l’agent",
       mute: "Couper la voix en temps réel",
       unmute: "Réactiver la voix en temps réel",
       stop: "Arrêter la session vocale",

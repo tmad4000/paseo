@@ -29,14 +29,9 @@ test("a failed speech close reports the failure without retaining observation de
         async loadAgent() {
           throw new Error("Unexpected agent load");
         },
-        async reloadAgentSession() {
-          throw new Error("Unexpected agent reload");
-        },
         async sendSpokenInput() {
           throw new Error("Unexpected spoken input");
         },
-        async interruptAgentIfRunning() {},
-        hasActiveAgentRun: () => false,
       },
       stt: null,
       tts: null,

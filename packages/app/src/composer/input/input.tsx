@@ -148,6 +148,7 @@ export interface MessageInputProps {
   voiceAgentId?: string;
   /** When true and there's sendable content, calls onQueue instead of onSubmit */
   isAgentRunning?: boolean;
+  supportsVoiceConcurrentInput?: boolean;
   isCancellingAgent?: boolean;
   onCancelAgent?: () => void;
   /** Controls what the default send action (Enter, send button, dictation) does when the agent is
@@ -570,6 +571,7 @@ function MessageInputOverlay({
         isMuteSwitching: boolean;
         muteError: string | null;
         failure: VoiceFailureKind | null;
+        lastInputStatus: "queued" | "sent" | "removed" | "unknown" | null;
         toggleMute: () => void;
       }
     | null
@@ -615,6 +617,7 @@ function MessageInputOverlay({
         isMuteSwitching={voice.isMuteSwitching}
         muteError={voice.muteError}
         failure={voice.failure}
+        lastInputStatus={voice.lastInputStatus}
         isSwitching={voice.isVoiceSwitching}
         isAgentRunning={isAgentRunning}
         isCancellingAgent={isCancellingAgent}
@@ -860,6 +863,7 @@ interface ToggleRealtimeVoiceContext {
   isConnected: boolean;
   disabled: boolean;
   isAgentRunning: boolean;
+  supportsVoiceConcurrentInput: boolean;
   handleStopRealtimeVoice: () => Promise<unknown> | void;
   toast: { error: (msg: string) => void };
   interruptBeforeVoiceMessage: string;
@@ -874,7 +878,7 @@ function toggleRealtimeVoiceImpl(ctx: ToggleRealtimeVoiceContext): void {
     void ctx.handleStopRealtimeVoice();
     return;
   }
-  if (ctx.isAgentRunning) {
+  if (ctx.isAgentRunning && !ctx.supportsVoiceConcurrentInput) {
     ctx.toast.error(ctx.interruptBeforeVoiceMessage);
     return;
   }
@@ -1090,6 +1094,7 @@ interface ResolvedMessageInputProps {
   voiceServerId: string | undefined;
   voiceAgentId: string | undefined;
   isAgentRunning: boolean;
+  supportsVoiceConcurrentInput: boolean;
   defaultSendBehavior: "interrupt" | "steer" | "queue";
   onQueue: ((payload: MessagePayload) => void) | undefined;
   onSubmitLoadingPress: (() => void) | undefined;
@@ -1137,6 +1142,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     voiceServerId: props.voiceServerId,
     voiceAgentId: props.voiceAgentId,
     isAgentRunning: props.isAgentRunning ?? false,
+    supportsVoiceConcurrentInput: props.supportsVoiceConcurrentInput ?? false,
     defaultSendBehavior: props.defaultSendBehavior,
     onQueue: props.onQueue,
     onSubmitLoadingPress: props.onSubmitLoadingPress,
@@ -1192,6 +1198,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       voiceServerId,
       voiceAgentId,
       isAgentRunning,
+      supportsVoiceConcurrentInput,
       defaultSendBehavior,
       onQueue,
       onSubmitLoadingPress,
@@ -1502,6 +1509,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isConnected,
         disabled,
         isAgentRunning,
+        supportsVoiceConcurrentInput,
         handleStopRealtimeVoice,
         toast,
         interruptBeforeVoiceMessage: t("composer.voice.interruptBeforeVoice"),
@@ -1510,6 +1518,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       disabled,
       handleStopRealtimeVoice,
       isAgentRunning,
+      supportsVoiceConcurrentInput,
       isConnected,
       t,
       toast,

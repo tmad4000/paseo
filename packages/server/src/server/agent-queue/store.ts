@@ -23,6 +23,7 @@ const StoredQueuedImageSchema = z.object({
 const StoredQueuedMessageSchema = z.object({
   id: z.string(),
   text: z.string(),
+  origin: z.literal("voice").optional(),
   attachments: z.array(AgentAttachmentWireSchema).optional(),
   composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
   images: z.array(StoredQueuedImageSchema).optional(),
@@ -66,6 +67,7 @@ export function toAgentQueueSnapshot(queue: StoredAgentQueue): AgentQueueSnapsho
     items: queue.items.map((item) => ({
       id: item.id,
       text: item.text,
+      ...(item.origin ? { origin: item.origin } : {}),
       createdAt: item.createdAt,
       ...(item.attachments?.length ? { attachments: item.attachments } : {}),
       ...(item.composerAttachments?.length

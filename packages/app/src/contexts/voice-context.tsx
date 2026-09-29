@@ -38,6 +38,7 @@ const EMPTY_SNAPSHOT: VoiceRuntimeSnapshot = {
   failure: null,
   activeServerId: null,
   activeAgentId: null,
+  lastInputStatus: null,
 };
 
 const EMPTY_TELEMETRY: VoiceRuntimeTelemetrySnapshot = {

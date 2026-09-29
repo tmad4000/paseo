@@ -1162,6 +1162,7 @@ interface ComposerRightControlsSlotProps extends ComposerVoiceModeButtonProps {
   isVoiceModeForAgent: boolean;
   hasAgent: boolean;
   isAgentRunning: boolean;
+  supportsVoiceConcurrentInput: boolean;
   hasSendableContent: boolean;
   isCompact: boolean;
   showVoice: boolean;
@@ -1171,6 +1172,7 @@ function ComposerRightControlsSlot({
   isVoiceModeForAgent,
   hasAgent,
   isAgentRunning,
+  supportsVoiceConcurrentInput,
   hasSendableContent,
   isCompact,
   showVoice,
@@ -1178,7 +1180,11 @@ function ComposerRightControlsSlot({
 }: ComposerRightControlsSlotProps) {
   const hideVoiceForCompactInput = isCompact && hasSendableContent;
   const showVoiceModeButton =
-    showVoice && !isVoiceModeForAgent && hasAgent && !isAgentRunning && !hideVoiceForCompactInput;
+    showVoice &&
+    !isVoiceModeForAgent &&
+    hasAgent &&
+    (!isAgentRunning || supportsVoiceConcurrentInput) &&
+    !hideVoiceForCompactInput;
   if (!showVoiceModeButton) return null;
   return (
     <View style={styles.rightControls}>
@@ -1349,6 +1355,10 @@ function ComposerContentImpl({
   // the client keeps its own against those hosts.
   const supportsAgentMessageQueue = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
+  // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
+  const supportsVoiceConcurrentInput = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.voiceConcurrentInput === true,
   );
   const applyAgentQueueSnapshot = useSessionStore((state) => state.applyAgentQueueSnapshot);
   const forgeAutoAttachRef = useRef<ReturnType<typeof useComposerForgeAutoAttach>>(null);
@@ -2205,6 +2215,7 @@ function ComposerContentImpl({
         isVoiceModeForAgent={isVoiceModeForAgent}
         hasAgent={hasAgent}
         isAgentRunning={isAgentRunning}
+        supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
         hasSendableContent={hasSendableContent}
         isCompact={isCompactLayout}
         showVoice={mode.showVoice}
@@ -2223,6 +2234,7 @@ function ComposerContentImpl({
       hasAgent,
       hasSendableContent,
       isAgentRunning,
+      supportsVoiceConcurrentInput,
       isConnected,
       isCompactLayout,
       isVoiceModeForAgent,
@@ -2634,6 +2646,7 @@ function ComposerContentImpl({
                   voiceServerId={serverId}
                   voiceAgentId={agentId}
                   isAgentRunning={isAgentRunning}
+                  supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
                   isCancellingAgent={isCancellingAgent}
                   onCancelAgent={handleCancelAgent}
                   defaultSendBehavior={activeSendBehavior}

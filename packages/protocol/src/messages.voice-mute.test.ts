@@ -3,6 +3,47 @@ import { SessionInboundMessageSchema, SessionOutboundMessageSchema } from "./mes
 import { validateWSOutboundMessage } from "./validation/ws-outbound.js";
 
 describe("voice mute wire compatibility", () => {
+  it("accepts legacy voice frames while preserving optional attachment and receipt fields", () => {
+    const attachment = {
+      type: "set_voice_mode",
+      enabled: true,
+      agentId: "agent",
+      attachmentId: "logical",
+    };
+    const chunk = {
+      type: "voice_audio_chunk",
+      audio: "AA==",
+      format: "pcm",
+      isLast: false,
+      attachmentId: "logical",
+      generation: "g2",
+    };
+    const receipt = {
+      type: "voice.input.receipts.read.response",
+      payload: {
+        requestId: "r",
+        agentId: "agent",
+        attachmentId: "logical",
+        items: [{ messageId: "logical:one", state: "queued", createdAt: "2026-09-29T12:00:00Z" }],
+        nextCursor: null,
+        error: null,
+      },
+    };
+    expect(SessionInboundMessageSchema.parse(attachment)).toEqual(attachment);
+    expect(SessionInboundMessageSchema.parse(chunk)).toEqual(chunk);
+    expect(validateWSOutboundMessage({ type: "session", message: receipt })).toEqual({
+      success: true,
+      data: { type: "session", message: receipt },
+    });
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "voice_audio_chunk",
+        audio: "AA==",
+        format: "pcm",
+        isLast: false,
+      }),
+    ).toEqual({ type: "voice_audio_chunk", audio: "AA==", format: "pcm", isLast: false });
+  });
   it("continues accepting older voice messages without mute fields", () => {
     const request = { type: "set_voice_mode", enabled: true, agentId: "agent" };
     const state = { type: "voice_input_state", payload: { isSpeaking: true } };

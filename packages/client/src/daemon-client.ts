@@ -3955,7 +3955,7 @@ export class DaemonClient {
   async setVoiceMode(
     enabled: boolean,
     agentId?: string,
-    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean },
+    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string },
   ): Promise<SetVoiceModePayload> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
@@ -4002,8 +4002,35 @@ export class DaemonClient {
     return response.muted;
   }
 
-  async sendVoiceAudioChunk(audio: string, format: string, isLast = false): Promise<void> {
-    this.sendSessionMessage({ type: "voice_audio_chunk", audio, format, isLast });
+  async readVoiceInputReceipts(input: {
+    agentId: string;
+    attachmentId: string;
+    generation: string;
+    after?: string;
+    limit?: number;
+  }): Promise<
+    Extract<SessionOutboundMessage, { type: "voice.input.receipts.read.response" }>["payload"]
+  > {
+    const requestId = this.createRequestId();
+    const response = await this.sendRequest({
+      requestId,
+      message: { type: "voice.input.receipts.read.request", requestId, ...input },
+      select: (msg) =>
+        msg.type === "voice.input.receipts.read.response" && msg.payload.requestId === requestId
+          ? msg.payload
+          : null,
+    });
+    if (response.error) throw new Error(response.error);
+    return response;
+  }
+
+  async sendVoiceAudioChunk(
+    audio: string,
+    format: string,
+    isLast = false,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<void> {
+    this.sendSessionMessage({ type: "voice_audio_chunk", audio, format, isLast, ...transport });
   }
 
   async startDictationStream(dictationId: string, format: string): Promise<void> {
@@ -4219,8 +4246,12 @@ export class DaemonClient {
     this.sendSessionMessage({ type: "abort_request" });
   }
 
-  async audioPlayed(id: string, error?: string): Promise<void> {
-    this.sendSessionMessageStrict({ type: "audio_played", id, error });
+  async audioPlayed(
+    id: string,
+    error?: string,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<void> {
+    this.sendSessionMessageStrict({ type: "audio_played", id, error, ...transport });
   }
 
   // ============================================================================

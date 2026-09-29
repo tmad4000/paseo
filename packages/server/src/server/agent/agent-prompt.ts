@@ -242,6 +242,10 @@ export interface SendPromptToAgentParams {
   unarchive?: boolean;
   /** See {@link StartAgentRunOptions.clearPendingPermissions}. */
   clearPendingPermissions?: boolean;
+  /** Queue delivery must never replace a run that won the reservation race. */
+  replaceRunning?: boolean;
+  /** Queue delivery waits while a provider permission request is pending. */
+  blockPendingPermissions?: boolean;
   logger: Logger;
 }
 
@@ -328,12 +332,21 @@ export async function sendPromptToAgent(
     await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
   }
 
+  if (
+    params.blockPendingPermissions &&
+    params.agentManager.getPendingPermissions(params.agentId).length
+  ) {
+    const error = new Error(`Agent ${params.agentId} is waiting for permission`);
+    Object.assign(error, { code: "AGENT_RUN_BUSY" });
+    throw error;
+  }
+
   const runOptions = params.messageId
     ? { ...params.runOptions, clientMessageId: params.messageId }
     : params.runOptions;
 
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
-    replaceRunning: true,
+    replaceRunning: params.replaceRunning ?? true,
     activeTurnBehavior: params.activeTurnBehavior,
     clearPendingPermissions: params.clearPendingPermissions,
     runOptions,

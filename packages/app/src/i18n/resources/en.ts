@@ -1856,6 +1856,10 @@ export const en = {
     commandsUnavailable:
       "Verbal mute needs an updated host with local speech recognition. Use the microphone button here.",
     notListening: "Not listening",
+    inputQueued: "Speech queued for agent",
+    inputSent: "Speech sent to agent",
+    inputRemoved: "Speech removed from queue",
+    inputUnknown: "Speech delivery uncertain",
     failure: {
       "nothing-recognized": "Didn't catch that. Say it again.",
       "recognition-stalled": "Speech recognition stopped responding. Stop and restart voice.",
@@ -1865,6 +1869,7 @@ export const en = {
       "microphone-lost": "Microphone lost. Voice stopped.",
     },
     actions: {
+      interruptAgent: "Interrupt agent",
       mute: "Mute realtime voice",
       unmute: "Unmute realtime voice",
       stop: "Stop realtime voice",

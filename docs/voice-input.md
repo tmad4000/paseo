@@ -10,6 +10,26 @@ This is an **agent input mute**, not a hardware microphone switch. Capture and t
 
 Muted recognition uses a 750 ms onset buffer and bounds an utterance to six seconds; longer speech is discarded. It does not continuously decode partial transcripts while muted and does not load an additional model. A pause separates the unmute command from private conversation. Muted speech is never replayed after unmuting.
 
+## Voice while an agent works
+
+Starting or stopping voice attaches or detaches the microphone and playback; it does not reload the
+provider session, interrupt the current turn, resolve a permission, or stop children. Ordinary speech
+and default typed input enter the daemon's durable agent queue in admission order, including when the
+agent is idle. The queue starts each follow-up after the current turn and any permission wait clear.
+Use the separate **Interrupt agent** control to cancel a running turn.
+
+Each finalized utterance has one stable message ID. A transcript is acknowledged only after its
+queue write succeeds. The voice panel distinguishes **queued** from **sent to agent** and plays
+different local tones. On reconnect, the app reclaims its logical attachment with a new transport
+generation, reads the stored queue and send receipts, and ignores audio and acknowledgements from
+older generations. Stop voice does not remove admitted follow-ups. An uncertain provider outcome
+stays uncertain instead of silently sending the same speech twice. Another device cannot take over
+an active attachment without the current owner releasing it.
+
+Speech stops current playback, not agent work. A later reply can still play. If the agent did not use
+the speak tool during a turn, the attached voice session reads only its visible final assistant text.
+The speak tool remains available before attachment and returns promptly if voice is detached.
+
 ## When input fails
 
 Silence during voice mode looks the same as the agent thinking, so every failure that stops speech from reaching the agent is spoken on the device and shown in the voice panel. The status line changes from “Microphone on” to “Not listening” while input is blocked.

@@ -1805,6 +1805,10 @@ export const zhCN: TranslationResources = {
     mutedHint: "仅在主机上监听“unmute microphone”，其他语音将被丢弃。结束语音会话可关闭麦克风。",
     commandsUnavailable: "语音静音需要更新主机并启用本地语音识别。请使用麦克风按钮。",
     notListening: "未在收听",
+    inputQueued: "语音已加入智能体队列",
+    inputSent: "语音已发送给智能体",
+    inputRemoved: "语音已从队列移除",
+    inputUnknown: "语音送达状态未知",
     failure: {
       "nothing-recognized": "没听清，请再说一遍。",
       "recognition-stalled": "语音识别无响应。请停止并重新开始语音。",
@@ -1814,6 +1818,7 @@ export const zhCN: TranslationResources = {
       "microphone-lost": "麦克风已丢失。语音已停止。",
     },
     actions: {
+      interruptAgent: "中断智能体",
       mute: "静音 realtime voice",
       unmute: "取消静音 realtime voice",
       stop: "结束语音会话",

@@ -1206,7 +1206,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   type TopLevelCreateAgentArgs = z.infer<typeof canonicalTopLevelCreateAgentArgsSchema>;
   type LegacyTopLevelCreateAgentArgs = z.infer<typeof legacyTopLevelCreateAgentArgsSchema>;
 
-  if (options.voiceOnly || options.enableVoiceTools || callerContext?.enableVoiceTools) {
+  if (
+    options.voiceOnly ||
+    callerAgentId ||
+    options.enableVoiceTools ||
+    callerContext?.enableVoiceTools
+  ) {
     registerTool(
       "speak",
       {
@@ -1230,7 +1235,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         }
         const handler = resolveSpeakHandler?.(callerAgentId) ?? null;
         if (!handler) {
-          throw new Error(`No speak handler registered for your session '${callerAgentId}'`);
+          return {
+            content: [{ type: "text", text: "Voice is not attached. Continue in the chat." }],
+            structuredContent: ensureValidJson({ ok: false }),
+          };
         }
         await handler({
           text: args.text,

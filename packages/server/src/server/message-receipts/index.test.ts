@@ -75,3 +75,50 @@ test("failed local message preparation does not leave an ambiguous receipt", asy
   await requests.send(input);
   expect(sends).toBe(1);
 });
+
+test("voice receipts remain readable after more than 100 later deliveries", async () => {
+  const { requests, directory } = await fixture();
+  const input = {
+    agentId: "agent",
+    messageId: "attachment:first",
+    attachmentId: "attachment",
+    request: { text: "first" },
+    send: async () => {},
+  };
+  await requests.send(input);
+  for (let index = 0; index < 101; index++) {
+    await requests.send({
+      ...input,
+      messageId: `attachment:${index}`,
+      request: { text: `${index}` },
+    });
+  }
+  const reopened = new MessageReceipts(directory);
+  expect(await reopened.get("agent", "attachment:first", input.request)).toBe("completed");
+  const outcomes = await reopened.listForAttachment({
+    agentId: "agent",
+    attachmentId: "attachment",
+  });
+  expect(outcomes).toHaveLength(102);
+  expect(outcomes.map((item) => item.messageId)).toContain("attachment:first");
+  await expect(reopened.get("agent", "attachment:first", { text: "changed" })).rejects.toThrow(
+    "agent_request_key_conflict",
+  );
+});
+
+test("known reservation loss clears the pending receipt but provider ambiguity does not", async () => {
+  const { requests, directory } = await fixture();
+  const busy = Object.assign(new Error("busy"), { code: "AGENT_RUN_BUSY" });
+  const input = {
+    agentId: "agent",
+    messageId: "retryable",
+    request: { text: "follow up" },
+    send: async () => {
+      throw busy;
+    },
+  };
+  await expect(requests.send(input)).rejects.toThrow("busy");
+  expect(await new MessageReceipts(directory).get("agent", "retryable")).toBe("absent");
+  await requests.send({ ...input, send: async () => {} });
+  expect(await requests.get("agent", "retryable")).toBe("completed");
+});

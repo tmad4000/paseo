@@ -3,6 +3,7 @@ import type { AgentStreamEventPayload, SessionOutboundMessage } from "@getpaseo/
 import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities";
 import type { DaemonServerInfo } from "@/stores/session-store";
 import { createMicrophoneCue } from "@/voice/microphone-cue";
+import { createInputReceiptCue } from "@/voice/input-receipt-cue";
 import {
   createVoiceFailureTracker,
   voiceFailureFromRecognitionIssue,
@@ -63,6 +64,7 @@ export interface VoiceRuntimeSnapshot {
   failure: VoiceFailureKind | null;
   activeServerId: string | null;
   activeAgentId: string | null;
+  lastInputStatus: "queued" | "sent" | "removed" | "unknown" | null;
 }
 
 export interface VoiceRuntimeTelemetrySnapshot {
@@ -76,11 +78,38 @@ export interface VoiceSessionAdapter {
   setVoiceMode(
     enabled: boolean,
     agentId?: string,
-    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean },
-  ): Promise<{ voiceCommandsEnabled?: boolean; isMuted?: boolean }>;
+    input?: { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string },
+  ): Promise<{
+    voiceCommandsEnabled?: boolean;
+    isMuted?: boolean;
+    attachmentId?: string;
+    generation?: string;
+  }>;
   setVoiceInputMuted(muted: boolean): Promise<boolean>;
-  sendVoiceAudioChunk(audioData: string, mimeType: string): Promise<void>;
-  audioPlayed(chunkId: string, error?: string): Promise<void>;
+  sendVoiceAudioChunk(
+    audioData: string,
+    mimeType: string,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<void>;
+  audioPlayed(
+    chunkId: string,
+    error?: string,
+    transport?: { attachmentId: string; generation: string },
+  ): Promise<void>;
+  readVoiceInputReceipts(input: {
+    agentId: string;
+    attachmentId: string;
+    generation: string;
+    after?: string;
+    limit?: number;
+  }): Promise<{
+    items: Array<{
+      messageId: string;
+      state: "queued" | "submitted" | "removed" | "unknown";
+      createdAt: string;
+    }>;
+    nextCursor: string | null;
+  }>;
   abortRequest(): Promise<void>;
   setAssistantAudioPlaying(isPlaying: boolean): void;
 }
@@ -109,6 +138,8 @@ interface RuntimeState {
   serverSpeechDetected: boolean;
   transportReady: boolean;
   generation: number;
+  attachmentId: string | null;
+  transportGeneration: string | null;
   segmentDurationTimer: ReturnType<typeof setInterval> | null;
   lastDisplayVolumePublishMs: number;
   serverSpeechStartedAt: number | null;
@@ -159,6 +190,7 @@ const INITIAL_SNAPSHOT: VoiceRuntimeSnapshot = {
   failure: null,
   activeServerId: null,
   activeAgentId: null,
+  lastInputStatus: null,
 };
 
 const INITIAL_TELEMETRY: VoiceRuntimeTelemetrySnapshot = {
@@ -180,7 +212,8 @@ function snapshotsEqual(left: VoiceRuntimeSnapshot, right: VoiceRuntimeSnapshot)
     left.muteError === right.muteError &&
     left.failure === right.failure &&
     left.activeServerId === right.activeServerId &&
-    left.activeAgentId === right.activeAgentId
+    left.activeAgentId === right.activeAgentId &&
+    left.lastInputStatus === right.lastInputStatus
   );
 }
 
@@ -213,7 +246,16 @@ export interface VoiceRuntime {
   shouldPlayVoiceAudio(serverId: string): boolean;
   onAssistantAudioStarted(serverId: string): void;
   onAssistantAudioFinished(serverId: string): void;
-  onTranscriptionResult(serverId: string, text: string): void;
+  onTranscriptionResult(
+    serverId: string,
+    text: string,
+    payload?: { attachmentId?: string; generation?: string; queued?: boolean; messageId?: string },
+  ): void;
+  acceptsVoiceTransport(
+    serverId: string,
+    payload: { attachmentId?: string; generation?: string },
+  ): boolean;
+  onQueueChanged(serverId: string, agentId: string): void;
   onServerSpeechStateChanged(serverId: string, isSpeaking: boolean): void;
   onInputMutedChanged(serverId: string, muted: boolean): void;
   onInputError(serverId: string, error: string): void;
@@ -235,6 +277,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     serverSpeechDetected: false,
     transportReady: false,
     generation: 0,
+    attachmentId: null,
+    transportGeneration: null,
     segmentDurationTimer: null,
     lastDisplayVolumePublishMs: 0,
     serverSpeechStartedAt: null,
@@ -253,6 +297,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     playing: false,
   };
   const failures = createVoiceFailureTracker();
+  const inputStatuses = new Map<string, "queued" | "sent" | "removed" | "unknown">();
+  let receiptReadTail = Promise.resolve();
   const cuePcm16 = Uint8Array.from(Buffer.from(THINKING_TONE_NATIVE_PCM_BASE64, "base64"));
   const cueSource = {
     size: cuePcm16.byteLength,
@@ -372,11 +418,13 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     if (!activeSession) {
       return;
     }
-    if (error === undefined) {
-      await activeSession.adapter.audioPlayed(chunkId);
-    } else {
-      await activeSession.adapter.audioPlayed(chunkId, error);
-    }
+    const transport =
+      state.attachmentId && state.transportGeneration
+        ? { attachmentId: state.attachmentId, generation: state.transportGeneration }
+        : undefined;
+    if (transport) await activeSession.adapter.audioPlayed(chunkId, error, transport);
+    else if (error === undefined) await activeSession.adapter.audioPlayed(chunkId);
+    else await activeSession.adapter.audioPlayed(chunkId, error);
   }
 
   async function processPlaybackQueue(serverId: string): Promise<void> {
@@ -610,7 +658,14 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
       const base64 = Buffer.from(chunk).toString("base64");
 
-      void activeSession.adapter.sendVoiceAudioChunk(base64, PCM_MIME_TYPE).catch((error) => {
+      const transport =
+        state.attachmentId && state.transportGeneration
+          ? { attachmentId: state.attachmentId, generation: state.transportGeneration }
+          : undefined;
+      const upload = transport
+        ? activeSession.adapter.sendVoiceAudioChunk(base64, PCM_MIME_TYPE, transport)
+        : activeSession.adapter.sendVoiceAudioChunk(base64, PCM_MIME_TYPE);
+      void upload.catch((error) => {
         console.error(`[VoiceRuntime#${instanceId}] Failed to send audio chunk:`, error);
       });
     },
@@ -618,13 +673,70 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
   function resetToDisabledState(): void {
     failures.reset();
+    inputStatuses.clear();
     state.transportReady = false;
+    state.attachmentId = null;
+    state.transportGeneration = null;
     state.turnInProgress = false;
     state.serverSpeechDetected = false;
     state.lastDisplayVolumePublishMs = 0;
     uploader.reset();
     resetCaptureTelemetry();
     patchSnapshot({ ...INITIAL_SNAPSHOT });
+  }
+
+  function applyInputStatus(
+    messageId: string,
+    status: "queued" | "sent" | "removed" | "unknown",
+    playCue: boolean,
+  ): void {
+    const previous = inputStatuses.get(messageId);
+    if (previous && previous !== "queued" && status === "queued") return;
+    if (previous === status) return;
+    inputStatuses.set(messageId, status);
+    patchSnapshot({ lastInputStatus: status });
+    if (playCue && (status === "queued" || status === "sent")) {
+      void playLocalCue(
+        createInputReceiptCue(status),
+        status === "queued" ? "Queued" : "Sent to agent",
+      );
+    }
+  }
+
+  function reconcileInputReceipts(playCue: boolean): void {
+    receiptReadTail = receiptReadTail
+      .catch(() => undefined)
+      .then(async () => {
+        const active = getActiveSession();
+        const agentId = state.snapshot.activeAgentId;
+        const attachmentId = state.attachmentId;
+        const generation = state.transportGeneration;
+        if (!active || !agentId || !attachmentId || !generation || !state.transportReady) return;
+        let after: string | undefined;
+        do {
+          const page = await active.adapter.readVoiceInputReceipts({
+            agentId,
+            attachmentId,
+            generation,
+            ...(after ? { after } : {}),
+            limit: 100,
+          });
+          if (generation !== state.transportGeneration || attachmentId !== state.attachmentId)
+            return;
+          for (const item of page.items) {
+            applyInputStatus(
+              item.messageId,
+              item.state === "submitted" ? "sent" : item.state,
+              playCue,
+            );
+          }
+          after = page.nextCursor ?? undefined;
+        } while (after);
+        return undefined;
+      })
+      .catch((error) => {
+        console.warn(`[VoiceRuntime#${instanceId}] Could not reconcile voice receipts:`, error);
+      });
   }
 
   function publishDisplayVolume(level: number, nowMs: number): void {
@@ -661,6 +773,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     resetToDisabledState();
   }
 
+  // The reconnect transition keeps its generation checks and failure cleanup together.
+  // oxlint-disable-next-line complexity
   async function resyncVoiceMode(serverId: string): Promise<void> {
     if (
       !state.snapshot.isVoiceMode ||
@@ -680,18 +794,34 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     try {
       await deps.engine.initialize();
       if (generation !== state.generation) return;
-      const response = state.snapshot.voiceCommandsEnabled
-        ? await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId, {
-            voiceCommandsEnabled: true,
-            isMuted: state.snapshot.isMuted,
-          })
+      let options:
+        | { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string }
+        | undefined;
+      if (state.snapshot.voiceCommandsEnabled) {
+        options = {
+          voiceCommandsEnabled: true,
+          isMuted: state.snapshot.isMuted,
+          ...(state.attachmentId ? { attachmentId: state.attachmentId } : {}),
+        };
+      } else if (state.attachmentId) {
+        options = { attachmentId: state.attachmentId };
+      }
+      const response = options
+        ? await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId, options)
         : await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
       if (generation !== state.generation) return;
+      if (
+        state.attachmentId &&
+        (response.attachmentId !== state.attachmentId || !response.generation)
+      )
+        throw new Error("Host did not acknowledge this voice attachment");
       if (state.snapshot.voiceCommandsEnabled && !response.voiceCommandsEnabled) {
         void reportFailure("recognition-unavailable");
         return;
       }
       state.transportReady = true;
+      state.transportGeneration = response.generation ?? null;
+      reconcileInputReceipts(false);
       patchSnapshot({ muteError: null });
       // The host re-created its recognizer, so every earlier failure is stale.
       const recovered = clearFailures([
@@ -767,6 +897,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       }
       if (!connected) {
         state.transportReady = false;
+        state.transportGeneration = null;
         if (!state.snapshot.isVoiceMode) return;
         state.generation += 1;
         state.turnInProgress = false;
@@ -822,6 +953,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       ) {
         return;
       }
+      if (state.transportGeneration && payload.generation !== state.transportGeneration) return;
+      if (state.attachmentId && payload.attachmentId !== state.attachmentId) return;
 
       const groupId = payload.groupId ?? payload.id;
       const chunkIndex = payload.chunkIndex ?? 0;
@@ -858,6 +991,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       void processPlaybackQueue(serverId);
     },
 
+    // Capture admission, generation checks, and rollback are one transition.
+    // oxlint-disable-next-line complexity
     async startVoice(serverId, agentId) {
       const session = sessions.get(serverId);
       if (!session) {
@@ -881,6 +1016,9 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       const generation = state.generation + 1;
       let enabledCurrentVoiceMode = false;
       state.generation = generation;
+      state.attachmentId =
+        serverInfo?.features?.voiceConcurrentInput === true ? crypto.randomUUID() : null;
+      state.transportGeneration = null;
       state.transportReady = false;
       patchSnapshot((prev) => ({
         ...prev,
@@ -910,13 +1048,27 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         await deps.engine.initialize();
         // COMPAT(voiceVerbalMute): added in fork v0.2.0, remove gate after 2027-03-21.
         const supportsCommands = serverInfo?.features?.voiceVerbalMute === true;
-        let response: { voiceCommandsEnabled?: boolean; isMuted?: boolean };
+        let response: {
+          voiceCommandsEnabled?: boolean;
+          isMuted?: boolean;
+          attachmentId?: string;
+          generation?: string;
+        };
         try {
-          response = supportsCommands
-            ? await session.adapter.setVoiceMode(true, agentId, {
-                voiceCommandsEnabled: true,
-                isMuted: false,
-              })
+          let options:
+            | { voiceCommandsEnabled?: boolean; isMuted?: boolean; attachmentId?: string }
+            | undefined;
+          if (supportsCommands) {
+            options = {
+              voiceCommandsEnabled: true,
+              isMuted: false,
+              ...(state.attachmentId ? { attachmentId: state.attachmentId } : {}),
+            };
+          } else if (state.attachmentId) {
+            options = { attachmentId: state.attachmentId };
+          }
+          response = options
+            ? await session.adapter.setVoiceMode(true, agentId, options)
             : await session.adapter.setVoiceMode(true, agentId);
         } catch (error) {
           // The host starts its recognizer while enabling voice mode, so a rejection with the
@@ -927,12 +1079,19 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           throw error;
         }
         enabledCurrentVoiceMode = true;
+        if (
+          state.attachmentId &&
+          (response.attachmentId !== state.attachmentId || !response.generation)
+        )
+          throw new Error("Host did not acknowledge this voice attachment");
         await deps.engine.startCapture();
         if (state.generation !== generation) {
           return;
         }
 
         state.transportReady = true;
+        state.transportGeneration = response.generation ?? null;
+        reconcileInputReceipts(false);
         state.turnInProgress = false;
         uploader.reset();
         resetCaptureTelemetry();
@@ -1118,7 +1277,16 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       reconcileCue();
     },
 
-    onTranscriptionResult(serverId, text) {
+    acceptsVoiceTransport(serverId, payload) {
+      if (serverId !== state.snapshot.activeServerId) return false;
+      if (!state.transportGeneration) return true;
+      return (
+        payload.generation === state.transportGeneration &&
+        payload.attachmentId === state.attachmentId
+      );
+    },
+
+    onTranscriptionResult(serverId, text, payload) {
       if (
         serverId !== state.snapshot.activeServerId ||
         !state.snapshot.isVoiceMode ||
@@ -1126,10 +1294,23 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       ) {
         return;
       }
+      if (state.transportGeneration && payload?.generation !== state.transportGeneration) return;
+      if (state.attachmentId && payload?.attachmentId !== state.attachmentId) return;
+      if (state.transportGeneration && text.trim() && payload?.queued !== true) return;
+
+      if (payload?.messageId && payload.queued) {
+        applyInputStatus(payload.messageId, "queued", true);
+      }
 
       if (text.trim()) {
         // Recognition works again, so the next miss or stall is a new episode.
         clearFailures(["nothing-recognized", "recognition-stalled", "recognition-failed"]);
+        if (state.attachmentId) {
+          state.turnInProgress = false;
+          patchSnapshot((prev) => ({ ...prev, phase: "listening" }));
+          stopCue();
+          return;
+        }
         state.turnInProgress = true;
         patchSnapshot((prev) => ({ ...prev, phase: "waiting" }));
         reconcileCue();
@@ -1139,6 +1320,12 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       state.turnInProgress = false;
       patchSnapshot((prev) => ({ ...prev, phase: "listening" }));
       stopCue();
+    },
+
+    onQueueChanged(serverId, agentId) {
+      if (state.snapshot.activeServerId === serverId && state.snapshot.activeAgentId === agentId) {
+        reconcileInputReceipts(true);
+      }
     },
 
     onServerSpeechStateChanged(serverId, isSpeaking) {
@@ -1182,6 +1369,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       }
 
       if (eventType === "turn_started") {
+        reconcileInputReceipts(true);
         state.turnInProgress = true;
         if (state.snapshot.phase !== "playing") {
           patchSnapshot((prev) => ({ ...prev, phase: "waiting" }));

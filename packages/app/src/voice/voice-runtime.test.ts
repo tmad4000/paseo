@@ -51,6 +51,7 @@ function createSessionAdapter(serverId = "server-1"): VoiceSessionAdapter {
     setVoiceInputMuted: vi.fn(async (muted: boolean) => muted),
     sendVoiceAudioChunk: vi.fn().mockResolvedValue(undefined),
     audioPlayed: vi.fn().mockResolvedValue(undefined),
+    readVoiceInputReceipts: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     abortRequest: vi.fn().mockResolvedValue(undefined),
     setAssistantAudioPlaying: vi.fn(),
   };
@@ -104,6 +105,94 @@ function createRuntime(options?: {
 }
 
 describe("voice runtime", () => {
+  it("uses one logical attachment across reconnect and ignores stale transport output", async () => {
+    const adapter = createSessionAdapter();
+    let generation = "g1";
+    vi.mocked(adapter.setVoiceMode).mockImplementation(async (_enabled, _agentId, input) => ({
+      attachmentId: input?.attachmentId,
+      generation,
+    }));
+    const { runtime, engine } = createRuntime({
+      getServerInfo: () => ({ ...createServerInfo(), features: { voiceConcurrentInput: true } }),
+    });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    const firstStart = vi.mocked(adapter.setVoiceMode).mock.calls[0];
+    const attachmentId = firstStart?.[2]?.attachmentId;
+    expect(attachmentId).toEqual(expect.any(String));
+    runtime.handleCapturePcm(new Uint8Array([1, 2]));
+    expect(adapter.sendVoiceAudioChunk).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { attachmentId, generation: "g1" },
+    );
+
+    runtime.onTranscriptionResult("server-1", "follow up", {
+      attachmentId,
+      generation: "g1",
+      queued: true,
+      messageId: `${attachmentId}:one`,
+    });
+    expect(runtime.getSnapshot()).toMatchObject({ phase: "listening", lastInputStatus: "queued" });
+    generation = "g2";
+    runtime.updateSessionConnection("server-1", false);
+    runtime.updateSessionConnection("server-1", true);
+    await vi.waitFor(() => expect(adapter.setVoiceMode).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(adapter.setVoiceMode).mock.calls[1]?.[2]?.attachmentId).toBe(attachmentId);
+    expect(runtime.acceptsVoiceTransport("server-1", { attachmentId, generation: "g1" })).toBe(
+      false,
+    );
+    expect(runtime.acceptsVoiceTransport("server-1", { attachmentId, generation: "g2" })).toBe(
+      true,
+    );
+    vi.mocked(engine.play).mockClear();
+    runtime.handleAudioOutput("server-1", {
+      ...createAudioPayload({ id: "old", groupId: "old", chunkIndex: 0, isLastChunk: true }),
+      attachmentId,
+      generation: "g1",
+    });
+    expect(engine.play).not.toHaveBeenCalled();
+    await runtime.stopVoice();
+  });
+
+  it("reconciles queued and submitted speech by message id without replaying admission", async () => {
+    const adapter = createSessionAdapter();
+    vi.mocked(adapter.setVoiceMode).mockImplementation(async (_enabled, _agentId, input) => ({
+      attachmentId: input?.attachmentId,
+      generation: "g1",
+    }));
+    const { runtime } = createRuntime({
+      getServerInfo: () => ({ ...createServerInfo(), features: { voiceConcurrentInput: true } }),
+    });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    const attachmentId = vi.mocked(adapter.setVoiceMode).mock.calls[0]?.[2]?.attachmentId ?? "";
+    vi.mocked(adapter.readVoiceInputReceipts).mockResolvedValue({
+      items: [
+        { messageId: `${attachmentId}:one`, state: "queued", createdAt: "2026-09-29T12:00:00Z" },
+      ],
+      nextCursor: null,
+    });
+    runtime.onQueueChanged("server-1", "agent-1");
+    await vi.waitFor(() => expect(runtime.getSnapshot().lastInputStatus).toBe("queued"));
+    vi.mocked(adapter.readVoiceInputReceipts).mockResolvedValue({
+      items: [
+        { messageId: `${attachmentId}:one`, state: "submitted", createdAt: "2026-09-29T12:00:00Z" },
+      ],
+      nextCursor: null,
+    });
+    runtime.onQueueChanged("server-1", "agent-1");
+    await vi.waitFor(() => expect(runtime.getSnapshot().lastInputStatus).toBe("sent"));
+    runtime.onTranscriptionResult("server-1", "follow up", {
+      attachmentId,
+      generation: "g1",
+      queued: true,
+      messageId: `${attachmentId}:one`,
+    });
+    expect(runtime.getSnapshot().lastInputStatus).toBe("sent");
+    expect(adapter.sendVoiceAudioChunk).not.toHaveBeenCalled();
+    await runtime.stopVoice();
+  });
   function createCommandRuntime() {
     const adapter = createSessionAdapter();
     vi.mocked(adapter.setVoiceMode).mockResolvedValue({

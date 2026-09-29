@@ -15,6 +15,8 @@ import {
   type SendQueuedPromptInput,
 } from "./service.js";
 import { AgentQueueStore } from "./store.js";
+import { MessageReceipts } from "../message-receipts/index.js";
+import { wrapSpokenInput } from "../voice-config.js";
 
 const AGENT_ID = "agent-1";
 
@@ -24,6 +26,7 @@ const AGENT_ID = "agent-1";
  */
 class FakeAgentController implements AgentQueueAgentController {
   lifecycle: AgentLifecycleStatus = "idle";
+  pendingPermissions = 0;
   private readonly subscribers = new Set<(event: AgentManagerEvent) => void>();
 
   subscribe = ((callback: (event: AgentManagerEvent) => void) => {
@@ -39,10 +42,31 @@ class FakeAgentController implements AgentQueueAgentController {
       lifecycle: this.lifecycle,
     }) as ManagedAgent) as AgentQueueAgentController["getAgent"];
 
+  getPendingPermissions = (() =>
+    Array.from({ length: this.pendingPermissions }, (_, index) => ({
+      id: `permission-${index}`,
+    }))) as NonNullable<AgentQueueAgentController["getPendingPermissions"]>;
+
   emitLifecycle(lifecycle: AgentLifecycleStatus, agentId = AGENT_ID): void {
     this.lifecycle = lifecycle;
     for (const subscriber of this.subscribers) {
       subscriber({ type: "agent_state", agent: { id: agentId, lifecycle } as ManagedAgent });
+    }
+  }
+
+  resolvePermission(agentId = AGENT_ID): void {
+    this.pendingPermissions = 0;
+    for (const subscriber of this.subscribers) {
+      subscriber({
+        type: "agent_stream",
+        agentId,
+        event: {
+          type: "permission_resolved",
+          requestId: "permission-0",
+          resolution: { behavior: "allow" },
+          provider: "codex",
+        },
+      } as unknown as AgentManagerEvent);
     }
   }
 }
@@ -162,6 +186,99 @@ describe("AgentQueueService", () => {
 
     expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
     expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("receipt-backed voice and typed messages preserve FIFO and equal spoken utterances", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "attachment:a",
+      text: "same",
+      origin: "voice",
+    });
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "attachment:b",
+      text: "same",
+      origin: "voice",
+    });
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "typed-1", text: "typed" });
+    for (let index = 0; index < 3; index++) {
+      harness.agents.emitLifecycle("running");
+      harness.agents.emitLifecycle("idle");
+      await harness.service.flushDrains();
+    }
+    expect(harness.sent.map((item) => item.messageId)).toEqual([
+      "attachment:a",
+      "attachment:b",
+      "typed-1",
+    ]);
+    expect(harness.sent.map((item) => item.prompt)).toEqual([
+      wrapSpokenInput("same"),
+      wrapSpokenInput("same"),
+      "typed",
+    ]);
+    expect(await receipts.get(AGENT_ID, "attachment:a")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("a permission wait holds the receipt-backed head until the keyed resolution", async () => {
+    harness.service.setMessageReceipts(new MessageReceipts(join(dir, "agent-requests")));
+    harness.agents.pendingPermissions = 1;
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "attachment:a",
+      text: "yes",
+      origin: "voice",
+    });
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "attachment:a",
+    ]);
+    harness.agents.resolvePermission();
+    await harness.service.flushDrains();
+    expect(harness.sent.map((item) => item.messageId)).toEqual(["attachment:a"]);
+  });
+
+  test("a competing run retains the head and clears only its pre-provider receipt", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.failSends(Object.assign(new Error("Agent busy"), { code: "AGENT_RUN_BUSY" }));
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "race", text: "follow up" });
+    await harness.service.flushDrains();
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual(["race"]);
+    expect(await receipts.get(AGENT_ID, "race")).toBe("absent");
+    harness.failSends(null);
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent.map((item) => item.messageId)).toEqual(["race"]);
+  });
+
+  test("removing admitted speech records an outcome that survives a later retry", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "attachment:removed",
+      text: "cancel this",
+      origin: "voice",
+    });
+    await harness.service.remove(AGENT_ID, "attachment:removed");
+    expect(await receipts.get(AGENT_ID, "attachment:removed")).toBe("removed");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "attachment:removed",
+      text: "cancel this",
+      origin: "voice",
+    });
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+    expect(harness.sent).toEqual([]);
   });
 
   test("a send that fails leaves the message at the front of the queue", async () => {

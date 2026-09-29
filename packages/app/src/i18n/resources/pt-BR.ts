@@ -1865,6 +1865,10 @@ export const ptBR: TranslationResources = {
     commandsUnavailable:
       "O comando de silenciar exige um host atualizado com reconhecimento local. Use o botão do microfone.",
     notListening: "Não está ouvindo",
+    inputQueued: "Fala na fila do agente",
+    inputSent: "Fala enviada ao agente",
+    inputRemoved: "Fala removida da fila",
+    inputUnknown: "Entrega da fala incerta",
     failure: {
       "nothing-recognized": "Não entendi. Diga de novo.",
       "recognition-stalled": "O reconhecimento de voz parou de responder. Pare e reinicie a voz.",
@@ -1874,6 +1878,7 @@ export const ptBR: TranslationResources = {
       "microphone-lost": "Microfone perdido. A voz foi interrompida.",
     },
     actions: {
+      interruptAgent: "Interromper agente",
       mute: "Silenciar voz em tempo real",
       unmute: "Ativar voz em tempo real",
       stop: "Encerrar a sessão de voz",

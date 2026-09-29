@@ -1,4 +1,5 @@
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
+import type { AgentStreamEvent } from "../../agent/agent-sdk-types.js";
 import type { OwnedOperation, SessionDelivery } from "../owned-subscriptions/index.js";
 import { VoiceSession, type VoiceSessionOptions } from "./voice-session.js";
 
@@ -22,6 +23,7 @@ interface ActiveVoiceSource {
   voice: VoiceSession;
   owner: OwnedOperation;
   pending: Set<Promise<void>>;
+  lifecycleTail: Promise<void>;
   closing: boolean;
 }
 
@@ -45,15 +47,42 @@ export class VoiceSessions {
     );
   }
 
+  ownsAttachment(
+    source: object | undefined,
+    agentId: string,
+    attachmentId: string,
+    generation: string,
+  ): boolean {
+    const active = source ? this.sources.get(source) : undefined;
+    return (
+      !!active &&
+      !active.closing &&
+      active.voice.isActiveForAgent(agentId) &&
+      active.voice.acceptsInput(attachmentId, generation)
+    );
+  }
+
+  handleAgentEvent(agentId: string, event: AgentStreamEvent): void {
+    for (const source of this.sources.values()) {
+      if (!source.closing && source.voice.isActiveForAgent(agentId)) {
+        source.voice.handleAgentEvent(event);
+      }
+    }
+  }
+
   handleMessage(message: VoiceMessage): Promise<void> {
     const source = this.delivery.currentSource;
     if (!source) throw new Error("Voice request has no source");
     const existing = this.sources.get(source);
     if (existing?.closing) return existing.owner.release().then(() => this.handleMessage(message));
     const active = existing ?? this.startSource(source);
-    const pending = Promise.resolve().then(() => {
-      return active.closing ? undefined : this.dispatch(active.voice, message);
-    });
+    const before = message.type === "set_voice_mode" ? active.lifecycleTail : Promise.resolve();
+    const pending = before
+      .catch(() => undefined)
+      .then(() => {
+        return active.closing ? undefined : this.dispatch(active.voice, message);
+      });
+    if (message.type === "set_voice_mode") active.lifecycleTail = pending;
     active.pending.add(pending);
     const finished = () => {
       active.pending.delete(pending);
@@ -80,6 +109,7 @@ export class VoiceSessions {
     const active: ActiveVoiceSource = {
       owner,
       pending: new Set(),
+      lifecycleTail: Promise.resolve(),
       closing: false,
       voice: new VoiceSession({
         ...this.options,
@@ -104,11 +134,16 @@ export class VoiceSessions {
   private async dispatch(voice: VoiceSession, message: VoiceMessage): Promise<void> {
     switch (message.type) {
       case "voice_audio_chunk":
-        return voice.handleAudioChunk(message);
+        return voice.acceptsInput(message.attachmentId, message.generation)
+          ? voice.handleAudioChunk(message)
+          : Promise.resolve();
       case "abort_request":
         return voice.handleAbort();
       case "audio_played":
-        return voice.handleAudioPlayed(message.id, message.error);
+        if (voice.acceptsInput(message.attachmentId, message.generation)) {
+          voice.handleAudioPlayed(message.id, message.error);
+        }
+        return Promise.resolve();
       case "set_voice_mode":
         return voice.handleSetVoiceMode(
           message.enabled,
