@@ -285,7 +285,7 @@ test.describe("Composer attachments", () => {
       await gate.waitForHeldServerMessage("agent.queue.get_item_images.response");
       await gate.drop();
       await expect(
-        page.getByRole("alert").filter({ hasText: /socket|connect|closed/i }),
+        page.getByRole("alert").filter({ hasText: /^Dropped by reconnect test\.$/ }),
       ).toBeVisible();
       await expect(edit).toBeVisible();
       await expectComposerDraft(page, "");
