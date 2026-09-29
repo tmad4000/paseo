@@ -172,6 +172,8 @@ export const ja: TranslationResources = {
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
+      steerRequiresUpdatedHost:
+        "実行中のターンを中断せずに誘導するには、この Paseo ホストを更新してください。",
       failedToCreateAgent: "エージェントの作成に失敗しました",
       noHostSelected: "ホストが選択されていません",
       initialPromptRequired: "初期プロンプトが必要です",

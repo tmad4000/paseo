@@ -171,6 +171,7 @@ export const ar: TranslationResources = {
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
+      steerRequiresUpdatedHost: "حدّث مضيف Paseo للتوجيه دون مقاطعة المهمة الجارية.",
       failedToCreateAgent: "فشل في إنشاء الوكيل",
       noHostSelected: "لم يتم تحديد مضيف",
       initialPromptRequired: "مطلوب موجه الأولي",

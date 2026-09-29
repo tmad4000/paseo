@@ -174,6 +174,8 @@ export const fr: TranslationResources = {
     },
     errors: {
       failedToSend: "Échec de l'envoi du message",
+      steerRequiresUpdatedHost:
+        "Mettez à jour cet hôte Paseo pour orienter le message sans interrompre le tour actif.",
       failedToCreateAgent: "Échec de la création de l'agent",
       noHostSelected: "Aucun hôte sélectionné",
       initialPromptRequired: "Une invite initiale est requise",

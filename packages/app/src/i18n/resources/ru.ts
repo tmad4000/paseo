@@ -172,6 +172,8 @@ export const ru: TranslationResources = {
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
+      steerRequiresUpdatedHost:
+        "Обновите этот хост Paseo, чтобы направить сообщение, не прерывая текущий ход.",
       failedToCreateAgent: "Не удалось создать агента.",
       noHostSelected: "Хост не выбран",
       initialPromptRequired: "Необходим инициализирующий промпт",

@@ -111,7 +111,7 @@ import {
 } from "@/attachments/service";
 import { resolveAgentControlsMode } from "@/composer/agent-controls/mode";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
-import { resolveActiveSendBehavior } from "./input/state";
+import { resolveActiveSendBehavior, resolveDirectActiveTurnBehavior } from "./input/state";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
@@ -1345,6 +1345,9 @@ function ComposerContentImpl({
   const supportsForgeSearch = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.forgeSearch === true,
   );
+  const supportsSteerOnly = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.steerOnly === true,
+  );
   // COMPAT(agentMessageQueue): added in v0.4.0. Older daemons have no queue, so
   // the client keeps its own against those hosts.
   const supportsAgentMessageQueue = useSessionStore(
@@ -1491,7 +1494,7 @@ function ComposerContentImpl({
         agentId: string,
         text: string,
         attachments: ComposerAttachment[],
-        activeTurnBehavior: "interrupt" | "steer",
+        activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
       ) => Promise<void>)
     | null
   >(null);
@@ -1545,7 +1548,14 @@ function ComposerContentImpl({
   }, [focusInput, onFocusInput]);
 
   const submitMessage = useCallback(
-    async (text: string, submitAttachments: ComposerAttachment[]) => {
+    async (
+      text: string,
+      submitAttachments: ComposerAttachment[],
+      activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
+    ) => {
+      if (activeTurnBehavior === "steer_only" && !supportsSteerOnly) {
+        throw new Error(t("composer.errors.steerRequiresUpdatedHost"));
+      }
       onMessageSent?.();
       if (onSubmitMessageRef.current) {
         await onSubmitMessageRef.current({ text, attachments: submitAttachments, cwd });
@@ -1558,10 +1568,10 @@ function ComposerContentImpl({
         agentIdRef.current,
         text,
         submitAttachments,
-        appSettings.sendBehavior === "steer" ? "steer" : "interrupt",
+        resolveDirectActiveTurnBehavior(appSettings.sendBehavior, activeTurnBehavior),
       );
     },
-    [appSettings.sendBehavior, cwd, onMessageSent, t],
+    [appSettings.sendBehavior, cwd, onMessageSent, supportsSteerOnly, t],
   );
 
   useEffect(() => {
@@ -1573,14 +1583,13 @@ function ComposerContentImpl({
       targetAgentId: string,
       text: string,
       sendAttachments: ComposerAttachment[],
-      activeTurnBehavior: "interrupt" | "steer",
+      activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
-      // Reaching a direct send while the agent's turn is active means the user
-      // chose the interrupt-labeled action (queue mode routes elsewhere), so
-      // tell the daemon the interruption is intentional.
+      // Only an explicit interrupt action may request cancellation. Queue mode's
+      // immediate action uses strict steering and must leave the turn intact.
       const isTargetTurnActive = selectAgentTurnPresentation(
         useSessionStore.getState().sessions[serverId],
         targetAgentId,
@@ -1589,7 +1598,7 @@ function ComposerContentImpl({
         client,
         agentId: targetAgentId,
         text,
-        ...(isTargetTurnActive ? { interrupt: true } : {}),
+        ...(isTargetTurnActive && activeTurnBehavior === "interrupt" ? { interrupt: true } : {}),
         attachments: sendAttachments,
         attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,
@@ -1598,7 +1607,7 @@ function ComposerContentImpl({
         submission: createMessageSubmissionWriter(serverId),
         activeTurnBehavior,
         activeTurnId:
-          activeTurnBehavior === "steer"
+          activeTurnBehavior === "steer" || activeTurnBehavior === "steer_only"
             ? (selectAgentTurnPresentation(
                 useSessionStore.getState().sessions[serverId],
                 targetAgentId,
@@ -1736,6 +1745,7 @@ function ComposerContentImpl({
       outgoingMessage: string,
       outgoingAttachments: ComposerAttachment[],
       forceSend?: boolean,
+      activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
       const result = await submitAgentInput({
         message: outgoingMessage,
@@ -1755,7 +1765,7 @@ function ComposerContentImpl({
           if (submitBehavior !== "preserve-and-lock") {
             beginSubmit(submitAttachments);
           }
-          await submitMessage(submitText, submitAttachments);
+          await submitMessage(submitText, submitAttachments, activeTurnBehavior);
         },
         clearDraft,
         setUserInput: replaceUserInput,
@@ -1810,7 +1820,12 @@ function ComposerContentImpl({
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
+      void sendMessageWithContent(
+        payload.text,
+        outgoingAttachments,
+        payload.forceSend,
+        payload.activeTurnBehavior,
+      );
     },
     [
       attachments,
@@ -2059,7 +2074,11 @@ function ComposerContentImpl({
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
-      // Reuse the regular send path; server-side send atomically interrupts any active run.
+      const immediateBehavior = appSettings.sendBehavior === "queue" ? "steer_only" : undefined;
+      if (immediateBehavior === "steer_only" && !supportsSteerOnly) {
+        setSendError(t("composer.errors.steerRequiresUpdatedHost"));
+        return;
+      }
       if (supportsAgentMessageQueue && client) {
         // Take the message off the daemon queue first. The daemon drains the same
         // queue, so leaving it there while we send would risk sending it twice.
@@ -2079,7 +2098,7 @@ function ComposerContentImpl({
           return;
         }
         try {
-          await submitMessage(taken.text, taken.attachments);
+          await submitMessage(taken.text, taken.attachments, immediateBehavior);
         } catch (error) {
           setSendError(error instanceof Error ? error.message : t("composer.errors.failedToSend"));
           // Requeue so the message is not lost. It lands at the end rather than
@@ -2106,7 +2125,7 @@ function ComposerContentImpl({
         messageId: id,
         queue: queueWriter,
         submitMessage: ({ text, attachments: queuedAttachments }) =>
-          submitMessage(text, queuedAttachments),
+          submitMessage(text, queuedAttachments, immediateBehavior),
         failedToSendMessage: t("composer.errors.failedToSend"),
       });
       if (result.status === "failed") {
@@ -2115,6 +2134,7 @@ function ComposerContentImpl({
     },
     [
       agentId,
+      appSettings.sendBehavior,
       applyAgentQueueSnapshot,
       client,
       queueOutbox,
@@ -2123,6 +2143,7 @@ function ComposerContentImpl({
       submitMessage,
       supportsAgentMessageQueue,
       supportsForgeSearch,
+      supportsSteerOnly,
       t,
     ],
   );
@@ -2503,9 +2524,19 @@ function ComposerContentImpl({
         handleEditQueuedMessage,
         handleSendQueuedNow,
         editLabel: t("composer.attachments.editQueuedMessage"),
-        sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
+        sendNowLabel:
+          appSettings.sendBehavior === "queue" && isAgentRunning
+            ? t("composer.input.sendAndSteer")
+            : t("composer.attachments.sendQueuedMessageNow"),
       }),
-    [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
+    [
+      appSettings.sendBehavior,
+      handleEditQueuedMessage,
+      handleSendQueuedNow,
+      isAgentRunning,
+      queuedMessages,
+      t,
+    ],
   );
 
   const autocompleteConfiguration = useMemo(

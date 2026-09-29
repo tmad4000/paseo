@@ -216,7 +216,8 @@ export async function dispatchComposerAgentMessage(
     timestamp: new Date(),
     images: wirePayload.images,
     attachments: wirePayload.attachments,
-    ...(input.activeTurnBehavior === "steer" && input.activeTurnId
+    ...((input.activeTurnBehavior === "steer" || input.activeTurnBehavior === "steer_only") &&
+    input.activeTurnId
       ? { turnId: input.activeTurnId }
       : {}),
   });
@@ -613,8 +614,6 @@ export async function takeQueuedComposerMessage(
 
   try {
     const images = await input.client.getQueuedAgentMessageImages(input.agentId, input.messageId);
-    const snapshot = await input.client.removeQueuedAgentMessage(input.agentId, input.messageId);
-    input.applySnapshot(snapshot);
     const restoredImages = await Promise.all(
       images.map(async (image) => ({
         kind: "image" as const,
@@ -625,6 +624,10 @@ export async function takeQueuedComposerMessage(
         }),
       })),
     );
+    // Keep the authoritative queue item until every image is safely available
+    // on this device. A failed local write must not discard the daemon copy.
+    const snapshot = await input.client.removeQueuedAgentMessage(input.agentId, input.messageId);
+    input.applySnapshot(snapshot);
     return {
       status: "taken",
       text: item.text,

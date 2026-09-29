@@ -187,7 +187,7 @@ interface FakeSendCall {
   text: string;
   options: {
     messageId: string;
-    activeTurnBehavior?: "interrupt" | "steer";
+    activeTurnBehavior?: "interrupt" | "steer" | "steer_only";
     images: Array<{ data: string; mimeType: string }>;
     attachments: AgentAttachment[];
   };
@@ -1270,6 +1270,34 @@ describe("takeQueuedComposerMessage", () => {
       text: "look",
       attachments: [{ kind: "image", metadata: imageMetadata }],
     });
+  });
+
+  it("keeps an image message queued when local image persistence fails", async () => {
+    const queue = createFakeQueue(
+      new Map([["agent", [{ id: "item-1", text: "look", attachments: [] }]]]),
+    );
+    const client = createFakeQueueClient({
+      getQueuedAgentMessageImages: async () => [
+        { id: "srv-1", mimeType: "image/png", fileName: "shot.png", data: "AAAA" },
+      ],
+    });
+    const snapshots: AgentQueueSnapshot[] = [];
+
+    const result = await takeQueuedComposerMessage({
+      client,
+      agentId: "agent",
+      messageId: "item-1",
+      queue,
+      persistImage: async () => {
+        throw new Error("disk full");
+      },
+      applySnapshot: (snapshot) => snapshots.push(snapshot),
+    });
+
+    expect(result).toEqual({ status: "failed", errorMessage: "disk full" });
+    expect(client.removed).toEqual([]);
+    expect(snapshots).toEqual([]);
+    expect(queue.state.get("agent")).toHaveLength(1);
   });
 
   it("reports missing when the message already drained", async () => {

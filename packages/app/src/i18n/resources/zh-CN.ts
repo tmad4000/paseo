@@ -171,6 +171,7 @@ export const zhCN: TranslationResources = {
     },
     errors: {
       failedToSend: "发送消息失败",
+      steerRequiresUpdatedHost: "请更新此 Paseo 主机，以便在不中断当前任务的情况下引导消息。",
       failedToCreateAgent: "创建 Agent 失败",
       noHostSelected: "未选择 Host",
       initialPromptRequired: "初始 prompt 必填",

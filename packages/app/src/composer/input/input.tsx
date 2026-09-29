@@ -912,6 +912,7 @@ interface SendMessageContext {
   allowEmptySubmit: boolean;
   cwd: string;
   isAgentRunning: boolean;
+  activeTurnBehavior?: MessagePayload["activeTurnBehavior"];
   onSubmit: (payload: MessagePayload) => void;
   onMinimizeHeight: () => void;
   preserveHeightOnSubmit: boolean;
@@ -932,6 +933,7 @@ function sendMessageImpl(ctx: SendMessageContext): void {
     attachments: ctx.attachments,
     cwd: ctx.cwd,
     forceSend: ctx.isAgentRunning || undefined,
+    activeTurnBehavior: ctx.activeTurnBehavior,
   });
   // When the host preserves and locks the composer (e.g. new-workspace creation),
   // the text stays put — collapsing the height would clip it. Keep it grown.
@@ -1502,33 +1504,37 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       resetComposerHeight?.();
     }, [resetComposerHeight]);
 
-    const handleSendMessage = useCallback(() => {
-      const liveValue = textInputRef.current?.getText() ?? valueRef.current;
-      if (!preserveHeightOnSubmit) {
-        updateLiveTextPresence("");
-      }
-      sendMessageImpl({
-        value: liveValue,
-        attachments,
-        hasExternalContent,
+    const handleSendMessage = useCallback(
+      (activeTurnBehavior?: MessagePayload["activeTurnBehavior"]) => {
+        const liveValue = textInputRef.current?.getText() ?? valueRef.current;
+        if (!preserveHeightOnSubmit) {
+          updateLiveTextPresence("");
+        }
+        sendMessageImpl({
+          value: liveValue,
+          attachments,
+          hasExternalContent,
+          allowEmptySubmit,
+          cwd,
+          isAgentRunning,
+          activeTurnBehavior,
+          onSubmit,
+          onMinimizeHeight: minimizeInputHeight,
+          preserveHeightOnSubmit,
+        });
+      },
+      [
         allowEmptySubmit,
+        attachments,
         cwd,
-        isAgentRunning,
         onSubmit,
-        onMinimizeHeight: minimizeInputHeight,
+        isAgentRunning,
+        hasExternalContent,
+        minimizeInputHeight,
         preserveHeightOnSubmit,
-      });
-    }, [
-      allowEmptySubmit,
-      attachments,
-      cwd,
-      onSubmit,
-      isAgentRunning,
-      hasExternalContent,
-      minimizeInputHeight,
-      preserveHeightOnSubmit,
-      updateLiveTextPresence,
-    ]);
+        updateLiveTextPresence,
+      ],
+    );
 
     const handleQueueMessage = useCallback(
       () =>

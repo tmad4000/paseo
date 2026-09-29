@@ -172,6 +172,8 @@ export const es: TranslationResources = {
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
+      steerRequiresUpdatedHost:
+        "Actualiza este host de Paseo para dirigir el mensaje sin interrumpir el turno activo.",
       failedToCreateAgent: "No se pudo crear el agente",
       noHostSelected: "Ningún anfitrión seleccionado",
       initialPromptRequired: "Se requiere aviso inicial",

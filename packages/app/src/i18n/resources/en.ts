@@ -167,6 +167,8 @@ export const en = {
     },
     errors: {
       failedToSend: "Failed to send message",
+      steerRequiresUpdatedHost:
+        "Update this Paseo host to steer without interrupting its active turn.",
       failedToCreateAgent: "Failed to create agent",
       noHostSelected: "No host selected",
       initialPromptRequired: "Initial prompt is required",
@@ -2163,7 +2165,7 @@ export const en = {
           interrupt: "When the agent is running, Enter interrupts. Command/Ctrl+Enter queues.",
           steer:
             "When the agent is running, Enter steers the active turn. Command/Ctrl+Enter queues.",
-          queue: "When the agent is running, Enter queues. Command/Ctrl+Enter submits.",
+          queue: "When the agent is running, Enter queues. Command/Ctrl+Enter steers.",
         },
         options: {
           interrupt: "Interrupt",

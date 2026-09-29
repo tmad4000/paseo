@@ -4,9 +4,9 @@ Queued composer messages belong to the agent, not to the device that typed them.
 moving the message queue from client memory onto the daemon so every connected client sees the same
 queue and the daemon drains it with no client attached.
 
-## What it looks like today
+## The original client-only behavior
 
-The queue is entirely client-side and in memory:
+Before daemon-owned queues were added, the queue was entirely client-side and in memory:
 
 - State is `queuedMessages: Map<agentId, QueuedComposerMessage[]>` on the per-server session slice in
   `packages/app/src/stores/session-store.ts`. Nothing persists it — not AsyncStorage, not
@@ -19,7 +19,7 @@ The queue is entirely client-side and in memory:
 
 Two consequences, and they are one bug:
 
-1. Queue on the phone and the desktop never sees it.
+1. A message queued on the phone was invisible on the desktop.
 2. If the phone disconnects, backgrounds, or the tab closes before the agent frees up, the message is
    never sent. Nothing else will send it — no other client has the item, and the daemon was never
    told.
@@ -44,6 +44,13 @@ by one store method per operation.
 
 Persist across daemon restarts: yes. A queue that evaporates on restart reintroduces the delivery
 bug it exists to fix.
+
+Every queue mutation also appends a JSON line to `$PASEO_HOME/queues/{agentId}.journal.jsonl`
+before replacing the current queue file. Each line includes the complete `before` and `after`
+states, including message text and image bytes, so a mistaken removal can be recovered from an
+earlier revision. Journal files are created mode 0600. Treat them as private data; copy them aside
+before attempting recovery. The journal rotates at 64 MiB, retaining the previous segment as
+`{agentId}.journal.previous.jsonl`. Deliberately deleting an agent removes its queue and journals.
 
 ## Protocol
 
@@ -204,3 +211,7 @@ own decision.
 Send-now on a daemon-backed queue takes the message off the queue before sending, because the daemon
 drains the same queue and leaving it there would risk sending twice. If that send then fails, the
 message is requeued at the end rather than where it was — the queue has no insert-at-position.
+When Queue is the selected send behavior and the agent is running, the immediate composer shortcut
+and queued Send now use strict steering. A host must advertise `steerOnly`; an unavailable steer
+reports an error without interrupting the running turn. The queued Send now path still removes the
+item before attempting delivery and requeues it after failure, so its position can change.

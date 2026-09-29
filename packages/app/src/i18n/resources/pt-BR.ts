@@ -172,6 +172,8 @@ export const ptBR: TranslationResources = {
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
+      steerRequiresUpdatedHost:
+        "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",
       failedToCreateAgent: "Falha ao criar agente",
       noHostSelected: "Nenhum host selecionado",
       initialPromptRequired: "O prompt inicial é obrigatório",

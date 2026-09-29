@@ -22,6 +22,7 @@ export type AgentRunController = Pick<
   | "tryRunOutOfBand"
   | "hasInFlightRun"
   | "replaceAgentRun"
+  | "steerAgentRun"
   | "steerOrReplaceActiveTurn"
   | "streamAgent"
 > & {
@@ -51,6 +52,23 @@ async function steerOrReplaceActiveRun(
     }
   | null
 > {
+  if (options?.activeTurnBehavior === "steer_only") {
+    const activeAgent = agentManager.getAgent(agentId);
+    if (!activeAgent?.activeForegroundTurnId && !activeAgent?.activeTurnId) {
+      if (agentManager.hasInFlightRun(agentId)) {
+        throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+      }
+      return null;
+    }
+    const steerOptions = options.clearPendingPermissions
+      ? { ...options.runOptions, clearPendingPermissions: true }
+      : options.runOptions;
+    const result = await agentManager.steerAgentRun(agentId, prompt, steerOptions);
+    if (result.status === "accepted") {
+      return { disposition: "steered" };
+    }
+    throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+  }
   if (options?.activeTurnBehavior !== "steer") {
     return null;
   }
@@ -76,6 +94,9 @@ async function startOrReplaceRun(
   iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>;
   replaced: boolean;
 }> {
+  if (options?.activeTurnBehavior === "steer_only" && agentManager.hasInFlightRun(agentId)) {
+    throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+  }
   const replaced = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
   const iterator = replaced
     ? await agentManager.replaceAgentRun(agentId, prompt, options?.runOptions)
@@ -120,6 +141,7 @@ export async function startAgentRun(
   try {
     return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
   } catch (error) {
+    if (options?.activeTurnBehavior === "steer_only") throw error;
     if (!isStaleProviderSessionError(error)) throw error;
     logger.info({ agentId, err: error }, "Provider session went stale; reopening from persistence");
     // The live session belongs to a retired plugin runtime. Reload swaps in a

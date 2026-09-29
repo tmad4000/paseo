@@ -3,6 +3,7 @@ import {
   applyDictationTranscript,
   computeCanStartDictation,
   resolveActiveSendBehavior,
+  resolveDirectActiveTurnBehavior,
   resolveComposerSurfacePresentation,
   runAlternateSendAction,
   runDefaultSendAction,
@@ -189,6 +190,12 @@ describe("dictation transcript behavior", () => {
 });
 
 describe("composer send behavior", () => {
+  it("lets the daemon queue a turn that starts just as Queue mode sends", () => {
+    expect(resolveDirectActiveTurnBehavior("queue")).toBeUndefined();
+    expect(resolveDirectActiveTurnBehavior("queue", "steer_only")).toBe("steer_only");
+    expect(resolveDirectActiveTurnBehavior("steer")).toBe("steer");
+  });
+
   it("sends immediately when queue mode cannot advance past a permission", () => {
     expect(resolveActiveSendBehavior("queue", true)).toBe("interrupt");
     expect(resolveActiveSendBehavior("queue", false)).toBe("queue");
@@ -199,7 +206,8 @@ describe("composer send behavior", () => {
     const calls: string[] = [];
     return {
       calls,
-      handleSendMessage: () => calls.push("send"),
+      handleSendMessage: (behavior?: "interrupt" | "steer" | "steer_only") =>
+        calls.push(behavior ? `send:${behavior}` : "send"),
       handleQueueMessage: () => calls.push("queue"),
       onQueue: () => undefined,
     };
@@ -224,7 +232,7 @@ describe("composer send behavior", () => {
       handleQueueMessage: alternateAction.handleQueueMessage,
     });
 
-    expect(defaultAction.calls).toEqual(["send"]);
+    expect(defaultAction.calls).toEqual(["send:interrupt"]);
     expect(alternateAction.calls).toEqual(["queue"]);
   });
 
@@ -247,11 +255,11 @@ describe("composer send behavior", () => {
       handleQueueMessage: alternateAction.handleQueueMessage,
     });
 
-    expect(defaultAction.calls).toEqual(["send"]);
+    expect(defaultAction.calls).toEqual(["send:steer"]);
     expect(alternateAction.calls).toEqual(["queue"]);
   });
 
-  it("uses Enter to queue and Mod+Enter to submit when queue is selected", () => {
+  it("uses Enter to queue and Mod+Enter to steer when queue is selected", () => {
     const defaultAction = actions();
     runDefaultSendAction({
       defaultSendBehavior: "queue",
@@ -271,7 +279,7 @@ describe("composer send behavior", () => {
     });
 
     expect(defaultAction.calls).toEqual(["queue"]);
-    expect(alternateAction.calls).toEqual(["send"]);
+    expect(alternateAction.calls).toEqual(["send:steer_only"]);
   });
 });
 
