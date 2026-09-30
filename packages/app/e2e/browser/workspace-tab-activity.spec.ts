@@ -64,7 +64,7 @@ for (const viewport of [
             elements.map((element) => element.getAttribute("data-testid")),
           );
         expect(ids[0]).toBe(`workspace-tab-menu-agent_${session.agentId}-trigger`);
-        await page.getByRole("button", { name: /first-.*New activity/ }).click();
+        await page.getByRole("button", { name: /first-/ }).click();
       } else {
         await expect(unread).toBeVisible();
         const ids = await page

@@ -864,7 +864,12 @@ function TabChip({
               onPressIn={handleNavigateTab}
               onPress={handleNavigateTab}
               accessibilityRole="button"
-              accessibilityLabel={`${accessibilityLabel}${unread ? `, ${t("workspace.tabs.newActivity", { defaultValue: "New activity" })}` : ""}`}
+              accessibilityLabel={accessibilityLabel}
+              accessibilityHint={
+                unread
+                  ? t("workspace.tabs.newActivity", { defaultValue: "New activity" })
+                  : undefined
+              }
               accessibilityState={tabAccessibilityState}
               aria-selected={isActive}
             >

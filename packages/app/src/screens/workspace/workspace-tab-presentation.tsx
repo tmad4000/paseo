@@ -226,7 +226,10 @@ export function WorkspaceTabOptionRow({
         onPress={onPress}
         style={pressableStyle}
         accessibilityRole="button"
-        accessibilityLabel={`${presentation.label}${unread ? `, ${t("workspace.tabs.newActivity", { defaultValue: "New activity" })}` : ""}`}
+        accessibilityLabel={presentation.label}
+        accessibilityHint={
+          unread ? t("workspace.tabs.newActivity", { defaultValue: "New activity" }) : undefined
+        }
       >
         {(state) => {
           const optionActive = isOptionActive(state);
