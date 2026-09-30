@@ -75,4 +75,61 @@ describe("sidebar local filtering and sorting", () => {
     ).toEqual(["older", "newer"]);
     expect(manual.map((item) => item.workspaceKey)).toEqual(["older", "newer"]);
   });
+
+  it("orders project groups by their latest chat while sorting chats within each group", () => {
+    const result = filterAndSortSidebarProjects({
+      projects: [projects[1], projects[0]],
+      entries,
+      query: "",
+      mode: "recent",
+    });
+    expect(result.map(projectWorkspaceKeys)).toEqual([
+      ["ideaflow", ["newer", "older"]],
+      ["paseo", ["other"]],
+    ]);
+    expect(projects.map(projectWorkspaceKeys)).toEqual([
+      ["ideaflow", ["older", "newer"]],
+      ["paseo", ["other"]],
+    ]);
+  });
+
+  it("keeps empty and equally recent projects in manual order", () => {
+    const empty: SidebarProjectEntry = {
+      ...projects[0],
+      viewKey: "empty",
+      projectName: "Empty",
+      workspaces: [],
+    };
+    const sameTime = workspace("same", "Another queue review", "Other", "2026-09-27T00:00:00Z");
+    const tiedProject = {
+      viewKey: "other-project",
+      projectName: "Other",
+      workspaces: [sameTime.placement],
+    } as SidebarProjectEntry;
+    const result = filterAndSortSidebarProjects({
+      projects: [empty, tiedProject, projects[1], projects[0]],
+      entries: new Map([...entries, [sameTime.entry.workspaceKey, sameTime.entry]]),
+      query: "",
+      mode: "recent",
+    });
+    expect(result.map((project) => project.viewKey)).toEqual([
+      "ideaflow",
+      "other-project",
+      "paseo",
+      "empty",
+    ]);
+  });
+
+  it("sorts project groups and their chats by title", () => {
+    const result = filterAndSortSidebarProjects({
+      projects: [projects[1], projects[0]],
+      entries,
+      query: "",
+      mode: "title",
+    });
+    expect(result.map(projectWorkspaceKeys)).toEqual([
+      ["ideaflow", ["older", "newer"]],
+      ["paseo", ["other"]],
+    ]);
+  });
 });

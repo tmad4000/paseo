@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0-beta.3 - 2026-09-29 (fork)
+
+### Fixed
+
+- Sorting the sidebar by recent activity now orders both project groups and chats within each project. Title sorting orders both levels as well. Dragging a project returns to manual ordering.
+
 ## 0.10.0-beta.1 - 2026-09-27
 
 ### Added

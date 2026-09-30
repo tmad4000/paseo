@@ -2234,6 +2234,7 @@ function ProjectModeList({
         return;
       }
 
+      if (sortMode !== "manual") setSortMode("manual");
       setProjectOrder(
         mergeWithRemainder({
           currentOrder: currentProjectOrder,
@@ -2241,7 +2242,7 @@ function ProjectModeList({
         }),
       );
     },
-    [getProjectOrder, setProjectOrder],
+    [getProjectOrder, setProjectOrder, setSortMode, sortMode],
   );
 
   const handleWorkspaceReorder = useCallback(

@@ -51,7 +51,7 @@ export function filterAndSortSidebarProjects(input: {
 }): SidebarProjectEntry[] {
   const { projects, entries, query, mode } = input;
   if (!query && mode === "manual") return [...projects];
-  return projects.flatMap((project) => {
+  const visibleProjects = projects.flatMap((project) => {
     const projectMatches = project.projectName
       .normalize("NFKC")
       .toLocaleLowerCase()
@@ -64,4 +64,20 @@ export function filterAndSortSidebarProjects(input: {
     if (query && !projectMatches && workspaces.length === 0) return [];
     return [{ ...project, workspaces: sortSidebarWorkspaces(workspaces, entries, mode) }];
   });
+  if (mode === "manual") return visibleProjects;
+  if (mode === "title") {
+    return visibleProjects.sort(
+      (left, right) =>
+        left.projectName.localeCompare(right.projectName, undefined, { sensitivity: "base" }) ||
+        left.viewKey.localeCompare(right.viewKey),
+    );
+  }
+  const latestActivity = (project: SidebarProjectEntry) =>
+    project.workspaces.reduce(
+      (latest, workspace) =>
+        Math.max(latest, entries.get(workspace.workspaceKey)?.lastActivityAt?.getTime() ?? 0),
+      0,
+    );
+  // Stable sorting keeps the stored project order for empty projects and equal timestamps.
+  return visibleProjects.sort((left, right) => latestActivity(right) - latestActivity(left));
 }
