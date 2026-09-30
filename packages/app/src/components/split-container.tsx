@@ -79,6 +79,7 @@ import {
   WorkspaceTabIcon,
 } from "@/screens/workspace/workspace-tab-presentation";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import { sortTabsByActivity } from "@/screens/workspace/workspace-tab-activity";
 import {
   createDefaultLayout,
   findPaneById,
@@ -101,6 +102,8 @@ interface SplitContainerProps {
   normalizedWorkspaceId: string;
   isWorkspaceFocused: boolean;
   uiTabs: WorkspaceTab[];
+  activityByAgentId: Map<string, number>;
+  unreadTabIds: Set<string>;
   hoveredCloseTabKey: string | null;
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   closingTabIds: Set<string>;
@@ -314,6 +317,8 @@ export function SplitContainer({
   normalizedWorkspaceId,
   isWorkspaceFocused,
   uiTabs,
+  activityByAgentId,
+  unreadTabIds,
   hoveredCloseTabKey,
   setHoveredCloseTabKey,
   closingTabIds,
@@ -663,6 +668,8 @@ export function SplitContainer({
                   node={renderRoot}
                   workspaceKey={workspaceKey}
                   uiTabs={uiTabs}
+                  activityByAgentId={activityByAgentId}
+                  unreadTabIds={unreadTabIds}
                   focusedPaneId={layout.focusedPaneId}
                   normalizedServerId={normalizedServerId}
                   normalizedWorkspaceId={normalizedWorkspaceId}
@@ -925,6 +932,8 @@ function SplitNodeView({
   node,
   workspaceKey,
   uiTabs,
+  activityByAgentId,
+  unreadTabIds,
   focusedPaneId,
   normalizedServerId,
   normalizedWorkspaceId,
@@ -1013,6 +1022,8 @@ function SplitNodeView({
           <SplitPaneView
             pane={node.pane}
             uiTabs={uiTabs}
+            activityByAgentId={activityByAgentId}
+            unreadTabIds={unreadTabIds}
             isFocused={node.pane.id === focusedPaneId}
             normalizedServerId={normalizedServerId}
             normalizedWorkspaceId={normalizedWorkspaceId}
@@ -1065,6 +1076,8 @@ function SplitNodeView({
               node={child}
               workspaceKey={workspaceKey}
               uiTabs={uiTabs}
+              activityByAgentId={activityByAgentId}
+              unreadTabIds={unreadTabIds}
               focusedPaneId={focusedPaneId}
               normalizedServerId={normalizedServerId}
               normalizedWorkspaceId={normalizedWorkspaceId}
@@ -1125,6 +1138,8 @@ function SplitNodeView({
 function SplitPaneView({
   pane,
   uiTabs,
+  activityByAgentId,
+  unreadTabIds,
   isFocused,
   normalizedServerId,
   normalizedWorkspaceId,
@@ -1173,13 +1188,28 @@ function SplitPaneView({
   const activeTabDescriptor = paneState.activeTab?.descriptor ?? null;
   const desktopTabRowItems = useMemo<WorkspaceDesktopTabRowItem[]>(
     () =>
-      paneTabs.map((tab) => ({
+      sortTabsByActivity(
+        paneTabs.map((tab) => ({ tab })),
+        activityByAgentId,
+      ).map(({ tab }) => ({
         tab,
         isActive: tab.key === activeTabDescriptor?.key,
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
+        unread: unreadTabIds.has(tab.tabId),
       })),
-    [activeTabDescriptor?.key, closingTabIds, hoveredCloseTabKey, paneTabs],
+    [
+      activeTabDescriptor?.key,
+      activityByAgentId,
+      closingTabIds,
+      hoveredCloseTabKey,
+      paneTabs,
+      unreadTabIds,
+    ],
+  );
+  const displayedPaneTabs = useMemo(
+    () => desktopTabRowItems.map(({ tab }) => tab),
+    [desktopTabRowItems],
   );
 
   useEffect(() => {
@@ -1218,12 +1248,12 @@ function SplitPaneView({
 
   const paneId = pane.id;
   const handleCloseTabsToLeft = useCallback(
-    (tabId: string) => onCloseTabsToLeft(tabId, paneTabs),
-    [onCloseTabsToLeft, paneTabs],
+    (tabId: string) => onCloseTabsToLeft(tabId, displayedPaneTabs),
+    [displayedPaneTabs, onCloseTabsToLeft],
   );
   const handleCloseTabsToRight = useCallback(
-    (tabId: string) => onCloseTabsToRight(tabId, paneTabs),
-    [onCloseTabsToRight, paneTabs],
+    (tabId: string) => onCloseTabsToRight(tabId, displayedPaneTabs),
+    [displayedPaneTabs, onCloseTabsToRight],
   );
   const handleCloseOtherTabs = useCallback(
     (tabId: string) => onCloseOtherTabs(tabId, paneTabs),

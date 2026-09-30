@@ -453,6 +453,7 @@ function tabKeyExtractor(tab: WorkspaceDesktopTabRowItem) {
 export interface WorkspaceDesktopTabRowItem {
   tab: WorkspaceTabDescriptor;
   isActive: boolean;
+  unread: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
 }
@@ -465,6 +466,7 @@ interface WorkspaceTabLabel {
   key: string;
   label: string;
   modified: boolean;
+  unread: boolean;
 }
 
 interface WorkspaceTabLabelMeasurement {
@@ -488,15 +490,18 @@ function completeWorkspaceTabLabelWidths(
   measurements: Map<string, WorkspaceTabLabelMeasurement>,
 ): number[] | null {
   const widths: number[] = [];
-  for (const { key, label, modified } of labels) {
+  for (const { key, label, modified, unread } of labels) {
     const measurement = measurements.get(key);
     if (!measurement || measurement.label !== label || measurement.width <= 0) {
       return null;
     }
-    // The modified dot sits in the content row, so a modified tab needs that much more width
-    // before its label starts truncating.
-    const modifiedAllowance = modified ? TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE : 0;
-    widths.push(measurement.width + TAB_LABEL_LAYOUT_ALLOWANCE + modifiedAllowance);
+    // Both dots sit in the content row, so the label must truncate before either one.
+    const dotAllowance = Number(modified) + Number(unread);
+    widths.push(
+      measurement.width +
+        TAB_LABEL_LAYOUT_ALLOWANCE +
+        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE),
+    );
   }
   return widths;
 }
@@ -667,6 +672,7 @@ function TabHandleContent({
   tabLabelSkeletonStyle,
   tabLabelStyle,
   modifiedTestId,
+  unread,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -675,6 +681,7 @@ function TabHandleContent({
   tabLabelSkeletonStyle: React.ComponentProps<typeof View>["style"];
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
+  unread: boolean;
 }) {
   const { t } = useTranslation();
   const tabHandleDataSet = useMemo(
@@ -704,6 +711,9 @@ function TabHandleContent({
           testID={modifiedTestId}
         />
       ) : null}
+      {unread ? (
+        <View style={styles.tabUnreadDot} testID={`workspace-tab-unread-${presentation.key}`} />
+      ) : null}
     </View>
   );
 }
@@ -712,6 +722,7 @@ function TabChip({
   serverId,
   tab,
   isActive,
+  unread,
   isDragging,
   isFocused,
   resolvedTabWidth,
@@ -731,6 +742,7 @@ function TabChip({
   serverId: string;
   tab: WorkspaceTabDescriptor;
   isActive: boolean;
+  unread: boolean;
   isDragging: boolean;
   isFocused: boolean;
   resolvedTabWidth: number;
@@ -852,7 +864,7 @@ function TabChip({
               onPressIn={handleNavigateTab}
               onPress={handleNavigateTab}
               accessibilityRole="button"
-              accessibilityLabel={accessibilityLabel}
+              accessibilityLabel={`${accessibilityLabel}${unread ? `, ${t("workspace.tabs.newActivity", { defaultValue: "New activity" })}` : ""}`}
               accessibilityState={tabAccessibilityState}
               aria-selected={isActive}
             >
@@ -864,6 +876,7 @@ function TabChip({
                 tabLabelSkeletonStyle={tabLabelSkeletonStyle}
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
+                unread={unread}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>
@@ -1113,7 +1126,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           tab.presentation.titleState === "loading"
             ? getFallbackTabLabel(tab.tab, fallbackTabLabels)
             : tab.presentation.label;
-        return { key: tab.tab.key, label, modified: tab.presentation.modified };
+        return { key: tab.tab.key, label, modified: tab.presentation.modified, unread: tab.unread };
       }),
     [fallbackTabLabels, tabs],
   );
@@ -1519,6 +1532,7 @@ function ResolvedDesktopTabChip({
         serverId={serverId}
         tab={item.tab}
         isActive={item.isActive}
+        unread={item.unread}
         isDragging={isDragging}
         isFocused={isFocused}
         resolvedTabWidth={resolvedTabWidth}
@@ -1719,6 +1733,13 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.foregroundMuted,
+  },
+  tabUnreadDot: {
+    width: TAB_MODIFIED_DOT_SIZE,
+    height: TAB_MODIFIED_DOT_SIZE,
+    flexShrink: 0,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.accent,
   },
   newTabTooltipText: {
     color: theme.colors.foreground,

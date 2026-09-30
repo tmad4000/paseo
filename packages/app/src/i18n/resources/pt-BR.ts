@@ -690,6 +690,7 @@ export const ptBR: TranslationResources = {
     tabs: {
       loading: "Carregando...",
       modified: "Alterações não salvas",
+      newActivity: "Nova atividade",
       loadingAgentTitle: "Carregando título do agente",
       fallback: {
         newAgent: "Novo agente",

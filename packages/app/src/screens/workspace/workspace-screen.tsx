@@ -64,6 +64,7 @@ import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   canDismissPaneInLayout,
+  collectAllPanes,
   collectAllTabs,
   DEFAULT_PANE_ID,
   findPaneById,
@@ -138,6 +139,11 @@ import {
 } from "@/screens/workspace/workspace-tab-menu";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import {
+  reconcileTabActivity,
+  sortTabsByActivity,
+  type TabActivityState,
+} from "@/screens/workspace/workspace-tab-activity";
 import {
   resolveWorkspaceExplorerToggleOwner,
   WorkspaceExplorerToggle,
@@ -414,6 +420,7 @@ interface MobileWorkspaceTabSwitcherProps {
   activeTab: WorkspaceTabDescriptor | null;
   tabSwitcherOptions: ComboboxOption[];
   tabByKey: Map<string, WorkspaceTabDescriptor>;
+  unreadTabIds: Set<string>;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
@@ -525,6 +532,7 @@ function MobileWorkspaceTabOption({
   normalizedWorkspaceId,
   selected,
   active,
+  unread,
   onPress,
   onCopyResumeCommand,
   onCopyAgentId,
@@ -546,6 +554,7 @@ function MobileWorkspaceTabOption({
   normalizedWorkspaceId: string;
   selected: boolean;
   active: boolean;
+  unread: boolean;
   onPress: () => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
@@ -635,11 +644,12 @@ function MobileWorkspaceTabOption({
         presentation={presentation}
         selected={selected}
         active={active}
+        unread={unread}
         onPress={onPress}
         trailingAccessory={trailingAccessory}
       />
     ),
-    [selected, active, onPress, trailingAccessory],
+    [selected, active, unread, onPress, trailingAccessory],
   );
 
   return (
@@ -659,6 +669,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   activeTab,
   tabSwitcherOptions,
   tabByKey,
+  unreadTabIds,
   normalizedServerId,
   normalizedWorkspaceId,
   onSelectSwitcherTab,
@@ -720,6 +731,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           normalizedWorkspaceId={normalizedWorkspaceId}
           selected={selected}
           active={active}
+          unread={unreadTabIds.has(tab.tabId)}
           onPress={onPress}
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
@@ -738,6 +750,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
     },
     [
       tabByKey,
+      unreadTabIds,
       tabIndexByKey,
       tabs.length,
       normalizedServerId,
@@ -2100,6 +2113,56 @@ function WorkspaceScreenContent({
     () => focusedPaneTabState.tabs.map((tab) => tab.descriptor),
     [focusedPaneTabState.tabs],
   );
+  const allActivityTabs = useMemo<WorkspaceTabDescriptor[]>(
+    () =>
+      uiTabs.map((tab) => ({
+        key: tab.tabId,
+        tabId: tab.tabId,
+        kind: tab.target.kind,
+        target: tab.target,
+      })),
+    [uiTabs],
+  );
+  const activityAgents = useSessionStore((state) => state.sessions[normalizedServerId]?.agents);
+  const activityOverrides = useSessionStore((state) => state.agentLastActivity);
+  const activityByAgentId = useMemo(() => {
+    const activity = new Map<string, number>();
+    for (const tab of allActivityTabs) {
+      if (tab.target.kind !== "agent") continue;
+      const agentId = tab.target.agentId;
+      const date = activityOverrides.get(agentId) ?? activityAgents?.get(agentId)?.lastActivityAt;
+      const timestamp = date?.getTime() ?? 0;
+      if (Number.isFinite(timestamp) && timestamp > 0) activity.set(agentId, timestamp);
+    }
+    return activity;
+  }, [activityAgents, activityOverrides, allActivityTabs]);
+  const viewedTabIds = useMemo(() => {
+    if (!isRouteFocused) return new Set<string>();
+    if (!workspaceLayout) return new Set(activeTabId ? [activeTabId] : []);
+    return new Set(
+      collectAllPanes(workspaceLayout.root)
+        .filter((pane) => !pane.hidden && pane.focusedTabId)
+        .map((pane) => pane.focusedTabId as string),
+    );
+  }, [activeTabId, isRouteFocused, workspaceLayout]);
+  const activitySortedTabs = useMemo(
+    () =>
+      sortTabsByActivity(
+        tabs.map((tab) => ({ tab })),
+        activityByAgentId,
+      ).map(({ tab }) => tab),
+    [activityByAgentId, tabs],
+  );
+  const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
+  useEffect(() => {
+    setTabActivity((previous) =>
+      reconcileTabActivity(previous, allActivityTabs, activityByAgentId, viewedTabIds),
+    );
+  }, [activityByAgentId, allActivityTabs, viewedTabIds]);
+  const unreadTabIds = useMemo(
+    () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
+    [tabActivity],
+  );
   const hasSetupTab = useMemo(
     () =>
       uiTabs.some(
@@ -2393,12 +2456,12 @@ function WorkspaceScreenContent({
 
   const tabSwitcherOptions = useMemo(
     () =>
-      tabs.map((tab) => ({
+      activitySortedTabs.map((tab) => ({
         id: tab.key,
         label: getFallbackTabOptionLabel(tab, tabFallbackLabels),
         description: getFallbackTabOptionDescription(tab, tabFallbackLabels),
       })),
-    [tabFallbackLabels, tabs],
+    [activitySortedTabs, tabFallbackLabels],
   );
 
   const handleCreateDraftTab = useCallback(
@@ -2981,9 +3044,9 @@ function WorkspaceScreenContent({
 
   const handleCloseTabsToLeft = useCallback(
     async (tabId: string) => {
-      await handleCloseTabsToLeftInPane(tabId, tabs);
+      await handleCloseTabsToLeftInPane(tabId, activitySortedTabs);
     },
-    [handleCloseTabsToLeftInPane, tabs],
+    [activitySortedTabs, handleCloseTabsToLeftInPane],
   );
 
   const handleCloseTabsToRightInPane = useCallback(
@@ -3003,9 +3066,9 @@ function WorkspaceScreenContent({
 
   const handleCloseTabsToRight = useCallback(
     async (tabId: string) => {
-      await handleCloseTabsToRightInPane(tabId, tabs);
+      await handleCloseTabsToRightInPane(tabId, activitySortedTabs);
     },
-    [handleCloseTabsToRightInPane, tabs],
+    [activitySortedTabs, handleCloseTabsToRightInPane],
   );
 
   const handleCloseOtherTabsInPane = useCallback(
@@ -3731,13 +3794,20 @@ function WorkspaceScreenContent({
 
   const desktopTabRowItems = useMemo<WorkspaceDesktopTabRowItem[]>(
     () =>
-      tabs.map((tab) => ({
+      activitySortedTabs.map((tab) => ({
         tab,
         isActive: tab.tabId === activeTabDescriptor?.tabId,
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
+        unread: unreadTabIds.has(tab.tabId),
       })),
-    [activeTabDescriptor?.tabId, closingTabIds, hoveredCloseTabKey, tabs],
+    [
+      activeTabDescriptor?.tabId,
+      activitySortedTabs,
+      closingTabIds,
+      hoveredCloseTabKey,
+      unreadTabIds,
+    ],
   );
 
   const handleSplitPane = useCallback(
@@ -4025,6 +4095,8 @@ function WorkspaceScreenContent({
         normalizedWorkspaceId={normalizedWorkspaceId}
         isWorkspaceFocused={isRouteFocused}
         uiTabs={uiTabs}
+        activityByAgentId={activityByAgentId}
+        unreadTabIds={unreadTabIds}
         hoveredCloseTabKey={hoveredCloseTabKey}
         setHoveredCloseTabKey={setHoveredCloseTabKey}
         closingTabIds={closingTabIds}
@@ -4062,6 +4134,8 @@ function WorkspaceScreenContent({
     normalizedWorkspaceId,
     isRouteFocused,
     uiTabs,
+    activityByAgentId,
+    unreadTabIds,
     hoveredCloseTabKey,
     closingTabIds,
     navigateToTabId,
@@ -4101,11 +4175,12 @@ function WorkspaceScreenContent({
 
       {isMobile ? (
         <MobileWorkspaceTabSwitcher
-          tabs={tabs}
+          tabs={activitySortedTabs}
           activeTabKey={activeTabKey}
           activeTab={activeTabDescriptor}
           tabSwitcherOptions={tabSwitcherOptions}
           tabByKey={tabByKey}
+          unreadTabIds={unreadTabIds}
           normalizedServerId={normalizedServerId}
           normalizedWorkspaceId={normalizedWorkspaceId}
           onSelectSwitcherTab={handleSelectSwitcherTab}

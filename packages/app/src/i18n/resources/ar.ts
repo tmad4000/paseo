@@ -681,6 +681,7 @@ export const ar: TranslationResources = {
     tabs: {
       loading: "تحميل...",
       modified: "تغييرات غير محفوظة",
+      newActivity: "نشاط جديد",
       loadingAgentTitle: "جارٍ تحميل عنوان الوكيل",
       fallback: {
         newAgent: "وكيل جديد",

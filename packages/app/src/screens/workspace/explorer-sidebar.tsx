@@ -63,6 +63,7 @@ export function ExplorerSidebarDock({
         isActive: tab.tabId === activeTabId,
         isCloseHovered: false,
         isClosingTab: closingTabIds.has(tab.tabId),
+        unread: false,
       })),
     [activeTabId, closingTabIds, tabs],
   );

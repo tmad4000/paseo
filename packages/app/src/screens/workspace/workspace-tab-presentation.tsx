@@ -190,6 +190,7 @@ interface WorkspaceTabOptionRowProps {
   presentation: WorkspaceTabPresentation;
   selected: boolean;
   active: boolean;
+  unread?: boolean;
   onPress: () => void;
   trailingAccessory?: ReactNode;
 }
@@ -198,6 +199,7 @@ export function WorkspaceTabOptionRow({
   presentation,
   selected,
   active,
+  unread = false,
   onPress,
   trailingAccessory,
 }: WorkspaceTabOptionRowProps): ReactElement {
@@ -220,7 +222,12 @@ export function WorkspaceTabOptionRow({
   );
   return (
     <View style={optionRowStyle}>
-      <Pressable onPress={onPress} style={pressableStyle}>
+      <Pressable
+        onPress={onPress}
+        style={pressableStyle}
+        accessibilityRole="button"
+        accessibilityLabel={`${presentation.label}${unread ? `, ${t("workspace.tabs.newActivity", { defaultValue: "New activity" })}` : ""}`}
+      >
         {(state) => {
           const optionActive = isOptionActive(state);
           return (
@@ -245,6 +252,13 @@ export function WorkspaceTabOptionRow({
       </Pressable>
       {presentation.modified ? (
         <View style={styles.optionModifiedDot} accessibilityLabel={t("workspace.tabs.modified")} />
+      ) : null}
+      {unread ? (
+        <View
+          style={styles.optionUnreadDot}
+          accessibilityLabel={t("workspace.tabs.newActivity", { defaultValue: "New activity" })}
+          testID={`workspace-tab-unread-${presentation.key}`}
+        />
       ) : null}
       {selected ? (
         <View style={styles.optionTrailingSlot}>
@@ -348,6 +362,12 @@ const styles = StyleSheet.create((theme) => ({
     height: 8,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.foregroundMuted,
+  },
+  optionUnreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.accent,
   },
   optionTrailingAccessorySlot: {
     alignItems: "center",
