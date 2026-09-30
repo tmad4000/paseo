@@ -133,6 +133,7 @@ export const fr: TranslationResources = {
       queueMessage: "Message de file d'attente",
       sendAndInterrupt: "Envoyer et interrompre",
       sendAndSteer: "Envoyer et guider",
+      sendOptions: "Options d’envoi",
       sendMessage: "Envoyer un message",
       queue: "File d'attente",
       send: "Envoyer",

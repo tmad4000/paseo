@@ -130,6 +130,7 @@ export const ar: TranslationResources = {
       queueMessage: "رسالة قائمة الانتظار",
       sendAndInterrupt: "إرسال ومقاطعة",
       sendAndSteer: "إرسال وتوجيه",
+      sendOptions: "خيارات الإرسال",
       sendMessage: "أرسل رسالة",
       queue: "طابور",
       send: "يرسل",

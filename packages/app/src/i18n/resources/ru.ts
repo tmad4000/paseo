@@ -131,6 +131,7 @@ export const ru: TranslationResources = {
       queueMessage: "Сообщение в очередь",
       sendAndInterrupt: "Отправить и прервать",
       sendAndSteer: "Отправить и направить",
+      sendOptions: "Варианты отправки",
       sendMessage: "Отправить сообщение",
       queue: "Очередь",
       send: "Отправить",

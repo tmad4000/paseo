@@ -21,7 +21,15 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import { ArrowUp, Mic, MicOff, CornerDownLeft, Plus, Square } from "lucide-react-native";
+import {
+  ArrowUp,
+  ChevronDown,
+  Mic,
+  MicOff,
+  CornerDownLeft,
+  Plus,
+  Square,
+} from "lucide-react-native";
 import { useDictation } from "@/hooks/use-dictation";
 import { DictationOverlay } from "@/components/dictation-controls";
 import { RealtimeVoiceOverlay } from "@/components/realtime-voice-overlay";
@@ -85,6 +93,7 @@ import {
 } from "./state";
 
 const DEFAULT_SEND_KEYS: ShortcutKey[][] = [["Enter"]];
+const ALTERNATE_SEND_KEYS: ShortcutKey[][] = [["mod", "Enter"]];
 const COMPOSER_INPUT_DATASET = { composerInput: "" } as const;
 
 export interface AttachmentMenuItem {
@@ -349,14 +358,24 @@ function VoiceTooltipBody({
 function SendTooltipBody({
   label,
   sendKeys,
+  alternateLabel,
 }: {
   label: string;
   sendKeys: ShortcutChord | null | undefined;
+  alternateLabel?: string;
 }) {
   return (
-    <View style={styles.tooltipRow}>
-      <Text style={styles.tooltipText}>{label}</Text>
-      {sendKeys ? <Shortcut chord={sendKeys} /> : null}
+    <View style={styles.tooltipRows}>
+      <View style={styles.tooltipRow}>
+        <Text style={styles.tooltipText}>{label}</Text>
+        {sendKeys ? <Shortcut chord={sendKeys} /> : null}
+      </View>
+      {alternateLabel ? (
+        <View style={styles.tooltipRow}>
+          <Text style={styles.tooltipText}>{alternateLabel}</Text>
+          <Shortcut chord={ALTERNATE_SEND_KEYS} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -774,6 +793,7 @@ function SendButtonTooltip({
   buttonIconSize,
   sendKeys,
   sendTooltipLabel,
+  alternateSendTooltipLabel,
 }: {
   shouldShow: boolean;
   canPressLoadingButton: boolean;
@@ -789,6 +809,7 @@ function SendButtonTooltip({
   buttonIconSize: number;
   sendKeys: ShortcutChord | null | undefined;
   sendTooltipLabel: string;
+  alternateSendTooltipLabel?: string;
 }) {
   if (!shouldShow) return null;
   return (
@@ -809,13 +830,125 @@ function SendButtonTooltip({
         />
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
-        <SendTooltipBody label={sendTooltipLabel} sendKeys={sendKeys} />
+        <SendTooltipBody
+          label={sendTooltipLabel}
+          sendKeys={sendKeys}
+          alternateLabel={alternateSendTooltipLabel}
+        />
       </TooltipContent>
     </Tooltip>
   );
 }
 
+function SendActionMenu({
+  visible,
+  disabled,
+  defaultSendBehavior,
+  queueLabel,
+  steerLabel,
+  interruptLabel,
+  menuLabel,
+  onQueueSendAction,
+  onSteerSendAction,
+  onInterruptSendAction,
+}: {
+  visible: boolean;
+  disabled: boolean;
+  defaultSendBehavior: "queue" | "steer" | "interrupt";
+  queueLabel: string;
+  steerLabel: string;
+  interruptLabel: string;
+  menuLabel: string;
+  onQueueSendAction: () => void;
+  onSteerSendAction: () => void;
+  onInterruptSendAction: () => void;
+}) {
+  const triggerStyle = useCallback(
+    ({ hovered, open }: { hovered: boolean; open: boolean }) => [
+      styles.sendOptionsButton,
+      (hovered || open) && styles.iconButtonHovered,
+      disabled && styles.buttonDisabled,
+    ],
+    [disabled],
+  );
+  if (!visible) return null;
+  const actions = [
+    { id: "steer", label: steerLabel, onSelect: onSteerSendAction },
+    { id: "queue", label: queueLabel, onSelect: onQueueSendAction },
+    { id: "interrupt", label: interruptLabel, onSelect: onInterruptSendAction },
+  ].sort((a, b) => Number(b.id === defaultSendBehavior) - Number(a.id === defaultSendBehavior));
+
+  return (
+    <DropdownMenu compactMode="sheet">
+      <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger
+            disabled={disabled}
+            accessibilityLabel={menuLabel}
+            accessibilityRole="button"
+            hitSlop={8}
+            testID="message-input-send-options-button"
+            style={triggerStyle}
+          >
+            {({ hovered, open }) => (
+              <ThemedChevronDown
+                size={ICON_SIZE.sm}
+                uniProps={hovered || open ? iconForegroundMapping : iconForegroundMutedMapping}
+              />
+            )}
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center" offset={8}>
+          <Text style={styles.tooltipText}>{menuLabel}</Text>
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent
+        side="top"
+        align="end"
+        offset={8}
+        minWidth={220}
+        sheetTitle={menuLabel}
+        testID="message-input-send-options-menu"
+      >
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.id}
+            onSelect={action.onSelect}
+            testID={`message-input-send-${action.id}`}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 type PrimaryActionKind = "send" | "active" | "none";
+
+function resolveSendActionPresentation(input: {
+  primaryActionKind: PrimaryActionKind;
+  isAgentRunning: boolean;
+  hasQueueAction: boolean;
+  isSubmitLoading: boolean;
+  defaultActionQueues: boolean;
+  submitAccessibilityLabel: string;
+  sendTooltipLabel: string;
+  queueLabel: string;
+  steerLabel: string;
+}) {
+  const visible =
+    input.primaryActionKind === "send" &&
+    input.isAgentRunning &&
+    input.hasQueueAction &&
+    !input.isSubmitLoading;
+  const alternateLabel = input.defaultActionQueues ? input.steerLabel : input.queueLabel;
+  return {
+    visible,
+    alternateTooltipLabel: visible ? alternateLabel : undefined,
+    tooltipLabel: visible ? input.submitAccessibilityLabel : input.sendTooltipLabel,
+  };
+}
 
 function hasSendableComposerContent(input: {
   hasText: boolean;
@@ -1598,6 +1731,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       });
     }, [defaultSendBehavior, isAgentRunning, handleSendMessage, handleQueueMessage, onQueue]);
 
+    const handleSteerSendAction = useCallback(() => {
+      handleSendMessage("steer_only");
+    }, [handleSendMessage]);
+
+    const handleInterruptSendAction = useCallback(() => {
+      handleSendMessage("interrupt");
+    }, [handleSendMessage]);
+
     const getWebTextArea = useCallback(
       (): TextAreaHandle | null => getWebTextAreaImpl(textInputRef.current),
       [],
@@ -1700,6 +1841,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       submitButtonAccessibilityLabel,
       defaultActionQueues,
       t,
+    });
+    const sendActions = resolveSendActionPresentation({
+      primaryActionKind,
+      isAgentRunning,
+      hasQueueAction: Boolean(onQueue),
+      isSubmitLoading,
+      defaultActionQueues,
+      submitAccessibilityLabel,
+      sendTooltipLabel,
+      queueLabel: t("composer.input.queueMessage"),
+      steerLabel: t("composer.input.sendAndSteer"),
     });
 
     const handleInputChange = useCallback(
@@ -1898,6 +2050,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 dictationToggleKeys={dictationToggleKeys}
               />
               {rightContent}
+              <SendActionMenu
+                visible={sendActions.visible}
+                disabled={isSendButtonDisabled}
+                defaultSendBehavior={defaultSendBehavior}
+                queueLabel={t("composer.input.queueMessage")}
+                steerLabel={t("composer.input.sendAndSteer")}
+                interruptLabel={t("composer.input.sendAndInterrupt")}
+                menuLabel={t("composer.input.sendOptions")}
+                onQueueSendAction={handleQueueMessage}
+                onSteerSendAction={handleSteerSendAction}
+                onInterruptSendAction={handleInterruptSendAction}
+              />
               <PrimaryAction
                 kind={primaryActionKind}
                 activeActionContent={activeActionContent}
@@ -1914,7 +2078,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 submitButtonTestID={submitButtonTestID}
                 buttonIconSize={buttonIconSize}
                 sendKeys={DEFAULT_SEND_KEYS}
-                sendTooltipLabel={sendTooltipLabel}
+                sendTooltipLabel={sendActions.tooltipLabel}
+                alternateSendTooltipLabel={sendActions.alternateTooltipLabel}
               />
             </View>
           </View>
@@ -2064,6 +2229,13 @@ const styles = StyleSheet.create((theme: Theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  sendOptionsButton: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   voiceButtonRecording: {
     backgroundColor: theme.colors.destructive,
   },
@@ -2093,7 +2265,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
   tooltipRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: theme.spacing[2],
+  },
+  tooltipRows: {
+    gap: theme.spacing[1],
+    minWidth: 180,
   },
   tooltipText: {
     fontSize: theme.fontSize.base,
@@ -2119,6 +2296,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
 })) as unknown as Record<string, object>;
 
 const ThemedPlus = withUnistyles(Plus);
+const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedMic = withUnistyles(Mic);
 const ThemedMicOff = withUnistyles(MicOff);
 const ThemedArrowUp = withUnistyles(ArrowUp);

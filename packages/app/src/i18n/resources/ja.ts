@@ -131,6 +131,7 @@ export const ja: TranslationResources = {
       queueMessage: "メッセージをキューに追加",
       sendAndInterrupt: "送信して中断",
       sendAndSteer: "送信して指示を追加",
+      sendOptions: "送信オプション",
       sendMessage: "メッセージを送信",
       queue: "キュー",
       send: "送信",

@@ -130,6 +130,7 @@ export const zhCN: TranslationResources = {
       queueMessage: "消息排队",
       sendAndInterrupt: "发送并中断",
       sendAndSteer: "发送并引导",
+      sendOptions: "发送选项",
       sendMessage: "发送消息",
       queue: "排队",
       send: "发送",
