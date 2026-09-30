@@ -400,7 +400,7 @@ async function expectInterruptedTurnOrderAfterReconnect(
   const agent = await seedMockAgentWorkspace({
     repoPrefix: `submission-reconnect-${testInfo.workerIndex}-`,
     title: "Submission reconnect ordering",
-    model: "ten-second-stream",
+    model: "one-minute-stream",
   });
   const prompt = "Keep this prompt before its response.";
   try {
@@ -409,14 +409,15 @@ async function expectInterruptedTurnOrderAfterReconnect(
     await agent.client.sendAgentMessage(agent.agentId, "Start the turn that will be interrupted.");
     await expect(page.getByRole("button", { name: /stop|cancel/i }).first()).toBeVisible();
     await expect(page.getByText("Cycle 1", { exact: true })).toBeVisible();
-    await queueMessage(page, prompt);
+    await fillComposerDraft(page, prompt);
     gate.setAgentStreamSuppressed(true);
-    await queuedSendNowButton(page).click();
+    await page.getByTestId("message-input-send-options-button").click();
+    await page.getByTestId("message-input-send-interrupt").click();
     const promptRow = page.getByTestId("user-message").filter({ hasText: prompt });
     await expect(promptRow).toBeVisible();
     await gate.waitForServerMessage("send_agent_message_response");
     await gate.drop();
-    await agent.client.waitForFinish(agent.agentId, 30_000);
+    await agent.client.waitForFinish(agent.agentId, 90_000);
     gate.setAgentStreamSuppressed(false);
     gate.forceNextTimelineEpochReset();
     gate.restoreFresh();
@@ -1256,7 +1257,7 @@ test.describe("Agent message submission", () => {
       expect(gate.getClientRequestCount("cancel_agent_request")).toBe(cancelsBefore);
       expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
         text: prompt,
-        activeTurnBehavior: "steer",
+        activeTurnBehavior: "steer_only",
       });
     } finally {
       gate.restore();
@@ -1380,7 +1381,7 @@ test.describe("Agent message submission", () => {
   test("keeps a submitted prompt before its response when canonical history arrives", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await expectInterruptedTurnOrderAfterReconnect(page, testInfo);
   });
 

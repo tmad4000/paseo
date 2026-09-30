@@ -1681,12 +1681,20 @@ function ComposerContentImpl({
       submitAttachments: ComposerAttachment[],
       activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
-      const resolvedBehavior = resolveDirectActiveTurnBehavior(
+      let resolvedBehavior = resolveDirectActiveTurnBehavior(
         appSettings.sendBehavior,
         activeTurnBehavior,
       );
       if (resolvedBehavior === "steer_only" && !supportsSteerOnly) {
-        throw new Error(t("composer.errors.steerRequiresUpdatedHost"));
+        const isTargetTurnActive = selectAgentTurnPresentation(
+          useSessionStore.getState().sessions[serverId],
+          agentIdRef.current,
+        ).isActive;
+        if (isTargetTurnActive) {
+          throw new Error(t("composer.errors.steerRequiresUpdatedHost"));
+        }
+        // An idle send needs no steering capability on an older daemon.
+        resolvedBehavior = undefined;
       }
       onMessageSent?.();
       if (onSubmitMessageRef.current) {
@@ -1703,7 +1711,7 @@ function ComposerContentImpl({
         resolvedBehavior,
       );
     },
-    [appSettings.sendBehavior, cwd, onMessageSent, supportsSteerOnly, t],
+    [appSettings.sendBehavior, cwd, onMessageSent, serverId, supportsSteerOnly, t],
   );
 
   useEffect(() => {
