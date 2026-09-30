@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0-beta.5 - 2026-09-30
+
+### Added
+
+- Show Steer as the primary action while an agent runs, with Queue message and Interrupt agent in the nearby options menu.
+- Mark workspace agent tabs with unread activity and order agent tabs by recent activity.
+
 ## 0.10.0-beta.3 - 2026-09-29
 
 ### Fixed
