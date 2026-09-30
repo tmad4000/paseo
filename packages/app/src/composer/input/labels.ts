@@ -15,11 +15,24 @@ export function resolveSubmitAccessibilityLabel(input: {
   if (input.isAgentRunning) {
     return input.t(
       input.defaultSendBehavior === "steer"
-        ? "composer.input.sendAndSteer"
-        : "composer.input.sendAndInterrupt",
+        ? "composer.input.steerNow"
+        : "composer.input.interruptAgent",
     );
   }
   return input.t("composer.input.sendMessage");
+}
+
+export function resolvePrimarySendLabel(input: {
+  submitLabel: string | undefined;
+  isAgentRunning: boolean;
+  defaultSendBehavior: SendBehavior;
+  t: TFunction;
+}): string {
+  if (input.submitLabel) return input.submitLabel;
+  if (!input.isAgentRunning) return input.t("composer.input.send");
+  if (input.defaultSendBehavior === "queue") return input.t("composer.input.queue");
+  if (input.defaultSendBehavior === "steer") return input.t("composer.input.steer");
+  return input.t("composer.cancel.interrupt");
 }
 
 export function resolveVoiceAccessibilityLabel(input: {

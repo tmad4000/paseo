@@ -77,6 +77,7 @@ const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
 }));
 import {
+  resolvePrimarySendLabel,
   resolveSendTooltipLabel,
   resolveSubmitAccessibilityLabel,
   resolveVoiceAccessibilityLabel,
@@ -848,6 +849,7 @@ function SendActionMenu({
   steerLabel,
   interruptLabel,
   menuLabel,
+  optionsLabel,
   onQueueSendAction,
   onSteerSendAction,
   onInterruptSendAction,
@@ -859,6 +861,7 @@ function SendActionMenu({
   steerLabel: string;
   interruptLabel: string;
   menuLabel: string;
+  optionsLabel: string;
   onQueueSendAction: () => void;
   onSteerSendAction: () => void;
   onInterruptSendAction: () => void;
@@ -891,10 +894,13 @@ function SendActionMenu({
             style={triggerStyle}
           >
             {({ hovered, open }) => (
-              <ThemedChevronDown
-                size={ICON_SIZE.sm}
-                uniProps={hovered || open ? iconForegroundMapping : iconForegroundMutedMapping}
-              />
+              <>
+                <Text style={styles.sendOptionsLabel}>{optionsLabel}</Text>
+                <ThemedChevronDown
+                  size={ICON_SIZE.sm}
+                  uniProps={hovered || open ? iconForegroundMapping : iconForegroundMutedMapping}
+                />
+              </>
             )}
           </DropdownMenuTrigger>
         </TooltipTrigger>
@@ -1932,13 +1938,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       () => [styles.textInput, mode.isMonospace && styles.textInputMonospace, styles.readOnlyText],
       [mode.isMonospace],
     );
+    const primarySendLabel = resolvePrimarySendLabel({
+      submitLabel,
+      isAgentRunning,
+      defaultSendBehavior,
+      t,
+    });
     const sendButtonCombinedStyle = useMemo(
       () => [
         styles.sendButton,
-        submitLabel ? styles.sendButtonLabeled : undefined,
+        styles.sendButtonLabeled,
         isSendButtonDisabled && styles.buttonDisabled,
       ],
-      [isSendButtonDisabled, submitLabel],
+      [isSendButtonDisabled],
     );
     const overlayContainerStyle = useMemo(
       () => [
@@ -2055,9 +2067,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 disabled={isSendButtonDisabled}
                 defaultSendBehavior={defaultSendBehavior}
                 queueLabel={t("composer.input.queueMessage")}
-                steerLabel={t("composer.input.sendAndSteer")}
-                interruptLabel={t("composer.input.sendAndInterrupt")}
+                steerLabel={t("composer.input.steerNow")}
+                interruptLabel={t("composer.input.interruptAgent")}
                 menuLabel={t("composer.input.sendOptions")}
+                optionsLabel={t("composer.input.options")}
                 onQueueSendAction={handleQueueMessage}
                 onSteerSendAction={handleSteerSendAction}
                 onInterruptSendAction={handleInterruptSendAction}
@@ -2074,7 +2087,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 sendButtonCombinedStyle={sendButtonCombinedStyle}
                 isSubmitLoading={isSubmitLoading}
                 submitIcon={submitIcon}
-                submitLabel={submitLabel}
+                submitLabel={primarySendLabel}
                 submitButtonTestID={submitButtonTestID}
                 buttonIconSize={buttonIconSize}
                 sendKeys={DEFAULT_SEND_KEYS}
@@ -2230,11 +2243,18 @@ const styles = StyleSheet.create((theme: Theme) => ({
     justifyContent: "center",
   },
   sendOptionsButton: {
-    width: 28,
+    minWidth: 28,
     height: 28,
     borderRadius: theme.borderRadius.full,
+    flexDirection: "row",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
     alignItems: "center",
     justifyContent: "center",
+  },
+  sendOptionsLabel: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
   voiceButtonRecording: {
     backgroundColor: theme.colors.destructive,

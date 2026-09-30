@@ -400,7 +400,7 @@ async function expectInterruptedTurnOrderAfterReconnect(
   const agent = await seedMockAgentWorkspace({
     repoPrefix: `submission-reconnect-${testInfo.workerIndex}-`,
     title: "Submission reconnect ordering",
-    model: "ten-second-stream",
+    model: "one-minute-stream",
   });
   const prompt = "Keep this prompt before its response.";
   try {
@@ -409,14 +409,15 @@ async function expectInterruptedTurnOrderAfterReconnect(
     await agent.client.sendAgentMessage(agent.agentId, "Start the turn that will be interrupted.");
     await expect(page.getByRole("button", { name: /stop|cancel/i }).first()).toBeVisible();
     await expect(page.getByText("Cycle 1", { exact: true })).toBeVisible();
-    await queueMessage(page, prompt);
+    await fillComposerDraft(page, prompt);
     gate.setAgentStreamSuppressed(true);
-    await queuedSendNowButton(page).click();
+    await page.getByTestId("message-input-send-options-button").click();
+    await page.getByTestId("message-input-send-interrupt").click();
     const promptRow = page.getByTestId("user-message").filter({ hasText: prompt });
     await expect(promptRow).toBeVisible();
     await gate.waitForServerMessage("send_agent_message_response");
     await gate.drop();
-    await agent.client.waitForFinish(agent.agentId, 30_000);
+    await agent.client.waitForFinish(agent.agentId, 90_000);
     gate.setAgentStreamSuppressed(false);
     gate.forceNextTimelineEpochReset();
     gate.restoreFresh();
@@ -1017,9 +1018,7 @@ test.describe("Agent message submission", () => {
 
       gate.holdNextClientRequest("send_agent_message_request");
       await fillComposerDraft(page, "Replace the running turn without duplicating its action.");
-      await expect(page.getByRole("button", { name: "Send and steer", exact: true })).toHaveCount(
-        1,
-      );
+      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
       await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Interrupt agent", exact: true })).toHaveCount(
         0,
@@ -1038,6 +1037,51 @@ test.describe("Agent message submission", () => {
       await agent.cleanup();
     }
   });
+
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 960 },
+    { name: "phone", width: 390, height: 844 },
+  ]) {
+    test(`shows busy send choices on ${viewport.name} without sending when opened`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      const agent = await startRunningMockAgent(page, {
+        prefix: `send-choices-${viewport.name}-${testInfo.workerIndex}-`,
+        model: "one-minute-stream",
+        prompt: "Keep this turn active while the user inspects send choices.",
+      });
+      const draft = "Queue this draft without interrupting the active turn.";
+      try {
+        await fillComposerDraft(page, draft);
+        await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+        await testInfo.attach(`${viewport.name}-busy-composer`, {
+          body: await page.screenshot(),
+          contentType: "image/png",
+        });
+        const sendOptions = page.getByRole("button", { name: "Send options" });
+        await sendOptions.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("menuitem", { name: "Queue message" })).toBeVisible();
+        await expect(page.getByRole("menuitem", { name: "Steer now" })).toBeVisible();
+        await expect(page.getByRole("menuitem", { name: "Interrupt agent" })).toBeVisible();
+        await expectComposerDraft(page, draft);
+        await expect(page.getByText("Queued messages (1)")).toHaveCount(0);
+        await testInfo.attach(`${viewport.name}-send-choices`, {
+          body: await page.screenshot(),
+          contentType: "image/png",
+        });
+
+        await page.getByRole("menuitem", { name: "Queue message" }).click();
+        await expect(page.getByText("Queued messages (1)")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+        await expect(queuedSendNowButton(page)).toBeVisible();
+        await expect(page.getByTestId("user-message").filter({ hasText: draft })).toHaveCount(0);
+      } finally {
+        await agent.cleanup();
+      }
+    });
+  }
 
   test("makes the next queued turn interruptible after cancellation settles", async ({ page }) => {
     const title = "Queued turn after interrupt";
@@ -1213,7 +1257,7 @@ test.describe("Agent message submission", () => {
       expect(gate.getClientRequestCount("cancel_agent_request")).toBe(cancelsBefore);
       expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
         text: prompt,
-        activeTurnBehavior: "steer",
+        activeTurnBehavior: "steer_only",
       });
     } finally {
       gate.restore();
@@ -1267,9 +1311,9 @@ test.describe("Agent message submission", () => {
 
       const prompt = "Interrupt the running turn.";
       await fillComposerDraft(page, prompt);
-      await expect(
-        page.getByRole("button", { name: "Send and interrupt", exact: true }),
-      ).toHaveCount(1);
+      await expect(page.getByRole("button", { name: "Interrupt agent", exact: true })).toHaveCount(
+        1,
+      );
       await composerLocator(page).press("Enter");
 
       const request = await gate.waitForRequest();
@@ -1337,7 +1381,7 @@ test.describe("Agent message submission", () => {
   test("keeps a submitted prompt before its response when canonical history arrives", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await expectInterruptedTurnOrderAfterReconnect(page, testInfo);
   });
 

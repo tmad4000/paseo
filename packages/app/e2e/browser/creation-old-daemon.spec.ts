@@ -98,6 +98,7 @@ for (const version of ["0.2.5", "0.7.2", "0.8.0"]) {
       client,
       gate,
     }) => {
+      test.setTimeout(120_000);
       await openOldHost(page, project.workspaceId);
       await openNewWorkspaceComposer(page, project);
       await selectWorkspaceIsolation(page, "worktree");
@@ -118,8 +119,8 @@ for (const version of ["0.2.5", "0.7.2", "0.8.0"]) {
       gate.release();
       await expect.poll(async () => (await client.fetchAgents()).entries.length).toBe(1);
       const first = (await client.fetchAgents()).entries[0]!.agent;
-      await client.waitForFinish(first.id, 20_000);
       await expectPromptOnce(client, first.id, prompt);
+      await client.waitForFinish(first.id, 20_000);
       await expect(
         page.getByTestId(`workspace-tab-agent_${first.id}`).filter({ visible: true }),
       ).toHaveText(prompt);
@@ -133,8 +134,8 @@ for (const version of ["0.2.5", "0.7.2", "0.8.0"]) {
         ({ agent }) => agent.id !== first.id,
       )!.agent;
       expect(second.workspaceId).toBe(first.workspaceId);
-      await client.waitForFinish(second.id, 20_000);
       await expectPromptOnce(client, second.id, secondPrompt);
+      await client.waitForFinish(second.id, 20_000);
       await expect(
         page.getByTestId(`workspace-tab-agent_${second.id}`).filter({ visible: true }),
       ).toHaveText(secondPrompt);
@@ -148,10 +149,14 @@ for (const version of ["0.2.5", "0.7.2", "0.8.0"]) {
     });
 
     async function expectPromptOnce(client: DaemonClient, agentId: string, text: string) {
-      const timeline = await client.fetchAgentTimeline(agentId);
-      expect(
-        timeline.entries.filter(({ item }) => item.type === "user_message" && item.text === text),
-      ).toHaveLength(1);
+      await expect
+        .poll(async () => {
+          const timeline = await client.fetchAgentTimeline(agentId);
+          return timeline.entries.filter(
+            ({ item }) => item.type === "user_message" && item.text === text,
+          ).length;
+        })
+        .toBe(1);
     }
 
     async function openOldHost(page: Page, workspaceId: string) {

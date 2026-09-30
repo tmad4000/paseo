@@ -14,9 +14,9 @@ Muted recognition uses a 750 ms onset buffer and bounds an utterance to six seco
 
 Starting or stopping voice attaches or detaches the microphone and playback; it does not reload the
 provider session, interrupt the current turn, resolve a permission, or stop children. Ordinary speech
-and default typed input enter the daemon's durable agent queue in admission order, including when the
-agent is idle. The queue starts each follow-up after the current turn and any permission wait clear.
-Use the separate **Interrupt agent** control to cancel a running turn.
+enters the daemon's durable agent queue in admission order, including when the agent is idle. The
+queue starts each follow-up after the current turn and any permission wait clear. Typed input follows
+the selected send behavior. Use the separate **Interrupt agent** control to cancel a running turn.
 
 Each finalized utterance has one stable message ID. A transcript is acknowledged only after its
 queue write succeeds. The voice panel distinguishes **queued** from **sent to agent** and plays
