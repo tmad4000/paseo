@@ -37,6 +37,7 @@ export interface SendQueuedPromptInput {
   agentId: string;
   prompt: AgentPromptInput;
   messageId: string;
+  activeTurnBehavior?: "steer_only";
 }
 
 export interface AgentQueueServiceOptions {
@@ -84,6 +85,7 @@ export class AgentQueueService {
           agentId: input.agentId,
           prompt: input.prompt,
           messageId: input.messageId,
+          ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
           logger: this.logger,
         }));
   }
@@ -195,6 +197,48 @@ export class AgentQueueService {
     });
     this.publish(result);
     return toAgentQueueSnapshot(result.queue);
+  }
+
+  /** Claims the current daemon item before sending, so a drain, edit, or second device cannot race it. */
+  async sendNow(agentId: string, itemId: string): Promise<AgentQueueSnapshot> {
+    let claimedItem: StoredQueuedMessage | undefined;
+    let originalIndex = -1;
+    const claimed = await this.store.mutate(agentId, (current) => {
+      originalIndex = current.items.findIndex((item) => item.id === itemId);
+      if (originalIndex === -1) {
+        throw new Error("This message is no longer queued.");
+      }
+      claimedItem = current.items[originalIndex];
+      return {
+        ...current,
+        items: current.items.filter((item) => item.id !== itemId),
+        drainedIds: recordDrainedId(current.drainedIds, itemId),
+      };
+    });
+    this.publish(claimed);
+    const item = claimedItem!;
+    try {
+      await this.sendPrompt({
+        agentId,
+        prompt: buildAgentPrompt(item.text, item.images, item.attachments as AgentAttachment[]),
+        messageId: item.id,
+        activeTurnBehavior: "steer_only",
+      });
+    } catch (error) {
+      const restored = await this.store.mutate(agentId, (current) => {
+        if (current.items.some((queued) => queued.id === itemId)) return current;
+        const items = [...current.items];
+        items.splice(Math.min(originalIndex, items.length), 0, item);
+        return {
+          ...current,
+          items,
+          drainedIds: (current.drainedIds ?? []).filter((id) => id !== itemId),
+        };
+      });
+      this.publish(restored);
+      throw error;
+    }
+    return toAgentQueueSnapshot(claimed.queue);
   }
 
   async reorder(agentId: string, itemIds: string[]): Promise<AgentQueueSnapshot> {

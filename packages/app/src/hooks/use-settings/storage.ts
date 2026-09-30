@@ -123,9 +123,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "system",
-  // Queue by default: a mid-turn send should never silently kill the turn's
-  // in-flight tool calls and subagents. Interrupt stays one setting away.
-  sendBehavior: "queue",
+  // The fork's Steer uses strict steering on the wire. It never falls back to interruption.
+  sendBehavior: "steer",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,

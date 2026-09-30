@@ -1800,6 +1800,7 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: this.agentQueueService !== null,
         queueEdit: this.agentQueueService !== null,
+        queueSendNow: this.agentQueueService !== null,
         steerOnly: true,
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: true,

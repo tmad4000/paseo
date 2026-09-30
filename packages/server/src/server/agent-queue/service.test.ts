@@ -273,6 +273,39 @@ describe("AgentQueueService", () => {
     expect(harness.sent[0]?.prompt).toBe("latest text");
   });
 
+  test("send-now claims the latest daemon text exactly once across competing devices", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "old text" });
+    await harness.service.edit(AGENT_ID, "item-1", "old text", "edited elsewhere");
+
+    const results = await Promise.allSettled([
+      harness.service.sendNow(AGENT_ID, "item-1"),
+      harness.service.sendNow(AGENT_ID, "item-1"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]?.prompt).toBe("edited elsewhere");
+    expect(harness.sent[0]?.activeTurnBehavior).toBe("steer_only");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("a refused strict steer restores the same queued item at its original position", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "first" });
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-2", text: "second" });
+    harness.failSends(new Error("steer refused"));
+
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("steer refused");
+
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "item-1",
+      "item-2",
+    ]);
+    expect(harness.sent).toEqual([]);
+  });
+
   test("revision increases monotonically across mutations", async () => {
     harness.agents.lifecycle = "running";
     const first = await harness.service.enqueue({

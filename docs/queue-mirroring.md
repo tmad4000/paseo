@@ -63,6 +63,7 @@ defined there, and a separate module would import them in a cycle.
 | `agent.queue.enqueue.request`         | in        | Append an item                                 |
 | `agent.queue.remove.request`          | in        | Cancel one item                                |
 | `agent.queue.edit.request`            | in        | Edit an item's text without moving it          |
+| `agent.queue.send_now.request`        | in        | Claim and strictly steer one queued item       |
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
 | `agent.queue.get_item_images.request` | in        | Fetch one item's image bytes                   |
@@ -82,6 +83,12 @@ or an item already claimed for delivery. It changes only the text, preserving th
 If an edit fails while the item is still queued, the editor remains open so the user can copy or
 revise the draft. The capability flag
 `queueEdit` prevents a newer client from sending this RPC to an older daemon.
+
+Send-now is a daemon operation gated by `queueSendNow`. It claims the authoritative stored item
+under the same per-agent lock as edits and drains, then sends that exact content with strict
+steering. A second device cannot send stale text or send the same item again. If the provider
+rejects the steer, the daemon restores the item at its prior position. A journal entry records
+both the claim and any restoration for manual recovery after a crash.
 
 The wire item:
 

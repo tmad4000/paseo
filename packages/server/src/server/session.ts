@@ -649,6 +649,7 @@ const AGENT_QUEUE_RESPONSE_TYPES = {
   "agent.queue.enqueue.request": "agent.queue.enqueue.response",
   "agent.queue.remove.request": "agent.queue.remove.response",
   "agent.queue.edit.request": "agent.queue.edit.response",
+  "agent.queue.send_now.request": "agent.queue.send_now.response",
   "agent.queue.list.request": "agent.queue.list.response",
   "agent.queue.reorder.request": "agent.queue.reorder.response",
 } as const;
@@ -2638,6 +2639,7 @@ export class Session {
       case "agent.queue.enqueue.request":
       case "agent.queue.remove.request":
       case "agent.queue.edit.request":
+      case "agent.queue.send_now.request":
       case "agent.queue.list.request":
       case "agent.queue.reorder.request":
         return this.handleAgentQueueRequest(msg);
@@ -4974,6 +4976,8 @@ export class Session {
         return service.remove(agentId, msg.itemId);
       case "agent.queue.edit.request":
         return service.edit(agentId, msg.itemId, msg.expectedText, msg.text);
+      case "agent.queue.send_now.request":
+        return service.sendNow(agentId, msg.itemId);
       case "agent.queue.reorder.request":
         return service.reorder(agentId, msg.itemIds);
       case "agent.queue.list.request":

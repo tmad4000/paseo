@@ -79,7 +79,6 @@ import {
   queueComposerMessageOnServer,
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
-  takeQueuedComposerMessage,
   updateQueuedComposerMessage,
   toggleForgeAttachmentFromPicker,
   uploadFileAttachments,
@@ -1433,6 +1432,9 @@ function ComposerContentImpl({
   const supportsQueueEdit = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.queueEdit === true,
   );
+  const supportsQueueSendNow = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.queueSendNow === true,
+  );
   const applyAgentQueueSnapshot = useSessionStore((state) => state.applyAgentQueueSnapshot);
   const forgeAutoAttachRef = useRef<ReturnType<typeof useComposerForgeAutoAttach>>(null);
   const [isForgeResolving, setIsForgeResolving] = useState(false);
@@ -1633,7 +1635,11 @@ function ComposerContentImpl({
       submitAttachments: ComposerAttachment[],
       activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
-      if (activeTurnBehavior === "steer_only" && !supportsSteerOnly) {
+      const resolvedBehavior = resolveDirectActiveTurnBehavior(
+        appSettings.sendBehavior,
+        activeTurnBehavior,
+      );
+      if (resolvedBehavior === "steer_only" && !supportsSteerOnly) {
         throw new Error(t("composer.errors.steerRequiresUpdatedHost"));
       }
       onMessageSent?.();
@@ -1648,7 +1654,7 @@ function ComposerContentImpl({
         agentIdRef.current,
         text,
         submitAttachments,
-        resolveDirectActiveTurnBehavior(appSettings.sendBehavior, activeTurnBehavior),
+        resolvedBehavior,
       );
     },
     [appSettings.sendBehavior, cwd, onMessageSent, supportsSteerOnly, t],
@@ -2154,48 +2160,21 @@ function ComposerContentImpl({
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
-      const immediateBehavior = appSettings.sendBehavior === "queue" ? "steer_only" : undefined;
-      if (immediateBehavior === "steer_only" && !supportsSteerOnly) {
+      const immediateBehavior = "steer_only";
+      if (!supportsSteerOnly) {
         setSendError(t("composer.errors.steerRequiresUpdatedHost"));
         return;
       }
       if (supportsAgentMessageQueue && client) {
-        // Take the message off the daemon queue first. The daemon drains the same
-        // queue, so leaving it there while we send would risk sending it twice.
-        const taken = await takeQueuedComposerMessage({
-          client,
-          agentId,
-          messageId: id,
-          queue: queueWriter,
-          persistImage: persistAttachmentFromDataUrl,
-          applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
-        });
-        if (taken.status === "failed") {
-          setSendError(taken.errorMessage);
-          return;
-        }
-        if (taken.status === "missing") {
+        if (!supportsQueueSendNow) {
+          setSendError(t("composer.errors.steerRequiresUpdatedHost"));
           return;
         }
         try {
-          await submitMessage(taken.text, taken.attachments, immediateBehavior);
+          const snapshot = await client.sendQueuedAgentMessageNow(agentId, id);
+          applyAgentQueueSnapshot(serverId, snapshot);
         } catch (error) {
           setSendError(error instanceof Error ? error.message : t("composer.errors.failedToSend"));
-          // Requeue so the message is not lost. It lands at the end rather than
-          // where it was, because the daemon queue has no insert-at-position.
-          await queueComposerMessageOnServer({
-            client,
-            agentId,
-            text: taken.text,
-            attachments: taken.attachments,
-            attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
-              supportsForgeAttachments: supportsForgeSearch,
-            }),
-            encodeImages,
-            queue: queueWriter,
-            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
-            outbox: queueOutbox,
-          });
         }
         return;
       }
@@ -2214,15 +2193,13 @@ function ComposerContentImpl({
     },
     [
       agentId,
-      appSettings.sendBehavior,
       applyAgentQueueSnapshot,
       client,
-      queueOutbox,
       queueWriter,
       serverId,
       submitMessage,
       supportsAgentMessageQueue,
-      supportsForgeSearch,
+      supportsQueueSendNow,
       supportsSteerOnly,
       t,
     ],
@@ -2606,19 +2583,11 @@ function ComposerContentImpl({
         editLabel: t("composer.attachments.editQueuedMessage"),
         saveLabel: t("composer.attachments.saveQueuedMessage"),
         cancelLabel: t("common.actions.cancel"),
-        sendNowLabel:
-          appSettings.sendBehavior === "queue" && isAgentRunning
-            ? t("composer.input.sendAndSteer")
-            : t("composer.attachments.sendQueuedMessageNow"),
+        sendNowLabel: isAgentRunning
+          ? t("composer.input.sendAndSteer")
+          : t("composer.attachments.sendQueuedMessageNow"),
       }),
-    [
-      appSettings.sendBehavior,
-      handleSaveQueuedMessage,
-      handleSendQueuedNow,
-      isAgentRunning,
-      queuedMessages,
-      t,
-    ],
+    [handleSaveQueuedMessage, handleSendQueuedNow, isAgentRunning, queuedMessages, t],
   );
 
   const autocompleteConfiguration = useMemo(

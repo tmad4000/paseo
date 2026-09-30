@@ -9,7 +9,8 @@ export function resolveActiveSendBehavior(
   sendBehavior: SendBehavior,
   hasPendingPermission: boolean,
 ): SendBehavior {
-  return sendBehavior === "queue" && hasPendingPermission ? "interrupt" : sendBehavior;
+  // A permission prompt can strand a queue, but it must not silently turn a send into Interrupt.
+  return sendBehavior === "queue" && hasPendingPermission ? "steer" : sendBehavior;
 }
 
 /** An unmarked direct send from Queue mode lets the daemon queue a racing active turn. */
@@ -17,7 +18,8 @@ export function resolveDirectActiveTurnBehavior(
   sendBehavior: SendBehavior,
   override?: ActiveTurnBehavior,
 ): ActiveTurnBehavior | undefined {
-  return override ?? (sendBehavior === "queue" ? undefined : sendBehavior);
+  const behavior = override ?? (sendBehavior === "queue" ? undefined : sendBehavior);
+  return behavior === "steer" ? "steer_only" : behavior;
 }
 
 interface ComposerSurfaceState {
@@ -131,7 +133,7 @@ export function runDefaultSendAction(ctx: SendActionContext): void {
     ctx.handleQueueMessage();
     return;
   }
-  ctx.handleSendMessage(ctx.defaultSendBehavior === "queue" ? undefined : ctx.defaultSendBehavior);
+  ctx.handleSendMessage(resolveDirectActiveTurnBehavior(ctx.defaultSendBehavior));
 }
 
 export function runAlternateSendAction(ctx: SendActionContext): void {
