@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   useSidebarWorkspacesList,
   type SidebarProjectEntry,
@@ -20,6 +27,13 @@ import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model
 import { filterWorkspacesByLabels, type SidebarWorkspaceGroup } from "./sidebar-labels";
 import { filterWorkspacesByProjects, resolveActiveProjectFilters } from "./sidebar-project-filter";
 import {
+  filterAndSortSidebarProjects,
+  normalizeSidebarQuery,
+  sortSidebarWorkspaces,
+  workspaceMatchesSidebarQuery,
+  type SidebarSortMode,
+} from "./sidebar-filter-sort";
+import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
 } from "@/workspace-labels";
@@ -36,6 +50,10 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   /** The project filter as it is actually being applied — see `resolveActiveProjectFilters`. */
   resolvedProjectFilters: readonly string[];
   hasProjectsBeforeFilter: boolean;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  sortMode: SidebarSortMode;
+  setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
@@ -58,6 +76,9 @@ export function SidebarModelProvider({
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SidebarSortMode>("manual");
+  const normalizedQuery = useMemo(() => normalizeSidebarQuery(searchQuery), [searchQuery]);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
   const { hosts: labelHosts } = useWorkspaceLabelProjection();
   const collapsedProjectKeys = useSidebarCollapsedSectionsStore(
@@ -95,7 +116,11 @@ export function SidebarModelProvider({
   // anything; the label filter reads `labels`, which only exists on an entry. Hydration opens a
   // live session-store subscription over every workspace on every visible host, so widening this
   // for a filter that does not need it costs a retained-but-inactive sidebar real work.
-  const needsWorkspaceEntries = groupMode !== "project" || hasActiveLabelFilter;
+  const needsWorkspaceEntries =
+    groupMode !== "project" ||
+    hasActiveLabelFilter ||
+    Boolean(normalizedQuery) ||
+    sortMode !== "manual";
   const workspaceEntriesByKey = useSidebarWorkspaceEntries(
     list.workspacePlacements,
     active !== false || needsWorkspaceEntries,
@@ -105,9 +130,12 @@ export function SidebarModelProvider({
       workspaces: [...workspaceEntriesByKey.values()],
       projectFilters: resolvedProjectFilters,
     });
-    const filtered = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
-    return new Map(filtered.map((workspace) => [workspace.workspaceKey, workspace]));
-  }, [labelFilter, resolvedProjectFilters, workspaceEntriesByKey]);
+    const filtered = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter }).filter(
+      (workspace) => workspaceMatchesSidebarQuery(workspace, normalizedQuery),
+    );
+    const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, sortMode);
+    return new Map(sorted.map((workspace) => [workspace.workspaceKey, workspace]));
+  }, [labelFilter, normalizedQuery, resolvedProjectFilters, sortMode, workspaceEntriesByKey]);
   const visibleWorkspaceKeys = useMemo(
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
@@ -122,18 +150,33 @@ export function SidebarModelProvider({
       const included = new Set(resolvedProjectFilters);
       projects = projects.filter((project) => included.has(project.viewKey));
     }
-    if (hasActiveLabelFilter) {
+    if (hasActiveLabelFilter || normalizedQuery) {
       projects = projects.flatMap((project) => {
         const workspaces = project.workspaces.filter((workspace) =>
           visibleWorkspaceKeys.has(workspace.workspaceKey),
         );
-        return workspaces.length > 0 ? [{ ...project, workspaces }] : [];
+        const projectNameMatches = project.projectName
+          .normalize("NFKC")
+          .toLocaleLowerCase()
+          .includes(normalizedQuery);
+        return workspaces.length > 0 ||
+          (!hasActiveLabelFilter && normalizedQuery && projectNameMatches)
+          ? [{ ...project, workspaces }]
+          : [];
       });
     }
-    return projects;
+    return filterAndSortSidebarProjects({
+      projects,
+      entries: filteredWorkspaceEntriesByKey,
+      query: normalizedQuery,
+      mode: sortMode,
+    });
   }, [
     hasActiveLabelFilter,
     hasActiveProjectFilter,
+    normalizedQuery,
+    sortMode,
+    filteredWorkspaceEntriesByKey,
     resolvedProjectFilters,
     list.projects,
     visibleWorkspaceKeys,
@@ -148,14 +191,17 @@ export function SidebarModelProvider({
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
       pinnedCollapsed,
-      collapsedProjectKeys,
+      sortMode,
+      collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
     }),
     [
       collapsedProjectKeys,
+      normalizedQuery,
       collapsedWorkspaceGroupKeys,
       groupMode,
       list.projectNamesByViewKey,
+      sortMode,
       filteredProjects,
       pinnedCollapsed,
       pinnedKeys,
@@ -171,18 +217,25 @@ export function SidebarModelProvider({
       allProjects: list.projects,
       resolvedProjectFilters,
       hasProjectsBeforeFilter: list.projects.length > 0,
+      searchQuery,
+      setSearchQuery,
+      sortMode,
+      setSortMode,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
-      collapsedProjectKeys,
+      collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       toggleProjectCollapsed,
       shortcutModel: projection.shortcutModel,
     }),
     [
       resolvedProjectFilters,
       collapsedProjectKeys,
+      normalizedQuery,
+      searchQuery,
+      sortMode,
       groupMode,
       list,
       filteredProjects,

@@ -1,5 +1,14 @@
 import { router } from "expo-router";
-import { FolderPlus, GitBranch, Import, Server, Settings, X } from "lucide-react-native";
+import {
+  ArrowDownUp,
+  FolderPlus,
+  GitBranch,
+  Import,
+  Search,
+  Server,
+  Settings,
+  X,
+} from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
@@ -23,11 +32,22 @@ import {
 } from "@/components/sidebar-resize-handle-layout";
 import { HostPicker } from "@/components/hosts/host-picker";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
+import {
+  EditingTextInput as TextInput,
+  type EditingTextInputHandle,
+} from "@/components/ui/text-input";
+import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useImportSession } from "@/hooks/use-import-session";
@@ -65,6 +85,7 @@ interface SidebarSharedProps {
   projects: SidebarProjectEntry[];
   hasProjectsBeforeFilter: boolean;
   hasActiveProjectFilter: boolean;
+  hasActiveSearchFilter: boolean;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   isInitialLoad: boolean;
   isRevalidating: boolean;
@@ -113,6 +134,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const {
     projects,
     hasProjectsBeforeFilter,
+    searchQuery,
     resolvedProjectFilters,
     workspaceEntriesByKey,
     isInitialLoad,
@@ -208,6 +230,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     projects,
     hasProjectsBeforeFilter,
     hasActiveProjectFilter: resolvedProjectFilters.length > 0,
+    hasActiveSearchFilter: searchQuery.trim().length > 0,
     workspaceEntriesByKey,
     isInitialLoad,
     isRevalidating,
@@ -512,6 +535,7 @@ function MobileSidebar({
   projects,
   hasProjectsBeforeFilter,
   hasActiveProjectFilter,
+  hasActiveSearchFilter,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -556,6 +580,7 @@ function MobileSidebar({
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
         <SidebarNavRows style={styles.sidebarHeaderGroup} onBeforeNavigate={closeSidebar} />
+        <SidebarSearchControls />
         <WindowChromeSafeArea placement="inline" style={styles.mobileCloseButtonRow}>
           <Pressable
             style={styles.mobileCloseButton}
@@ -590,6 +615,7 @@ function MobileSidebar({
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
             hasActiveProjectFilter={hasActiveProjectFilter}
+            hasActiveSearchFilter={hasActiveSearchFilter}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}
@@ -624,6 +650,7 @@ function DesktopSidebar({
   projects,
   hasProjectsBeforeFilter,
   hasActiveProjectFilter,
+  hasActiveSearchFilter,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -753,6 +780,7 @@ function DesktopSidebar({
           )}
           <SidebarNavRows style={sidebarHeaderGroupStyle} />
         </View>
+        <SidebarSearchControls />
 
         {isInitialLoad && !hasActiveHostFilter ? (
           <SidebarAgentListSkeleton />
@@ -768,6 +796,7 @@ function DesktopSidebar({
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
             hasActiveProjectFilter={hasActiveProjectFilter}
+            hasActiveSearchFilter={hasActiveSearchFilter}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}
@@ -820,6 +849,96 @@ function WorkspacesSectionHeader() {
   );
 }
 
+const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = ["manual", "recent", "title"];
+
+function SidebarSearchControls() {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const { searchQuery, setSearchQuery, sortMode, setSortMode } = useSidebarModel();
+  const searchInputRef = useRef<EditingTextInputHandle>(null);
+  const clearSearch = useCallback(() => {
+    searchInputRef.current?.reset();
+    setSearchQuery("");
+  }, [setSearchQuery]);
+  useEffect(() => {
+    if (!searchQuery && searchInputRef.current?.getText()) searchInputRef.current.reset();
+  }, [searchQuery]);
+  return (
+    <View style={styles.sidebarSearchControls}>
+      <View style={styles.sidebarSearchField}>
+        <Search size={15} color={theme.colors.foregroundMuted} />
+        <TextInput
+          ref={searchInputRef}
+          initialValue={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder={t("sidebar.filterSidebar.placeholder")}
+          placeholderTextColor={theme.colors.foregroundMuted}
+          accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          testID="sidebar-title-project-filter"
+          style={styles.sidebarSearchInput}
+        />
+        {searchQuery ? (
+          <Pressable
+            onPress={clearSearch}
+            accessibilityRole="button"
+            accessibilityLabel={t("sidebar.filterSidebar.clear")}
+            testID="sidebar-title-project-filter-clear"
+          >
+            <X size={14} color={theme.colors.foregroundMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+      <DropdownMenu compactMode="sheet">
+        <DropdownMenuTrigger
+          style={styles.sidebarSortTrigger}
+          accessibilityRole="button"
+          accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
+            value: t(`sidebar.filterSidebar.sort.${sortMode}`),
+          })}
+          testID="sidebar-sort-trigger"
+        >
+          <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          width={210}
+          sheetTitle={t("sidebar.filterSidebar.sortHeading")}
+        >
+          {SIDEBAR_SORT_MODES.map((mode) => (
+            <SidebarSortItem
+              key={mode}
+              mode={mode}
+              selected={sortMode === mode}
+              onSelectMode={setSortMode}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
+}
+
+function SidebarSortItem({
+  mode,
+  selected,
+  onSelectMode,
+}: {
+  mode: SidebarSortMode;
+  selected: boolean;
+  onSelectMode: (mode: SidebarSortMode) => void;
+}) {
+  const { t } = useTranslation();
+  const selectMode = useCallback(() => onSelectMode(mode), [mode, onSelectMode]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={selectMode} testID={`sidebar-sort-${mode}`}>
+      {t(`sidebar.filterSidebar.sort.${mode}`)}
+    </DropdownMenuItem>
+  );
+}
+
 // Stable element so the sidebar list's listHeaderComponent prop keeps identity across
 // renders (WorkspacesSectionHeader takes no props).
 const workspacesSectionHeaderElement = <WorkspacesSectionHeader />;
@@ -846,6 +965,40 @@ const styles = StyleSheet.create((theme) => ({
   },
   sidebarHeaderGroupBelowChrome: {
     paddingTop: 0,
+  },
+  sidebarSearchControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1.5],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  sidebarSearchField: {
+    minWidth: 0,
+    minHeight: 32,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface0,
+  },
+  sidebarSearchInput: {
+    minWidth: 0,
+    flex: 1,
+    paddingVertical: 0,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  sidebarSortTrigger: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
   },
   workspacesSectionHeader: {
     flexDirection: "row",

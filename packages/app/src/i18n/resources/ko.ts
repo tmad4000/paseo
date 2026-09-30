@@ -1108,6 +1108,17 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "프로젝트 또는 채팅 필터",
+      clear: "사이드바 필터 지우기",
+      sortHeading: "채팅 정렬",
+      sortBy: "채팅 정렬: {{value}}",
+      sort: {
+        manual: "수동 순서",
+        recent: "최근 활동",
+        title: "제목 가나다순",
+      },
+    },
     display: {
       trigger: "표시 설정",
       heading: "표시",

@@ -1127,6 +1127,17 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "Filtrar projetos ou chats",
+      clear: "Limpar filtro da barra lateral",
+      sortHeading: "Ordenar chats",
+      sortBy: "Ordenar chats: {{value}}",
+      sort: {
+        manual: "Ordem manual",
+        recent: "Atividade recente",
+        title: "Título A–Z",
+      },
+    },
     display: {
       trigger: "Preferências de exibição",
       heading: "Exibição",

@@ -1114,6 +1114,17 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "プロジェクトやチャットを絞り込む",
+      clear: "サイドバーの絞り込みを解除",
+      sortHeading: "チャットの並び替え",
+      sortBy: "チャットの並び替え: {{value}}",
+      sort: {
+        manual: "手動の順序",
+        recent: "最近のアクティビティ",
+        title: "タイトル順",
+      },
+    },
     display: {
       trigger: "表示設定",
       heading: "表示",
