@@ -33,7 +33,6 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useShallow } from "zustand/shallow";
 import {
-  ArrowUp,
   ChevronDown,
   ChevronUp,
   Square,
@@ -840,7 +839,7 @@ function QueuedMessageRow({
           accessibilityLabel={sendNowLabel}
           accessibilityRole="button"
         >
-          <ThemedArrowUp size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+          <Text style={styles.queueSendButtonLabel}>{sendNowLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -2638,7 +2637,7 @@ function ComposerContentImpl({
         cancelLabel={t("common.actions.cancel")}
         sendNowLabel={
           isAgentRunning
-            ? t("composer.input.sendAndSteer")
+            ? t("composer.input.steerNow")
             : t("composer.attachments.sendQueuedMessageNow")
         }
       />
@@ -3005,7 +3004,14 @@ const styles = StyleSheet.create((theme: Theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   queueSendButton: {
+    width: "auto",
+    paddingHorizontal: theme.spacing[3],
     backgroundColor: theme.colors.accent,
+  },
+  queueSendButtonLabel: {
+    color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
   },
   sendErrorText: {
     color: theme.colors.palette.red[500],
@@ -3015,7 +3021,6 @@ const styles = StyleSheet.create((theme: Theme) => ({
 
 const ThemedAttachmentSpinner = withUnistyles(LoadingSpinner);
 const ThemedPencil = withUnistyles(Pencil);
-const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronUp = withUnistyles(ChevronUp);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);
@@ -3027,7 +3032,6 @@ const ThemedClipboardPaste = withUnistyles(ClipboardPaste);
 const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

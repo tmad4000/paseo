@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolvePrimarySendLabel,
   resolveSendTooltipLabel,
   resolveSubmitAccessibilityLabel,
   resolveVoiceAccessibilityLabel,
@@ -11,9 +12,12 @@ const translations: Record<string, string> = {
   "composer.input.queueMessage": "Queue message",
   "composer.input.sendAndInterrupt": "Send and interrupt",
   "composer.input.sendAndSteer": "Send and steer",
+  "composer.input.steer": "Steer",
+  "composer.input.steerNow": "Steer now",
   "composer.input.sendMessage": "Send message",
   "composer.input.queue": "Queue",
   "composer.input.send": "Send",
+  "composer.cancel.interrupt": "Interrupt",
   "composer.voice.unmuteVoiceMode": "Unmute Voice mode",
   "composer.voice.muteVoiceMode": "Mute Voice mode",
   "composer.voice.stopDictation": "Stop dictation",
@@ -56,7 +60,7 @@ describe("composer input labels", () => {
         isAgentRunning: true,
         t,
       }),
-    ).toBe("Send and interrupt");
+    ).toBe("Interrupt agent");
     expect(
       resolveSubmitAccessibilityLabel({
         submitButtonAccessibilityLabel: undefined,
@@ -66,7 +70,7 @@ describe("composer input labels", () => {
         isAgentRunning: true,
         t,
       }),
-    ).toBe("Send and steer");
+    ).toBe("Steer now");
     expect(
       resolveSubmitAccessibilityLabel({
         submitButtonAccessibilityLabel: undefined,
@@ -77,6 +81,39 @@ describe("composer input labels", () => {
         t,
       }),
     ).toBe("Send message");
+  });
+
+  it("names the primary action for each running preference and idle Send", () => {
+    for (const [defaultSendBehavior, expected] of [
+      ["steer", "Steer"],
+      ["queue", "Queue"],
+      ["interrupt", "Interrupt"],
+    ] as const) {
+      expect(
+        resolvePrimarySendLabel({
+          submitLabel: undefined,
+          isAgentRunning: true,
+          defaultSendBehavior,
+          t,
+        }),
+      ).toBe(expected);
+    }
+    expect(
+      resolvePrimarySendLabel({
+        submitLabel: undefined,
+        isAgentRunning: false,
+        defaultSendBehavior: "steer",
+        t,
+      }),
+    ).toBe("Send");
+    expect(
+      resolvePrimarySendLabel({
+        submitLabel: "Run",
+        isAgentRunning: true,
+        defaultSendBehavior: "steer",
+        t,
+      }),
+    ).toBe("Run");
   });
 
   it("keeps explicit submit labels untouched", () => {

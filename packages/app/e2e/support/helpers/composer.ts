@@ -76,7 +76,7 @@ export function queuedSendNowButton(page: Page) {
   return page
     .getByRole("button", { name: "Edit queued message" })
     .locator("..")
-    .getByRole("button", { name: /^(Send and steer|Send queued message now)$/ });
+    .getByRole("button", { name: /^(Steer now|Send queued message now)$/ });
 }
 
 export async function expectQueuedMessageButton(page: Page): Promise<void> {

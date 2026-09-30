@@ -1017,9 +1017,7 @@ test.describe("Agent message submission", () => {
 
       gate.holdNextClientRequest("send_agent_message_request");
       await fillComposerDraft(page, "Replace the running turn without duplicating its action.");
-      await expect(page.getByRole("button", { name: "Send and steer", exact: true })).toHaveCount(
-        1,
-      );
+      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
       await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Interrupt agent", exact: true })).toHaveCount(
         0,
@@ -1035,6 +1033,38 @@ test.describe("Agent message submission", () => {
       gate.releaseHeldClientRequest();
     } finally {
       gate.restore();
+      await agent.cleanup();
+    }
+  });
+
+  test("shows busy send choices on a narrow screen without sending when opened", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const agent = await startRunningMockAgent(page, {
+      prefix: `send-choices-${testInfo.workerIndex}-`,
+      model: "one-minute-stream",
+      prompt: "Keep this turn active while the user inspects send choices.",
+    });
+    const draft = "Queue this draft without interrupting the active turn.";
+    try {
+      await fillComposerDraft(page, draft);
+      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+      const sendOptions = page.getByRole("button", { name: "Send options" });
+      await sendOptions.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "Queue message" })).toBeVisible();
+      await expect(page.getByRole("menuitem", { name: "Steer now" })).toBeVisible();
+      await expect(page.getByRole("menuitem", { name: "Interrupt agent" })).toBeVisible();
+      await expectComposerDraft(page, draft);
+      await expect(page.getByText("Queued messages (1)")).toHaveCount(0);
+
+      await page.getByRole("menuitem", { name: "Queue message" }).click();
+      await expect(page.getByText("Queued messages (1)")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+      await expect(queuedSendNowButton(page)).toBeVisible();
+      await expect(page.getByTestId("user-message").filter({ hasText: draft })).toHaveCount(0);
+    } finally {
       await agent.cleanup();
     }
   });
@@ -1267,9 +1297,9 @@ test.describe("Agent message submission", () => {
 
       const prompt = "Interrupt the running turn.";
       await fillComposerDraft(page, prompt);
-      await expect(
-        page.getByRole("button", { name: "Send and interrupt", exact: true }),
-      ).toHaveCount(1);
+      await expect(page.getByRole("button", { name: "Interrupt agent", exact: true })).toHaveCount(
+        1,
+      );
       await composerLocator(page).press("Enter");
 
       const request = await gate.waitForRequest();
