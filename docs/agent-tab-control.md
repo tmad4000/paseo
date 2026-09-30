@@ -15,8 +15,9 @@ Implementation notes that postdate the design:
   WS send handler and MCP `send_agent_prompt`; `setupFinishNotification` queues
   inline. `send_agent_message_request` and `send_agent_prompt` carry the
   optional `interrupt` flag; responses report `queued`.
-- The app's default `sendBehavior` flipped to `"queue"`; the interrupt-labeled
-  send path passes `interrupt: true` explicitly.
+- The app's default `sendBehavior` initially flipped to `"queue"`; the
+  interrupt-labeled send path passes `interrupt: true` explicitly. The current
+  composer default is described in [README.md](../README.md).
 - `open_tab`/`close_tab` are registered only when the daemon wires the
   `uiCommands` dependency (bootstrap always does). `close_tab` extends the
   `ui.command` push with `tab.close`, which the app maps to

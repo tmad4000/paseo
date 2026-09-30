@@ -1037,37 +1037,50 @@ test.describe("Agent message submission", () => {
     }
   });
 
-  test("shows busy send choices on a narrow screen without sending when opened", async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    const agent = await startRunningMockAgent(page, {
-      prefix: `send-choices-${testInfo.workerIndex}-`,
-      model: "one-minute-stream",
-      prompt: "Keep this turn active while the user inspects send choices.",
-    });
-    const draft = "Queue this draft without interrupting the active turn.";
-    try {
-      await fillComposerDraft(page, draft);
-      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
-      const sendOptions = page.getByRole("button", { name: "Send options" });
-      await sendOptions.focus();
-      await page.keyboard.press("Enter");
-      await expect(page.getByRole("menuitem", { name: "Queue message" })).toBeVisible();
-      await expect(page.getByRole("menuitem", { name: "Steer now" })).toBeVisible();
-      await expect(page.getByRole("menuitem", { name: "Interrupt agent" })).toBeVisible();
-      await expectComposerDraft(page, draft);
-      await expect(page.getByText("Queued messages (1)")).toHaveCount(0);
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 960 },
+    { name: "phone", width: 390, height: 844 },
+  ]) {
+    test(`shows busy send choices on ${viewport.name} without sending when opened`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      const agent = await startRunningMockAgent(page, {
+        prefix: `send-choices-${viewport.name}-${testInfo.workerIndex}-`,
+        model: "one-minute-stream",
+        prompt: "Keep this turn active while the user inspects send choices.",
+      });
+      const draft = "Queue this draft without interrupting the active turn.";
+      try {
+        await fillComposerDraft(page, draft);
+        await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+        await testInfo.attach(`${viewport.name}-busy-composer`, {
+          body: await page.screenshot(),
+          contentType: "image/png",
+        });
+        const sendOptions = page.getByRole("button", { name: "Send options" });
+        await sendOptions.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("menuitem", { name: "Queue message" })).toBeVisible();
+        await expect(page.getByRole("menuitem", { name: "Steer now" })).toBeVisible();
+        await expect(page.getByRole("menuitem", { name: "Interrupt agent" })).toBeVisible();
+        await expectComposerDraft(page, draft);
+        await expect(page.getByText("Queued messages (1)")).toHaveCount(0);
+        await testInfo.attach(`${viewport.name}-send-choices`, {
+          body: await page.screenshot(),
+          contentType: "image/png",
+        });
 
-      await page.getByRole("menuitem", { name: "Queue message" }).click();
-      await expect(page.getByText("Queued messages (1)")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
-      await expect(queuedSendNowButton(page)).toBeVisible();
-      await expect(page.getByTestId("user-message").filter({ hasText: draft })).toHaveCount(0);
-    } finally {
-      await agent.cleanup();
-    }
-  });
+        await page.getByRole("menuitem", { name: "Queue message" }).click();
+        await expect(page.getByText("Queued messages (1)")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Steer now", exact: true })).toHaveCount(1);
+        await expect(queuedSendNowButton(page)).toBeVisible();
+        await expect(page.getByTestId("user-message").filter({ hasText: draft })).toHaveCount(0);
+      } finally {
+        await agent.cleanup();
+      }
+    });
+  }
 
   test("makes the next queued turn interruptible after cancellation settles", async ({ page }) => {
     const title = "Queued turn after interrupt";

@@ -75,6 +75,8 @@ Download it from [paseo.sh/download](https://paseo.sh/download) or the [GitHub r
 
 To connect from your phone, open **Settings → your host → Pair Device**.
 
+When an agent is running, the composer shows **Steer** as the default send action. It adds your message to the current turn. Open **Options** beside it to **Queue message** for the next turn or **Interrupt agent** to stop the current turn and send your message. The same controls are available on desktop and phone; you can change the default in Settings.
+
 ### CLI / headless
 
 Install the CLI and start Paseo:
