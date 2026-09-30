@@ -158,6 +158,7 @@ export const ptBR: TranslationResources = {
       dropImagesHere: "Solte imagens aqui",
       dropFilesHere: "Solte arquivos aqui",
       editQueuedMessage: "Editar mensagem na fila",
+      saveQueuedMessage: "Salvar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
       openImage: "Abrir anexo de imagem",
       removeImage: "Remover anexo de imagem",
@@ -172,6 +173,11 @@ export const ptBR: TranslationResources = {
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
+      queueEditRequiresUpdatedHost:
+        "Atualize este host Paseo para editar mensagens na fila sem alterar a ordem.",
+      queueEditFailed: "Falha ao editar mensagem na fila",
+      steerRequiresUpdatedHost:
+        "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",
       failedToCreateAgent: "Falha ao criar agente",
       noHostSelected: "Nenhum host selecionado",
       initialPromptRequired: "O prompt inicial é obrigatório",

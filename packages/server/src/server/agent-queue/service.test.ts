@@ -49,6 +49,7 @@ class FakeAgentController implements AgentQueueAgentController {
 
 interface Harness {
   service: AgentQueueService;
+  store: AgentQueueStore;
   agents: FakeAgentController;
   /** Every send the service attempted, including the ones that threw. */
   attempts: SendQueuedPromptInput[];
@@ -68,8 +69,9 @@ describe("AgentQueueService", () => {
     const broadcasts: AgentQueueSnapshot[] = [];
     let sendError: Error | null = null;
 
+    const store = new AgentQueueStore(join(dir, "queues"));
     const service = new AgentQueueService({
-      store: new AgentQueueStore(join(dir, "queues")),
+      store,
       agentManager: agents,
       agentStorage: {} as AgentStorage,
       logger: createTestLogger(),
@@ -88,6 +90,7 @@ describe("AgentQueueService", () => {
 
     return {
       service,
+      store,
       agents,
       attempts,
       sent,
@@ -203,6 +206,104 @@ describe("AgentQueueService", () => {
 
     expect(snapshot.items.map((item) => item.id)).toEqual(["item-1"]);
     expect(harness.broadcasts).toEqual([]);
+  });
+
+  test("editing changes only the text, preserving queue order and message identity", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "first" });
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "item-2",
+      text: "second",
+      images: [{ data: "aGVsbG8=", mimeType: "image/png" }],
+    });
+    const before = await harness.store.get(AGENT_ID);
+    harness.broadcasts.length = 0;
+
+    const after = await harness.service.edit(AGENT_ID, "item-2", "second", "  revised  ");
+    const stored = await harness.store.get(AGENT_ID);
+
+    expect(after.items.map((item) => [item.id, item.text, item.createdAt])).toEqual([
+      ["item-1", "first", before.items[0]?.createdAt],
+      ["item-2", "revised", before.items[1]?.createdAt],
+    ]);
+    expect(stored.items[1]?.images).toEqual(before.items[1]?.images);
+    expect(harness.broadcasts).toEqual([after]);
+    expect(after.revision).toBe(before.revision + 1);
+  });
+
+  test("a stale or already-drained edit cannot overwrite a queued message", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "original" });
+    await harness.service.edit(AGENT_ID, "item-1", "original", "new text");
+
+    await expect(
+      harness.service.edit(AGENT_ID, "item-1", "original", "stale text"),
+    ).rejects.toThrow(/changed on another device/);
+    await expect(harness.service.edit(AGENT_ID, "item-1", "new text", "   ")).rejects.toThrow(
+      /cannot be empty/,
+    );
+    expect((await harness.service.list(AGENT_ID)).items[0]?.text).toBe("new text");
+
+    await harness.service.remove(AGENT_ID, "item-1");
+    await expect(harness.service.edit(AGENT_ID, "item-1", "new text", "too late")).rejects.toThrow(
+      /no longer queued/,
+    );
+  });
+
+  test("a drain sends the latest edit even if it read the queue just before the edit", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "old text" });
+    await harness.service.flushDrains();
+
+    const originalGet = harness.store.get.bind(harness.store);
+    let injectEdit = true;
+    harness.store.get = async (agentId) => {
+      const snapshot = await originalGet(agentId);
+      if (injectEdit && snapshot.items[0]?.id === "item-1") {
+        injectEdit = false;
+        await harness.service.edit(agentId, "item-1", "old text", "latest text");
+      }
+      return snapshot;
+    };
+
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent[0]?.prompt).toBe("latest text");
+  });
+
+  test("send-now claims the latest daemon text exactly once across competing devices", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "old text" });
+    await harness.service.edit(AGENT_ID, "item-1", "old text", "edited elsewhere");
+
+    const results = await Promise.allSettled([
+      harness.service.sendNow(AGENT_ID, "item-1"),
+      harness.service.sendNow(AGENT_ID, "item-1"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]?.prompt).toBe("edited elsewhere");
+    expect(harness.sent[0]?.activeTurnBehavior).toBe("steer_only");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("a refused strict steer restores the same queued item at its original position", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "first" });
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-2", text: "second" });
+    harness.failSends(new Error("steer refused"));
+
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("steer refused");
+
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "item-1",
+      "item-2",
+    ]);
+    expect(harness.sent).toEqual([]);
   });
 
   test("revision increases monotonically across mutations", async () => {

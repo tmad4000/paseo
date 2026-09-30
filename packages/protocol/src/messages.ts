@@ -1220,7 +1220,7 @@ const ImageAttachmentSchema = z.object({
   mimeType: z.string(), // e.g., "image/jpeg", "image/png"
 });
 
-export const ActiveTurnBehaviorSchema = z.enum(["interrupt", "steer"]);
+export const ActiveTurnBehaviorSchema = z.enum(["interrupt", "steer", "steer_only"]);
 export type ActiveTurnBehavior = z.infer<typeof ActiveTurnBehaviorSchema>;
 
 export const SendAgentMessageSchema = z.object({
@@ -2557,6 +2557,24 @@ export const AgentQueueRemoveRequestSchema = z.object({
   itemId: z.string(),
 });
 
+export const AgentQueueEditRequestSchema = z.object({
+  type: z.literal("agent.queue.edit.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+  /** Reject a stale edit rather than overwriting a change made on another device. */
+  expectedText: z.string(),
+  text: z.string(),
+});
+
+/** Atomically claims a queued item and sends its daemon-owned content using strict steering. */
+export const AgentQueueSendNowRequestSchema = z.object({
+  type: z.literal("agent.queue.send_now.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+});
+
 export const AgentQueueListRequestSchema = z.object({
   type: z.literal("agent.queue.list.request"),
   requestId: z.string(),
@@ -2614,6 +2632,16 @@ export const AgentQueueEnqueueResponseSchema = z.object({
 
 export const AgentQueueRemoveResponseSchema = z.object({
   type: z.literal("agent.queue.remove.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueEditResponseSchema = z.object({
+  type: z.literal("agent.queue.edit.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueSendNowResponseSchema = z.object({
+  type: z.literal("agent.queue.send_now.response"),
   payload: AgentQueueResponsePayloadSchema,
 });
 
@@ -3523,6 +3551,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentRewindRequestMessageSchema,
   AgentQueueEnqueueRequestSchema,
   AgentQueueRemoveRequestSchema,
+  AgentQueueEditRequestSchema,
+  AgentQueueSendNowRequestSchema,
   AgentQueueListRequestSchema,
   AgentQueueReorderRequestSchema,
   AgentQueueGetItemImagesRequestSchema,
@@ -3894,6 +3924,10 @@ export const ServerInfoStatusPayloadSchema = z
         artifactFeed: z.boolean().optional(),
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: z.boolean().optional(),
+        queueEdit: z.boolean().optional(),
+        queueSendNow: z.boolean().optional(),
+        // Strict steering never falls back to interrupting the active turn.
+        steerOnly: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -7159,6 +7193,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentRewindResponseMessageSchema,
   AgentQueueEnqueueResponseSchema,
   AgentQueueRemoveResponseSchema,
+  AgentQueueEditResponseSchema,
+  AgentQueueSendNowResponseSchema,
   AgentQueueListResponseSchema,
   AgentQueueReorderResponseSchema,
   AgentQueueGetItemImagesResponseSchema,

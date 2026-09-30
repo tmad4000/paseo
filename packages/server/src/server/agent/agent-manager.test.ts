@@ -637,7 +637,7 @@ class UnsupportedSteeringSession extends TestAgentSession {
 
 async function startAndSteerThroughManager(
   session: AgentSession,
-  behavior: "steer" | "interrupt" = "steer",
+  behavior: "steer" | "steer_only" | "interrupt" = "steer",
 ): Promise<{ manager: AgentManager; agentId: string; workdir: string }> {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-steer-dispatch-"));
   const client = new (class extends TestAgentClient {
@@ -750,6 +750,68 @@ test("unavailable steer interrupts once and starts one replacement turn", async 
   try {
     expect(session.interruptCount).toBe(1);
     expect(session.startCount).toBe(2);
+    expect(manager.getTimeline(agentId)).toContainEqual(
+      expect.objectContaining({ type: "user_message", clientMessageId: "replacement-client" }),
+    );
+  } finally {
+    await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("strict steer leaves the active turn running when steering is unavailable", async () => {
+  const session = new SteeringTestSession({ provider: "codex", cwd: process.cwd() });
+  session.steerResult = "unavailable";
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-strict-steer-"));
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  let agentId: string | null = null;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    const run = manager.streamAgent(agent.id, "initial");
+    void (async () => {
+      for await (const _event of run) {
+      }
+    })();
+    await manager.waitForAgentRunStart(agent.id);
+    await expect(
+      startAgentRun(manager, agent.id, "immediate", logger, {
+        replaceRunning: true,
+        activeTurnBehavior: "steer_only",
+        runOptions: { clientMessageId: "strict-steer-client" },
+      }),
+    ).rejects.toThrow("It was not interrupted");
+    expect(session.steerCount).toBe(1);
+    expect(session.interruptCount).toBe(0);
+    expect(session.startCount).toBe(1);
+    expect(manager.getAgent(agent.id)?.activeForegroundTurnId).toBe("active-turn-1");
+    expect(
+      manager
+        .getTimeline(agent.id)
+        .some(
+          (item) => item.type === "user_message" && item.clientMessageId === "strict-steer-client",
+        ),
+    ).toBe(false);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("strict steer is delivered into the active turn when accepted", async () => {
+  const session = new SteeringTestSession({ provider: "codex", cwd: process.cwd() });
+  const { manager, agentId, workdir } = await startAndSteerThroughManager(session, "steer_only");
+  try {
+    expect(session.steerCount).toBe(1);
+    expect(session.interruptCount).toBe(0);
+    expect(session.startCount).toBe(1);
     expect(manager.getTimeline(agentId)).toContainEqual(
       expect.objectContaining({ type: "user_message", clientMessageId: "replacement-client" }),
     );

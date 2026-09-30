@@ -216,7 +216,8 @@ export async function dispatchComposerAgentMessage(
     timestamp: new Date(),
     images: wirePayload.images,
     attachments: wirePayload.attachments,
-    ...(input.activeTurnBehavior === "steer" && input.activeTurnId
+    ...((input.activeTurnBehavior === "steer" || input.activeTurnBehavior === "steer_only") &&
+    input.activeTurnId
       ? { turnId: input.activeTurnId }
       : {}),
   });
@@ -266,34 +267,29 @@ export function queueComposerMessage(input: QueueComposerMessageInput): QueueCom
   return { queued: item };
 }
 
-export interface EditQueuedComposerMessageInput {
+export interface UpdateQueuedComposerMessageInput {
   agentId: string;
   messageId: string;
+  expectedText: string;
+  text: string;
   queue: QueueWriter;
 }
 
-export interface EditQueuedComposerMessageResult {
-  text: string;
-  attachments: UserComposerAttachment[];
-}
-
-export function editQueuedComposerMessage(
-  input: EditQueuedComposerMessageInput,
-): EditQueuedComposerMessageResult | null {
+export function updateQueuedComposerMessage(input: UpdateQueuedComposerMessageInput): boolean {
   const item = input.queue.read(input.agentId).find((q) => q.id === input.messageId);
-  if (!item) return null;
+  if (!item || item.text !== input.expectedText) return false;
+  const text = input.text.trim();
+  if (!text && item.attachments.length === 0) return false;
   input.queue.write((prev) => {
     const next = new Map(prev);
-    next.set(
-      input.agentId,
-      (prev.get(input.agentId) ?? []).filter((q) => q.id !== input.messageId),
-    );
+    const items = [...(prev.get(input.agentId) ?? [])];
+    const index = items.findIndex((queued) => queued.id === input.messageId);
+    if (index === -1) return prev;
+    items[index] = { ...items[index], text };
+    next.set(input.agentId, items);
     return next;
   });
-  return {
-    text: item.text,
-    attachments: userAttachmentsOnly(item.attachments),
-  };
+  return true;
 }
 
 export interface SendQueuedComposerMessageNowInput {
@@ -613,8 +609,6 @@ export async function takeQueuedComposerMessage(
 
   try {
     const images = await input.client.getQueuedAgentMessageImages(input.agentId, input.messageId);
-    const snapshot = await input.client.removeQueuedAgentMessage(input.agentId, input.messageId);
-    input.applySnapshot(snapshot);
     const restoredImages = await Promise.all(
       images.map(async (image) => ({
         kind: "image" as const,
@@ -625,6 +619,10 @@ export async function takeQueuedComposerMessage(
         }),
       })),
     );
+    // Keep the authoritative queue item until every image is safely available
+    // on this device. A failed local write must not discard the daemon copy.
+    const snapshot = await input.client.removeQueuedAgentMessage(input.agentId, input.messageId);
+    input.applySnapshot(snapshot);
     return {
       status: "taken",
       text: item.text,

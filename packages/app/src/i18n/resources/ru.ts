@@ -158,6 +158,7 @@ export const ru: TranslationResources = {
       dropImagesHere: "Скиньте изображения сюда",
       dropFilesHere: "Переместите файлы сюда",
       editQueuedMessage: "Изменить сообщение из очереди",
+      saveQueuedMessage: "Сохранить сообщение в очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
       openImage: "Открыть прикрепленное изображение",
       removeImage: "Удалить прикрепленное изображение",
@@ -172,6 +173,11 @@ export const ru: TranslationResources = {
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
+      queueEditRequiresUpdatedHost:
+        "Обновите этот хост Paseo, чтобы редактировать сообщения без изменения порядка очереди.",
+      queueEditFailed: "Не удалось изменить сообщение в очереди",
+      steerRequiresUpdatedHost:
+        "Обновите этот хост Paseo, чтобы направить сообщение, не прерывая текущий ход.",
       failedToCreateAgent: "Не удалось создать агента.",
       noHostSelected: "Хост не выбран",
       initialPromptRequired: "Необходим инициализирующий промпт",

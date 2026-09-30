@@ -4,9 +4,9 @@ Queued composer messages belong to the agent, not to the device that typed them.
 moving the message queue from client memory onto the daemon so every connected client sees the same
 queue and the daemon drains it with no client attached.
 
-## What it looks like today
+## The original client-only behavior
 
-The queue is entirely client-side and in memory:
+Before daemon-owned queues were added, the queue was entirely client-side and in memory:
 
 - State is `queuedMessages: Map<agentId, QueuedComposerMessage[]>` on the per-server session slice in
   `packages/app/src/stores/session-store.ts`. Nothing persists it — not AsyncStorage, not
@@ -19,7 +19,7 @@ The queue is entirely client-side and in memory:
 
 Two consequences, and they are one bug:
 
-1. Queue on the phone and the desktop never sees it.
+1. A message queued on the phone was invisible on the desktop.
 2. If the phone disconnects, backgrounds, or the tab closes before the agent frees up, the message is
    never sent. Nothing else will send it — no other client has the item, and the daemon was never
    told.
@@ -45,6 +45,13 @@ by one store method per operation.
 Persist across daemon restarts: yes. A queue that evaporates on restart reintroduces the delivery
 bug it exists to fix.
 
+Every queue mutation also appends a JSON line to `$PASEO_HOME/queues/{agentId}.journal.jsonl`
+before replacing the current queue file. Each line includes the complete `before` and `after`
+states, including message text and image bytes, so a mistaken removal can be recovered from an
+earlier revision. Journal files are created mode 0600. Treat them as private data; copy them aside
+before attempting recovery. The journal rotates at 64 MiB, retaining the previous segment as
+`{agentId}.journal.previous.jsonl`. Deliberately deleting an agent removes its queue and journals.
+
 ## Protocol
 
 Dotted names per [rpc-namespacing.md](rpc-namespacing.md), in `packages/protocol/src/messages.ts`
@@ -55,6 +62,8 @@ defined there, and a separate module would import them in a cycle.
 | ------------------------------------- | --------- | ---------------------------------------------- |
 | `agent.queue.enqueue.request`         | in        | Append an item                                 |
 | `agent.queue.remove.request`          | in        | Cancel one item                                |
+| `agent.queue.edit.request`            | in        | Edit an item's text without moving it          |
+| `agent.queue.send_now.request`        | in        | Claim and strictly steer one queued item       |
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
 | `agent.queue.get_item_images.request` | in        | Fetch one item's image bytes                   |
@@ -67,6 +76,19 @@ push.
 Broadcast the whole queue for one agent, not deltas. Queues are a handful of items; a full snapshot
 is self-healing and removes an entire class of drift. Carry a per-agent `revision` that increments on
 every mutation so a client can drop a stale broadcast that arrives out of order.
+
+Editing uses `itemId`, `expectedText`, and the replacement text. The daemon rejects a stale edit
+or an item already claimed for delivery. It changes only the text, preserving the item's ID,
+`createdAt`, attachments, images, and position. Both clients receive the next full snapshot.
+If an edit fails while the item is still queued, the editor remains open so the user can copy or
+revise the draft. The capability flag
+`queueEdit` prevents a newer client from sending this RPC to an older daemon.
+
+Send-now is a daemon operation gated by `queueSendNow`. It claims the authoritative stored item
+under the same per-agent lock as edits and drains, then sends that exact content with strict
+steering. A second device cannot send stale text or send the same item again. If the provider
+rejects the steer, the daemon restores the item at its prior position. A journal entry records
+both the claim and any restoration for manual recovery after a crash.
 
 The wire item:
 
@@ -196,6 +218,10 @@ and drops its row rather than retrying forever.
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
 affordance; adding one is a separate change.
 
+The inline editor currently changes text only. Attachments stay on the queued item. A message
+that is claimed for delivery while its editor is open disappears from the queue and cannot be
+edited afterward.
+
 Nothing drains on daemon startup. Queues persist across a restart, but a leftover item waits for the
 next running → idle edge or the next enqueue rather than resuming the agent at boot. Auto-starting
 agents when the daemon comes up is a bigger behavior change than mirroring, and it belongs in its
@@ -204,3 +230,7 @@ own decision.
 Send-now on a daemon-backed queue takes the message off the queue before sending, because the daemon
 drains the same queue and leaving it there would risk sending twice. If that send then fails, the
 message is requeued at the end rather than where it was — the queue has no insert-at-position.
+When Queue is the selected send behavior and the agent is running, the immediate composer shortcut
+and queued Send now use strict steering. A host must advertise `steerOnly`; an unavailable steer
+reports an error without interrupting the running turn. The queued Send now path still removes the
+item before attempting delivery and requeues it after failure, so its position can change.

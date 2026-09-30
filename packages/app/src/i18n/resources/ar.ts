@@ -157,6 +157,7 @@ export const ar: TranslationResources = {
       dropImagesHere: "إسقاط الصور هنا",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "تحرير الرسالة في قائمة الانتظار",
+      saveQueuedMessage: "حفظ الرسالة في قائمة الانتظار",
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
       openImage: "فتح مرفق الصورة",
       removeImage: "إزالة مرفق الصورة",
@@ -171,6 +172,10 @@ export const ar: TranslationResources = {
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
+      queueEditRequiresUpdatedHost:
+        "حدّث مضيف Paseo لتعديل الرسائل في قائمة الانتظار دون تغيير ترتيبها.",
+      queueEditFailed: "تعذّر تعديل الرسالة في قائمة الانتظار",
+      steerRequiresUpdatedHost: "حدّث مضيف Paseo للتوجيه دون مقاطعة المهمة الجارية.",
       failedToCreateAgent: "فشل في إنشاء الوكيل",
       noHostSelected: "لم يتم تحديد مضيف",
       initialPromptRequired: "مطلوب موجه الأولي",

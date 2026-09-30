@@ -157,6 +157,7 @@ export const zhCN: TranslationResources = {
       dropImagesHere: "将图片拖放到这里",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",
+      saveQueuedMessage: "保存排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
       openImage: "打开图片附件",
       removeImage: "移除图片附件",
@@ -171,6 +172,9 @@ export const zhCN: TranslationResources = {
     },
     errors: {
       failedToSend: "发送消息失败",
+      queueEditRequiresUpdatedHost: "更新此 Paseo 主机，才能在不改变顺序的情况下编辑排队消息。",
+      queueEditFailed: "编辑排队消息失败",
+      steerRequiresUpdatedHost: "请更新此 Paseo 主机，以便在不中断当前任务的情况下引导消息。",
       failedToCreateAgent: "创建 Agent 失败",
       noHostSelected: "未选择 Host",
       initialPromptRequired: "初始 prompt 必填",

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -102,10 +102,20 @@ export interface AgentQueueMutationResult {
   changed: boolean;
 }
 
+/** Each record retains both sides of a mutation for manual recovery. */
+export interface AgentQueueJournalEntry {
+  recordedAt: string;
+  before: StoredAgentQueue;
+  after: StoredAgentQueue;
+}
+
 export class AgentQueueStore {
   private readonly mutations = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly maxJournalBytes = 64 * 1024 * 1024,
+  ) {}
 
   async get(agentId: string): Promise<StoredAgentQueue> {
     await this.ensureDir();
@@ -141,6 +151,13 @@ export class AgentQueueStore {
         agentId,
         revision: current.revision + 1,
       });
+      // Record the recoverable state before replacing the queue file. If the
+      // journal cannot be written, leave the existing queue untouched.
+      await this.appendJournal({
+        recordedAt: new Date().toISOString(),
+        before: current,
+        after: updated,
+      });
       await this.write(updated);
       return { queue: updated, changed: true };
     });
@@ -150,11 +167,21 @@ export class AgentQueueStore {
     await this.serialize(agentId, async () => {
       await this.ensureDir();
       await rm(this.filePath(agentId), { force: true });
+      await rm(this.journalPath(agentId), { force: true });
+      await rm(this.previousJournalPath(agentId), { force: true });
     });
   }
 
   private filePath(agentId: string): string {
     return join(this.dir, `${agentId}.json`);
+  }
+
+  private journalPath(agentId: string): string {
+    return join(this.dir, `${agentId}.journal.jsonl`);
+  }
+
+  private previousJournalPath(agentId: string): string {
+    return join(this.dir, `${agentId}.journal.previous.jsonl`);
   }
 
   private async ensureDir(): Promise<void> {
@@ -164,6 +191,29 @@ export class AgentQueueStore {
   private async write(queue: StoredAgentQueue): Promise<void> {
     await this.ensureDir();
     await writeJsonFileAtomic(this.filePath(queue.agentId), queue);
+  }
+
+  private async appendJournal(entry: AgentQueueJournalEntry): Promise<void> {
+    const journalPath = this.journalPath(entry.after.agentId);
+    const line = `${JSON.stringify(entry)}\n`;
+    let size = 0;
+    try {
+      size = (await stat(journalPath)).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (size > 0 && size + Buffer.byteLength(line) > this.maxJournalBytes) {
+      const previousPath = this.previousJournalPath(entry.after.agentId);
+      await rm(previousPath, { force: true });
+      await rename(journalPath, previousPath);
+    }
+    const file = await open(journalPath, "a", 0o600);
+    try {
+      await file.writeFile(line);
+      await file.sync();
+    } finally {
+      await file.close();
+    }
   }
 
   private async serialize<T>(agentId: string, mutation: () => Promise<T>): Promise<T> {

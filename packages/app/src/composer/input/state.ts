@@ -3,13 +3,23 @@ import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
 import type { MessagePayload } from "@/composer/types";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 
-export type SendBehavior = ActiveTurnBehavior | "queue";
+export type SendBehavior = Exclude<ActiveTurnBehavior, "steer_only"> | "queue";
 
 export function resolveActiveSendBehavior(
   sendBehavior: SendBehavior,
   hasPendingPermission: boolean,
 ): SendBehavior {
-  return sendBehavior === "queue" && hasPendingPermission ? "interrupt" : sendBehavior;
+  // A permission prompt can strand a queue, but it must not silently turn a send into Interrupt.
+  return sendBehavior === "queue" && hasPendingPermission ? "steer" : sendBehavior;
+}
+
+/** An unmarked direct send from Queue mode lets the daemon queue a racing active turn. */
+export function resolveDirectActiveTurnBehavior(
+  sendBehavior: SendBehavior,
+  override?: ActiveTurnBehavior,
+): ActiveTurnBehavior | undefined {
+  const behavior = override ?? (sendBehavior === "queue" ? undefined : sendBehavior);
+  return behavior === "steer" ? "steer_only" : behavior;
 }
 
 interface ComposerSurfaceState {
@@ -50,7 +60,7 @@ interface SendActionContext {
   defaultSendBehavior: SendBehavior;
   isAgentRunning: boolean;
   onQueue: ((payload: MessagePayload) => void) | undefined;
-  handleSendMessage: () => void;
+  handleSendMessage: (activeTurnBehavior?: ActiveTurnBehavior) => void;
   handleQueueMessage: () => void;
 }
 
@@ -89,6 +99,7 @@ export function applyDictationTranscript(text: string, ctx: DictationTranscriptC
     attachments: ctx.attachments,
     cwd: ctx.cwd,
     forceSend: ctx.isAgentRunning || undefined,
+    activeTurnBehavior: ctx.defaultSendBehavior === "queue" ? undefined : ctx.defaultSendBehavior,
   });
 }
 
@@ -122,12 +133,12 @@ export function runDefaultSendAction(ctx: SendActionContext): void {
     ctx.handleQueueMessage();
     return;
   }
-  ctx.handleSendMessage();
+  ctx.handleSendMessage(resolveDirectActiveTurnBehavior(ctx.defaultSendBehavior));
 }
 
 export function runAlternateSendAction(ctx: SendActionContext): void {
   if (ctx.defaultSendBehavior === "queue") {
-    ctx.handleSendMessage();
+    ctx.handleSendMessage("steer_only");
     return;
   }
   if (ctx.isAgentRunning && ctx.onQueue) {
