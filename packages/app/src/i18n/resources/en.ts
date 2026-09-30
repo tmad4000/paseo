@@ -1109,6 +1109,17 @@ export const en = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "Filter projects or chats",
+      clear: "Clear sidebar filter",
+      sortHeading: "Sort chats",
+      sortBy: "Sort chats: {{value}}",
+      sort: {
+        manual: "Manual order",
+        recent: "Recent activity",
+        title: "Title A–Z",
+      },
+    },
     display: {
       trigger: "Display preferences",
       heading: "Display",

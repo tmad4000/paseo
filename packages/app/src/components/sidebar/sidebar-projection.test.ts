@@ -173,4 +173,24 @@ describe("buildSidebarProjection", () => {
       { serverId: "srv", workspaceId: "unpinned" },
     ]);
   });
+
+  it("sorts rows within status groups by recent activity when requested", () => {
+    const older = makeWorkspace("older", "done");
+    const newer = makeWorkspace("newer", "done");
+    older.entry.lastActivityAt = new Date("2026-09-20T00:00:00Z");
+    newer.entry.lastActivityAt = new Date("2026-09-29T00:00:00Z");
+    const input = projectionInput({ groupMode: "status" });
+    input.projects = [makeProject([older.placement, newer.placement])];
+    input.pinnedKeys = { pinnedWorkspaceKeys: [], pinnedAtByKey: {} };
+    input.workspaceEntriesByKey = new Map([
+      [older.entry.workspaceKey, older.entry],
+      [newer.entry.workspaceKey, newer.entry],
+    ]);
+
+    const projection = buildSidebarProjection({ ...input, sortMode: "recent" });
+    expect(projection.workspaceGroups[0]?.rows.map((entry) => entry.workspaceId)).toEqual([
+      "newer",
+      "older",
+    ]);
+  });
 });

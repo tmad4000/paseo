@@ -90,6 +90,7 @@ import { hasVisibleOrderChanged, mergeWithRemainder } from "@/utils/sidebar-reor
 import { confirmDialog } from "@/utils/confirm-dialog";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
+import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import {
   SidebarWorkspaceContextMenu,
@@ -219,6 +220,7 @@ interface SidebarWorkspaceListProps {
   hasProjectsBeforeFilter: boolean;
   /** Whether a project filter is actually being applied — the resolved list, not the stored one. */
   hasActiveProjectFilter: boolean;
+  hasActiveSearchFilter?: boolean;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   collapsedProjectKeys: ReadonlySet<string>;
   onToggleProjectCollapsed: (projectViewKey: string) => void;
@@ -1888,6 +1890,7 @@ export function SidebarWorkspaceList({
   projects,
   hasProjectsBeforeFilter,
   hasActiveProjectFilter,
+  hasActiveSearchFilter = false,
   workspaceEntriesByKey,
   collapsedProjectKeys,
   onToggleProjectCollapsed,
@@ -1957,7 +1960,9 @@ export function SidebarWorkspaceList({
   // see and falls back to "all projects" when nothing matches, so it either keeps at least one
   // project or is not applied at all — it can narrow this list but never empty it.
   const sidebarFilterEmpty =
-    hasActiveLabelFilter && hasProjectsBeforeFilter && projects.length === 0;
+    (hasActiveLabelFilter || hasActiveSearchFilter) &&
+    hasProjectsBeforeFilter &&
+    projects.length === 0;
 
   // Project mode is the one that keeps its project headers; every other grouping mode is a flat
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
@@ -1977,6 +1982,7 @@ export function SidebarWorkspaceList({
         onPinnedWorkspaceReorder={handlePinnedWorkspaceReorder}
         listHeaderComponent={listHeaderComponent}
         sidebarFilterEmpty={sidebarFilterEmpty}
+        searchActive={hasActiveSearchFilter}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
       />
@@ -1995,6 +2001,7 @@ export function SidebarWorkspaceList({
         listFooterComponent={listFooterComponent}
         listHeaderComponent={listHeaderComponent}
         sidebarFilterEmpty={sidebarFilterEmpty}
+        hasActiveSearchFilter={hasActiveSearchFilter}
         hasActiveProjectFilter={hasActiveProjectFilter}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
@@ -2029,6 +2036,7 @@ function SidebarGroupedModeList({
   onPinnedWorkspaceReorder,
   listHeaderComponent,
   sidebarFilterEmpty,
+  searchActive,
   parentGestureRef,
   dragGestureHostActive,
 }: {
@@ -2044,6 +2052,7 @@ function SidebarGroupedModeList({
   onPinnedWorkspaceReorder: (workspaces: SidebarWorkspacePlacement[]) => void;
   listHeaderComponent?: ReactElement | null;
   sidebarFilterEmpty: boolean;
+  searchActive: boolean;
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }) {
@@ -2071,6 +2080,7 @@ function SidebarGroupedModeList({
       onPinnedWorkspaceReorder={onPinnedWorkspaceReorder}
       listHeaderComponent={listHeaderComponent}
       sidebarFilterEmpty={sidebarFilterEmpty}
+      searchActive={searchActive}
       parentGestureRef={parentGestureRef}
       dragGestureHostActive={dragGestureHostActive}
     />
@@ -2092,6 +2102,7 @@ function ProjectModeList({
   listHeaderComponent,
   sidebarFilterEmpty,
   hasActiveProjectFilter,
+  hasActiveSearchFilter = false,
   parentGestureRef,
   dragGestureHostActive,
   pathname,
@@ -2125,7 +2136,8 @@ function ProjectModeList({
     new Map(),
   );
   const showShortcutBadges = useShowShortcutBadges();
-  const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const storedPinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const pinnedCollapsed = hasActiveSearchFilter ? false : storedPinnedCollapsed;
   const togglePinnedCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.togglePinnedCollapsed,
   );
@@ -2134,6 +2146,7 @@ function ProjectModeList({
   const setProjectOrder = useSidebarOrderStore((state) => state.setProjectOrder);
   const getWorkspaceOrder = useSidebarOrderStore((state) => state.getWorkspaceOrder);
   const setWorkspaceOrder = useSidebarOrderStore((state) => state.setWorkspaceOrder);
+  const { sortMode, setSortMode } = useSidebarModel();
 
   const isWorkspaceRoute = useMemo(
     () => Boolean(pathname && parseHostWorkspaceRouteFromPathname(pathname)),
@@ -2244,6 +2257,7 @@ function ProjectModeList({
         return;
       }
 
+      if (sortMode !== "manual") setSortMode("manual");
       setWorkspaceOrder(
         projectViewKey,
         mergeWithRemainder({
@@ -2252,7 +2266,7 @@ function ProjectModeList({
         }),
       );
     },
-    [getWorkspaceOrder, setWorkspaceOrder],
+    [getWorkspaceOrder, setWorkspaceOrder, setSortMode, sortMode],
   );
 
   const handleWorktreeCreated = useCallback((workspaceId: string) => {

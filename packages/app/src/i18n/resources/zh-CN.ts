@@ -1093,6 +1093,17 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "筛选项目或聊天",
+      clear: "清除侧边栏筛选",
+      sortHeading: "聊天排序",
+      sortBy: "聊天排序：{{value}}",
+      sort: {
+        manual: "手动排序",
+        recent: "最近活动",
+        title: "标题 A–Z",
+      },
+    },
     display: {
       trigger: "显示偏好",
       heading: "显示",

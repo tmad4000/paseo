@@ -1101,6 +1101,17 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "تصفية المشاريع أو المحادثات",
+      clear: "مسح تصفية الشريط الجانبي",
+      sortHeading: "ترتيب المحادثات",
+      sortBy: "ترتيب المحادثات: {{value}}",
+      sort: {
+        manual: "الترتيب اليدوي",
+        recent: "النشاط الأخير",
+        title: "العنوان أ–ي",
+      },
+    },
     display: {
       trigger: "تفضيلات العرض",
       heading: "العرض",

@@ -19,6 +19,7 @@ import {
   type SidebarShortcutSection,
 } from "@/utils/sidebar-shortcuts";
 import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
+import { sortSidebarWorkspaces, type SidebarSortMode } from "./sidebar-filter-sort";
 
 export interface SidebarProjection {
   pinnedGroups: PinnedSidebarGroups;
@@ -42,6 +43,7 @@ export interface SidebarProjectionInput {
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   projectNamesByViewKey: Map<string, string>;
   groupMode: SidebarGroupMode;
+  sortMode?: SidebarSortMode;
   pinnedCollapsed: boolean;
   collapsedProjectKeys: ReadonlySet<string>;
   collapsedWorkspaceGroupKeys: ReadonlySet<string>;
@@ -99,8 +101,16 @@ function buildWorkspaceGroups(
     case "project":
       return [];
     case "status":
-      return statusWorkspaceGroups(
-        buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey),
-      );
+      const groups = buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey);
+      if (input.sortMode && input.sortMode !== "manual") {
+        for (const group of groups) {
+          group.rows = sortSidebarWorkspaces(
+            group.rows,
+            input.workspaceEntriesByKey,
+            input.sortMode,
+          );
+        }
+      }
+      return statusWorkspaceGroups(groups);
   }
 }

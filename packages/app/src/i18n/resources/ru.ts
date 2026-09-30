@@ -1118,6 +1118,17 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "Фильтр проектов и чатов",
+      clear: "Сбросить фильтр боковой панели",
+      sortHeading: "Сортировка чатов",
+      sortBy: "Сортировка чатов: {{value}}",
+      sort: {
+        manual: "Ручной порядок",
+        recent: "Недавняя активность",
+        title: "Название А–Я",
+      },
+    },
     display: {
       trigger: "Настройки отображения",
       heading: "Отображение",

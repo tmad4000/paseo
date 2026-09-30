@@ -126,6 +126,7 @@ interface StatusWorkspaceListProps {
   listHeaderComponent?: ReactNode;
   /** Swaps the group list for the label filter's empty state. Never the header above it. */
   sidebarFilterEmpty?: boolean;
+  searchActive?: boolean;
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }
@@ -143,13 +144,15 @@ export function SidebarStatusWorkspaceList({
   onPinnedWorkspaceReorder,
   listHeaderComponent,
   sidebarFilterEmpty = false,
+  searchActive = false,
   parentGestureRef,
   dragGestureHostActive,
 }: StatusWorkspaceListProps) {
   const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedWorkspaceGroupKeys,
   );
-  const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const storedPinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const pinnedCollapsed = searchActive ? false : storedPinnedCollapsed;
   const togglePinnedCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.togglePinnedCollapsed,
   );
@@ -234,7 +237,9 @@ export function SidebarStatusWorkspaceList({
       ) : (
         <StatusGroupList
           groups={groups}
-          collapsedWorkspaceGroupKeys={collapsedWorkspaceGroupKeys}
+          collapsedWorkspaceGroupKeys={
+            searchActive ? new Set<string>() : collapsedWorkspaceGroupKeys
+          }
           projectIconByProjectViewKey={projectIconByProjectViewKey}
           shortcutIndex={statusShortcutIndex}
           showShortcutBadges={showShortcutBadges}

@@ -1136,6 +1136,17 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    filterSidebar: {
+      placeholder: "Filtrer les projets ou les discussions",
+      clear: "Effacer le filtre latéral",
+      sortHeading: "Trier les discussions",
+      sortBy: "Trier les discussions : {{value}}",
+      sort: {
+        manual: "Ordre manuel",
+        recent: "Activité récente",
+        title: "Titre A–Z",
+      },
+    },
     display: {
       trigger: "Préférences d'affichage",
       heading: "Affichage",
