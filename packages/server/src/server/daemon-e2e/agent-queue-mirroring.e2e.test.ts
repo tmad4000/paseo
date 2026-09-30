@@ -148,6 +148,13 @@ describe("agent message queue mirroring", () => {
       expect(mirrored.items.map((item) => item.createdAt)).toEqual(
         before.items.map((item) => item.createdAt),
       );
+      const retried = await secondDevice.editQueuedAgentMessage({
+        agentId: agent.id,
+        itemId: "item-1",
+        expectedText: "first",
+        text: "revised first",
+      });
+      expect(retried.revision).toBe(edited.revision);
       await expect(
         ctx.client.editQueuedAgentMessage({
           agentId: agent.id,

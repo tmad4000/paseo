@@ -4,14 +4,18 @@ import { daemonWsRoutePattern } from "./daemon-port";
 type WebSocketMessage = string | Buffer;
 
 interface SendAgentMessageRequest {
-  type: "send_agent_message_request";
+  type: "send_agent_message_request" | "agent.queue.send_now.request";
   requestId: string;
   agentId: string;
+  itemId?: string;
   /** Absent when the client sends into an idle agent. */
   activeTurnBehavior?: string;
 }
 
-function readSendRequest(message: WebSocketMessage): SendAgentMessageRequest | null {
+function readSendRequest(
+  message: WebSocketMessage,
+  requestType: SendAgentMessageRequest["type"],
+): SendAgentMessageRequest | null {
   if (typeof message !== "string") return null;
   try {
     const envelope = JSON.parse(message) as {
@@ -20,16 +24,17 @@ function readSendRequest(message: WebSocketMessage): SendAgentMessageRequest | n
     };
     const request = envelope.type === "session" ? envelope.message : null;
     if (
-      request?.type !== "send_agent_message_request" ||
+      request?.type !== requestType ||
       typeof request.requestId !== "string" ||
       typeof request.agentId !== "string"
     ) {
       return null;
     }
     return {
-      type: "send_agent_message_request",
+      type: requestType,
       requestId: request.requestId,
       agentId: request.agentId,
+      itemId: typeof request.itemId === "string" ? request.itemId : undefined,
       activeTurnBehavior:
         typeof request.activeTurnBehavior === "string" ? request.activeTurnBehavior : undefined,
     };
@@ -38,7 +43,10 @@ function readSendRequest(message: WebSocketMessage): SendAgentMessageRequest | n
   }
 }
 
-export async function gateNextAgentMessage(page: Page) {
+export async function gateNextAgentMessage(
+  page: Page,
+  requestType: SendAgentMessageRequest["type"] = "send_agent_message_request",
+) {
   let serverSocket: WebSocketRoute | null = null;
   let browserSocket: WebSocketRoute | null = null;
   const heldMessages: Array<WebSocketMessage | null> = [];
@@ -51,7 +59,7 @@ export async function gateNextAgentMessage(page: Page) {
     serverSocket = server;
 
     ws.onMessage((message) => {
-      const request = readSendRequest(message);
+      const request = readSendRequest(message, requestType);
       if (request) {
         heldMessages.push(message);
         requests.push(request);
@@ -77,7 +85,7 @@ export async function gateNextAgentMessage(page: Page) {
     accept(index = 0) {
       const heldMessage = heldMessages[index];
       if (!serverSocket || !heldMessage) {
-        throw new Error("No held send-agent-message request to accept");
+        throw new Error(`No held ${requestType} request to accept`);
       }
       serverSocket.send(heldMessage);
       heldMessages[index] = null;

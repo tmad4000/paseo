@@ -227,7 +227,7 @@ test.describe("Composer attachments", () => {
     }
   });
 
-  test("editing a queued message opens its text and attachments for resubmission", async ({
+  test("editing a queued message preserves its attachments and queue position", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -244,22 +244,30 @@ test.describe("Composer attachments", () => {
       await expectQueuedMessageButton(page);
       await expectComposerDraft(page, "");
 
-      await page.getByRole("button", { name: "Edit queued message" }).click();
-      await expectComposerDraft(page, "Original queued text");
-      await expectAttachmentPill(page, "composer-image-attachment-pill");
-      await expect(page.getByRole("button", { name: "Edit queued message" })).toHaveCount(0);
-
-      await fillComposerDraft(page, "Revised queued text");
+      await fillComposerDraft(page, "Second queued text");
       await sendDraftToQueue(page);
-      await expectQueuedMessageButton(page);
       await expectComposerDraft(page, "");
-      await page.getByRole("button", { name: "Edit queued message" }).click();
-      await expectComposerDraft(page, "Revised queued text");
-      await expectAttachmentPill(page, "composer-image-attachment-pill");
-      await pressInterruptShortcut(page);
-      await expectAgentIdle(page, 15_000);
-      await expectComposerDraft(page, "Revised queued text");
-      await expectAttachmentPill(page, "composer-image-attachment-pill");
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(2);
+      const before = await agent.client.listQueuedAgentMessages(agent.agentId);
+      expect(before.items[0]?.images).toHaveLength(1);
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await expect(queuedEditor).toHaveValue("Original queued text");
+      await queuedEditor.fill("Revised queued text");
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expectComposerDraft(page, "");
+
+      const after = await agent.client.listQueuedAgentMessages(agent.agentId);
+      expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
+      expect(after.items.map((item) => item.text)).toEqual([
+        "Revised queued text",
+        "Second queued text",
+      ]);
+      expect(after.items[0]?.images).toEqual(before.items[0]?.images);
     } finally {
       await agent.cleanup();
     }
@@ -280,24 +288,31 @@ test.describe("Composer attachments", () => {
         .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
         .toBe(1);
       const edit = page.getByRole("button", { name: "Edit queued message" });
-      gate.holdNextServerMessage("agent.queue.get_item_images.response");
       await edit.click();
-      await gate.waitForHeldServerMessage("agent.queue.get_item_images.response");
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("Retried queued message");
+      gate.holdNextServerMessage("agent.queue.edit.response");
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await gate.waitForHeldServerMessage("agent.queue.edit.response");
       await gate.drop();
       await expect(
         page.getByRole("alert").filter({ hasText: /^Dropped by reconnect test\.$/ }),
       ).toBeVisible();
-      await expect(edit).toBeVisible();
+      await expect(queuedEditor).toHaveValue("Retried queued message");
       await expectComposerDraft(page, "");
       expect(
         (await agent.client.listQueuedAgentMessages(agent.agentId)).items.map((item) => item.text),
-      ).toEqual(["Keep this queued message"]);
+      ).toEqual(["Retried queued message"]);
 
       gate.restoreFresh();
       await gate.waitForServerMessage("fetch_agent_timeline_response", 2);
-      await edit.click();
-      await expectComposerDraft(page, "Keep this queued message");
-      await expect(edit).toHaveCount(0);
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expect
+        .poll(
+          async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text,
+        )
+        .toBe("Retried queued message");
     } finally {
       gate.restore();
       await agent.cleanup();

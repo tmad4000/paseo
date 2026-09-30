@@ -270,6 +270,9 @@ export class AgentQueueService {
       }
       const item = current.items[index];
       if (item.text !== expectedText) {
+        // A client may retry after the daemon saved the edit but its response was
+        // lost during a disconnect. The desired text is already durable.
+        if (item.text === trimmed) return current;
         throw new Error("This queued message changed on another device. Review it and try again.");
       }
       if (this.receipts) {

@@ -68,13 +68,19 @@ export async function typeIntoFocusedComposer(page: Page, text: string): Promise
 }
 
 export async function sendDraftToQueue(page: Page): Promise<void> {
-  await composerInput(page).press("Control+Enter");
+  await page.getByTestId("message-input-send-options-button").click();
+  await page.getByTestId("message-input-send-queue").click();
+}
+
+export function queuedSendNowButton(page: Page) {
+  return page
+    .getByRole("button", { name: "Edit queued message" })
+    .locator("..")
+    .getByRole("button", { name: /^(Send and steer|Send queued message now)$/ });
 }
 
 export async function expectQueuedMessageButton(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: "Send queued message now" })).toBeVisible({
-    timeout: 10_000,
-  });
+  await expect(queuedSendNowButton(page)).toBeVisible({ timeout: 10_000 });
 }
 
 export async function cancelAgent(page: Page): Promise<void> {
