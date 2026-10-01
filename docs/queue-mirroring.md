@@ -212,8 +212,10 @@ a known item id as a retry:
   item stays sendable.
 
 Snapshots still replace the local list wholesale, with one exception:
-`appendPendingQueueRows` re-appends un-acked outbox rows a snapshot would
-otherwise erase, since they are writes the server does not know about yet. An
+The composer uses `appendPendingQueueRows` to overlay un-acked outbox rows on
+the stored snapshot. Keep that overlay out of session snapshot state so removing
+an acknowledged outbox entry also removes its local row. Equal-revision snapshots
+reconcile optimistic rows; older revisions remain ignored. An
 entry that keeps failing stays in the device's durable outbox and visible queue.
 At `QUEUE_OUTBOX_MAX_ATTEMPTS` failed reconnects, the client shows an attention
 message once; future reconnects keep retrying. Only an acknowledgement removes

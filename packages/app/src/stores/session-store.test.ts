@@ -800,3 +800,22 @@ describe("removeWorkspace", () => {
     expect(after.workspaces).toBe(before.workspaces);
   });
 });
+
+
+describe("queue snapshot reconciliation", () => {
+  it("removes an optimistic row on an unchanged retry acknowledgement", () => {
+    const store = useSessionStore.getState();
+    const snapshot = { agentId: "agent", revision: 2, items: [] };
+    store.applyAgentQueueSnapshot("test-server", snapshot);
+    store.setQueuedMessages("test-server", new Map([
+      ["agent", [{ id: "delivered", text: "already delivered", attachments: [] }]],
+    ]));
+    store.applyAgentQueueSnapshot("test-server", snapshot);
+    expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
+    store.applyAgentQueueSnapshot("test-server", {
+      agentId: "agent", revision: 1,
+      items: [{ id: "delivered", text: "already delivered", createdAt: "2026-01-01T00:00:00.000Z" }],
+    });
+    expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
+  });
+});
