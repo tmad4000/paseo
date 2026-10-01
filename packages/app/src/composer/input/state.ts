@@ -59,7 +59,7 @@ interface StopRealtimeVoiceContext {
 interface SendActionContext {
   defaultSendBehavior: SendBehavior;
   isAgentRunning: boolean;
-  onQueue: ((payload: MessagePayload) => void) | undefined;
+  onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   handleSendMessage: (activeTurnBehavior?: ActiveTurnBehavior) => void;
   handleQueueMessage: () => void;
 }
@@ -68,7 +68,7 @@ interface DictationTranscriptContext {
   value: string;
   defaultSendBehavior: SendBehavior;
   isAgentRunning: boolean;
-  onQueue: ((payload: MessagePayload) => void) | undefined;
+  onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmit: (payload: MessagePayload) => void;
   replaceText: (text: string) => void;
   attachments: MessagePayload["attachments"];
@@ -89,8 +89,7 @@ export function applyDictationTranscript(text: string, ctx: DictationTranscriptC
   ctx.replaceText(nextValue);
 
   if (ctx.defaultSendBehavior === "queue" && ctx.isAgentRunning && ctx.onQueue) {
-    ctx.onQueue({ text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd });
-    ctx.replaceText("");
+    void queueInputMessage({ text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue);
     return;
   }
 
@@ -195,4 +194,15 @@ export async function stopRealtimeVoice(ctx: StopRealtimeVoiceContext): Promise<
   if (!ctx.voice || !ctx.isRealtimeVoiceForCurrentAgent) return;
 
   await ctx.voice.stopVoice();
+}
+
+
+export async function queueInputMessage(
+  payload: MessagePayload,
+  onQueue: (payload: MessagePayload) => void | Promise<void>,
+): Promise<void> {
+  try {
+    await onQueue(payload);
+  } catch {
+  }
 }

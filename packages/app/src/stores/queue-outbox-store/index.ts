@@ -38,6 +38,7 @@ function sortByCreation(entries: PendingQueueEnqueue[]): PendingQueueEnqueue[] {
   return entries.sort((a, b) => a.createdAt - b.createdAt);
 }
 
+const writesInFlight = new Set<string>();
 let pendingWrite: Promise<void> = Promise.resolve();
 const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedQueueOutboxSchema);
 const durableStorage: typeof persistedStorage = {
@@ -73,6 +74,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
 
       add: async (entry) => {
         await awaitOutboxHydration();
+        writesInFlight.add(entry.itemId);
         set((state) => ({
           entries: {
             ...state.entries,
@@ -84,6 +86,8 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         } catch (error) {
           get().remove(entry.itemId);
           throw error;
+        } finally {
+          writesInFlight.delete(entry.itemId);
         }
       },
 
@@ -113,8 +117,14 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         });
       },
 
-      entriesForServer: (serverId) =>
-        sortByCreation(Object.values(get().entries).filter((entry) => entry.serverId === serverId)),
+      entriesForServer: (serverId) => {
+        const blockedAgents = new Set<string>();
+        return sortByCreation(Object.values(get().entries).filter((entry) => entry.serverId === serverId))
+          .filter((entry) => {
+            if (writesInFlight.has(entry.itemId)) blockedAgents.add(entry.agentId);
+            return !blockedAgents.has(entry.agentId);
+          });
+      },
 
       entriesForAgent: (serverId, agentId) =>
         sortByCreation(

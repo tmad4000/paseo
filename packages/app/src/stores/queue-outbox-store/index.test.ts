@@ -39,3 +39,29 @@ describe("durable outbox acceptance", () => {
     ]);
   });
 });
+
+
+it("cannot dispatch an entry while its write is pending or after that write fails", async () => {
+  vi.resetModules();
+  storage.values.clear();
+  storage.hold = undefined;
+  const { useQueueOutboxStore, flushQueueOutboxForServer } = await import("./index");
+  await useQueueOutboxStore.persist.rehydrate();
+  let reject!: (error: Error) => void;
+  storage.hold = new Promise<void>((_, rejectWrite) => { reject = rejectWrite; });
+  const adding = useQueueOutboxStore.getState().add({
+    serverId: "server", agentId: "agent", itemId: "unsaved", text: "draft",
+    images: [], attachments: [], composerAttachments: [],
+  });
+  const failed = adding.catch((error: Error) => error.message);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const enqueueAgentMessage = vi.fn(async () => ({ agentId: "agent", revision: 1, items: [] }));
+  await flushQueueOutboxForServer({ serverId: "server", client: { enqueueAgentMessage }, applySnapshot: () => {} });
+  expect(enqueueAgentMessage).not.toHaveBeenCalled();
+  storage.hold = undefined;
+  reject(new Error("storage full"));
+  expect(await failed).toBe("storage full");
+  await flushQueueOutboxForServer({ serverId: "server", client: { enqueueAgentMessage }, applySnapshot: () => {} });
+  expect(enqueueAgentMessage).not.toHaveBeenCalled();
+  expect(useQueueOutboxStore.getState().entriesForAgent("server", "agent")).toEqual([]);
+});

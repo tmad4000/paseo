@@ -300,3 +300,31 @@ describe("stopRealtimeVoice", () => {
     expect(cancelAgent).not.toHaveBeenCalled();
   });
 });
+
+
+it("awaits the widget queue callback without clearing newer input", async () => {
+  const { queueInputMessage } = await import("./state");
+  let resolve!: () => void;
+  let current = "submitted";
+  const write = new Promise<void>((accept) => { resolve = accept; });
+  const queued = queueInputMessage({ text: current, attachments: [], cwd: "/repo" }, async (payload) => {
+    await write;
+    if (current === payload.text) current = "";
+  });
+  expect(current).toBe("submitted");
+  current = "newer edit";
+  resolve();
+  await queued;
+  expect(current).toBe("newer edit");
+});
+
+it("retains auto-queued dictation after local acceptance fails", async () => {
+  let current = "draft";
+  applyDictationTranscript("spoken", {
+    value: current, defaultSendBehavior: "queue", isAgentRunning: true,
+    onQueue: async () => { throw new Error("storage full"); }, onSubmit: () => {},
+    replaceText: (text) => { current = text; }, attachments: [], cwd: "/repo", autoSend: true,
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(current).toBe("draft spoken");
+});

@@ -1866,12 +1866,18 @@ function ComposerContentImpl({
     };
   }, [agentId, applyAgentQueueSnapshot, client, isConnected, serverId, supportsAgentMessageQueue]);
 
+  const latestAttachmentsRef = useRef(attachments);
+  latestAttachmentsRef.current = attachments;
   const queueMessage = useCallback(
     async (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+      const submittedText = textSource.getSnapshot();
+      const submittedAttachments = latestAttachmentsRef.current;
       const clearComposer = () => {
-        setUserInput("");
-        setSelectedAttachments([]);
-        resetSuppression();
+        if (textSource.getSnapshot() === submittedText) setUserInput("");
+        if (latestAttachmentsRef.current === submittedAttachments) {
+          setSelectedAttachments([]);
+          resetSuppression();
+        }
         clearSentAttachments(queuedAttachments);
       };
 
@@ -1910,6 +1916,7 @@ function ComposerContentImpl({
     },
     [
       agentId,
+      textSource,
       applyAgentQueueSnapshot,
       clearSentAttachments,
       client,
@@ -1985,7 +1992,7 @@ function ComposerContentImpl({
   );
 
   const handleSubmit = useCallback(
-    (payload: MessagePayload) => {
+    async (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
@@ -2304,7 +2311,7 @@ function ComposerContentImpl({
   );
 
   const handleQueue = useCallback(
-    (payload: MessagePayload) => {
+    async (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
@@ -2319,7 +2326,7 @@ function ComposerContentImpl({
         commands: pluginClientSlashCommands,
       });
       if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
-      void queueMessage(payload.text, outgoingAttachments).catch((error) => setSendError(error.message));
+      await queueMessage(payload.text, outgoingAttachments);
     },
     [
       attachments,

@@ -134,8 +134,8 @@ describe("submitAgentInput", () => {
       attachments: [{ id: "img-1" }],
     });
     expect(submitMessage).not.toHaveBeenCalled();
-    expect(setUserInput).toHaveBeenCalledWith("");
-    expect(setAttachments).toHaveBeenCalledWith([]);
+    expect(setUserInput).not.toHaveBeenCalled();
+    expect(setAttachments).not.toHaveBeenCalled();
     expect(setSendError).not.toHaveBeenCalled();
     expect(setIsProcessing.mock.calls).toEqual([[true], [false]]);
     expect(clearDraft).not.toHaveBeenCalled();
