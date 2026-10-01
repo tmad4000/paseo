@@ -104,7 +104,7 @@ describe("submitAgentInput", () => {
     expect(clearDraft).toHaveBeenCalledWith("sent");
   });
 
-  it("queues while the agent is running and clears the composer immediately", async () => {
+  it("queues while the agent is running and clears after queue acceptance", async () => {
     const queueMessage = vi.fn();
     const submitMessage = vi.fn();
     const clearDraft = vi.fn();
@@ -137,7 +137,7 @@ describe("submitAgentInput", () => {
     expect(setUserInput).toHaveBeenCalledWith("");
     expect(setAttachments).toHaveBeenCalledWith([]);
     expect(setSendError).not.toHaveBeenCalled();
-    expect(setIsProcessing).not.toHaveBeenCalled();
+    expect(setIsProcessing.mock.calls).toEqual([[true], [false]]);
     expect(clearDraft).not.toHaveBeenCalled();
   });
 
@@ -250,4 +250,26 @@ describe("submitAgentInput", () => {
     });
     expect(clearDraft).toHaveBeenCalledWith("sent");
   });
+});
+
+
+it("preserves draft and attachments until durable queue acceptance and on storage failure", async () => {
+  let rejectWrite!: (error: Error) => void;
+  const pending = new Promise<void>((_, reject) => { rejectWrite = reject; });
+  const setUserInput = vi.fn();
+  const setAttachments = vi.fn();
+  const setSendError = vi.fn();
+  const result = submitAgentInput({
+    message: "saved draft", attachments: [{ id: "image" }],
+    isAgentRunning: true, canSubmit: true,
+    queueMessage: () => pending, submitMessage: async () => {}, clearDraft: vi.fn(),
+    setUserInput, setAttachments, setSendError, setIsProcessing: vi.fn(),
+  });
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
+  rejectWrite(new Error("storage full"));
+  expect(await result).toBe("failed");
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
+  expect(setSendError).toHaveBeenCalledWith("storage full");
 });

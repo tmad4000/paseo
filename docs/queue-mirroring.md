@@ -194,15 +194,18 @@ and the daemon never knew. This is the client-side mirror of upstream #3464 /
 
 The fix is an outbox (`packages/app/src/stores/queue-outbox-store/`), persisted
 the same way drafts are. `queueComposerMessageOnServer` writes the full wire
-payload — image bytes included — into the outbox before the request goes out and
-removes it on ack. A send that fails keeps its entry and its optimistic row
+payload — image bytes included — into the outbox and awaits persistence before
+clearing the draft or attempting delivery. Encoding or storage failure keeps the
+draft and attachments and displays an error. The client removes the payload on ack. A send that fails keeps its entry and its optimistic row
 instead of rolling back; nothing is surfaced as an error, because delivery is
 now deferred, not dead.
 
 On every (re)connect that advertises `agentMessageQueue` (the `server_info`
 status message, which is exactly the re-established-transport signal), the
 session flushes the outbox: each entry is re-sent through the ordinary enqueue
-RPC, oldest first. Re-sending is safe because the daemon treats an enqueue with
+RPC, oldest first within each agent. Fresh enqueues use the same dispatch path;
+a failed predecessor blocks later items for that agent while other agents proceed.
+Re-sending is safe because the daemon treats an enqueue with
 a known item id as a retry:
 
 - an id already in the queue is a no-op (this existed from the start), and

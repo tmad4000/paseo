@@ -1092,6 +1092,50 @@ function createFakeQueueClient(
 }
 
 describe("queueComposerMessageOnServer", () => {
+  it("waits for recoverable storage before completing queue submission or delivery", async () => {
+    let confirmWrite!: () => void;
+    let stored = "";
+    const events: string[] = [];
+    const write = new Promise<void>((resolve) => { confirmWrite = resolve; });
+    const resultPromise = queueComposerMessageOnServer({
+      client: createFakeQueueClient(), agentId: "agent", text: "recover me", attachments: [],
+      encodeImages: passthroughEncodeImages, queue: createFakeQueue(), applySnapshot: () => {},
+      outbox: {
+        serverId: "server", remove: () => {},
+        add: async (entry) => {
+          events.push("writing");
+          await write;
+          stored = JSON.stringify(entry);
+        },
+        flush: async () => { events.push("delivery"); },
+      },
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual(["writing"]);
+    expect(stored).toBe("");
+    confirmWrite();
+    const result = await resultPromise;
+    expect(JSON.parse(stored)).toMatchObject({ itemId: result.queued?.id, text: "recover me" });
+    expect(events).toEqual(["writing", "delivery"]);
+  });
+
+  it("reports persistence failure without delivering or changing the queue", async () => {
+    const queue = createFakeQueue();
+    let delivered = false;
+    const result = await queueComposerMessageOnServer({
+      client: createFakeQueueClient(), agentId: "agent", text: "keep draft", attachments: [],
+      encodeImages: passthroughEncodeImages, queue, applySnapshot: () => {},
+      outbox: {
+        serverId: "server", remove: () => {},
+        add: async () => { throw new Error("storage full"); },
+        flush: async () => { delivered = true; },
+      },
+    });
+    expect(result).toEqual({ queued: null, error: "storage full" });
+    expect(delivered).toBe(false);
+    expect(queue.read("agent")).toEqual([]);
+  });
+
   it("shows the message locally before the daemon answers, then applies the snapshot", async () => {
     const queue = createFakeQueue();
     const client = createFakeQueueClient();
@@ -1175,7 +1219,7 @@ describe("queueComposerMessageOnServer", () => {
       queue,
       applySnapshot: () => {},
       outbox: {
-        add: (entry) => added.push(entry.itemId),
+        add: (entry) => { added.push(entry.itemId); },
         remove: (itemId) => removed.push(itemId),
       },
     });
@@ -1203,7 +1247,7 @@ describe("queueComposerMessageOnServer", () => {
       queue,
       applySnapshot: () => {},
       outbox: {
-        add: (entry) => added.push(entry.itemId),
+        add: (entry) => { added.push(entry.itemId); },
         remove: (itemId) => removed.push(itemId),
       },
     });

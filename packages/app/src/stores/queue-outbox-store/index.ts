@@ -25,7 +25,7 @@ const PersistedQueueOutboxSchema = z.object({
 type PersistedQueueOutbox = z.infer<typeof PersistedQueueOutboxSchema>;
 
 interface QueueOutboxActions {
-  add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => void;
+  add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
   remove: (itemId: string) => void;
   bumpAttempts: (itemId: string) => void;
   entriesForServer: (serverId: string) => PendingQueueEnqueue[];
@@ -38,6 +38,29 @@ function sortByCreation(entries: PendingQueueEnqueue[]): PendingQueueEnqueue[] {
   return entries.sort((a, b) => a.createdAt - b.createdAt);
 }
 
+let pendingWrite: Promise<void> = Promise.resolve();
+const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedQueueOutboxSchema);
+const durableStorage: typeof persistedStorage = {
+  ...persistedStorage,
+  setItem: (name, value) => {
+    pendingWrite = pendingWrite.catch(() => {}).then(async () => {
+      await persistedStorage.setItem(name, value);
+    });
+    void pendingWrite.catch(() => {});
+    return pendingWrite;
+  },
+};
+
+let hydrationInFlight: Promise<void> | undefined;
+async function awaitOutboxHydration(): Promise<void> {
+  if (useQueueOutboxStore.persist.hasHydrated()) return;
+  hydrationInFlight ??= Promise.resolve(useQueueOutboxStore.persist.rehydrate()).then(() => {
+    if (!useQueueOutboxStore.persist.hasHydrated()) throw new Error("Unable to load saved queued messages");
+  }).finally(() => { hydrationInFlight = undefined; });
+  await hydrationInFlight;
+  if (!useQueueOutboxStore.persist.hasHydrated()) throw new Error("Unable to load saved queued messages");
+}
+
 /**
  * The durable outbox for daemon-owned queue writes. Entries are keyed by item
  * id (unique across servers by construction) and survive app restarts, so an
@@ -48,13 +71,20 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
     (set, get) => ({
       entries: {},
 
-      add: (entry) => {
+      add: async (entry) => {
+        await awaitOutboxHydration();
         set((state) => ({
           entries: {
             ...state.entries,
             [entry.itemId]: { ...entry, createdAt: Date.now(), attempts: 0 },
           },
         }));
+        try {
+          await pendingWrite;
+        } catch (error) {
+          get().remove(entry.itemId);
+          throw error;
+        }
       },
 
       remove: (itemId) => {
@@ -96,43 +126,26 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
     {
       name: "paseo-queue-outbox",
       version: 1,
-      storage: createValidatedPersistStorage(AsyncStorage, PersistedQueueOutboxSchema),
+      storage: durableStorage,
       partialize: ({ entries }) => ({ entries }),
     },
   ),
 );
 
-const flushesInFlight = new Set<string>();
-
-/**
- * Flushes this store's un-acked enqueues for one server. Called on every
- * (re)connect that advertises `agentMessageQueue`; concurrent calls for the
- * same server coalesce so a burst of status messages cannot double-send.
- */
 export async function flushQueueOutboxForServer(input: {
   serverId: string;
   client: QueueOutboxFlushClient;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
   onRetryLimit?: (entry: PendingQueueEnqueue) => void;
 }): Promise<void> {
-  if (flushesInFlight.has(input.serverId)) {
-    return;
-  }
-  flushesInFlight.add(input.serverId);
-  try {
-    const store = useQueueOutboxStore.getState();
-    await flushQueueOutbox({
-      serverId: input.serverId,
-      outbox: {
-        list: (serverId) => useQueueOutboxStore.getState().entriesForServer(serverId),
-        remove: store.remove,
-        bumpAttempts: store.bumpAttempts,
-      },
-      client: input.client,
-      applySnapshot: input.applySnapshot,
-      ...(input.onRetryLimit ? { onRetryLimit: input.onRetryLimit } : {}),
-    });
-  } finally {
-    flushesInFlight.delete(input.serverId);
-  }
+  await awaitOutboxHydration();
+  const store = useQueueOutboxStore.getState();
+  await flushQueueOutbox({
+    ...input,
+    outbox: {
+      list: (serverId) => useQueueOutboxStore.getState().entriesForServer(serverId),
+      remove: store.remove,
+      bumpAttempts: store.bumpAttempts,
+    },
+  });
 }

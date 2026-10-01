@@ -19,6 +19,7 @@ import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/mo
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
+import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
 
 export interface QueuedComposerMessage {
@@ -472,8 +473,10 @@ export interface QueueOutboxWriter {
     images: Array<{ data: string; mimeType: string }>;
     attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
     composerAttachments: QueuedComposerAttachment[];
-  }) => void;
+  }) => void | Promise<void>;
   remove: (itemId: string) => void;
+  serverId?: string;
+  flush?: () => Promise<void>;
 }
 
 export interface QueueComposerMessageOnServerInput {
@@ -503,6 +506,28 @@ export interface QueueComposerMessageOnServerInput {
 export async function queueComposerMessageOnServer(
   input: QueueComposerMessageOnServerInput,
 ): Promise<QueueComposerMessageResult & { error?: string }> {
+  if (input.outbox?.flush) {
+    return serializeQueueOperation(JSON.stringify(["prepare", input.outbox.serverId, input.agentId]), async () => {
+      const text = input.text.trim();
+      if (!text && input.attachments.length === 0) return { queued: null };
+      const queued = { id: generateMessageId(), text, attachments: input.attachments };
+      try {
+        const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
+          format: input.attachmentSubmitFormat,
+        });
+        const images = await input.encodeImages(wirePayload.images);
+        await input.outbox!.add({
+          agentId: input.agentId, itemId: queued.id, text,
+          images: images ?? [], attachments: wirePayload.attachments,
+          composerAttachments: toQueuedComposerAttachments(input.attachments),
+        });
+      } catch (error) {
+        return { queued: null, error: error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend") };
+      }
+      void input.outbox!.flush!().catch(() => {});
+      return { queued };
+    });
+  }
   const optimistic = queueComposerMessage({
     agentId: input.agentId,
     text: input.text,
@@ -544,7 +569,11 @@ export async function queueComposerMessageOnServer(
     attachments: wirePayload.attachments,
     composerAttachments: toQueuedComposerAttachments(input.attachments),
   };
-  input.outbox?.add(enqueueInput);
+  try {
+    await input.outbox?.add(enqueueInput);
+  } catch (error) {
+    return rollBack(error);
+  }
   try {
     const snapshot = await input.client.enqueueAgentMessage(enqueueInput);
     input.outbox?.remove(enqueueInput.itemId);

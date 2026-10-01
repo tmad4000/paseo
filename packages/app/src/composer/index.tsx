@@ -88,7 +88,7 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
-import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
+import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { appendPendingQueueRows, getPendingQueueMessageIds } from "@/composer/queue-sync";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
@@ -1834,10 +1834,15 @@ function ComposerContentImpl({
 
   const queueOutbox = useMemo<QueueOutboxWriter>(
     () => ({
+      serverId,
       add: (entry) => useQueueOutboxStore.getState().add({ ...entry, serverId }),
+      flush: () => flushQueueOutboxForServer({
+        serverId, client: client!,
+        applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+      }),
       remove: (itemId) => useQueueOutboxStore.getState().remove(itemId),
     }),
-    [serverId],
+    [serverId, client, applyAgentQueueSnapshot],
   );
 
   useEffect(() => {
@@ -1862,7 +1867,7 @@ function ComposerContentImpl({
   }, [agentId, applyAgentQueueSnapshot, client, isConnected, serverId, supportsAgentMessageQueue]);
 
   const queueMessage = useCallback(
-    (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+    async (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
       const clearComposer = () => {
         setUserInput("");
         setSelectedAttachments([]);
@@ -1871,7 +1876,6 @@ function ComposerContentImpl({
       };
 
       if (supportsAgentMessageQueue && client) {
-        void (async () => {
           const result = await queueComposerMessageOnServer({
             client,
             agentId,
@@ -1887,8 +1891,9 @@ function ComposerContentImpl({
           });
           if (result.error) {
             setSendError(result.error);
+            throw new Error(result.error);
           }
-        })();
+        if (!result.queued) return;
         clearComposer();
         return;
       }
@@ -1938,7 +1943,7 @@ function ComposerContentImpl({
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
         queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
-          queueMessage(queuedText, queuedAttachments);
+          return queueMessage(queuedText, queuedAttachments);
         },
         submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
           if (submitBehavior !== "preserve-and-lock") {
@@ -2314,7 +2319,7 @@ function ComposerContentImpl({
         commands: pluginClientSlashCommands,
       });
       if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
-      queueMessage(payload.text, outgoingAttachments);
+      void queueMessage(payload.text, outgoingAttachments).catch((error) => setSendError(error.message));
     },
     [
       attachments,

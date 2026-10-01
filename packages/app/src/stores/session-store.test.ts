@@ -824,15 +824,15 @@ describe("queue snapshot reconciliation", () => {
 
 
 describe("queue snapshot acknowledgement", () => {
-  it("clears accepted retry payloads before edits and retains local-only messages", () => {
+  it("clears accepted retry payloads before edits and retains local-only messages", async () => {
     initializeTestSession();
     const outbox = useQueueOutboxStore.getState();
     const entry = {
       serverId: "test-server", agentId: "agent", text: "A",
       images: [], attachments: [], composerAttachments: [],
     };
-    outbox.add({ ...entry, itemId: "accepted" });
-    outbox.add({ ...entry, itemId: "local-only" });
+    await outbox.add({ ...entry, itemId: "accepted" });
+    await outbox.add({ ...entry, itemId: "local-only" });
     try {
       const store = useSessionStore.getState();
       store.applyAgentQueueSnapshot("test-server", {
