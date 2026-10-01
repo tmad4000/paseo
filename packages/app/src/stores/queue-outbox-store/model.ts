@@ -68,6 +68,9 @@ export interface FlushQueueOutboxInput {
  */
 export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<void> {
   for (const entry of input.outbox.list(input.serverId)) {
+    if (!input.outbox.list(input.serverId).some((pending) => pending.itemId === entry.itemId)) {
+      continue;
+    }
     try {
       const snapshot = await input.client.enqueueAgentMessage({
         agentId: entry.agentId,

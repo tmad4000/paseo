@@ -43,6 +43,7 @@ import type {
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import {
   shouldApplyAgentQueueSnapshot,
   toQueuedComposerMessages,
@@ -1818,6 +1819,13 @@ export const useSessionStore = create<SessionStore>()(
       },
 
       applyAgentQueueSnapshot: (serverId, snapshot) => {
+        const outbox = useQueueOutboxStore.getState();
+        const acceptedIds = new Set(snapshot.items.map((item) => item.id));
+        for (const entry of outbox.entriesForAgent(serverId, snapshot.agentId)) {
+          if (acceptedIds.has(entry.itemId)) {
+            outbox.remove(entry.itemId);
+          }
+        }
         set((prev) => {
           const session = prev.sessions[serverId];
           if (!session) {

@@ -11,6 +11,7 @@ import {
   type Agent,
   type WorkspaceDescriptor,
 } from "./session-store";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import type { StreamItem } from "../types/stream";
 import { reduceTurnLiveness, type TurnLivenessTransition } from "@/timeline/turn-liveness";
 
@@ -805,6 +806,7 @@ describe("removeWorkspace", () => {
 describe("queue snapshot reconciliation", () => {
   it("removes an optimistic row on an unchanged retry acknowledgement", () => {
     const store = useSessionStore.getState();
+    initializeTestSession();
     const snapshot = { agentId: "agent", revision: 2, items: [] };
     store.applyAgentQueueSnapshot("test-server", snapshot);
     store.setQueuedMessages("test-server", new Map([
@@ -817,5 +819,37 @@ describe("queue snapshot reconciliation", () => {
       items: [{ id: "delivered", text: "already delivered", createdAt: "2026-01-01T00:00:00.000Z" }],
     });
     expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
+  });
+});
+
+
+describe("queue snapshot acknowledgement", () => {
+  it("clears accepted retry payloads before edits and retains local-only messages", () => {
+    initializeTestSession();
+    const outbox = useQueueOutboxStore.getState();
+    const entry = {
+      serverId: "test-server", agentId: "agent", text: "A",
+      images: [], attachments: [], composerAttachments: [],
+    };
+    outbox.add({ ...entry, itemId: "accepted" });
+    outbox.add({ ...entry, itemId: "local-only" });
+    try {
+      const store = useSessionStore.getState();
+      store.applyAgentQueueSnapshot("test-server", {
+        agentId: "agent", revision: 1,
+        items: [{ id: "accepted", text: "A", createdAt: "2026-01-01T00:00:00.000Z" }],
+      });
+      expect(outbox.entriesForAgent("test-server", "agent").map((item) => item.itemId)).toEqual(["local-only"]);
+      store.applyAgentQueueSnapshot("test-server", {
+        agentId: "agent", revision: 2,
+        items: [{ id: "accepted", text: "B", createdAt: "2026-01-01T00:00:00.000Z" }],
+      });
+      store.applyAgentQueueSnapshot("test-server", { agentId: "agent", revision: 3, items: [] });
+      expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
+      expect(outbox.entriesForAgent("test-server", "agent").map((item) => item.itemId)).toEqual(["local-only"]);
+    } finally {
+      outbox.remove("accepted");
+      outbox.remove("local-only");
+    }
   });
 });

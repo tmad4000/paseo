@@ -221,8 +221,9 @@ At `QUEUE_OUTBOX_MAX_ATTEMPTS` failed reconnects, the client shows an attention
 message once; future reconnects keep retrying. Only an acknowledgement removes
 the payload. Rows absent from the latest authoritative snapshot are labeled
 "Waiting to sync with host" and cannot be edited or sent from the daemon queue.
-Snapshot IDs track acceptance separately from response acknowledgement, so an
-accepted row keeps its daemon controls even when the enqueue response is lost.
+Inclusion in an authoritative snapshot also acknowledges the enqueue and removes
+its outbox payload before editing is available. A lost response therefore cannot
+leave an obsolete retry payload after an accepted item is edited.
 
 ## Known edges
 
