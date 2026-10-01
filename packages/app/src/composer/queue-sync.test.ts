@@ -5,6 +5,7 @@ import type { AttachmentMetadata } from "@/attachments/types";
 import type { PendingQueueEnqueue } from "@/stores/queue-outbox-store/model";
 import {
   appendPendingQueueRows,
+  getPendingQueueMessageIds,
   shouldApplyAgentQueueSnapshot,
   toQueuedComposerAttachments,
   toQueuedComposerMessages,
@@ -106,6 +107,17 @@ describe("appendPendingQueueRows", () => {
       ...overrides,
     };
   }
+
+  it("marks only local rows as waiting when the enqueue response is lost", () => {
+    const entries = [pending({ itemId: "item-1" }), pending()];
+    const acceptedIds = new Set(snapshot().items.map((item) => item.id));
+    expect([...getPendingQueueMessageIds(entries, acceptedIds)]).toEqual(["pending-1"]);
+    expect(entries).toHaveLength(2);
+  });
+
+  it("marks all outbox rows as waiting before any authoritative snapshot", () => {
+    expect([...getPendingQueueMessageIds([pending()], undefined)]).toEqual(["pending-1"]);
+  });
 
   it("re-appends un-acked rows a snapshot would otherwise erase", () => {
     const rows = appendPendingQueueRows(toQueuedComposerMessages(snapshot()), [pending()]);

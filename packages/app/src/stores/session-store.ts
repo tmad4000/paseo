@@ -437,6 +437,7 @@ export interface SessionState {
    * cannot erase a newer state. See docs/queue-mirroring.md.
    */
   queuedMessageRevisions: Map<string, number>;
+  acceptedQueueMessageIds: Map<string, ReadonlySet<string>>;
 }
 
 // Global store state
@@ -672,6 +673,7 @@ function createInitialSessionState(
     fileExplorer: new Map(),
     queuedMessages: new Map(),
     queuedMessageRevisions: new Map(),
+    acceptedQueueMessageIds: new Map(),
   };
 }
 
@@ -1839,13 +1841,15 @@ export const useSessionStore = create<SessionStore>()(
               useQueueOutboxStore.getState().entriesForAgent(serverId, snapshot.agentId),
             ),
           );
+          const acceptedQueueMessageIds = new Map(session.acceptedQueueMessageIds);
+          acceptedQueueMessageIds.set(snapshot.agentId, new Set(snapshot.items.map((item) => item.id)));
           const queuedMessageRevisions = new Map(session.queuedMessageRevisions);
           queuedMessageRevisions.set(snapshot.agentId, snapshot.revision);
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: { ...session, queuedMessages, queuedMessageRevisions },
+              [serverId]: { ...session, queuedMessages, queuedMessageRevisions, acceptedQueueMessageIds },
             },
           };
         });

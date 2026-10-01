@@ -93,3 +93,12 @@ export function appendPendingQueueRows(
     }));
   return rows.length === 0 ? items : [...items, ...rows];
 }
+
+export function getPendingQueueMessageIds(
+  pending: readonly PendingQueueEnqueue[],
+  acceptedIds: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
+  return new Set(
+    pending.filter((entry) => !acceptedIds?.has(entry.itemId)).map((entry) => entry.itemId),
+  );
+}

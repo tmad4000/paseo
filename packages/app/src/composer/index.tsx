@@ -89,7 +89,7 @@ import {
   type QueuedComposerMessage,
 } from "@/composer/actions";
 import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
-import { appendPendingQueueRows } from "@/composer/queue-sync";
+import { appendPendingQueueRows, getPendingQueueMessageIds } from "@/composer/queue-sync";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1457,9 +1457,12 @@ function ComposerContentImpl({
         .sort((left, right) => left.createdAt - right.createdAt),
     [outboxEntries, serverId, agentId],
   );
+  const acceptedQueueMessageIds = useSessionStore(
+    (state) => state.sessions[serverId]?.acceptedQueueMessageIds.get(agentId),
+  );
   const pendingMessageIds = useMemo(
-    () => new Set(pendingQueueEntries.map((entry) => entry.itemId)),
-    [pendingQueueEntries],
+    () => getPendingQueueMessageIds(pendingQueueEntries, acceptedQueueMessageIds),
+    [pendingQueueEntries, acceptedQueueMessageIds],
   );
   const queuedMessages = useMemo(
     () => appendPendingQueueRows([...(queuedMessagesRaw ?? EMPTY_ARRAY)], pendingQueueEntries),
