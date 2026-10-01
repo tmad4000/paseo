@@ -112,6 +112,11 @@ describe("appendPendingQueueRows", () => {
     expect(rows.map((row) => row.id)).toEqual(["item-1", "pending-1"]);
   });
 
+  it("shows a saved local message before the host has supplied any queue snapshot", () => {
+    const rows = appendPendingQueueRows([], [pending()]);
+    expect(rows).toEqual([{ id: "pending-1", text: "not acked yet", attachments: [] }]);
+  });
+
   it("drops a pending row the snapshot already contains", () => {
     const rows = appendPendingQueueRows(toQueuedComposerMessages(snapshot()), [
       pending({ itemId: "item-1" }),

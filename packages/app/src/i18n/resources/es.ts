@@ -168,6 +168,9 @@ export const es: TranslationResources = {
       saveQueuedMessage: "Guardar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
       queuedMessages: "Mensajes en cola ({{count}})",
+      queueWaitingToSync: "Esperando sincronización con el servidor",
+      queueSyncNeedsAttention:
+        "Un mensaje en cola no llegó al servidor. Está guardado en este dispositivo y se reintentará al conectar.",
       queuedAttachment: "Archivo adjunto",
       expandQueuedMessages: "Mostrar mensajes en cola",
       collapseQueuedMessages: "Ocultar mensajes en cola",

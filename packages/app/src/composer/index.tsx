@@ -89,6 +89,7 @@ import {
   type QueuedComposerMessage,
 } from "@/composer/actions";
 import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
+import { appendPendingQueueRows } from "@/composer/queue-sync";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -404,6 +405,8 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 
 interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
+  pendingMessageIds: ReadonlySet<string>;
+  pendingLabel: string;
   summaryLabel: string;
   attachmentPreviewLabel: string;
   expandLabel: string;
@@ -419,6 +422,8 @@ interface RenderQueueTrackArgs {
 function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   const {
     queuedMessages,
+    pendingMessageIds,
+    pendingLabel,
     summaryLabel,
     attachmentPreviewLabel,
     expandLabel,
@@ -464,6 +469,8 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
           <QueuedMessageRow
             key={item.id}
             item={item}
+            isPending={pendingMessageIds.has(item.id)}
+            pendingLabel={pendingLabel}
             onSave={handleSaveQueuedMessage}
             onSendNow={handleSendQueuedNow}
             editLabel={editLabel}
@@ -738,6 +745,8 @@ function resolveMessageInputPassthroughAction(
 
 interface QueuedMessageRowProps {
   item: QueuedMessage;
+  isPending: boolean;
+  pendingLabel: string;
   onSave: (id: string, expectedText: string, text: string) => Promise<boolean>;
   onSendNow: (id: string) => void;
   editLabel: string;
@@ -748,6 +757,8 @@ interface QueuedMessageRowProps {
 
 function QueuedMessageRow({
   item,
+  isPending,
+  pendingLabel,
   onSave,
   onSendNow,
   editLabel,
@@ -821,27 +832,37 @@ function QueuedMessageRow({
   }
   return (
     <View style={styles.queueItem}>
-      <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-        {item.text}
-      </Text>
-      <View style={styles.queueActions}>
-        <Pressable
-          onPress={handleEdit}
-          style={styles.queueActionButton}
-          accessibilityLabel={editLabel}
-          accessibilityRole="button"
+      <View style={styles.queueItemContent}>
+        <Text
+          style={styles.queueText}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+          selectable={isPending}
         >
-          <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-        </Pressable>
-        <Pressable
-          onPress={handleSendNow}
-          style={[styles.queueActionButton, styles.queueSendButton]}
-          accessibilityLabel={sendNowLabel}
-          accessibilityRole="button"
-        >
-          <Text style={styles.queueSendButtonLabel}>{sendNowLabel}</Text>
-        </Pressable>
+          {item.text}
+        </Text>
+        {isPending ? <Text style={styles.queuePendingText}>{pendingLabel}</Text> : null}
       </View>
+      {!isPending ? (
+        <View style={styles.queueActions}>
+          <Pressable
+            onPress={handleEdit}
+            style={styles.queueActionButton}
+            accessibilityLabel={editLabel}
+            accessibilityRole="button"
+          >
+            <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+          </Pressable>
+          <Pressable
+            onPress={handleSendNow}
+            style={[styles.queueActionButton, styles.queueSendButton]}
+            accessibilityLabel={sendNowLabel}
+            accessibilityRole="button"
+          >
+            <Text style={styles.queueSendButtonLabel}>{sendNowLabel}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1428,7 +1449,22 @@ function ComposerContentImpl({
   const queuedMessagesRaw = useSessionStore((state) =>
     state.sessions[serverId]?.queuedMessages?.get(agentId),
   );
-  const queuedMessages = queuedMessagesRaw ?? EMPTY_ARRAY;
+  const outboxEntries = useQueueOutboxStore((state) => state.entries);
+  const pendingQueueEntries = useMemo(
+    () =>
+      Object.values(outboxEntries)
+        .filter((entry) => entry.serverId === serverId && entry.agentId === agentId)
+        .sort((left, right) => left.createdAt - right.createdAt),
+    [outboxEntries, serverId, agentId],
+  );
+  const pendingMessageIds = useMemo(
+    () => new Set(pendingQueueEntries.map((entry) => entry.itemId)),
+    [pendingQueueEntries],
+  );
+  const queuedMessages = useMemo(
+    () => appendPendingQueueRows([...(queuedMessagesRaw ?? EMPTY_ARRAY)], pendingQueueEntries),
+    [queuedMessagesRaw, pendingQueueEntries],
+  );
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
 
@@ -2634,6 +2670,8 @@ function ComposerContentImpl({
     () => (
       <QueueTrack
         queuedMessages={queuedMessages}
+        pendingMessageIds={pendingMessageIds}
+        pendingLabel={t("composer.attachments.queueWaitingToSync")}
         summaryLabel={t("composer.attachments.queuedMessages", { count: queuedMessages.length })}
         attachmentPreviewLabel={t("composer.attachments.queuedAttachment")}
         expandLabel={t("composer.attachments.expandQueuedMessages")}
@@ -2650,7 +2688,14 @@ function ComposerContentImpl({
         }
       />
     ),
-    [handleSaveQueuedMessage, handleSendQueuedNow, isAgentRunning, queuedMessages, t],
+    [
+      handleSaveQueuedMessage,
+      handleSendQueuedNow,
+      isAgentRunning,
+      queuedMessages,
+      pendingMessageIds,
+      t,
+    ],
   );
 
   const autocompleteConfiguration = useMemo(
@@ -2964,6 +3009,10 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexDirection: "column",
     alignItems: "stretch",
   },
+  queueItemContent: {
+    flex: 1,
+    minWidth: 0,
+  },
   queueEditInput: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
@@ -2994,9 +3043,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
     fontSize: theme.fontSize.sm,
   },
   queueText: {
-    flex: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
+  },
+  queuePendingText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   queueActions: {
     flexDirection: "row",

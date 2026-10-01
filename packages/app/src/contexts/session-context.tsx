@@ -36,7 +36,7 @@ import {
   type SessionState,
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
-import { flushQueueOutboxForServer, type PendingQueueEnqueue } from "@/stores/queue-outbox-store";
+import { flushQueueOutboxForServer } from "@/stores/queue-outbox-store";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -172,18 +172,6 @@ type WorkspaceSetupProgressPayload = Extract<
   SessionOutboundMessage,
   { type: "workspace_setup_progress" }
 >["payload"];
-
-/** Removes the optimistic row of an outbox entry that gave up retrying. */
-function dropAbandonedQueueRow(serverId: string, entry: PendingQueueEnqueue): void {
-  useSessionStore.getState().setQueuedMessages(serverId, (prev) => {
-    const next = new Map(prev);
-    next.set(
-      entry.agentId,
-      (prev.get(entry.agentId) ?? []).filter((row) => row.id !== entry.itemId),
-    );
-    return next;
-  });
-}
 
 function notifyVoiceAbortFailure(
   data: Extract<SessionOutboundMessage, { type: "activity_log" }>["payload"],
@@ -614,7 +602,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
             client,
             applySnapshot: (snapshot) =>
               useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-            onDropEntry: (entry) => dropAbandonedQueueRow(serverId, entry),
+            onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
           });
         }
         return;
@@ -806,6 +794,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     applyWorkspaceSetupProgress,
     updateSessionServerInfo,
     toast,
+    t,
     voiceRuntime,
     voiceAudioEngine,
   ]);

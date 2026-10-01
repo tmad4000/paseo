@@ -167,6 +167,9 @@ export const ko: TranslationResources = {
       saveQueuedMessage: "대기 메시지 저장",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
       queuedMessages: "대기 중인 메시지 ({{count}}개)",
+      queueWaitingToSync: "호스트와 동기화 대기 중",
+      queueSyncNeedsAttention:
+        "대기 중인 메시지가 호스트에 도달하지 못했습니다. 이 기기에 저장되었으며 재연결 시 다시 시도합니다.",
       queuedAttachment: "첨부 파일",
       expandQueuedMessages: "대기 중인 메시지 표시",
       collapseQueuedMessages: "대기 중인 메시지 숨기기",

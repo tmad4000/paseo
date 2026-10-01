@@ -167,6 +167,8 @@ export const zhCN: TranslationResources = {
       saveQueuedMessage: "保存排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
       queuedMessages: "排队中的消息（{{count}}）",
+      queueWaitingToSync: "等待与主机同步",
+      queueSyncNeedsAttention: "排队消息未能送达主机。消息已保存在此设备上，重新连接后会重试。",
       queuedAttachment: "附件",
       expandQueuedMessages: "显示排队中的消息",
       collapseQueuedMessages: "隐藏排队中的消息",

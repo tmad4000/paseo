@@ -167,6 +167,9 @@ export const ar: TranslationResources = {
       saveQueuedMessage: "حفظ الرسالة في قائمة الانتظار",
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
       queuedMessages: "الرسائل في قائمة الانتظار ({{count}})",
+      queueWaitingToSync: "في انتظار المزامنة مع المضيف",
+      queueSyncNeedsAttention:
+        "تعذر إرسال رسالة في قائمة الانتظار إلى المضيف. حُفظت على هذا الجهاز وستُعاد المحاولة عند الاتصال.",
       queuedAttachment: "مرفق",
       expandQueuedMessages: "إظهار الرسائل في قائمة الانتظار",
       collapseQueuedMessages: "إخفاء الرسائل في قائمة الانتظار",

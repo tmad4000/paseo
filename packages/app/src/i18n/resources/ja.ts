@@ -168,6 +168,9 @@ export const ja: TranslationResources = {
       saveQueuedMessage: "キューのメッセージを保存",
       sendQueuedMessageNow: "キューに入れたメッセージを今すぐ送信",
       queuedMessages: "キュー内のメッセージ（{{count}}件）",
+      queueWaitingToSync: "ホストとの同期を待機中",
+      queueSyncNeedsAttention:
+        "キュー内のメッセージをホストに送れませんでした。この端末に保存されており、再接続時に再試行します。",
       queuedAttachment: "添付ファイル",
       expandQueuedMessages: "キュー内のメッセージを表示",
       collapseQueuedMessages: "キュー内のメッセージを非表示",

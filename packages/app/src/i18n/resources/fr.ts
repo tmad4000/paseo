@@ -171,6 +171,9 @@ export const fr: TranslationResources = {
       saveQueuedMessage: "Enregistrer le message en file d’attente",
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
       queuedMessages: "Messages en attente ({{count}})",
+      queueWaitingToSync: "En attente de synchronisation avec l'hôte",
+      queueSyncNeedsAttention:
+        "Un message en attente n'a pas atteint l'hôte. Il est enregistré sur cet appareil et sera réessayé à la reconnexion.",
       queuedAttachment: "Pièce jointe",
       expandQueuedMessages: "Afficher les messages en attente",
       collapseQueuedMessages: "Masquer les messages en attente",

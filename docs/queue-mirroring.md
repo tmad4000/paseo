@@ -214,8 +214,11 @@ a known item id as a retry:
 Snapshots still replace the local list wholesale, with one exception:
 `appendPendingQueueRows` re-appends un-acked outbox rows a snapshot would
 otherwise erase, since they are writes the server does not know about yet. An
-entry that keeps failing gives up after `QUEUE_OUTBOX_MAX_ATTEMPTS` reconnects
-and drops its row rather than retrying forever.
+entry that keeps failing stays in the device's durable outbox and visible queue.
+At `QUEUE_OUTBOX_MAX_ATTEMPTS` failed reconnects, the client shows an attention
+message once; future reconnects keep retrying. Only an acknowledgement removes
+the payload. Until then, the row is labeled "Waiting to sync with host" and
+cannot be edited or sent from the daemon queue.
 
 ## Known edges
 
@@ -231,6 +234,7 @@ next running → idle edge or the next enqueue rather than resuming the agent at
 agents when the daemon comes up is a bigger behavior change than mirroring, and it belongs in its
 own decision.
 
-Send-now on a daemon-backed queue takes the message off the queue before sending, because the daemon
-drains the same queue and leaving it there would risk sending twice. If that send then fails, the
-message is requeued at the end rather than where it was — the queue has no insert-at-position.
+With delivery receipts, send-now claims the stored item in place and removes it only
+after confirmed dispatch. A failed or unsupported steer leaves it at its original
+position for recovery. Older hosts without receipts temporarily claim and restore
+the item around a send attempt.

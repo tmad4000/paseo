@@ -168,6 +168,9 @@ export const ptBR: TranslationResources = {
       saveQueuedMessage: "Salvar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
       queuedMessages: "Mensagens na fila ({{count}})",
+      queueWaitingToSync: "Aguardando sincronização com o host",
+      queueSyncNeedsAttention:
+        "Uma mensagem na fila não chegou ao host. Ela está salva neste dispositivo e será reenviada ao reconectar.",
       queuedAttachment: "Anexo",
       expandQueuedMessages: "Mostrar mensagens na fila",
       collapseQueuedMessages: "Ocultar mensagens na fila",

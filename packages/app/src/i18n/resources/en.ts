@@ -163,6 +163,9 @@ export const en = {
       saveQueuedMessage: "Save queued message",
       sendQueuedMessageNow: "Send queued message now",
       queuedMessages: "Queued messages ({{count}})",
+      queueWaitingToSync: "Waiting to sync with host",
+      queueSyncNeedsAttention:
+        "A queued message could not reach the host. It is saved on this device and will retry when connected.",
       queuedAttachment: "Attachment",
       expandQueuedMessages: "Show queued messages",
       collapseQueuedMessages: "Hide queued messages",

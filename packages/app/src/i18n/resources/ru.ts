@@ -168,6 +168,9 @@ export const ru: TranslationResources = {
       saveQueuedMessage: "Сохранить сообщение в очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
       queuedMessages: "Сообщения в очереди ({{count}})",
+      queueWaitingToSync: "Ожидание синхронизации с хостом",
+      queueSyncNeedsAttention:
+        "Сообщение из очереди не дошло до хоста. Оно сохранено на этом устройстве и будет отправлено при повторном подключении.",
       queuedAttachment: "Вложение",
       expandQueuedMessages: "Показать сообщения в очереди",
       collapseQueuedMessages: "Скрыть сообщения в очереди",

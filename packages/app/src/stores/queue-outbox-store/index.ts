@@ -113,7 +113,7 @@ export async function flushQueueOutboxForServer(input: {
   serverId: string;
   client: QueueOutboxFlushClient;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
-  onDropEntry?: (entry: PendingQueueEnqueue) => void;
+  onRetryLimit?: (entry: PendingQueueEnqueue) => void;
 }): Promise<void> {
   if (flushesInFlight.has(input.serverId)) {
     return;
@@ -130,7 +130,7 @@ export async function flushQueueOutboxForServer(input: {
       },
       client: input.client,
       applySnapshot: input.applySnapshot,
-      ...(input.onDropEntry ? { onDropEntry: input.onDropEntry } : {}),
+      ...(input.onRetryLimit ? { onRetryLimit: input.onRetryLimit } : {}),
     });
   } finally {
     flushesInFlight.delete(input.serverId);
