@@ -357,19 +357,20 @@ test.describe("Composer attachments", () => {
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 844 });
         const expand = longRow.getByRole("button", { name: "Expand or collapse queued message" });
-        if (
-          (await longRow
-            .getByText(longText, { exact: true })
-            .evaluate((element) => element.clientHeight)) < 1000
-        )
-          await expand.click();
+        const endText = longRow.getByText(longText, { exact: true });
         const scroll = page.getByTestId("composer-queue-list");
+        if (await endText.evaluate((element) => element.clientHeight < element.scrollHeight))
+          await expand.click();
+        await expect(endText).toBeVisible();
+        expect(
+          await endText.evaluate((element) => element.clientHeight >= element.scrollHeight),
+        ).toBe(true);
+        expect(await endText.evaluate((element) => element.clientHeight)).toBeGreaterThan(
+          await scroll.evaluate((element) => element.clientHeight),
+        );
         await scroll.evaluate((element) => {
           element.scrollTop = element.scrollHeight;
         });
-        const endText = longRow.getByText(longText, { exact: true });
-        await expect(endText).toBeVisible();
-        expect(await endText.evaluate((element) => element.clientHeight)).toBeGreaterThan(1000);
         expect(
           await scroll.evaluate((element) => element.scrollHeight > element.clientHeight),
         ).toBe(true);
