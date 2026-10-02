@@ -6,13 +6,8 @@ import {
 } from "@getpaseo/protocol/messages";
 
 /**
- * A queue enqueue the daemon has not acknowledged yet. The entry is the durable
- * copy: it carries the full wire payload (image bytes included) so it can be
- * re-sent verbatim after a reconnect or a fresh app launch, even though the
- * optimistic composer row it mirrors lives only in memory.
- *
- * Re-sending is safe because the daemon treats an enqueue with a known item id —
- * queued or already drained — as a retry and does nothing.
+ * Durable enqueue payload or removal intent. A cancellation must survive host
+ * acceptance so a lost enqueue response cannot cause the canceled item to be resent.
  * See docs/queue-mirroring.md, "The un-acked window".
  */
 export const PendingQueueEnqueueSchema = z.object({
@@ -31,9 +26,8 @@ export const PendingQueueEnqueueSchema = z.object({
 export type PendingQueueEnqueue = z.infer<typeof PendingQueueEnqueueSchema>;
 
 /**
- * Alert threshold for a persistently failing enqueue. The payload remains in
- * the outbox and is retried on future reconnects until the daemon acknowledges
- * it; a retry limit must never discard a user's queued message.
+ * A retry alert must never discard a user's queued payload or cancellation intent.
+ * See docs/queue-mirroring.md, "The un-acked window", for retry behavior.
  */
 export const QUEUE_OUTBOX_MAX_ATTEMPTS = 8;
 
@@ -65,10 +59,6 @@ export interface FlushQueueOutboxInput {
   onRetryLimit?: (entry: PendingQueueEnqueue) => void;
 }
 
-/**
- * Re-sends every un-acked enqueue for one server, oldest first so queue order
- * survives the retry. Only an acknowledgement removes the durable entry.
- */
 const queueOperations = new Map<string, Promise<unknown>>();
 
 export async function serializeQueueOperation<T>(
