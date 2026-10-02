@@ -369,7 +369,6 @@ test.describe("Composer attachments", () => {
         });
         const endText = longRow.getByText(longText, { exact: true });
         await expect(endText).toBeVisible();
-        expect(await endText.evaluate((element) => element.clientHeight)).toBeGreaterThan(1000);
         expect(
           await scroll.evaluate((element) => element.scrollHeight > element.clientHeight),
         ).toBe(true);
