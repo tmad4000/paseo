@@ -1,4 +1,5 @@
 import { expect, test } from "../support/fixtures";
+import type { Page } from "@playwright/test";
 import { clickNewChat } from "../support/helpers/launcher";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { expectAgentIdle } from "../support/helpers/agent-stream";
@@ -52,6 +53,25 @@ const TEST_JSON = {
   mimeType: "application/json",
   buffer: Buffer.from(JSON.stringify({ composer: "drop" })),
 };
+
+function waitForQueuedEditResponse(page: Page): Promise<void> {
+  return new Promise<void>((resolve) => {
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", ({ payload }) => {
+        try {
+          const envelope = JSON.parse(typeof payload === "string" ? payload : payload.toString());
+          if ((envelope.message ?? envelope).type === "agent.queue.edit.response") resolve();
+        } catch {}
+      });
+    });
+  });
+}
+
+function waitForTwoAnimationFrames(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
 test.describe("Composer attachments", () => {
   test("selected file shows a loading attachment until upload is acknowledged", async ({
@@ -411,16 +431,7 @@ test.describe("Composer attachments", () => {
   }) => {
     test.setTimeout(120_000);
     const gate = await installDaemonWebSocketGate(page);
-    const responseReceived = new Promise<void>((resolve) => {
-      page.on("websocket", (socket) => {
-        socket.on("framereceived", ({ payload }) => {
-          try {
-            const envelope = JSON.parse(typeof payload === "string" ? payload : payload.toString());
-            if ((envelope.message ?? envelope).type === "agent.queue.edit.response") resolve();
-          } catch {}
-        });
-      });
-    });
+    const responseReceived = waitForQueuedEditResponse(page);
     const agent = await startRunningMockAgent(page, {
       prefix: "queue-save-ownership-",
       model: "thirty-minute-stream",
@@ -486,12 +497,7 @@ test.describe("Composer attachments", () => {
       page.off("console", recordAttachmentScan);
       gate.releaseHeldServerMessage("agent.queue.edit.response");
       await responseReceived;
-      await page.evaluate(
-        () =>
-          new Promise<void>((resolve) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      await page.evaluate(waitForTwoAnimationFrames);
       await expect(editor).toHaveValue("Newer checkpoint C");
       expect(await readCheckpoint()).toMatchObject({
         draft: { lifecycle: "active", input: { text: "Newer checkpoint C" } },
