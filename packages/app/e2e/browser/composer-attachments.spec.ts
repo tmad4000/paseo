@@ -356,6 +356,11 @@ test.describe("Composer attachments", () => {
       const longRow = page.getByTestId(`queued-message-${before.items[1]!.id}`);
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 844 });
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          await new Promise<number>(requestAnimationFrame);
+          await new Promise<number>(requestAnimationFrame);
+        });
         const expand = longRow.getByRole("button", { name: "Expand or collapse queued message" });
         const endText = longRow.getByText(longText, { exact: true });
         const scroll = page.getByTestId("composer-queue-list");
