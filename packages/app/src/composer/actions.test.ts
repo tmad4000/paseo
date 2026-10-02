@@ -1242,7 +1242,9 @@ describe("queueComposerMessageOnServer", () => {
         add: (entry) => {
           added.push(entry.itemId);
         },
-        remove: (itemId) => removed.push(itemId),
+        remove: (itemId) => {
+          removed.push(itemId);
+        },
       },
     });
 
@@ -1272,7 +1274,9 @@ describe("queueComposerMessageOnServer", () => {
         add: (entry) => {
           added.push(entry.itemId);
         },
-        remove: (itemId) => removed.push(itemId),
+        remove: (itemId) => {
+          removed.push(itemId);
+        },
       },
     });
 
