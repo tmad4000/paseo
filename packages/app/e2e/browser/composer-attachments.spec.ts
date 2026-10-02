@@ -406,6 +406,86 @@ test.describe("Composer attachments", () => {
     }
   });
 
+  test("an old queued save cannot clear a newer draft after collapse and reopen", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const gate = await installDaemonWebSocketGate(page);
+    const responseReceived = new Promise<void>((resolve) => {
+      page.on("websocket", (socket) => {
+        socket.on("framereceived", ({ payload }) => {
+          try {
+            const envelope = JSON.parse(typeof payload === "string" ? payload : payload.toString());
+            if ((envelope.message ?? envelope).type === "agent.queue.edit.response") resolve();
+          } catch {}
+        });
+      });
+    });
+    const agent = await startRunningMockAgent(page, {
+      prefix: "queue-save-ownership-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running for isolated draft ownership.",
+    });
+    try {
+      await attachImageFromMenu(page, TEST_IMAGE);
+      await fillComposerDraft(page, "Original queued baseline");
+      await sendDraftToQueue(page);
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(1);
+      const original = (await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]!;
+      const draftKey = `queued-edit:${getServerId()}:${agent.agentId}:${original.id}`;
+      const readCheckpoint = () =>
+        page.evaluate((key) => {
+          const saved = JSON.parse(localStorage.getItem("paseo-drafts") ?? "{}");
+          return {
+            draft: saved.state?.drafts?.[key],
+            baseline: saved.state?.drafts?.[`${key}:baseline`],
+          };
+        }, draftKey);
+      await page.getByRole("button", { name: "Edit queued message" }).click();
+      const editor = page.getByRole("textbox", { name: "Edit queued message" });
+      await editor.fill("Pending save B");
+      gate.holdNextServerMessage("agent.queue.edit.response");
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await gate.waitForHeldServerMessage("agent.queue.edit.response");
+      await page.getByTestId("composer-queue-toggle").click();
+      await expect(editor).toHaveCount(0);
+      await page.getByTestId("composer-queue-toggle").click();
+      await expect(editor).toHaveValue("Pending save B");
+      await editor.fill("Newer checkpoint C");
+      await expect.poll(readCheckpoint).toMatchObject({
+        draft: { lifecycle: "active", input: { text: "Newer checkpoint C" } },
+        baseline: { lifecycle: "active", input: { text: original.text } },
+      });
+      gate.releaseHeldServerMessage("agent.queue.edit.response");
+      await responseReceived;
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      await expect(editor).toHaveValue("Newer checkpoint C");
+      expect(await readCheckpoint()).toMatchObject({
+        draft: { lifecycle: "active", input: { text: "Newer checkpoint C" } },
+        baseline: { lifecycle: "active", input: { text: original.text } },
+      });
+      const saved = (await agent.client.listQueuedAgentMessages(agent.agentId)).items;
+      expect(saved.map((item) => item.id)).toEqual([original.id]);
+      expect(saved[0]?.text).toBe("Pending save B");
+      expect(saved[0]?.images).toEqual(original.images);
+      await page.reload();
+      await expect.poll(readCheckpoint).toMatchObject({
+        draft: { lifecycle: "active", input: { text: "Newer checkpoint C" } },
+        baseline: { lifecycle: "active", input: { text: original.text } },
+      });
+    } finally {
+      gate.restore();
+      await agent.cleanup();
+    }
+  });
+
   test("leaving a stale queued edit preserves the changed draft for retry", async ({ page }) => {
     test.setTimeout(120_000);
     const agent = await startRunningMockAgent(page, {

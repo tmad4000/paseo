@@ -90,11 +90,15 @@ export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<vo
   await Promise.all(
     [...agents].map((agentId) =>
       serializeQueueOperation(JSON.stringify(["dispatch", input.serverId, agentId]), async () => {
-        for (const entry of input.outbox
+        for (const candidate of input.outbox
           .list(input.serverId)
           .filter((item) => item.agentId === agentId)) {
-          if (!input.outbox.list(input.serverId).some((pending) => pending.itemId === entry.itemId))
-            continue;
+          const entry = input.outbox.get
+            ? input.outbox.get(candidate.itemId)
+            : input.outbox
+                .list(input.serverId)
+                .find((pending) => pending.itemId === candidate.itemId);
+          if (!entry) continue;
           try {
             const removeFromHost = async () => {
               if (!input.client.removeQueuedAgentMessage)

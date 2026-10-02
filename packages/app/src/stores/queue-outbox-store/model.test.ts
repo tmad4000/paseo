@@ -305,3 +305,54 @@ test("a cancellation during an in-flight enqueue removes acceptance before clear
   expect(operations).toEqual(["accepted-response-lost-window", "removed"]);
   expect([...harness.entries]).toEqual([]);
 });
+
+test("cancelling B while A awaits acknowledgement dispatches only B removal", async () => {
+  const harness = createOutbox([
+    pendingEntry({ itemId: "A" }),
+    pendingEntry({ itemId: "B", createdAt: 2 }),
+  ]);
+  const operations: string[] = [];
+  let releaseA!: () => void;
+  let startedA!: () => void;
+  const waitingA = new Promise<void>((resolve) => {
+    releaseA = resolve;
+  });
+  const dispatchedA = new Promise<void>((resolve) => {
+    startedA = resolve;
+  });
+  const applied: AgentQueueSnapshot[] = [];
+  const flushing = flushQueueOutbox({
+    serverId: "server-1",
+    outbox: harness.outbox,
+    client: {
+      enqueueAgentMessage: async ({ itemId }) => {
+        operations.push(`enqueue:${itemId}`);
+        startedA();
+        await waitingA;
+        return snapshotWith("A");
+      },
+      removeQueuedAgentMessage: async (_agentId, itemId) => {
+        operations.push(`remove:${itemId}`);
+        expect(harness.entries.get(itemId)?.removalRequested).toBe(true);
+        return snapshotWith("A");
+      },
+    },
+    applySnapshot: (snapshot) => {
+      applied.push(snapshot);
+    },
+  });
+  await dispatchedA;
+  harness.entries.set(
+    "B",
+    PendingQueueEnqueueSchema.parse(
+      JSON.parse(
+        JSON.stringify(pendingEntry({ itemId: "B", createdAt: 2, removalRequested: true })),
+      ),
+    ),
+  );
+  releaseA();
+  await flushing;
+  expect(operations).toEqual(["enqueue:A", "remove:B"]);
+  expect([...harness.entries]).toEqual([]);
+  expect(applied.map((snapshot) => snapshot.items.map((item) => item.id))).toEqual([["A"], ["A"]]);
+});

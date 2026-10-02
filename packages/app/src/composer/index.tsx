@@ -835,6 +835,7 @@ function QueuedMessageRow({
     useDraftStore.getState().getDraftInput(baselineKey)?.text ?? item.text,
   );
   const draftRef = useRef(draft);
+  const draftVersionRef = useRef<number | undefined>(undefined);
   const editingRef = useRef(isEditing);
   const savingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -851,6 +852,7 @@ function QueuedMessageRow({
         draft: { text: expectedTextRef.current, attachments: [] },
       });
       store.saveDraftInput({ draftKey, draft: { text, attachments: [] } });
+      draftVersionRef.current = useDraftStore.getState().drafts[draftKey]?.version;
     },
     [baselineKey, draftKey],
   );
@@ -877,6 +879,7 @@ function QueuedMessageRow({
         text === expectedTextRef.current ||
         (await onSave(item.id, expectedTextRef.current, text))
       ) {
+        if (useDraftStore.getState().drafts[draftKey]?.version !== draftVersionRef.current) return;
         expectedTextRef.current = text;
         if (draftRef.current === text) {
           clearSavedDraft();
@@ -890,7 +893,7 @@ function QueuedMessageRow({
       savingRef.current = false;
       setIsSaving(false);
     }
-  }, [clearSavedDraft, item.id, onSave, preserveDraft]);
+  }, [clearSavedDraft, draftKey, item.id, onSave, preserveDraft]);
   useEffect(() => {
     let active = true;
     void useDraftStore
