@@ -1128,7 +1128,9 @@ function queueMessageImpl(ctx: QueueMessageContext): void {
       } else if (ctx.getLiveText().length === 0) {
         ctx.onMinimizeHeight();
       }
-    }).catch(() => {});
+      return undefined;
+    })
+    .catch(() => {});
 }
 
 function computeIsRealtimeVoiceForAgent(

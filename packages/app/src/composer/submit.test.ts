@@ -252,18 +252,26 @@ describe("submitAgentInput", () => {
   });
 });
 
-
 it("preserves draft and attachments until durable queue acceptance and on storage failure", async () => {
   let rejectWrite!: (error: Error) => void;
-  const pending = new Promise<void>((_, reject) => { rejectWrite = reject; });
+  const pending = new Promise<void>((_, reject) => {
+    rejectWrite = reject;
+  });
   const setUserInput = vi.fn();
   const setAttachments = vi.fn();
   const setSendError = vi.fn();
   const result = submitAgentInput({
-    message: "saved draft", attachments: [{ id: "image" }],
-    isAgentRunning: true, canSubmit: true,
-    queueMessage: () => pending, submitMessage: async () => {}, clearDraft: vi.fn(),
-    setUserInput, setAttachments, setSendError, setIsProcessing: vi.fn(),
+    message: "saved draft",
+    attachments: [{ id: "image" }],
+    isAgentRunning: true,
+    canSubmit: true,
+    queueMessage: () => pending,
+    submitMessage: async () => {},
+    clearDraft: vi.fn(),
+    setUserInput,
+    setAttachments,
+    setSendError,
+    setIsProcessing: vi.fn(),
   });
   expect(setUserInput).not.toHaveBeenCalled();
   expect(setAttachments).not.toHaveBeenCalled();

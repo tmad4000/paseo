@@ -68,7 +68,10 @@ export interface FlushQueueOutboxInput {
  */
 const queueOperations = new Map<string, Promise<unknown>>();
 
-export async function serializeQueueOperation<T>(key: string, operation: () => Promise<T>): Promise<T> {
+export async function serializeQueueOperation<T>(
+  key: string,
+  operation: () => Promise<T>,
+): Promise<T> {
   const previous = queueOperations.get(key) ?? Promise.resolve();
   const current = previous.catch(() => {}).then(operation);
   queueOperations.set(key, current);
@@ -81,24 +84,32 @@ export async function serializeQueueOperation<T>(key: string, operation: () => P
 
 export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<void> {
   const agents = new Set(input.outbox.list(input.serverId).map((entry) => entry.agentId));
-  await Promise.all([...agents].map((agentId) =>
-    serializeQueueOperation(JSON.stringify(["dispatch", input.serverId, agentId]), async () => {
-      for (const entry of input.outbox.list(input.serverId).filter((item) => item.agentId === agentId)) {
-        if (!input.outbox.list(input.serverId).some((pending) => pending.itemId === entry.itemId)) continue;
-        try {
-          const snapshot = await input.client.enqueueAgentMessage({
-            agentId: entry.agentId, itemId: entry.itemId, text: entry.text,
-            images: entry.images, attachments: entry.attachments,
-            composerAttachments: entry.composerAttachments,
-          });
-          await input.outbox.remove(entry.itemId);
-          input.applySnapshot(snapshot);
-        } catch {
-          await input.outbox.bumpAttempts(entry.itemId);
-          if (entry.attempts + 1 === QUEUE_OUTBOX_MAX_ATTEMPTS) input.onRetryLimit?.(entry);
-          break;
+  await Promise.all(
+    [...agents].map((agentId) =>
+      serializeQueueOperation(JSON.stringify(["dispatch", input.serverId, agentId]), async () => {
+        for (const entry of input.outbox
+          .list(input.serverId)
+          .filter((item) => item.agentId === agentId)) {
+          if (!input.outbox.list(input.serverId).some((pending) => pending.itemId === entry.itemId))
+            continue;
+          try {
+            const snapshot = await input.client.enqueueAgentMessage({
+              agentId: entry.agentId,
+              itemId: entry.itemId,
+              text: entry.text,
+              images: entry.images,
+              attachments: entry.attachments,
+              composerAttachments: entry.composerAttachments,
+            });
+            await input.outbox.remove(entry.itemId);
+            input.applySnapshot(snapshot);
+          } catch {
+            await input.outbox.bumpAttempts(entry.itemId);
+            if (entry.attempts + 1 === QUEUE_OUTBOX_MAX_ATTEMPTS) input.onRetryLimit?.(entry);
+            break;
+          }
         }
-      }
-    }),
-  ));
+      }),
+    ),
+  );
 }

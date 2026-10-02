@@ -47,7 +47,9 @@ export async function submitAgentInput<TAttachment>(
     try {
       await input.queueMessage({ message: trimmedMessage, attachments });
     } catch (error) {
-      input.setSendError(error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend"));
+      input.setSendError(
+        error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend"),
+      );
       return "failed";
     } finally {
       input.setIsProcessing(false);

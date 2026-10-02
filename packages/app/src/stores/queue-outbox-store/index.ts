@@ -47,9 +47,12 @@ const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedQu
 const durableStorage: typeof persistedStorage = {
   ...persistedStorage,
   setItem: (name, value) => {
-    pendingWrite = pendingWrite.catch(() => {}).then(async () => {
-      await persistedStorage.setItem(name, value);
-    });
+    pendingWrite = pendingWrite
+      .catch(() => {})
+      .then(async () => {
+        await persistedStorage.setItem(name, value);
+        return undefined;
+      });
     void pendingWrite.catch(() => {});
     return pendingWrite;
   },
@@ -58,11 +61,18 @@ const durableStorage: typeof persistedStorage = {
 let hydrationInFlight: Promise<void> | undefined;
 async function awaitOutboxHydration(): Promise<void> {
   if (useQueueOutboxStore.persist.hasHydrated()) return;
-  hydrationInFlight ??= Promise.resolve(useQueueOutboxStore.persist.rehydrate()).then(() => {
-    if (!useQueueOutboxStore.persist.hasHydrated()) throw new Error("Unable to load saved queued messages");
-  }).finally(() => { hydrationInFlight = undefined; });
+  hydrationInFlight ??= Promise.resolve(useQueueOutboxStore.persist.rehydrate())
+    .then(() => {
+      if (!useQueueOutboxStore.persist.hasHydrated())
+        throw new Error("Unable to load saved queued messages");
+      return undefined;
+    })
+    .finally(() => {
+      hydrationInFlight = undefined;
+    });
   await hydrationInFlight;
-  if (!useQueueOutboxStore.persist.hasHydrated()) throw new Error("Unable to load saved queued messages");
+  if (!useQueueOutboxStore.persist.hasHydrated())
+    throw new Error("Unable to load saved queued messages");
 }
 
 /**
@@ -75,24 +85,25 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
     (set, get) => ({
       entries: {},
 
-      add: async (entry) => serializeQueueOperation("queue-outbox-mutation", async () => {
-        await awaitOutboxHydration();
-        writesInFlight.add(entry.itemId);
-        set((state) => ({
-          entries: {
-            ...state.entries,
-            [entry.itemId]: { ...entry, createdAt: Date.now(), attempts: 0 },
-          },
-        }));
-        try {
-          await pendingWrite;
-        } catch (error) {
-          get().remove(entry.itemId);
-          throw error;
-        } finally {
-          writesInFlight.delete(entry.itemId);
-        }
-      }),
+      add: async (entry) =>
+        serializeQueueOperation("queue-outbox-mutation", async () => {
+          await awaitOutboxHydration();
+          writesInFlight.add(entry.itemId);
+          set((state) => ({
+            entries: {
+              ...state.entries,
+              [entry.itemId]: { ...entry, createdAt: Date.now(), attempts: 0 },
+            },
+          }));
+          try {
+            await pendingWrite;
+          } catch (error) {
+            get().remove(entry.itemId);
+            throw error;
+          } finally {
+            writesInFlight.delete(entry.itemId);
+          }
+        }),
 
       remove: (itemId) => {
         set((state) => {
@@ -105,18 +116,19 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         });
       },
 
-      removeDurably: (itemId) => serializeQueueOperation("queue-outbox-mutation", async () => {
-        const entry = get().entries[itemId];
-        if (!entry) return;
-        get().remove(itemId);
-        try {
-          await pendingWrite;
-        } catch (error) {
-          set((state) => ({ entries: { ...state.entries, [itemId]: entry } }));
-          await pendingWrite.catch(() => {});
-          throw error;
-        }
-      }),
+      removeDurably: (itemId) =>
+        serializeQueueOperation("queue-outbox-mutation", async () => {
+          const entry = get().entries[itemId];
+          if (!entry) return;
+          get().remove(itemId);
+          try {
+            await pendingWrite;
+          } catch (error) {
+            set((state) => ({ entries: { ...state.entries, [itemId]: entry } }));
+            await pendingWrite.catch(() => {});
+            throw error;
+          }
+        }),
 
       bumpAttempts: (itemId) => {
         set((state) => {
@@ -133,18 +145,20 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         });
       },
 
-      bumpAttemptsDurably: (itemId) => serializeQueueOperation("queue-outbox-mutation", async () => {
-        get().bumpAttempts(itemId);
-        await pendingWrite;
-      }),
+      bumpAttemptsDurably: (itemId) =>
+        serializeQueueOperation("queue-outbox-mutation", async () => {
+          get().bumpAttempts(itemId);
+          await pendingWrite;
+        }),
 
       entriesForServer: (serverId) => {
         const blockedAgents = new Set<string>();
-        return sortByCreation(Object.values(get().entries).filter((entry) => entry.serverId === serverId))
-          .filter((entry) => {
-            if (writesInFlight.has(entry.itemId)) blockedAgents.add(entry.agentId);
-            return !blockedAgents.has(entry.agentId);
-          });
+        return sortByCreation(
+          Object.values(get().entries).filter((entry) => entry.serverId === serverId),
+        ).filter((entry) => {
+          if (writesInFlight.has(entry.itemId)) blockedAgents.add(entry.agentId);
+          return !blockedAgents.has(entry.agentId);
+        });
       },
 
       entriesForAgent: (serverId, agentId) =>

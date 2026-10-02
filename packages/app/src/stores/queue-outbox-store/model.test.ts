@@ -171,7 +171,6 @@ describe("flushQueueOutbox", () => {
   });
 });
 
-
 describe("ordered dispatch", () => {
   test("failed A blocks B while another agent proceeds, including a fresh enqueue", async () => {
     const harness = createOutbox([
@@ -180,14 +179,23 @@ describe("ordered dispatch", () => {
     ]);
     const calls: string[] = [];
     let release!: () => void;
-    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const input = {
-      serverId: "server-1", outbox: harness.outbox, applySnapshot: () => {},
-      client: { enqueueAgentMessage: async (entry: { itemId: string; agentId: string }) => {
-        calls.push(entry.itemId);
-        if (entry.itemId === "A") { await waiting; throw new Error("offline"); }
-        return { ...snapshotWith(entry.itemId), agentId: entry.agentId };
-      } },
+      serverId: "server-1",
+      outbox: harness.outbox,
+      applySnapshot: () => {},
+      client: {
+        enqueueAgentMessage: async (entry: { itemId: string; agentId: string }) => {
+          calls.push(entry.itemId);
+          if (entry.itemId === "A") {
+            await waiting;
+            throw new Error("offline");
+          }
+          return { ...snapshotWith(entry.itemId), agentId: entry.agentId };
+        },
+      },
     };
     const first = flushQueueOutbox(input);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -199,10 +207,15 @@ describe("ordered dispatch", () => {
     expect(calls).toContain("other");
     expect([...harness.entries.keys()]).toEqual(["A", "B"]);
     const recovered: string[] = [];
-    await flushQueueOutbox({ ...input, client: { enqueueAgentMessage: async (entry) => {
-      recovered.push(entry.itemId);
-      return snapshotWith(entry.itemId);
-    } } });
+    await flushQueueOutbox({
+      ...input,
+      client: {
+        enqueueAgentMessage: async (entry) => {
+          recovered.push(entry.itemId);
+          return snapshotWith(entry.itemId);
+        },
+      },
+    });
     expect(recovered).toEqual(["A", "B"]);
     expect(harness.entries.size).toBe(0);
   });

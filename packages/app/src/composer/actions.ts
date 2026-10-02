@@ -507,29 +507,38 @@ export async function queueComposerMessageOnServer(
   input: QueueComposerMessageOnServerInput,
 ): Promise<QueueComposerMessageResult & { error?: string }> {
   if (input.outbox?.flush) {
-    return serializeQueueOperation(JSON.stringify(["prepare", input.outbox.serverId, input.agentId]), async () => {
-      const text = input.text.trim();
-      if (!text && input.attachments.length === 0) return { queued: null };
-      const queued = { id: generateMessageId(), text, attachments: input.attachments };
-      try {
-        const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
-          format: input.attachmentSubmitFormat,
-        });
-        const images = await input.encodeImages(wirePayload.images);
-        if (wirePayload.images.length > 0 && images?.length !== wirePayload.images.length) {
-          throw new Error(i18n.t("composer.errors.failedToSend"));
+    return serializeQueueOperation(
+      JSON.stringify(["prepare", input.outbox.serverId, input.agentId]),
+      async () => {
+        const text = input.text.trim();
+        if (!text && input.attachments.length === 0) return { queued: null };
+        const queued = { id: generateMessageId(), text, attachments: input.attachments };
+        try {
+          const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
+            format: input.attachmentSubmitFormat,
+          });
+          const images = await input.encodeImages(wirePayload.images);
+          if (wirePayload.images.length > 0 && images?.length !== wirePayload.images.length) {
+            throw new Error(i18n.t("composer.errors.failedToSend"));
+          }
+          await input.outbox!.add({
+            agentId: input.agentId,
+            itemId: queued.id,
+            text,
+            images: images ?? [],
+            attachments: wirePayload.attachments,
+            composerAttachments: toQueuedComposerAttachments(input.attachments),
+          });
+        } catch (error) {
+          return {
+            queued: null,
+            error: error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend"),
+          };
         }
-        await input.outbox!.add({
-          agentId: input.agentId, itemId: queued.id, text,
-          images: images ?? [], attachments: wirePayload.attachments,
-          composerAttachments: toQueuedComposerAttachments(input.attachments),
-        });
-      } catch (error) {
-        return { queued: null, error: error instanceof Error ? error.message : i18n.t("composer.errors.failedToSend") };
-      }
-      void input.outbox!.flush!().catch(() => {});
-      return { queued };
-    });
+        void input.outbox!.flush!().catch(() => {});
+        return { queued };
+      },
+    );
   }
   const optimistic = queueComposerMessage({
     agentId: input.agentId,

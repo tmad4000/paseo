@@ -90,10 +90,15 @@ export function applyDictationTranscript(text: string, ctx: DictationTranscriptC
   ctx.replaceText(nextValue);
 
   if (ctx.defaultSendBehavior === "queue" && ctx.isAgentRunning && ctx.onQueue) {
-    void queueInputMessage({ text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue)
+    void queueInputMessage(
+      { text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd },
+      ctx.onQueue,
+    )
       .then(() => {
         if (ctx.getLiveText?.() === nextValue) ctx.replaceText("");
-      }).catch(() => {});
+        return undefined;
+      })
+      .catch(() => {});
     return;
   }
 
@@ -199,7 +204,6 @@ export async function stopRealtimeVoice(ctx: StopRealtimeVoiceContext): Promise<
 
   await ctx.voice.stopVoice();
 }
-
 
 export async function queueInputMessage(
   payload: MessagePayload,

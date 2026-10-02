@@ -1096,18 +1096,28 @@ describe("queueComposerMessageOnServer", () => {
     let confirmWrite!: () => void;
     let stored = "";
     const events: string[] = [];
-    const write = new Promise<void>((resolve) => { confirmWrite = resolve; });
+    const write = new Promise<void>((resolve) => {
+      confirmWrite = resolve;
+    });
     const resultPromise = queueComposerMessageOnServer({
-      client: createFakeQueueClient(), agentId: "agent", text: "recover me", attachments: [],
-      encodeImages: passthroughEncodeImages, queue: createFakeQueue(), applySnapshot: () => {},
+      client: createFakeQueueClient(),
+      agentId: "agent",
+      text: "recover me",
+      attachments: [],
+      encodeImages: passthroughEncodeImages,
+      queue: createFakeQueue(),
+      applySnapshot: () => {},
       outbox: {
-        serverId: "server", remove: () => {},
+        serverId: "server",
+        remove: () => {},
         add: async (entry) => {
           events.push("writing");
           await write;
           stored = JSON.stringify(entry);
         },
-        flush: async () => { events.push("delivery"); },
+        flush: async () => {
+          events.push("delivery");
+        },
       },
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1123,12 +1133,22 @@ describe("queueComposerMessageOnServer", () => {
     const queue = createFakeQueue();
     let delivered = false;
     const result = await queueComposerMessageOnServer({
-      client: createFakeQueueClient(), agentId: "agent", text: "keep draft", attachments: [],
-      encodeImages: passthroughEncodeImages, queue, applySnapshot: () => {},
+      client: createFakeQueueClient(),
+      agentId: "agent",
+      text: "keep draft",
+      attachments: [],
+      encodeImages: passthroughEncodeImages,
+      queue,
+      applySnapshot: () => {},
       outbox: {
-        serverId: "server", remove: () => {},
-        add: async () => { throw new Error("storage full"); },
-        flush: async () => { delivered = true; },
+        serverId: "server",
+        remove: () => {},
+        add: async () => {
+          throw new Error("storage full");
+        },
+        flush: async () => {
+          delivered = true;
+        },
       },
     });
     expect(result).toEqual({ queued: null, error: "storage full" });
@@ -1219,7 +1239,9 @@ describe("queueComposerMessageOnServer", () => {
       queue,
       applySnapshot: () => {},
       outbox: {
-        add: (entry) => { added.push(entry.itemId); },
+        add: (entry) => {
+          added.push(entry.itemId);
+        },
         remove: (itemId) => removed.push(itemId),
       },
     });
@@ -1247,7 +1269,9 @@ describe("queueComposerMessageOnServer", () => {
       queue,
       applySnapshot: () => {},
       outbox: {
-        add: (entry) => { added.push(entry.itemId); },
+        add: (entry) => {
+          added.push(entry.itemId);
+        },
         remove: (itemId) => removed.push(itemId),
       },
     });

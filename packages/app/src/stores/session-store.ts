@@ -44,10 +44,7 @@ import type {
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
 import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
-import {
-  shouldApplyAgentQueueSnapshot,
-  toQueuedComposerMessages,
-} from "@/composer/queue-sync";
+import { shouldApplyAgentQueueSnapshot, toQueuedComposerMessages } from "@/composer/queue-sync";
 import {
   normalizeWorkspaceOpaqueId,
   normalizeWorkspacePath,
@@ -1821,7 +1818,8 @@ export const useSessionStore = create<SessionStore>()(
       applyAgentQueueSnapshot: async (serverId, snapshot) => {
         const outbox = useQueueOutboxStore.getState();
         const acceptedIds = new Set(snapshot.items.map((item) => item.id));
-        const acknowledged = outbox.entriesForAgent(serverId, snapshot.agentId)
+        const acknowledged = outbox
+          .entriesForAgent(serverId, snapshot.agentId)
           .filter((entry) => acceptedIds.has(entry.itemId));
         if (acknowledged.length > 0) {
           try {
@@ -1845,19 +1843,24 @@ export const useSessionStore = create<SessionStore>()(
             return prev;
           }
           const queuedMessages = new Map(session.queuedMessages);
-          queuedMessages.set(
-            snapshot.agentId,
-            toQueuedComposerMessages(snapshot),
-          );
+          queuedMessages.set(snapshot.agentId, toQueuedComposerMessages(snapshot));
           const acceptedQueueMessageIds = new Map(session.acceptedQueueMessageIds);
-          acceptedQueueMessageIds.set(snapshot.agentId, new Set(snapshot.items.map((item) => item.id)));
+          acceptedQueueMessageIds.set(
+            snapshot.agentId,
+            new Set(snapshot.items.map((item) => item.id)),
+          );
           const queuedMessageRevisions = new Map(session.queuedMessageRevisions);
           queuedMessageRevisions.set(snapshot.agentId, snapshot.revision);
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: { ...session, queuedMessages, queuedMessageRevisions, acceptedQueueMessageIds },
+              [serverId]: {
+                ...session,
+                queuedMessages,
+                queuedMessageRevisions,
+                acceptedQueueMessageIds,
+              },
             },
           };
         });

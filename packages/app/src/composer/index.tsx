@@ -1457,8 +1457,8 @@ function ComposerContentImpl({
         .sort((left, right) => left.createdAt - right.createdAt),
     [outboxEntries, serverId, agentId],
   );
-  const acceptedQueueMessageIds = useSessionStore(
-    (state) => state.sessions[serverId]?.acceptedQueueMessageIds.get(agentId),
+  const acceptedQueueMessageIds = useSessionStore((state) =>
+    state.sessions[serverId]?.acceptedQueueMessageIds.get(agentId),
   );
   const pendingMessageIds = useMemo(
     () => getPendingQueueMessageIds(pendingQueueEntries, acceptedQueueMessageIds),
@@ -1836,10 +1836,12 @@ function ComposerContentImpl({
     () => ({
       serverId,
       add: (entry) => useQueueOutboxStore.getState().add({ ...entry, serverId }),
-      flush: () => flushQueueOutboxForServer({
-        serverId, client: client!,
-        applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
-      }),
+      flush: () =>
+        flushQueueOutboxForServer({
+          serverId,
+          client: client!,
+          applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+        }),
       remove: (itemId) => useQueueOutboxStore.getState().removeDurably(itemId),
     }),
     [serverId, client, applyAgentQueueSnapshot],
