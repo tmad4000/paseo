@@ -99,6 +99,8 @@ export function getPendingQueueMessageIds(
   acceptedIds: ReadonlySet<string> | undefined,
 ): ReadonlySet<string> {
   return new Set(
-    pending.filter((entry) => !acceptedIds?.has(entry.itemId)).map((entry) => entry.itemId),
+    pending
+      .filter((entry) => entry.removalRequested || !acceptedIds?.has(entry.itemId))
+      .map((entry) => entry.itemId),
   );
 }

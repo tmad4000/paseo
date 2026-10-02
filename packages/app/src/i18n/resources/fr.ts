@@ -167,6 +167,11 @@ export const fr: TranslationResources = {
       addIssueOrPr_mr: "Ajouter un problème ou MR",
       dropImagesHere: "Déposez des images ici",
       dropFilesHere: "Drop files here",
+      queueRemovalPending: "Suppression en attente — attente de l’hôte",
+      queueRemovalFailed: "Suppression non confirmée — appuyez sur Supprimer pour réessayer",
+      removeQueuedMessage: "Supprimer le message en attente",
+      readQueuedMessage: "Développer ou réduire le message en attente",
+      doneQueuedMessage: "Terminer la modification du message",
       editQueuedMessage: "Modifier le message en file d'attente",
       saveQueuedMessage: "Enregistrer le message en file d’attente",
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
@@ -192,6 +197,7 @@ export const fr: TranslationResources = {
       failedToSend: "Échec de l'envoi du message",
       queueEditRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour modifier les messages en file d’attente sans changer leur ordre.",
+      queueRemoveFailed: "Impossible de supprimer le message. Réessayez.",
       queueEditFailed: "Impossible de modifier le message en file d’attente",
       steerRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour orienter le message sans interrompre le tour actif.",

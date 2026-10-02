@@ -25,6 +25,7 @@ export const PendingQueueEnqueueSchema = z.object({
   composerAttachments: z.array(QueuedComposerAttachmentSchema),
   createdAt: z.number(),
   attempts: z.number().int().nonnegative(),
+  removalRequested: z.boolean().optional(),
 });
 
 export type PendingQueueEnqueue = z.infer<typeof PendingQueueEnqueueSchema>;
@@ -38,11 +39,13 @@ export const QUEUE_OUTBOX_MAX_ATTEMPTS = 8;
 
 export interface QueueOutboxAccess {
   list: (serverId: string) => PendingQueueEnqueue[];
-  remove: (itemId: string) => void | Promise<void>;
+  remove: (itemId: string, preserveRemovalIntent?: boolean) => void | Promise<void>;
+  get?: (itemId: string) => PendingQueueEnqueue | undefined;
   bumpAttempts: (itemId: string) => void | Promise<void>;
 }
 
 export interface QueueOutboxFlushClient {
+  removeQueuedAgentMessage?: (agentId: string, itemId: string) => Promise<AgentQueueSnapshot>;
   enqueueAgentMessage: (input: {
     agentId: string;
     itemId: string;
@@ -93,15 +96,36 @@ export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<vo
           if (!input.outbox.list(input.serverId).some((pending) => pending.itemId === entry.itemId))
             continue;
           try {
-            const snapshot = await input.client.enqueueAgentMessage({
-              agentId: entry.agentId,
-              itemId: entry.itemId,
-              text: entry.text,
-              images: entry.images,
-              attachments: entry.attachments,
-              composerAttachments: entry.composerAttachments,
-            });
-            await input.outbox.remove(entry.itemId);
+            const removeFromHost = async () => {
+              if (!input.client.removeQueuedAgentMessage)
+                throw new Error("Queue removal unavailable");
+              return input.client.removeQueuedAgentMessage(entry.agentId, entry.itemId);
+            };
+            let snapshot = entry.removalRequested
+              ? await removeFromHost()
+              : await input.client.enqueueAgentMessage({
+                  agentId: entry.agentId,
+                  itemId: entry.itemId,
+                  text: entry.text,
+                  images: entry.images,
+                  attachments: entry.attachments,
+                  composerAttachments: entry.composerAttachments,
+                });
+            if (!entry.removalRequested) {
+              // A cancellation that raced acknowledgement must survive until the host confirms removal.
+              await input.outbox.remove(entry.itemId, true);
+              const latest =
+                input.outbox.get?.(entry.itemId) ??
+                input.outbox
+                  .list(input.serverId)
+                  .find((pending) => pending.itemId === entry.itemId);
+              if (latest?.removalRequested) {
+                snapshot = await removeFromHost();
+                await input.outbox.remove(entry.itemId);
+              }
+            } else {
+              await input.outbox.remove(entry.itemId);
+            }
             input.applySnapshot(snapshot);
           } catch {
             await input.outbox.bumpAttempts(entry.itemId);

@@ -164,6 +164,11 @@ export const ptBR: TranslationResources = {
       addIssueOrPr_mr: "Adicionar issue ou MR",
       dropImagesHere: "Solte imagens aqui",
       dropFilesHere: "Solte arquivos aqui",
+      queueRemovalPending: "Remoção pendente — aguardando o servidor",
+      queueRemovalFailed: "Remoção não confirmada — toque em Remover para tentar novamente",
+      removeQueuedMessage: "Remover mensagem da fila",
+      readQueuedMessage: "Expandir ou recolher mensagem da fila",
+      doneQueuedMessage: "Concluir edição da mensagem",
       editQueuedMessage: "Editar mensagem na fila",
       saveQueuedMessage: "Salvar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
@@ -189,6 +194,7 @@ export const ptBR: TranslationResources = {
       failedToSend: "Falha ao enviar mensagem",
       queueEditRequiresUpdatedHost:
         "Atualize este host Paseo para editar mensagens na fila sem alterar a ordem.",
+      queueRemoveFailed: "Não foi possível remover a mensagem. Tente novamente.",
       queueEditFailed: "Falha ao editar mensagem na fila",
       steerRequiresUpdatedHost:
         "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",

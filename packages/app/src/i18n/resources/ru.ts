@@ -164,6 +164,11 @@ export const ru: TranslationResources = {
       addIssueOrPr_mr: "Добавить проблему или MR",
       dropImagesHere: "Скиньте изображения сюда",
       dropFilesHere: "Переместите файлы сюда",
+      queueRemovalPending: "Удаление ожидает подтверждения сервера",
+      queueRemovalFailed: "Удаление не подтверждено — нажмите «Удалить» для повтора",
+      removeQueuedMessage: "Удалить сообщение из очереди",
+      readQueuedMessage: "Развернуть или свернуть сообщение в очереди",
+      doneQueuedMessage: "Завершить редактирование сообщения",
       editQueuedMessage: "Изменить сообщение из очереди",
       saveQueuedMessage: "Сохранить сообщение в очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
@@ -189,6 +194,7 @@ export const ru: TranslationResources = {
       failedToSend: "Не удалось отправить сообщение",
       queueEditRequiresUpdatedHost:
         "Обновите этот хост Paseo, чтобы редактировать сообщения без изменения порядка очереди.",
+      queueRemoveFailed: "Не удалось удалить сообщение. Попробуйте ещё раз.",
       queueEditFailed: "Не удалось изменить сообщение в очереди",
       steerRequiresUpdatedHost:
         "Обновите этот хост Paseo, чтобы направить сообщение, не прерывая текущий ход.",

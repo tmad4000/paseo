@@ -115,6 +115,14 @@ describe("appendPendingQueueRows", () => {
     expect(entries).toHaveLength(2);
   });
 
+  it("keeps a host-accepted row pending while its removal is unconfirmed", () => {
+    const entries = [pending({ itemId: "item-1", removalRequested: true })];
+    expect([...getPendingQueueMessageIds(entries, new Set(["item-1"]))]).toEqual(["item-1"]);
+    expect(
+      appendPendingQueueRows(toQueuedComposerMessages(snapshot()), entries).map((row) => row.id),
+    ).toEqual(["item-1"]);
+  });
+
   it("marks all outbox rows as waiting before any authoritative snapshot", () => {
     expect([...getPendingQueueMessageIds([pending()], undefined)]).toEqual(["pending-1"]);
   });

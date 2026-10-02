@@ -163,6 +163,11 @@ export const ko: TranslationResources = {
       addIssueOrPr_mr: "이슈 또는 MR 추가",
       dropImagesHere: "여기에 이미지를 끌어다 놓으세요",
       dropFilesHere: "여기에 파일을 끌어다 놓으세요",
+      queueRemovalPending: "삭제 대기 중 — 호스트를 기다리는 중",
+      queueRemovalFailed: "삭제 미확인 — 삭제를 눌러 다시 시도",
+      removeQueuedMessage: "대기 중인 메시지 삭제",
+      readQueuedMessage: "대기 중인 메시지 펼치기 또는 접기",
+      doneQueuedMessage: "대기 중인 메시지 편집 완료",
       editQueuedMessage: "대기 중인 메시지 편집",
       saveQueuedMessage: "대기 메시지 저장",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
@@ -188,6 +193,7 @@ export const ko: TranslationResources = {
       failedToSend: "메시지를 보내지 못했습니다",
       queueEditRequiresUpdatedHost:
         "대기 메시지의 순서를 유지한 채 편집하려면 이 Paseo 호스트를 업데이트하세요.",
+      queueRemoveFailed: "메시지를 삭제하지 못했습니다. 다시 시도하세요.",
       queueEditFailed: "대기 메시지를 편집하지 못했습니다",
       steerRequiresUpdatedHost:
         "진행 중인 작업을 중단하지 않고 지시하려면 이 Paseo 호스트를 업데이트하세요.",

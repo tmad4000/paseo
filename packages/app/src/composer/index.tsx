@@ -1,3 +1,4 @@
+import { useDraftStore, flushDraftPersistStorage } from "@/stores/draft-store";
 import type { ComposerTextSource } from "./text-source";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
@@ -5,6 +6,7 @@ import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
+  ScrollView,
   Pressable,
   Text,
   StyleSheet as RNStyleSheet,
@@ -37,6 +39,7 @@ import {
   ChevronUp,
   Square,
   Pencil,
+  Trash2,
   AudioLines,
   CircleDot,
   FileText,
@@ -81,6 +84,7 @@ import {
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
   updateQueuedComposerMessage,
+  removeQueuedComposerMessageLocally,
   toggleForgeAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
@@ -404,6 +408,14 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 }
 
 interface RenderQueueTrackArgs {
+  draftScope: string;
+  handleRemoveQueuedMessage: (id: string) => Promise<boolean>;
+  removeLabel: string;
+  readLabel: string;
+  removalPendingIds: ReadonlySet<string>;
+  removalFailedIds: ReadonlySet<string>;
+  removalPendingLabel: string;
+  removalFailedLabel: string;
   queuedMessages: readonly QueuedMessage[];
   pendingMessageIds: ReadonlySet<string>;
   pendingLabel: string;
@@ -419,8 +431,29 @@ interface RenderQueueTrackArgs {
   sendNowLabel: string;
 }
 
+function resolveQueuedPendingLabel(
+  id: string,
+  failed: ReadonlySet<string>,
+  removing: ReadonlySet<string>,
+  failedLabel: string,
+  removingLabel: string,
+  pendingLabel: string,
+): string {
+  if (failed.has(id)) return failedLabel;
+  if (removing.has(id)) return removingLabel;
+  return pendingLabel;
+}
+
 function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   const {
+    draftScope,
+    handleRemoveQueuedMessage,
+    removeLabel,
+    readLabel,
+    removalPendingIds,
+    removalFailedIds,
+    removalPendingLabel,
+    removalFailedLabel,
     queuedMessages,
     pendingMessageIds,
     pendingLabel,
@@ -464,21 +497,41 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
           <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
         )}
       </Pressable>
-      {expanded &&
-        queuedMessages.map((item) => (
-          <QueuedMessageRow
-            key={item.id}
-            item={item}
-            isPending={pendingMessageIds.has(item.id)}
-            pendingLabel={pendingLabel}
-            onSave={handleSaveQueuedMessage}
-            onSendNow={handleSendQueuedNow}
-            editLabel={editLabel}
-            saveLabel={saveLabel}
-            cancelLabel={cancelLabel}
-            sendNowLabel={sendNowLabel}
-          />
-        ))}
+      {expanded && (
+        <ScrollView
+          testID="composer-queue-list"
+          style={styles.queueList}
+          contentContainerStyle={styles.queueListContent}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          {queuedMessages.map((item) => (
+            <QueuedMessageRow
+              key={item.id}
+              item={item}
+              draftKey={`${draftScope}:${item.id}`}
+              onRemove={handleRemoveQueuedMessage}
+              removeLabel={removeLabel}
+              readLabel={readLabel}
+              isPending={pendingMessageIds.has(item.id)}
+              pendingLabel={resolveQueuedPendingLabel(
+                item.id,
+                removalFailedIds,
+                removalPendingIds,
+                removalFailedLabel,
+                removalPendingLabel,
+                pendingLabel,
+              )}
+              onSave={handleSaveQueuedMessage}
+              onSendNow={handleSendQueuedNow}
+              editLabel={editLabel}
+              saveLabel={saveLabel}
+              cancelLabel={cancelLabel}
+              sendNowLabel={sendNowLabel}
+            />
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -745,71 +798,163 @@ function resolveMessageInputPassthroughAction(
 
 interface QueuedMessageRowProps {
   item: QueuedMessage;
+  draftKey: string;
   isPending: boolean;
   pendingLabel: string;
   onSave: (id: string, expectedText: string, text: string) => Promise<boolean>;
+  onRemove: (id: string) => Promise<boolean>;
   onSendNow: (id: string) => void;
   editLabel: string;
   saveLabel: string;
   cancelLabel: string;
   sendNowLabel: string;
+  removeLabel: string;
+  readLabel: string;
 }
 
 function QueuedMessageRow({
   item,
+  draftKey,
   isPending,
   pendingLabel,
   onSave,
+  onRemove,
   onSendNow,
   editLabel,
   saveLabel,
   cancelLabel,
   sendNowLabel,
+  removeLabel,
+  readLabel,
 }: QueuedMessageRowProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(item.text);
-  const [expectedText, setExpectedText] = useState(item.text);
+  const baselineKey = `${draftKey}:baseline`;
+  const restoredDraft = useDraftStore.getState().getDraftInput(draftKey)?.text;
+  const [isEditing, setIsEditing] = useState(restoredDraft !== undefined);
+  const [draft, setDraft] = useState(restoredDraft ?? item.text);
+  const expectedTextRef = useRef(
+    useDraftStore.getState().getDraftInput(baselineKey)?.text ?? item.text,
+  );
+  const draftRef = useRef(draft);
+  const editingRef = useRef(isEditing);
+  const savingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [isReading, setIsReading] = useState(false);
   const editInputRef = useRef<EditingTextInputHandle | null>(null);
+  const preserveDraft = useCallback(
+    (text: string) => {
+      draftRef.current = text;
+      setDraft(text);
+      const store = useDraftStore.getState();
+      store.saveDraftInput({
+        draftKey: baselineKey,
+        draft: { text: expectedTextRef.current, attachments: [] },
+      });
+      store.saveDraftInput({ draftKey, draft: { text, attachments: [] } });
+    },
+    [baselineKey, draftKey],
+  );
+  const clearSavedDraft = useCallback(() => {
+    const store = useDraftStore.getState();
+    store.clearDraftInput({ draftKey, lifecycle: "sent" });
+    store.clearDraftInput({ draftKey: baselineKey, lifecycle: "sent" });
+  }, [baselineKey, draftKey]);
   const handleEdit = useCallback(() => {
-    setDraft(item.text);
-    setExpectedText(item.text);
+    expectedTextRef.current = item.text;
+    preserveDraft(item.text);
+    editingRef.current = true;
     setIsEditing(true);
-  }, [item.text]);
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setDraft(item.text);
-  }, [item.text]);
+  }, [item.text, preserveDraft]);
   const handleSave = useCallback(async () => {
-    if (isSaving) return;
+    if (savingRef.current || !editingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
+    const text = editInputRef.current?.getText() ?? draftRef.current;
+    preserveDraft(text);
     try {
-      if (await onSave(item.id, expectedText, editInputRef.current?.getText() ?? draft)) {
-        setIsEditing(false);
+      await flushDraftPersistStorage();
+      if (
+        text === expectedTextRef.current ||
+        (await onSave(item.id, expectedTextRef.current, text))
+      ) {
+        expectedTextRef.current = text;
+        if (draftRef.current === text) {
+          clearSavedDraft();
+          editingRef.current = false;
+          setIsEditing(false);
+        } else {
+          preserveDraft(draftRef.current);
+        }
       }
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  }, [draft, expectedText, isSaving, item.id, onSave]);
-  const handleSendNow = useCallback(() => {
-    onSendNow(item.id);
-  }, [onSendNow, item.id]);
+  }, [clearSavedDraft, item.id, onSave, preserveDraft]);
+  useEffect(() => {
+    let active = true;
+    void useDraftStore
+      .getState()
+      .hydrateDraftInput({ draftKey })
+      .then((saved) => {
+        if (!active || editingRef.current || !saved) return undefined;
+        expectedTextRef.current =
+          useDraftStore.getState().getDraftInput(baselineKey)?.text ?? item.text;
+        draftRef.current = saved.text;
+        setDraft(saved.text);
+        editingRef.current = true;
+        setIsEditing(true);
+        return undefined;
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [baselineKey, draftKey, item.text]);
+  const saveOnLeaveRef = useRef(handleSave);
+  saveOnLeaveRef.current = handleSave;
+  useEffect(
+    () => () => {
+      void saveOnLeaveRef.current().catch(() => {});
+    },
+    [],
+  );
+  const handleRemove = useCallback(async () => {
+    if (isRemoving) return;
+    setIsRemoving(true);
+    try {
+      if (await onRemove(item.id)) clearSavedDraft();
+    } finally {
+      setIsRemoving(false);
+    }
+  }, [clearSavedDraft, isRemoving, item.id, onRemove]);
+  const saveFromUI = useCallback(() => {
+    void handleSave().catch(() => {});
+  }, [handleSave]);
+  const removeFromUI = useCallback(() => {
+    void handleRemove().catch(() => {});
+  }, [handleRemove]);
+  const toggleReading = useCallback(() => setIsReading((value) => !value), []);
+  const sendFromUI = useCallback(() => onSendNow(item.id), [item.id, onSendNow]);
+  const readingAccessibilityState = useMemo(() => ({ expanded: isReading }), [isReading]);
   if (isEditing) {
     return (
-      <View style={[styles.queueItem, styles.queueEditItem]}>
+      <View style={[styles.queueItem, styles.queueEditItem]} testID={`queued-message-${item.id}`}>
         <TextInput
           ref={editInputRef}
-          initialValue={item.text}
-          onChangeText={setDraft}
+          initialValue={draft}
+          onChangeText={preserveDraft}
+          onBlur={saveFromUI}
           multiline
           autoFocus
           editable={!isSaving}
           accessibilityLabel={editLabel}
           style={styles.queueEditInput}
+          scrollEnabled
         />
         <View style={styles.queueActions}>
           <Pressable
-            onPress={handleCancel}
+            onPress={saveFromUI}
             disabled={isSaving}
             style={styles.queueEditTextButton}
             accessibilityRole="button"
@@ -818,7 +963,7 @@ function QueuedMessageRow({
             <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
           </Pressable>
           <Pressable
-            onPress={handleSave}
+            onPress={saveFromUI}
             disabled={isSaving}
             style={[styles.queueEditTextButton, styles.queueEditSaveButton]}
             accessibilityRole="button"
@@ -831,38 +976,61 @@ function QueuedMessageRow({
     );
   }
   return (
-    <View style={styles.queueItem}>
-      <View style={styles.queueItemContent}>
+    <View style={[styles.queueItem, styles.queueReadItem]} testID={`queued-message-${item.id}`}>
+      <Pressable
+        onPress={toggleReading}
+        accessibilityRole="button"
+        accessibilityLabel={readLabel}
+        accessibilityState={readingAccessibilityState}
+        style={styles.queueItemContent}
+      >
         <Text
           style={styles.queueText}
-          numberOfLines={2}
+          numberOfLines={isReading ? undefined : 2}
           ellipsizeMode="tail"
-          selectable={isPending}
+          selectable={isReading}
         >
           {item.text}
         </Text>
         {isPending ? <Text style={styles.queuePendingText}>{pendingLabel}</Text> : null}
+      </Pressable>
+      <View style={styles.queueActions}>
+        {!isPending && (
+          <>
+            <Pressable
+              onPress={handleEdit}
+              disabled={isRemoving}
+              style={styles.queueActionButton}
+              accessibilityLabel={editLabel}
+              accessibilityRole="button"
+            >
+              <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+            </Pressable>
+            <Pressable
+              onPress={sendFromUI}
+              disabled={isRemoving}
+              style={[styles.queueActionButton, styles.queueSendButton]}
+              accessibilityLabel={sendNowLabel}
+              accessibilityRole="button"
+            >
+              <Text style={styles.queueSendButtonLabel}>{sendNowLabel}</Text>
+            </Pressable>
+          </>
+        )}
+        <Pressable
+          onPress={removeFromUI}
+          disabled={isRemoving}
+          style={styles.queueActionButton}
+          accessibilityLabel={removeLabel}
+          accessibilityRole="button"
+        >
+          {isRemoving ? (
+            <ThemedAttachmentSpinner size={18} uniProps={iconForegroundMutedMapping} />
+          ) : (
+            <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+          )}
+        </Pressable>
       </View>
-      {!isPending ? (
-        <View style={styles.queueActions}>
-          <Pressable
-            onPress={handleEdit}
-            style={styles.queueActionButton}
-            accessibilityLabel={editLabel}
-            accessibilityRole="button"
-          >
-            <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-          </Pressable>
-          <Pressable
-            onPress={handleSendNow}
-            style={[styles.queueActionButton, styles.queueSendButton]}
-            accessibilityLabel={sendNowLabel}
-            accessibilityRole="button"
-          >
-            <Text style={styles.queueSendButtonLabel}>{sendNowLabel}</Text>
-          </Pressable>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -2278,6 +2446,55 @@ function ComposerContentImpl({
     ],
   );
 
+  const handleRemoveQueuedMessage = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        if (supportsAgentMessageQueue && client) {
+          const pending = useQueueOutboxStore.getState().entries[id];
+          const item = queuedMessages.find((candidate) => candidate.id === id);
+          if (!pending && !item) return false;
+          await useQueueOutboxStore.getState().requestRemoval(
+            pending ?? {
+              serverId,
+              agentId,
+              itemId: id,
+              text: item!.text,
+              images: [],
+              attachments: [],
+              composerAttachments: [],
+              createdAt: Date.now(),
+              attempts: 0,
+              removalRequested: true,
+            },
+          );
+          // Persist intent for accepted rows too: an offline client cannot confirm remote removal.
+          if (isConnected) await queueOutbox.flush?.();
+          return true;
+        }
+        return (
+          removeQueuedComposerMessageLocally({ agentId, messageId: id, queue: queueWriter }) !==
+          null
+        );
+      } catch (error) {
+        setSendError(
+          error instanceof Error ? error.message : t("composer.errors.queueRemoveFailed"),
+        );
+        return false;
+      }
+    },
+    [
+      agentId,
+      client,
+      isConnected,
+      queuedMessages,
+      queueOutbox,
+      queueWriter,
+      serverId,
+      supportsAgentMessageQueue,
+      t,
+    ],
+  );
+
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
@@ -2700,6 +2917,37 @@ function ComposerContentImpl({
   const queueList = useMemo(
     () => (
       <QueueTrack
+        draftScope={`queued-edit:${serverId}:${agentId}`}
+        handleRemoveQueuedMessage={handleRemoveQueuedMessage}
+        removeLabel={t("composer.attachments.removeQueuedMessage")}
+        readLabel={t("composer.attachments.readQueuedMessage")}
+        removalPendingIds={
+          new Set(
+            Object.values(outboxEntries)
+              .filter(
+                (entry) =>
+                  entry.serverId === serverId &&
+                  entry.agentId === agentId &&
+                  entry.removalRequested,
+              )
+              .map((entry) => entry.itemId),
+          )
+        }
+        removalFailedIds={
+          new Set(
+            Object.values(outboxEntries)
+              .filter(
+                (entry) =>
+                  entry.serverId === serverId &&
+                  entry.agentId === agentId &&
+                  entry.removalRequested &&
+                  entry.attempts > 0,
+              )
+              .map((entry) => entry.itemId),
+          )
+        }
+        removalPendingLabel={t("composer.attachments.queueRemovalPending")}
+        removalFailedLabel={t("composer.attachments.queueRemovalFailed")}
         queuedMessages={queuedMessages}
         pendingMessageIds={pendingMessageIds}
         pendingLabel={t("composer.attachments.queueWaitingToSync")}
@@ -2711,7 +2959,7 @@ function ComposerContentImpl({
         handleSendQueuedNow={handleSendQueuedNow}
         editLabel={t("composer.attachments.editQueuedMessage")}
         saveLabel={t("composer.attachments.saveQueuedMessage")}
-        cancelLabel={t("common.actions.cancel")}
+        cancelLabel={t("composer.attachments.doneQueuedMessage")}
         sendNowLabel={
           isAgentRunning
             ? t("composer.input.steerNow")
@@ -2720,6 +2968,10 @@ function ComposerContentImpl({
       />
     ),
     [
+      agentId,
+      serverId,
+      outboxEntries,
+      handleRemoveQueuedMessage,
       handleSaveQueuedMessage,
       handleSendQueuedNow,
       isAgentRunning,
@@ -3001,6 +3253,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexDirection: "column",
     gap: theme.spacing[2],
   },
+  queueList: { maxHeight: 240, flexShrink: 1 },
+  queueListContent: { gap: theme.spacing[2], paddingBottom: theme.spacing[2] },
+  queueReadItem: { flexDirection: "column", alignItems: "stretch" },
   queueHeader: {
     minHeight: 36,
     flexDirection: "row",
@@ -3048,6 +3303,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     minHeight: 64,
+    maxHeight: 160,
     width: "100%",
     padding: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
@@ -3111,6 +3367,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
 })) as unknown as Record<string, object>;
 
 const ThemedAttachmentSpinner = withUnistyles(LoadingSpinner);
+const ThemedTrash = withUnistyles(Trash2);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronUp = withUnistyles(ChevronUp);

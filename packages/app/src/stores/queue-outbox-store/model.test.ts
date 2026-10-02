@@ -4,6 +4,7 @@ import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
 import {
   flushQueueOutbox,
+  PendingQueueEnqueueSchema,
   QUEUE_OUTBOX_MAX_ATTEMPTS,
   type PendingQueueEnqueue,
   type QueueOutboxAccess,
@@ -49,7 +50,9 @@ function createOutbox(initial: PendingQueueEnqueue[]): Harness {
         [...entries.values()]
           .filter((entry) => entry.serverId === serverId)
           .sort((a, b) => a.createdAt - b.createdAt),
-      remove: (itemId) => {
+      get: (itemId) => entries.get(itemId),
+      remove: (itemId, preserveRemovalIntent) => {
+        if (preserveRemovalIntent && entries.get(itemId)?.removalRequested) return;
         entries.delete(itemId);
       },
       bumpAttempts: (itemId) => {
@@ -219,4 +222,86 @@ describe("ordered dispatch", () => {
     expect(recovered).toEqual(["A", "B"]);
     expect(harness.entries.size).toBe(0);
   });
+});
+
+test("offline cancellation survives serialization and removes prior host acceptance without enqueueing", async () => {
+  const entry = pendingEntry({ removalRequested: true });
+  const restored = PendingQueueEnqueueSchema.parse(JSON.parse(JSON.stringify(entry)));
+  const harness = createOutbox([restored, pendingEntry({ itemId: "second", createdAt: 2 })]);
+  const hostItems = new Set([entry.itemId]);
+  const operations: string[] = [];
+  const client = {
+    enqueueAgentMessage: async ({ itemId }: { itemId: string }) => {
+      operations.push(`enqueue:${itemId}`);
+      hostItems.add(itemId);
+      return snapshotWith(...hostItems);
+    },
+    removeQueuedAgentMessage: async (_agentId: string, itemId: string) => {
+      operations.push(`remove:${itemId}`);
+      hostItems.delete(itemId);
+      return snapshotWith(...hostItems);
+    },
+  };
+  await flushQueueOutbox({
+    serverId: "server-1",
+    outbox: harness.outbox,
+    client,
+    applySnapshot: () => {},
+  });
+  expect(operations).toEqual(["remove:item-1", "enqueue:second"]);
+  expect([...hostItems]).toEqual(["second"]);
+  expect([...harness.entries]).toEqual([]);
+});
+
+test("a failed cancellation remains recoverable and blocks later messages for that agent", async () => {
+  const harness = createOutbox([
+    pendingEntry({ removalRequested: true }),
+    pendingEntry({ itemId: "second", createdAt: 2 }),
+  ]);
+  const sent: string[] = [];
+  await flushQueueOutbox({
+    serverId: "server-1",
+    outbox: harness.outbox,
+    client: {
+      enqueueAgentMessage: async ({ itemId }) => {
+        sent.push(itemId);
+        return snapshotWith(itemId);
+      },
+      removeQueuedAgentMessage: async () => {
+        throw new Error("offline");
+      },
+    },
+    applySnapshot: () => {},
+  });
+  expect(sent).toEqual([]);
+  expect(harness.entries.get("item-1")).toEqual(
+    pendingEntry({ removalRequested: true, attempts: 1 }),
+  );
+  expect([...harness.entries.keys()]).toEqual(["item-1", "second"]);
+});
+
+test("a cancellation during an in-flight enqueue removes acceptance before clearing its durable intent", async () => {
+  const harness = createOutbox([pendingEntry()]);
+  const operations: string[] = [];
+  await flushQueueOutbox({
+    serverId: "server-1",
+    outbox: harness.outbox,
+    client: {
+      enqueueAgentMessage: async () => {
+        operations.push("accepted-response-lost-window");
+        harness.entries.set("item-1", pendingEntry({ removalRequested: true }));
+        return snapshotWith("item-1");
+      },
+      removeQueuedAgentMessage: async () => {
+        expect(harness.entries.get("item-1")?.removalRequested).toBe(true);
+        operations.push("removed");
+        return snapshotWith();
+      },
+    },
+    applySnapshot: (snapshot) => {
+      expect(snapshot.items).toEqual([]);
+    },
+  });
+  expect(operations).toEqual(["accepted-response-lost-window", "removed"]);
+  expect([...harness.entries]).toEqual([]);
 });

@@ -30,6 +30,12 @@ interface SeedProjectDescriptor {
  */
 export interface SeedDaemonClient {
   listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot>;
+  editQueuedAgentMessage(input: {
+    agentId: string;
+    itemId: string;
+    expectedText: string;
+    text: string;
+  }): Promise<AgentQueueSnapshot>;
   connect(): Promise<void>;
   close(): Promise<void>;
   addProject(cwd: string): Promise<{

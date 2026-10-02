@@ -28,7 +28,8 @@ type PersistedQueueOutbox = z.infer<typeof PersistedQueueOutboxSchema>;
 interface QueueOutboxActions {
   add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
   remove: (itemId: string) => void;
-  removeDurably: (itemId: string) => Promise<void>;
+  removeDurably: (itemId: string, preserveRemovalIntent?: boolean) => Promise<void>;
+  requestRemoval: (entry: PendingQueueEnqueue) => Promise<void>;
   bumpAttempts: (itemId: string) => void;
   bumpAttemptsDurably: (itemId: string) => Promise<void>;
   entriesForServer: (serverId: string) => PendingQueueEnqueue[];
@@ -116,10 +117,37 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         });
       },
 
-      removeDurably: (itemId) =>
+      requestRemoval: (entry) =>
+        serializeQueueOperation("queue-outbox-mutation", async () => {
+          await awaitOutboxHydration();
+          const previous = get().entries[entry.itemId];
+          writesInFlight.add(entry.itemId);
+          set((state) => ({
+            entries: {
+              ...state.entries,
+              [entry.itemId]: { ...(previous ?? entry), removalRequested: true, attempts: 0 },
+            },
+          }));
+          try {
+            await pendingWrite;
+          } catch (error) {
+            set((state) => {
+              const entries = { ...state.entries };
+              if (previous) entries[entry.itemId] = previous;
+              else delete entries[entry.itemId];
+              return { entries };
+            });
+            await pendingWrite.catch(() => {});
+            throw error;
+          } finally {
+            writesInFlight.delete(entry.itemId);
+          }
+        }),
+
+      removeDurably: (itemId, preserveRemovalIntent = false) =>
         serializeQueueOperation("queue-outbox-mutation", async () => {
           const entry = get().entries[itemId];
-          if (!entry) return;
+          if (!entry || (preserveRemovalIntent && entry.removalRequested)) return;
           get().remove(itemId);
           try {
             await pendingWrite;
@@ -189,6 +217,7 @@ export async function flushQueueOutboxForServer(input: {
     ...input,
     outbox: {
       list: (serverId) => useQueueOutboxStore.getState().entriesForServer(serverId),
+      get: (itemId) => useQueueOutboxStore.getState().entries[itemId],
       remove: store.removeDurably,
       bumpAttempts: store.bumpAttemptsDurably,
     },

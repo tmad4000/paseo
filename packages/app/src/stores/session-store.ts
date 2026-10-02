@@ -1820,10 +1820,12 @@ export const useSessionStore = create<SessionStore>()(
         const acceptedIds = new Set(snapshot.items.map((item) => item.id));
         const acknowledged = outbox
           .entriesForAgent(serverId, snapshot.agentId)
-          .filter((entry) => acceptedIds.has(entry.itemId));
+          .filter((entry) => acceptedIds.has(entry.itemId) && !entry.removalRequested);
         if (acknowledged.length > 0) {
           try {
-            await Promise.all(acknowledged.map((entry) => outbox.removeDurably(entry.itemId)));
+            await Promise.all(
+              acknowledged.map((entry) => outbox.removeDurably(entry.itemId, true)),
+            );
           } catch {
             return;
           }

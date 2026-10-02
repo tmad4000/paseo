@@ -319,6 +319,162 @@ test.describe("Composer attachments", () => {
     }
   });
 
+  test("queued controls save on leave, remove only one item, and expose long text at desktop and phone width", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "queue-controls-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running for isolated queue controls.",
+    });
+    try {
+      await fillComposerDraft(page, "Original edit text");
+      await attachImageFromMenu(page, TEST_IMAGE);
+      await sendDraftToQueue(page);
+      await expectComposerDraft(page, "");
+      const longText = Array.from(
+        { length: 60 },
+        (_, index) => `Queued line ${index + 1}: fully readable at phone width.`,
+      ).join("\n");
+      await fillComposerDraft(page, longText);
+      await sendDraftToQueue(page);
+      await expectComposerDraft(page, "");
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(2);
+      const before = await agent.client.listQueuedAgentMessages(agent.agentId);
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const editor = page.getByRole("textbox", { name: "Edit queued message" });
+      await editor.fill("Saved by leaving the editor");
+      await page.getByRole("button", { name: "Done editing queued message" }).click();
+      await expect(editor).toHaveCount(0);
+      const saved = await agent.client.listQueuedAgentMessages(agent.agentId);
+      expect(saved.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
+      expect(saved.items[0]?.text).toBe("Saved by leaving the editor");
+      expect(saved.items[0]?.images).toEqual(before.items[0]?.images);
+      const longRow = page.getByTestId(`queued-message-${before.items[1]!.id}`);
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        const expand = longRow.getByRole("button", { name: "Expand or collapse queued message" });
+        if (
+          (await longRow
+            .getByText(longText, { exact: true })
+            .evaluate((element) => element.clientHeight)) < 1000
+        )
+          await expand.click();
+        const scroll = page.getByTestId("composer-queue-list");
+        await scroll.evaluate((element) => {
+          element.scrollTop = element.scrollHeight;
+        });
+        const endText = longRow.getByText(longText, { exact: true });
+        await expect(endText).toBeVisible();
+        expect(await endText.evaluate((element) => element.clientHeight)).toBeGreaterThan(1000);
+        expect(
+          await scroll.evaluate((element) => element.scrollHeight > element.clientHeight),
+        ).toBe(true);
+        const bounds = await endText.boundingBox();
+        const scrollBounds = await scroll.boundingBox();
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(
+          scrollBounds!.y + scrollBounds!.height + 2,
+        );
+        await page.screenshot({ path: testInfo.outputPath(`queue-controls-${width}.png`) });
+      }
+      await page.setViewportSize({ width: 1280, height: 844 });
+      await page
+        .getByTestId(`queued-message-${before.items[0]!.id}`)
+        .getByRole("button", { name: "Remove queued message" })
+        .click();
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items)
+        .toHaveLength(1);
+      await expect(page.getByTestId(`queued-message-${before.items[0]!.id}`)).toHaveCount(0);
+      expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text).toBe(
+        longText,
+      );
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("leaving a stale queued edit preserves the changed draft for retry", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "queue-stale-leave-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running for isolated stale edit.",
+    });
+    try {
+      await fillComposerDraft(page, "Original queued baseline");
+      await sendDraftToQueue(page);
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(1);
+      const item = (await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]!;
+      await page.getByRole("button", { name: "Edit queued message" }).click();
+      const editor = page.getByRole("textbox", { name: "Edit queued message" });
+      await editor.fill("Local edit stays recoverable");
+      await agent.client.editQueuedAgentMessage({
+        agentId: agent.agentId,
+        itemId: item.id,
+        expectedText: item.text,
+        text: "Changed on another device",
+      });
+      await page.getByRole("button", { name: "Done editing queued message" }).click();
+      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(editor).toHaveValue("Local edit stays recoverable");
+      expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text).toBe(
+        "Changed on another device",
+      );
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("offline queued removal retains its durable pending state across reload", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "queue-offline-remove-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running for isolated cancellation.",
+    });
+    try {
+      gate.holdNextServerMessage("agent.queue.enqueue.response");
+      await fillComposerDraft(page, "Accepted by host but response lost");
+      await sendDraftToQueue(page);
+      await gate.waitForHeldServerMessage("agent.queue.enqueue.response");
+      await gate.drop();
+      await expect(
+        page.getByText("Accepted by host but response lost", { exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Remove queued message" }).click();
+      await expect(
+        page.getByText("Removal pending — waiting for host", { exact: true }),
+      ).toBeVisible();
+      expect(
+        (await agent.client.listQueuedAgentMessages(agent.agentId)).items.map((item) => item.text),
+      ).toEqual(["Accepted by host but response lost"]);
+      const itemId = (await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]!.id;
+      const readSavedCancellation = () =>
+        page.evaluate((id) => {
+          const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "{}");
+          return saved.state?.entries?.[id];
+        }, itemId);
+      await expect.poll(readSavedCancellation).toMatchObject({ itemId, removalRequested: true });
+      await page.reload();
+      await expect.poll(readSavedCancellation).toMatchObject({ itemId, removalRequested: true });
+      expect(
+        (await agent.client.listQueuedAgentMessages(agent.agentId)).items.map((item) => item.id),
+      ).toEqual([itemId]);
+    } finally {
+      gate.restore();
+      await agent.cleanup();
+    }
+  });
+
   test("Escape interrupt cancels the running agent and preserves composer draft", async ({
     page,
   }) => {

@@ -164,6 +164,11 @@ export const es: TranslationResources = {
       addIssueOrPr_mr: "Agregar problema o MR",
       dropImagesHere: "Suelta imágenes aquí",
       dropFilesHere: "Drop files here",
+      queueRemovalPending: "Eliminación pendiente — esperando al servidor",
+      queueRemovalFailed: "Eliminación sin confirmar — toca Eliminar para reintentar",
+      removeQueuedMessage: "Eliminar mensaje en cola",
+      readQueuedMessage: "Expandir o contraer mensaje en cola",
+      doneQueuedMessage: "Terminar de editar mensaje en cola",
       editQueuedMessage: "Editar mensaje en cola",
       saveQueuedMessage: "Guardar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
@@ -189,6 +194,7 @@ export const es: TranslationResources = {
       failedToSend: "No se pudo enviar el mensaje",
       queueEditRequiresUpdatedHost:
         "Actualiza este host de Paseo para editar mensajes en cola sin cambiar su orden.",
+      queueRemoveFailed: "No se pudo eliminar el mensaje. Inténtalo de nuevo.",
       queueEditFailed: "No se pudo editar el mensaje en cola",
       steerRequiresUpdatedHost:
         "Actualiza este host de Paseo para dirigir el mensaje sin interrumpir el turno activo.",

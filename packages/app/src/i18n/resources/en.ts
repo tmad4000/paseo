@@ -159,6 +159,11 @@ export const en = {
       addIssueOrPr_mr: "Add issue or MR",
       dropImagesHere: "Drop images here",
       dropFilesHere: "Drop files here",
+      queueRemovalPending: "Removal pending — waiting for host",
+      queueRemovalFailed: "Removal not confirmed — tap Remove to retry",
+      removeQueuedMessage: "Remove queued message",
+      readQueuedMessage: "Expand or collapse queued message",
+      doneQueuedMessage: "Done editing queued message",
       editQueuedMessage: "Edit queued message",
       saveQueuedMessage: "Save queued message",
       sendQueuedMessageNow: "Send queued message now",
@@ -183,6 +188,7 @@ export const en = {
     errors: {
       failedToSend: "Failed to send message",
       queueEditRequiresUpdatedHost: "Update this Paseo host to edit queued messages in place.",
+      queueRemoveFailed: "Could not remove queued message. Try again.",
       queueEditFailed: "Failed to edit queued message",
       steerRequiresUpdatedHost:
         "Update this Paseo host to steer without interrupting its active turn.",

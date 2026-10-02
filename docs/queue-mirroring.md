@@ -77,9 +77,16 @@ every mutation so a client can drop a stale broadcast that arrives out of order.
 Editing uses `itemId`, `expectedText`, and the replacement text. The daemon rejects a stale edit
 or an item already claimed for delivery. It changes only the text, preserving the item's ID,
 `createdAt`, attachments, images, and position. Both clients receive the next full snapshot.
-If an edit fails while the item is still queued, the editor remains open so the user can copy or
-revise the draft. The capability flag
+Leaving the editor saves changed text. The existing draft store retains the local text and the
+host baseline until the host confirms the edit, including when the row is collapsed or the
+workspace is left. A stale or failed edit remains recoverable rather than being silently discarded. The capability flag
 `queueEdit` prevents a newer client from sending this RPC to an older daemon.
+
+Remove cancels one item without sending it. Offline removal is an intent, not confirmation:
+the existing local outbox retains that intent until the host acknowledges removal. Such entries
+retry only the remove RPC and never enqueue their old payload. A host acceptance broadcast must
+not clear removal intent; otherwise an accepted-but-unacknowledged message could escape deletion.
+The UI keeps removal pending or retry feedback visible while confirmation is unavailable.
 
 Send-now is a daemon operation gated by `queueSendNow`. It reads the authoritative stored item,
 blocks concurrent edits, and sends that content with strict steering. On daemons with delivery
