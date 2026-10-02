@@ -421,7 +421,7 @@ test.describe("Composer attachments", () => {
         text: "Changed on another device",
       });
       await page.getByRole("button", { name: "Done editing queued message" }).click();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.getByRole("alert").filter({ hasText: "This queued message changed" })).toBeVisible();
       await expect(editor).toHaveValue("Local edit stays recoverable");
       expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text).toBe(
         "Changed on another device",
