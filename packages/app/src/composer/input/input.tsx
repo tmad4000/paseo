@@ -1113,13 +1113,22 @@ interface QueueMessageContext {
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   replaceText: (text: string) => void;
   onMinimizeHeight: () => void;
+  getLiveText: () => string;
 }
 
 function queueMessageImpl(ctx: QueueMessageContext): void {
   if (!ctx.onQueue) return;
   const trimmed = ctx.value.trim();
   if (!trimmed && ctx.attachments.length === 0) return;
-  void queueInputMessage({ text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue);
+  void queueInputMessage({ text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue)
+    .then(() => {
+      if (ctx.getLiveText() === ctx.value) {
+        ctx.replaceText("");
+        ctx.onMinimizeHeight();
+      } else if (ctx.getLiveText().length === 0) {
+        ctx.onMinimizeHeight();
+      }
+    }).catch(() => {});
 }
 
 function computeIsRealtimeVoiceForAgent(
@@ -1488,6 +1497,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           onQueue,
           onSubmit,
           replaceText,
+          getLiveText: () => textInputRef.current?.getText() ?? valueRef.current,
           attachments,
           cwd,
           autoSend,
@@ -1712,6 +1722,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           onQueue,
           replaceText,
           onMinimizeHeight: minimizeInputHeight,
+          getLiveText: () => textInputRef.current?.getText() ?? valueRef.current,
         }),
       [attachments, cwd, onQueue, replaceText, minimizeInputHeight],
     );

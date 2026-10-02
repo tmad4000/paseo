@@ -474,7 +474,7 @@ export interface QueueOutboxWriter {
     attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
     composerAttachments: QueuedComposerAttachment[];
   }) => void | Promise<void>;
-  remove: (itemId: string) => void;
+  remove: (itemId: string) => void | Promise<void>;
   serverId?: string;
   flush?: () => Promise<void>;
 }
@@ -516,6 +516,9 @@ export async function queueComposerMessageOnServer(
           format: input.attachmentSubmitFormat,
         });
         const images = await input.encodeImages(wirePayload.images);
+        if (wirePayload.images.length > 0 && images?.length !== wirePayload.images.length) {
+          throw new Error(i18n.t("composer.errors.failedToSend"));
+        }
         await input.outbox!.add({
           agentId: input.agentId, itemId: queued.id, text,
           images: images ?? [], attachments: wirePayload.attachments,
@@ -576,7 +579,7 @@ export async function queueComposerMessageOnServer(
   }
   try {
     const snapshot = await input.client.enqueueAgentMessage(enqueueInput);
-    input.outbox?.remove(enqueueInput.itemId);
+    await input.outbox?.remove(enqueueInput.itemId);
     input.applySnapshot(snapshot);
     return optimistic;
   } catch (error) {

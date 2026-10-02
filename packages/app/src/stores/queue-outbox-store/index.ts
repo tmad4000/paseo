@@ -8,6 +8,7 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 import {
   flushQueueOutbox,
   PendingQueueEnqueueSchema,
+  serializeQueueOperation,
   type PendingQueueEnqueue,
   type QueueOutboxFlushClient,
 } from "./model";
@@ -27,7 +28,9 @@ type PersistedQueueOutbox = z.infer<typeof PersistedQueueOutboxSchema>;
 interface QueueOutboxActions {
   add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
   remove: (itemId: string) => void;
+  removeDurably: (itemId: string) => Promise<void>;
   bumpAttempts: (itemId: string) => void;
+  bumpAttemptsDurably: (itemId: string) => Promise<void>;
   entriesForServer: (serverId: string) => PendingQueueEnqueue[];
   entriesForAgent: (serverId: string, agentId: string) => PendingQueueEnqueue[];
 }
@@ -72,7 +75,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
     (set, get) => ({
       entries: {},
 
-      add: async (entry) => {
+      add: async (entry) => serializeQueueOperation("queue-outbox-mutation", async () => {
         await awaitOutboxHydration();
         writesInFlight.add(entry.itemId);
         set((state) => ({
@@ -89,7 +92,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         } finally {
           writesInFlight.delete(entry.itemId);
         }
-      },
+      }),
 
       remove: (itemId) => {
         set((state) => {
@@ -101,6 +104,19 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           return { entries };
         });
       },
+
+      removeDurably: (itemId) => serializeQueueOperation("queue-outbox-mutation", async () => {
+        const entry = get().entries[itemId];
+        if (!entry) return;
+        get().remove(itemId);
+        try {
+          await pendingWrite;
+        } catch (error) {
+          set((state) => ({ entries: { ...state.entries, [itemId]: entry } }));
+          await pendingWrite.catch(() => {});
+          throw error;
+        }
+      }),
 
       bumpAttempts: (itemId) => {
         set((state) => {
@@ -117,7 +133,13 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         });
       },
 
+      bumpAttemptsDurably: (itemId) => serializeQueueOperation("queue-outbox-mutation", async () => {
+        get().bumpAttempts(itemId);
+        await pendingWrite;
+      }),
+
       entriesForServer: (serverId) => {
+        if (writesInFlight.size > 0) return [];
         const blockedAgents = new Set<string>();
         return sortByCreation(Object.values(get().entries).filter((entry) => entry.serverId === serverId))
           .filter((entry) => {
@@ -154,8 +176,8 @@ export async function flushQueueOutboxForServer(input: {
     ...input,
     outbox: {
       list: (serverId) => useQueueOutboxStore.getState().entriesForServer(serverId),
-      remove: store.remove,
-      bumpAttempts: store.bumpAttempts,
+      remove: store.removeDurably,
+      bumpAttempts: store.bumpAttemptsDurably,
     },
   });
 }

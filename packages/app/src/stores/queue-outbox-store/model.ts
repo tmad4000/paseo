@@ -38,8 +38,8 @@ export const QUEUE_OUTBOX_MAX_ATTEMPTS = 8;
 
 export interface QueueOutboxAccess {
   list: (serverId: string) => PendingQueueEnqueue[];
-  remove: (itemId: string) => void;
-  bumpAttempts: (itemId: string) => void;
+  remove: (itemId: string) => void | Promise<void>;
+  bumpAttempts: (itemId: string) => void | Promise<void>;
 }
 
 export interface QueueOutboxFlushClient {
@@ -91,10 +91,10 @@ export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<vo
             images: entry.images, attachments: entry.attachments,
             composerAttachments: entry.composerAttachments,
           });
-          input.outbox.remove(entry.itemId);
+          await input.outbox.remove(entry.itemId);
           input.applySnapshot(snapshot);
         } catch {
-          input.outbox.bumpAttempts(entry.itemId);
+          await input.outbox.bumpAttempts(entry.itemId);
           if (entry.attempts + 1 === QUEUE_OUTBOX_MAX_ATTEMPTS) input.onRetryLimit?.(entry);
           break;
         }

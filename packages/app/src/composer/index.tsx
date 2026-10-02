@@ -1840,7 +1840,7 @@ function ComposerContentImpl({
         serverId, client: client!,
         applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
       }),
-      remove: (itemId) => useQueueOutboxStore.getState().remove(itemId),
+      remove: (itemId) => useQueueOutboxStore.getState().removeDurably(itemId),
     }),
     [serverId, client, applyAgentQueueSnapshot],
   );
@@ -1868,12 +1868,23 @@ function ComposerContentImpl({
 
   const latestAttachmentsRef = useRef(attachments);
   latestAttachmentsRef.current = attachments;
+  const queueSubmissionInFlight = useRef(new Set<string>());
   const queueMessage = useCallback(
     async (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
-      const submittedText = textSource.getSnapshot();
+      const submissionKey = JSON.stringify([queuedMessage.trim(), queuedAttachments]);
+      if (queueSubmissionInFlight.current.has(submissionKey)) {
+        const error = new Error("This queued message is still being saved.");
+        setSendError(error.message);
+        throw error;
+      }
+      queueSubmissionInFlight.current.add(submissionKey);
+      const submittedText = queuedMessage;
       const submittedAttachments = latestAttachmentsRef.current;
       const clearComposer = () => {
-        if (textSource.getSnapshot() === submittedText) setUserInput("");
+        if (messageInputRef.current?.getText() === submittedText) {
+          messageInputRef.current?.replaceText("");
+          setUserInput("");
+        }
         if (latestAttachmentsRef.current === submittedAttachments) {
           setSelectedAttachments([]);
           resetSuppression();
@@ -1881,7 +1892,8 @@ function ComposerContentImpl({
         clearSentAttachments(queuedAttachments);
       };
 
-      if (supportsAgentMessageQueue && client) {
+      try {
+        if (supportsAgentMessageQueue && client) {
           const result = await queueComposerMessageOnServer({
             client,
             agentId,
@@ -1899,24 +1911,26 @@ function ComposerContentImpl({
             setSendError(result.error);
             throw new Error(result.error);
           }
+          if (!result.queued) return;
+          clearComposer();
+          return;
+        }
+
+        const result = queueComposerMessage({
+          agentId,
+          text: queuedMessage,
+          attachments: queuedAttachments,
+          queue: queueWriter,
+        });
         if (!result.queued) return;
+
         clearComposer();
-        return;
+      } finally {
+        queueSubmissionInFlight.current.delete(submissionKey);
       }
-
-      const result = queueComposerMessage({
-        agentId,
-        text: queuedMessage,
-        attachments: queuedAttachments,
-        queue: queueWriter,
-      });
-      if (!result.queued) return;
-
-      clearComposer();
     },
     [
       agentId,
-      textSource,
       applyAgentQueueSnapshot,
       clearSentAttachments,
       client,

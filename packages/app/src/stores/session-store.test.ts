@@ -804,17 +804,17 @@ describe("removeWorkspace", () => {
 
 
 describe("queue snapshot reconciliation", () => {
-  it("removes an optimistic row on an unchanged retry acknowledgement", () => {
+  it("removes an optimistic row on an unchanged retry acknowledgement", async () => {
     const store = useSessionStore.getState();
     initializeTestSession();
     const snapshot = { agentId: "agent", revision: 2, items: [] };
-    store.applyAgentQueueSnapshot("test-server", snapshot);
+    await store.applyAgentQueueSnapshot("test-server", snapshot);
     store.setQueuedMessages("test-server", new Map([
       ["agent", [{ id: "delivered", text: "already delivered", attachments: [] }]],
     ]));
-    store.applyAgentQueueSnapshot("test-server", snapshot);
+    await store.applyAgentQueueSnapshot("test-server", snapshot);
     expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
-    store.applyAgentQueueSnapshot("test-server", {
+    await store.applyAgentQueueSnapshot("test-server", {
       agentId: "agent", revision: 1,
       items: [{ id: "delivered", text: "already delivered", createdAt: "2026-01-01T00:00:00.000Z" }],
     });
@@ -835,16 +835,16 @@ describe("queue snapshot acknowledgement", () => {
     await outbox.add({ ...entry, itemId: "local-only" });
     try {
       const store = useSessionStore.getState();
-      store.applyAgentQueueSnapshot("test-server", {
+      await store.applyAgentQueueSnapshot("test-server", {
         agentId: "agent", revision: 1,
         items: [{ id: "accepted", text: "A", createdAt: "2026-01-01T00:00:00.000Z" }],
       });
       expect(outbox.entriesForAgent("test-server", "agent").map((item) => item.itemId)).toEqual(["local-only"]);
-      store.applyAgentQueueSnapshot("test-server", {
+      await store.applyAgentQueueSnapshot("test-server", {
         agentId: "agent", revision: 2,
         items: [{ id: "accepted", text: "B", createdAt: "2026-01-01T00:00:00.000Z" }],
       });
-      store.applyAgentQueueSnapshot("test-server", { agentId: "agent", revision: 3, items: [] });
+      await store.applyAgentQueueSnapshot("test-server", { agentId: "agent", revision: 3, items: [] });
       expect(useSessionStore.getState().sessions["test-server"].queuedMessages.get("agent")).toEqual([]);
       expect(outbox.entriesForAgent("test-server", "agent").map((item) => item.itemId)).toEqual(["local-only"]);
     } finally {

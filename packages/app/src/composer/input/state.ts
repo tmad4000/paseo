@@ -71,6 +71,7 @@ interface DictationTranscriptContext {
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmit: (payload: MessagePayload) => void;
   replaceText: (text: string) => void;
+  getLiveText?: () => string;
   attachments: MessagePayload["attachments"];
   cwd: string;
   autoSend: boolean;
@@ -89,7 +90,10 @@ export function applyDictationTranscript(text: string, ctx: DictationTranscriptC
   ctx.replaceText(nextValue);
 
   if (ctx.defaultSendBehavior === "queue" && ctx.isAgentRunning && ctx.onQueue) {
-    void queueInputMessage({ text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue);
+    void queueInputMessage({ text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue)
+      .then(() => {
+        if (ctx.getLiveText?.() === nextValue) ctx.replaceText("");
+      }).catch(() => {});
     return;
   }
 
@@ -201,8 +205,5 @@ export async function queueInputMessage(
   payload: MessagePayload,
   onQueue: (payload: MessagePayload) => void | Promise<void>,
 ): Promise<void> {
-  try {
-    await onQueue(payload);
-  } catch {
-  }
+  await onQueue(payload);
 }

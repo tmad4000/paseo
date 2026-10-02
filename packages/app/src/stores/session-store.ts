@@ -1818,12 +1818,16 @@ export const useSessionStore = create<SessionStore>()(
         });
       },
 
-      applyAgentQueueSnapshot: (serverId, snapshot) => {
+      applyAgentQueueSnapshot: async (serverId, snapshot) => {
         const outbox = useQueueOutboxStore.getState();
         const acceptedIds = new Set(snapshot.items.map((item) => item.id));
-        for (const entry of outbox.entriesForAgent(serverId, snapshot.agentId)) {
-          if (acceptedIds.has(entry.itemId)) {
-            outbox.remove(entry.itemId);
+        const acknowledged = outbox.entriesForAgent(serverId, snapshot.agentId)
+          .filter((entry) => acceptedIds.has(entry.itemId));
+        if (acknowledged.length > 0) {
+          try {
+            await Promise.all(acknowledged.map((entry) => outbox.removeDurably(entry.itemId)));
+          } catch {
+            return;
           }
         }
         set((prev) => {
