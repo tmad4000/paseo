@@ -65,3 +65,29 @@ it("cannot dispatch an entry while its write is pending or after that write fail
   expect(enqueueAgentMessage).not.toHaveBeenCalled();
   expect(useQueueOutboxStore.getState().entriesForAgent("server", "agent")).toEqual([]);
 });
+
+it("keeps durable entries for other agents eligible during a pending write", async () => {
+  vi.resetModules();
+  storage.values.clear();
+  storage.hold = undefined;
+  const { useQueueOutboxStore } = await import("./index");
+  await useQueueOutboxStore.persist.rehydrate();
+  const store = useQueueOutboxStore.getState();
+  await store.add({
+    serverId: "server", agentId: "agent-b", itemId: "durable-b", text: "ready",
+    images: [], attachments: [], composerAttachments: [],
+  });
+  let release!: () => void;
+  storage.hold = new Promise<void>((resolve) => { release = resolve; });
+  const pending = useQueueOutboxStore.getState().add({
+    serverId: "server", agentId: "agent-a", itemId: "pending-a", text: "saving",
+    images: [], attachments: [], composerAttachments: [],
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(useQueueOutboxStore.getState().entriesForServer("server").map((entry) => entry.itemId)).toEqual([
+    "durable-b",
+  ]);
+  release();
+  await pending;
+  storage.hold = undefined;
+});

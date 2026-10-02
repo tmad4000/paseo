@@ -139,7 +139,6 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
       }),
 
       entriesForServer: (serverId) => {
-        if (writesInFlight.size > 0) return [];
         const blockedAgents = new Set<string>();
         return sortByCreation(Object.values(get().entries).filter((entry) => entry.serverId === serverId))
           .filter((entry) => {
