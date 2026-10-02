@@ -359,15 +359,18 @@ test.describe("Composer attachments", () => {
         const expand = longRow.getByRole("button", { name: "Expand or collapse queued message" });
         const endText = longRow.getByText(longText, { exact: true });
         const scroll = page.getByTestId("composer-queue-list");
-        if (await endText.evaluate((element) => element.clientHeight < element.scrollHeight))
+        if (
+          await endText.evaluate((element) => getComputedStyle(element).webkitLineClamp !== "none")
+        )
           await expand.click();
         await expect(endText).toBeVisible();
-        expect(
-          await endText.evaluate((element) => element.clientHeight >= element.scrollHeight),
-        ).toBe(true);
-        expect(await endText.evaluate((element) => element.clientHeight)).toBeGreaterThan(
-          await scroll.evaluate((element) => element.clientHeight),
-        );
+        const textMetrics = await endText.evaluate((element) => ({
+          lineClamp: getComputedStyle(element).webkitLineClamp,
+          fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+          height: element.clientHeight,
+        }));
+        expect(textMetrics.lineClamp).toBe("none");
+        expect(textMetrics.height).toBeGreaterThanOrEqual(60 * textMetrics.fontSize);
         await scroll.evaluate((element) => {
           element.scrollTop = element.scrollHeight;
         });
