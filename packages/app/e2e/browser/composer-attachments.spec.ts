@@ -453,11 +453,37 @@ test.describe("Composer attachments", () => {
       await expect(editor).toHaveCount(0);
       await page.getByTestId("composer-queue-toggle").click();
       await expect(editor).toHaveValue("Pending save B");
-      await editor.fill("Newer checkpoint C");
+      const attachmentScans: string[] = [];
+      const recordAttachmentScan = (message: import("@playwright/test").ConsoleMessage) => {
+        if (message.text() === "queued-edit-attachment-scan") attachmentScans.push(message.text());
+      };
+      page.on("console", recordAttachmentScan);
+      await page.evaluate(() => {
+        const openCursor = IDBObjectStore.prototype.openCursor;
+        IDBObjectStore.prototype.openCursor = function (...args) {
+          if (
+            this.transaction.db.name === "paseo-attachment-bytes" &&
+            this.name === "attachments"
+          ) {
+            console.debug("queued-edit-attachment-scan");
+          }
+          return openCursor.apply(this, args);
+        };
+      });
+      const beforeTyping = await readCheckpoint();
+      await editor.fill("");
+      await expect.poll(readCheckpoint).toMatchObject({
+        draft: { lifecycle: "active", input: { text: "" } },
+        baseline: beforeTyping.baseline,
+      });
+      await editor.pressSequentially("Newer checkpoint C");
       await expect.poll(readCheckpoint).toMatchObject({
         draft: { lifecycle: "active", input: { text: "Newer checkpoint C" } },
         baseline: { lifecycle: "active", input: { text: original.text } },
       });
+      expect((await readCheckpoint()).baseline).toEqual(beforeTyping.baseline);
+      expect(attachmentScans).toEqual([]);
+      page.off("console", recordAttachmentScan);
       gate.releaseHeldServerMessage("agent.queue.edit.response");
       await responseReceived;
       await page.evaluate(

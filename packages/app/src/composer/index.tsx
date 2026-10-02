@@ -847,11 +847,23 @@ function QueuedMessageRow({
       draftRef.current = text;
       setDraft(text);
       const store = useDraftStore.getState();
-      store.saveDraftInput({
-        draftKey: baselineKey,
-        draft: { text: expectedTextRef.current, attachments: [] },
-      });
-      store.saveDraftInput({ draftKey, draft: { text, attachments: [] } });
+      if (!store.getDraftInput(baselineKey)) {
+        store.saveDraftInput({
+          draftKey: baselineKey,
+          draft: { text: expectedTextRef.current, attachments: [] },
+        });
+      } else {
+        store.editDraftText({
+          draftKey: baselineKey,
+          text: expectedTextRef.current,
+          keepActive: true,
+        });
+      }
+      if (!store.getDraftInput(draftKey)) {
+        store.saveDraftInput({ draftKey, draft: { text, attachments: [] } });
+      } else {
+        store.editDraftText({ draftKey, text, keepActive: true });
+      }
       draftVersionRef.current = useDraftStore.getState().drafts[draftKey]?.version;
     },
     [baselineKey, draftKey],

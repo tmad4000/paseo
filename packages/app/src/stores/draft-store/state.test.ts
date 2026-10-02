@@ -28,6 +28,29 @@ describe("draft-store lifecycle", () => {
     expect(editDraftRecordText(edited, "", 3).lifecycle).toBe("active");
     expect(editDraftRecordText(undefined, "", 3).lifecycle).toBe("abandoned");
   });
+  it("keeps an empty queued text checkpoint active and reload-recoverable", () => {
+    const baseline: DraftRecord = {
+      input: { text: "Original queue text", attachments: [] },
+      lifecycle: "active",
+      updatedAt: 1,
+      version: 1,
+    };
+    const emptied = editDraftRecordText(baseline, "", 2, true);
+    expect(emptied).toEqual({
+      input: { text: "", attachments: [] },
+      lifecycle: "active",
+      updatedAt: 2,
+      version: 2,
+    });
+    const restored = JSON.parse(JSON.stringify(emptied)) as DraftRecord;
+    expect(toDraftInputIfReady(restored)).toEqual({ text: "", attachments: [] });
+    expect(editDraftRecordText(restored, "", 3, true)).toBe(restored);
+    const edited = editDraftRecordText(restored, "Restored edit", 4, true);
+    expect(edited.version).toBe(3);
+    expect(edited.input.attachments).toBe(restored.input.attachments);
+    expect(editDraftRecordText(edited, "", 5).lifecycle).toBe("abandoned");
+  });
+
   it("prunes finalized tombstones after TTL", () => {
     const nowMs = 1_000_000;
     const drafts = {
