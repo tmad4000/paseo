@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0-beta.8 - 2026-10-05
+
+### Added
+
+- Find existing chats from the sidebar using natural-language queries, with project scope and recent conversation evidence.
+- Route a prompt to an existing chat, choose the recipient manually, or resolve an ambiguous match before sending. Replies stay in that chat and queued delivery preserves the original draft.
+
 ## 0.10.0-beta.7 - 2026-10-03
 
 ### Fixed
