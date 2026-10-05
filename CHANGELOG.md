@@ -4,8 +4,8 @@
 
 ### Added
 
-- Find existing chats from the sidebar using natural-language queries, with project scope and recent conversation evidence.
-- Route a prompt to an existing chat, choose the recipient manually, or resolve an ambiguous match before sending. Replies stay in that chat and queued delivery preserves the original draft.
+- Find existing chats from the sidebar using natural-language queries ([#44](https://github.com/tmad4000/paseo/pull/44) by [@tmad4000](https://github.com/tmad4000))
+- Route prompts to existing chats with manual recipient selection or ambiguous-match review ([#44](https://github.com/tmad4000/paseo/pull/44))
 
 ## 0.10.0-beta.7 - 2026-10-03
 
