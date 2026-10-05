@@ -11,6 +11,12 @@ The bar is four questions:
 
 Every pull request needs evidence for the questions its change touches. Pull requests without evidence get closed.
 
+Batch related changes into one reviewable outcome before spending a full PR CI run.
+Use focused tests during implementation and record their results. Run the routed
+GitHub checks on the final PR head and review their conclusions before merge.
+An independent `no-mistakes` run can add value for broad or high-risk work, but
+it is not a required second copy of every routine PR gate.
+
 For plugin changes, verify the [SDK import boundaries](plugins.md#sdk-import-boundaries) before
 exercising contributions. Include the boundary tests and both runtime loaders in the evidence.
 
