@@ -1,3 +1,4 @@
+import type { StreamListOptions, StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
 import {
@@ -3146,6 +3147,23 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "updateAgent rejected");
     }
+  }
+
+  async listGlobalStream(options: StreamListOptions = {}) {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "stream.list.request", ...options },
+      responseType: "stream.list.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  async updateStreamEntry(input: StreamEntryUpdate): Promise<void> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "stream.entry.update.request", ...input },
+      responseType: "stream.entry.update.response",
+    });
+    if (!payload.accepted) throw new Error(payload.error ?? "Could not save Stream item");
   }
 
   async updateCompanionEntry(input: {

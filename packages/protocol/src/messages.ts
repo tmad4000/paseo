@@ -1,3 +1,11 @@
+import { AgentArtifactSchema } from "./agent-artifact.js";
+export { AgentArtifactSchema } from "./agent-artifact.js";
+import {
+  StreamListRequestSchema,
+  StreamListResponseSchema,
+  StreamUpdateRequestSchema,
+  StreamUpdateResponseSchema,
+} from "./global-stream.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
 export {
   AgentProfileSchema,
@@ -805,16 +813,6 @@ const AgentRuntimeInfoSchema: z.ZodType<AgentRuntimeInfo> = z.object({
 const AgentActiveTurnPayloadSchema = z.object({
   turnId: z.string(),
   startedAt: z.string().nullable(),
-});
-
-export const AgentArtifactSchema = z.object({
-  path: z.string(),
-  name: z.string(),
-  kind: z.enum(["html", "markdown", "image", "svg", "pdf", "diff"]),
-  mimeType: z.string(),
-  size: z.number().int().nonnegative(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
 });
 
 export const AgentSnapshotPayloadSchema = z.object({
@@ -3579,6 +3577,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
   UpdateCompanionEntryRequestMessageSchema,
+  StreamListRequestSchema,
+  StreamUpdateRequestSchema,
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
@@ -4062,6 +4062,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentMessageQueue: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
+        // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
+        globalStream: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
@@ -7348,6 +7350,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueUpdateMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
+  StreamListResponseSchema,
+  StreamUpdateResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
   WorkspaceTitleSetResponseSchema,

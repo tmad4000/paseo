@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
+import { useSessionStore } from "@/stores/session-store";
 import { Button } from "@/components/ui/button";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
@@ -50,6 +51,11 @@ export function CompanionFeed({
   const { t } = useTranslation();
   const connection = useHostRuntimeConnectionStatus(serverId);
   const client = useHostRuntimeClient(serverId);
+  const supportsWrites = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.globalStream === true,
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [viewTab, setViewTab] = useState<ViewTab>("stream");
   const [filter, setFilter] = useState<StreamFilter>("all");
@@ -75,7 +81,7 @@ export function CompanionFeed({
 
         if (onlyOpen) {
           if (item.entry.kind === "question" || item.entry.kind === "feature_request") {
-            return item.entry.status === "open";
+            return isCompanionEntryPending(item.entry);
           }
           if (item.entry.kind === "permission") {
             return item.entry.status === "pending";
@@ -96,34 +102,45 @@ export function CompanionFeed({
     [onOpenWorkspaceFile, onReturnToChat],
   );
 
+  const save = useCallback(
+    async (input: Parameters<NonNullable<typeof client>["updateStreamEntry"]>[0]) => {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        if (!client || !supportsWrites || connection !== "online")
+          throw new Error(t("globalStream.writeUnavailable"));
+        await client.updateStreamEntry(input);
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : t("globalStream.saveFailed"));
+        throw error;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [client, connection, supportsWrites, t],
+  );
   const handleUpdateStatus = useCallback(
     (entryId: string, status: "open" | "reviewed" | "done") => {
-      client
-        ?.updateCompanionEntry({ agentId, entryId, action: "update_status", status })
-        .catch(() => {});
+      void save({ agentId, entryId, action: "update_status", status }).catch(() => undefined);
     },
-    [client, agentId],
+    [save, agentId],
   );
-
   const handleRemovePin = useCallback(
     (entryId: string) => {
-      client?.updateCompanionEntry({ agentId, entryId, action: "remove_pin" }).catch(() => {});
+      void save({ agentId, entryId, action: "remove_pin" }).catch(() => undefined);
     },
-    [client, agentId],
+    [save, agentId],
   );
-
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
-      client
-        ?.updateCompanionEntry({
-          agentId,
-          action: "add_pin",
-          text: `Artifact: ${artifact.path}`,
-          sourceId: `artifact:${artifact.path}`,
-        })
-        .catch(() => {});
+      void save({
+        agentId,
+        action: "add_pin",
+        text: `Artifact: ${artifact.path}`,
+        sourceId: `artifact:${artifact.path}`,
+      }).catch(() => undefined);
     },
-    [client, agentId],
+    [save, agentId],
   );
 
   const renderItem = useCallback(
@@ -144,6 +161,7 @@ export function CompanionFeed({
           onReplyInChat={onReplyInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
+          disabled={saving || !supportsWrites || connection !== "online"}
         />
       ),
     [
@@ -155,18 +173,27 @@ export function CompanionFeed({
       onReplyInChat,
       handleUpdateStatus,
       handleRemovePin,
+      saving,
+      supportsWrites,
+      connection,
     ],
   );
 
   const handleToggleOnlyOpen = useCallback(() => setOnlyOpen((v) => !v), []);
   const handleSubmitPin = useCallback(() => {
-    if (!pinText.trim()) return;
-    client
-      ?.updateCompanionEntry({ agentId, action: "add_pin", text: pinText.trim() })
-      .catch(() => {});
-    setPinText("");
-    noteInput.current?.replaceText("");
-  }, [client, agentId, pinText]);
+    if (!pinText.trim() || saving) return;
+    void save({
+      agentId,
+      action: viewTab === "pinned" ? "add_pin" : "add_question",
+      text: pinText.trim(),
+    })
+      .then(() => {
+        setPinText("");
+        noteInput.current?.replaceText("");
+        return;
+      })
+      .catch(() => undefined);
+  }, [save, agentId, pinText, viewTab, saving]);
 
   const header = useMemo(
     () => (
@@ -190,6 +217,15 @@ export function CompanionFeed({
           ]}
         />
 
+        {saveError ? (
+          <Text accessibilityRole="alert" style={styles.description}>
+            {saveError}
+          </Text>
+        ) : null}
+        {saving ? <Text style={styles.description}>{t("globalStream.saving")}</Text> : null}
+        {!supportsWrites ? (
+          <Text style={styles.description}>{t("globalStream.writeUnavailable")}</Text>
+        ) : null}
         {viewTab === "stream" && (
           <View style={styles.segmentContainer}>
             <SegmentedControl
@@ -216,22 +252,45 @@ export function CompanionFeed({
           </View>
         )}
 
-        {viewTab === "pinned" && (
+        {supportsWrites && (
           <View style={styles.pinInputContainer}>
             <NoteInput
               ref={noteInput}
               style={styles.pinInput}
-              placeholder={t("agentPanel.stream.notePlaceholder")}
+              placeholder={t(
+                viewTab === "pinned"
+                  ? "agentPanel.stream.notePlaceholder"
+                  : "globalStream.questionPlaceholder",
+              )}
+              maxLength={4000}
+              editable={!saving}
               initialValue=""
               onChangeText={setPinText}
               onSubmitEditing={handleSubmitPin}
             />
-            <Button onPress={handleSubmitPin}>{t("agentPanel.stream.addNote")}</Button>
+            <Button
+              onPress={handleSubmitPin}
+              disabled={saving || connection !== "online" || !pinText.trim()}
+            >
+              {t(viewTab === "pinned" ? "agentPanel.stream.addNote" : "globalStream.addQuestion")}
+            </Button>
           </View>
         )}
       </View>
     ),
-    [connection, viewTab, filter, onlyOpen, t, handleToggleOnlyOpen, handleSubmitPin],
+    [
+      connection,
+      viewTab,
+      filter,
+      onlyOpen,
+      t,
+      handleToggleOnlyOpen,
+      handleSubmitPin,
+      supportsWrites,
+      saveError,
+      saving,
+      pinText,
+    ],
   );
 
   const empty = useMemo(
@@ -301,14 +360,16 @@ function CardSeparator() {
 }
 
 // eslint-disable-next-line complexity
-function EntryCard({
+export function EntryCard({
   entry,
   onReturnToChat,
   onReplyInChat,
   onUpdateStatus,
   onRemovePin,
+  disabled = false,
 }: {
   entry: CompanionEntry;
+  disabled?: boolean;
   onReturnToChat: () => void;
   onReplyInChat: () => void;
   onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
@@ -400,7 +461,7 @@ function EntryCard({
       <View style={styles.entryHeaderRow}>
         <Text style={styles.eyebrow}>{formatMessageTimestamp(new Date(entry.timestamp))}</Text>
         {entry.kind === "pin" ? (
-          <Button variant="ghost" size="sm" onPress={handleRemovePinLocal}>
+          <Button variant="ghost" size="sm" onPress={handleRemovePinLocal} disabled={disabled}>
             <Text style={styles.description}>{t("agentPanel.stream.unpin")}</Text>
           </Button>
         ) : null}
@@ -438,13 +499,13 @@ function EntryCard({
 
         {(entry.kind === "question" || entry.kind === "feature_request") && (
           <View style={styles.statusActionsRow}>
-            <Button variant="outline" onPress={handleSetOpen}>
+            <Button variant="outline" onPress={handleSetOpen} disabled={disabled}>
               Open
             </Button>
-            <Button variant="outline" onPress={handleSetReviewed}>
+            <Button variant="outline" onPress={handleSetReviewed} disabled={disabled}>
               Reviewed
             </Button>
-            <Button variant="outline" onPress={handleSetDone}>
+            <Button variant="outline" onPress={handleSetDone} disabled={disabled}>
               Done
             </Button>
           </View>

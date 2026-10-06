@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { router, usePathname, type Href } from "expo-router";
-import { LayoutPanelLeft, Plus } from "lucide-react-native";
+import { LayoutPanelLeft, Plus, ListFilter } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -32,8 +32,18 @@ export function SidebarViewsSection() {
     router.push(buildViewRoute(viewId) as Href);
   }, []);
 
+  const openStream = useCallback(() => router.navigate("/stream" as Href), []);
+
   return (
     <View style={styles.section} testID="sidebar-views-section">
+      <SidebarHeaderRow
+        variant="compact"
+        icon={ListFilter}
+        label={t("globalStream.title")}
+        isActive={pathname === "/stream"}
+        onPress={openStream}
+        testID="sidebar-global-stream"
+      />
       <View style={styles.header}>
         <Text style={styles.title}>{t("views.sidebar.title")}</Text>
         <Pressable

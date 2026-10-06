@@ -2661,6 +2661,10 @@ export class Session {
     switch (msg.type) {
       case "voice.input.receipts.read.request":
         return this.handleVoiceInputReceiptsRead(msg);
+      case "stream.list.request":
+        return this.handleStreamListRequest(msg);
+      case "stream.entry.update.request":
+        return this.handleStreamUpdateRequest(msg);
       case "update_companion_entry_request":
         return this.handleUpdateCompanionEntryRequest(msg);
       case "agent.queue.enqueue.request":
@@ -3696,6 +3700,45 @@ export class Session {
           accepted: false,
           error: getErrorMessageOr(error, "Failed to update agent"),
         },
+      });
+    }
+  }
+
+  private async handleStreamListRequest(
+    msg: Extract<SessionInboundMessage, { type: "stream.list.request" }>,
+  ): Promise<void> {
+    try {
+      const page = await this.agentManager.listGlobalStream(msg);
+      this.emit({
+        type: "stream.list.response",
+        payload: { requestId: msg.requestId, ...page, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "stream.list.response",
+        payload: {
+          requestId: msg.requestId,
+          rows: [],
+          nextCursor: null,
+          error: getErrorMessage(error),
+        },
+      });
+    }
+  }
+
+  private async handleStreamUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "stream.entry.update.request" }>,
+  ): Promise<void> {
+    try {
+      await this.agentManager.updateCompanionEntry(msg);
+      this.emit({
+        type: "stream.entry.update.response",
+        payload: { requestId: msg.requestId, accepted: true },
+      });
+    } catch (error) {
+      this.emit({
+        type: "stream.entry.update.response",
+        payload: { requestId: msg.requestId, accepted: false, error: getErrorMessage(error) },
       });
     }
   }

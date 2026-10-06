@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { AgentPermissionRequest, AgentStreamEvent } from "./agent-sdk-types.js";
 
 export const COMPANION_ENTRY_LIMIT = 50;
@@ -49,9 +49,19 @@ export function restoreCompanionEntries(options?: {
 }
 
 function expirePendingPermission(entry: CompanionEntry): CompanionEntry {
-  return entry.kind === "permission" && entry.status === "pending"
-    ? { ...entry, status: "expired" }
-    : entry;
+  if (entry.kind !== "permission" || entry.status !== "pending") return entry;
+  if (entry.requestKind === "question") {
+    // The provider request is no longer answerable, but the needed input survives.
+    return {
+      id: entry.id,
+      kind: "question",
+      status: "open",
+      timestamp: entry.timestamp,
+      text: entry.text,
+      truncated: entry.truncated,
+    };
+  }
+  return { ...entry, status: "expired" };
 }
 
 export class CompanionStreamCollector {
@@ -130,13 +140,8 @@ export class CompanionStreamCollector {
       // Only the final response is a review card, not intermediate tool narration.
       turns.delete(turnKey);
     }
-    if (item.type === "user_message") {
-      return mapChanged(entries, (entry) =>
-        entry.kind === "question" && entry.status === "open"
-          ? { ...entry, status: "reply_sent" }
-          : entry,
-      );
-    }
+    // A message is not evidence that any particular question has been answered.
+    // Questions are resolved individually by an explicit status update.
     return entries;
   }
 }
@@ -154,20 +159,18 @@ function collectOutcome(
     next = mapChanged(next, expirePendingPermission);
   }
   const text = draft?.text.trim() ?? "";
-  // Plain prose questions are a hint, never a claim that a later reply resolved a decision.
-  const prose = text.replace(/```[\s\S]*?```|`[^`]*`|https?:\/\/\S+/g, "");
-  const question = event.type === "turn_completed" && /[?？]\s*$/.test(prose);
-  if (question) {
+  const questions = event.type === "turn_completed" ? extractCompanionQuestions(text) : [];
+  for (const [index, question] of questions.entries()) {
     next = upsert(next, {
-      id: `${id}:question`,
+      id: `${id}:question${index ? `:${index}` : ""}`,
       kind: "question",
       timestamp,
-      text,
+      text: question,
       truncated: draft?.truncated ?? false,
       status: "open",
     });
   }
-  let outcomeText = question ? "" : text;
+  let outcomeText = questions.length === 1 && questions[0] === text ? "" : text;
   let status: "completed" | "failed" | "canceled" = "completed";
   if (event.type === "turn_failed") {
     outcomeText = event.error;
@@ -213,5 +216,41 @@ function upsert(entries: CompanionEntry[], entry: CompanionEntry): CompanionEntr
   const next = existing
     ? entries.map((item) => (item.id === entry.id ? { ...entry, timestamp: item.timestamp } : item))
     : [...entries, entry];
-  return next.slice(-COMPANION_ENTRY_LIMIT);
+  return retainCompanionEntries(next);
+}
+
+export function retainCompanionEntries(entries: CompanionEntry[]): CompanionEntry[] {
+  // Durable user context and unresolved work do not compete with transient outcomes.
+  const durable = (entry: CompanionEntry) => entry.kind === "pin" || isCompanionEntryPending(entry);
+  const recent = new Set(entries.filter((entry) => !durable(entry)).slice(-COMPANION_ENTRY_LIMIT));
+  return entries.filter((entry) => durable(entry) || recent.has(entry));
+}
+
+/** Capture explicit question lines and lists explicitly labelled as needing input.
+ * This is syntax recognition, not a semantic claim about every question in history.
+ * Agents use set_stream_question for authoritative, individually resolvable items.
+ */
+export function extractCompanionQuestions(text: string): string[] {
+  const prose = text.replace(/```[\s\S]*?```|`[^`]*`|https?:\/\/\S+/g, "");
+  const questions: string[] = [];
+  let inputSection = false;
+  for (const raw of prose.split("\n")) {
+    const line = raw.trim();
+    const heading = line.replace(/^[#*\s]+|[*:\s]+$/g, "");
+    if (
+      /^(?:still )?(?:need(?:s)? (?:your )?input|open questions|questions for you|pending decisions|awaiting your (?:answer|input))$/i.test(
+        heading,
+      )
+    ) {
+      inputSection = true;
+      continue;
+    }
+    if (/^#{1,6}\s|^\*\*[^*]+\*\*:?$/.test(line)) inputSection = false;
+    const listItem = line.match(/^(?:[-*+] |\d+[.)] )(.+)$/);
+    if (/[?？]\s*$/.test(line) || (inputSection && listItem)) {
+      const question = listItem?.[1] ?? line;
+      if (question) questions.push(question);
+    } else if (line && !listItem) inputSection = false;
+  }
+  return [...new Set(questions)];
 }

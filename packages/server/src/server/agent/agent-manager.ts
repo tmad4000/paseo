@@ -1,4 +1,7 @@
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
+import { applyStreamEntryUpdate } from "./stream-entry-update.js";
+import type { StreamListOptions, StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import { listStreamRows, type StreamSource } from "./global-stream.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { SessionSearchWriteBuffer } from "./session-search-write-buffer.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
@@ -2423,59 +2426,41 @@ export class AgentManager {
     return result;
   }
 
-  async updateCompanionEntry(input: {
-    agentId: string;
-    entryId?: string;
-    action: "update_status" | "add_pin" | "remove_pin" | "add_q_and_a";
-    status?: "open" | "reviewed" | "done";
-    text?: string;
-    answerText?: string;
-    sourceId?: string;
-  }): Promise<void> {
+  async listGlobalStream(options: StreamListOptions) {
+    const sources = new Map<string, StreamSource>();
+    for (const record of (await this.registry?.list()) ?? []) {
+      sources.set(record.id, { ...record, companionEntries: restoreCompanionEntries(record) });
+    }
+    for (const agent of this.agents.values()) {
+      sources.set(agent.id, {
+        ...agent,
+        title: sources.get(agent.id)?.title ?? agent.config.title,
+        archivedAt: sources.get(agent.id)?.archivedAt,
+      });
+    }
+    return listStreamRows(sources.values(), options);
+  }
+
+  async updateCompanionEntry(input: StreamEntryUpdate): Promise<void> {
+    return this.runLifecycleMutation(input.agentId, () =>
+      this.updateCompanionEntrySerialized(input),
+    );
+  }
+
+  private async updateCompanionEntrySerialized(input: StreamEntryUpdate): Promise<void> {
     // getAgent() hands out a copy; mutate the live record so the next snapshot carries the change.
     const liveAgent = this.agents.get(input.agentId) ?? null;
     let entries = liveAgent?.companionEntries;
     if (!liveAgent) {
-      if (!this.registry) return;
+      if (!this.registry) throw new Error("Stream storage unavailable");
       const stored = await this.registry.get(input.agentId);
-      if (!stored) return;
+      if (!stored) throw new Error("Conversation no longer exists");
       entries = restoreCompanionEntries({ companionEntries: stored.companionEntries });
     } else {
       entries = entries ?? [];
     }
 
-    if (!entries) return;
-    let next = [...entries];
-
-    if (input.action === "update_status" && input.entryId && input.status) {
-      next = next.map((e) =>
-        e.id === input.entryId && (e.kind === "question" || e.kind === "feature_request")
-          ? { ...e, status: input.status as "open" | "reviewed" | "done" }
-          : e,
-      );
-    } else if (input.action === "add_pin") {
-      const pinId = `pin:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      next.push({
-        id: pinId,
-        kind: "pin",
-        timestamp: new Date().toISOString(),
-        text: input.text ?? "",
-        truncated: false,
-        sourceId: input.sourceId,
-      });
-    } else if (input.action === "remove_pin" && input.entryId) {
-      next = next.filter((e) => !(e.id === input.entryId && e.kind === "pin"));
-    } else if (input.action === "add_q_and_a") {
-      const qnaId = `qa:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      next.push({
-        id: qnaId,
-        kind: "q_and_a",
-        timestamp: new Date().toISOString(),
-        text: input.text ?? "",
-        answer: input.answerText,
-        truncated: false,
-      });
-    }
+    const next = applyStreamEntryUpdate(entries, input);
 
     if (liveAgent) {
       liveAgent.companionEntries = next;

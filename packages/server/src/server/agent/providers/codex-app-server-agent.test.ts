@@ -3600,7 +3600,7 @@ describe("Codex app-server provider", () => {
       await expect(child).resolves.toMatchObject({
         type: "provider_subagent",
         provider: "codex",
-        turnId: "codex-turn-0",
+        turnId: expect.stringMatching(/^codex-turn-[0-9a-f-]{36}$/),
         event: {
           type: "upsert",
           id: "legacy-only-child-thread",
@@ -3610,7 +3610,7 @@ describe("Codex app-server provider", () => {
       await expect(spawn).resolves.toMatchObject({
         type: "timeline",
         provider: "codex",
-        turnId: "codex-turn-0",
+        turnId: expect.stringMatching(/^codex-turn-[0-9a-f-]{36}$/),
         item: {
           type: "tool_call",
           callId: "spawn-legacy-only-child",
@@ -6417,4 +6417,32 @@ describe("Codex denied plan approvals", () => {
       metadata: { approved: false },
     });
   });
+});
+
+test("new provider instances produce distinct turn identities for restored Stream records", async () => {
+  const turnIds: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    const appServer = createFakeCodexAppServer();
+    const session = new CodexAppServerAgentSession(
+      createConfig({ cwd: "/workspace/project" }),
+      null,
+      createTestLogger(),
+      async () => appServer.child,
+    );
+    const unsubscribe = session.subscribe((event) => {
+      if (event.type === "turn_completed" && event.turnId) turnIds.push(event.turnId);
+    });
+    try {
+      const result = session.run("Continue the same work");
+      await appServer.waitForTurnStart();
+      appServer.startsTurn({ threadId: "thread-1", turnId: "native-turn" });
+      appServer.completeTurn();
+      await result;
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
+  }
+  expect(turnIds).toHaveLength(2);
+  expect(new Set(turnIds).size).toBe(2);
 });

@@ -1,5 +1,5 @@
 import { toAgentPayload, toStoredAgentRecord } from "./agent-projections.js";
-import { parseStoredAgentRecord } from "./agent-storage.js";
+import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
 import { AgentSnapshotPayloadSchema } from "../messages.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -246,10 +246,13 @@ interface Harness {
   cleanup: () => void;
 }
 
-function createHarness(options?: { provider?: AgentProvider }): Harness {
+function createHarness(options?: { provider?: AgentProvider; storage?: boolean }): Harness {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stream-coalescing-"));
   const client = new TestAgentClient(options?.provider ?? "codex");
   const manager = new AgentManager({
+    registry: options?.storage
+      ? new AgentStorage(join(workdir, "agents"), createTestLogger())
+      : undefined,
     clients: { [client.provider]: client },
     idFactory: createIdFactory(),
     logger: createTestLogger(),
@@ -1451,6 +1454,68 @@ test("companion responses survive coalescing and snapshot serialization without 
     expect(getTimelineItems(await harness.manager.getTimelineRows(agentId))).toEqual([
       { type: "assistant_message", text: "Review complete." },
     ]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("Stream mutations preserve independent questions and report missing items", async () => {
+  const harness = createHarness({ storage: true });
+  try {
+    const { agentId } = await createManagedSession(harness);
+    await harness.manager.setTitle(agentId, "Renamed stream source");
+    await Promise.all([
+      harness.manager.updateCompanionEntry({
+        agentId,
+        action: "add_question",
+        entryId: "first",
+        text: "First question?",
+      }),
+      harness.manager.updateCompanionEntry({
+        agentId,
+        action: "add_question",
+        entryId: "second",
+        text: "Second question?",
+      }),
+    ]);
+    await harness.manager.updateCompanionEntry({
+      agentId,
+      action: "update_status",
+      entryId: "question:first",
+      status: "done",
+    });
+    const page = await harness.manager.listGlobalStream({ filter: "pending" });
+    expect(page.rows[0]?.agentTitle).toBe("Renamed stream source");
+    expect(page.rows.map((row) => row.item)).toEqual([
+      {
+        kind: "entry",
+        entry: expect.objectContaining({
+          id: "question:second",
+          status: "open",
+          text: "Second question?",
+        }),
+      },
+    ]);
+    await expect(
+      harness.manager.updateCompanionEntry({
+        agentId,
+        action: "update_status",
+        entryId: "missing",
+        status: "done",
+      }),
+    ).rejects.toThrow("no longer exists");
+    await harness.manager.closeAgent(agentId);
+    expect(harness.manager.getAgent(agentId)).toBeNull();
+    const dormant = await harness.manager.listGlobalStream({ filter: "pending" });
+    expect(dormant.rows[0]?.agentTitle).toBe("Renamed stream source");
+    await harness.manager.updateCompanionEntry({
+      agentId,
+      action: "update_status",
+      entryId: "question:second",
+      status: "done",
+    });
+    expect((await harness.manager.listGlobalStream({ filter: "pending" })).rows).toEqual([]);
+    expect(harness.manager.getAgent(agentId)).toBeNull();
   } finally {
     harness.cleanup();
   }

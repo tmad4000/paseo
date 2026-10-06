@@ -2,6 +2,27 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  globalStream: {
+    title: "Stream",
+    description: "Questions, context and outcomes across your conversations.",
+    all: "All",
+    pending: "Needs a reply",
+    pinned: "Pinned",
+    search: "Search Stream or conversations",
+    clearSearch: "Clear search",
+    archived: "Archived chats",
+    refresh: "Refresh",
+    incomplete: "No items available from the hosts that responded. Check the notices above.",
+    empty: "No items match this view.",
+    more: "Load more",
+    saveFailed: "Could not save. Please retry.",
+    openChat: "Open source chat",
+    artifact: "File artifact",
+    saving: "Saving…",
+    questionPlaceholder: "An answer you still need…",
+    addQuestion: "Add question",
+    writeUnavailable: "Connect to an updated host to change Stream items.",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

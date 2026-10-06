@@ -2,6 +2,27 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  globalStream: {
+    title: "Stream",
+    description: "Questions, context and outcomes across your conversations.",
+    all: "All",
+    pending: "Needs a reply",
+    pinned: "Pinned",
+    search: "Search Stream or conversations",
+    clearSearch: "Clear search",
+    archived: "Archived chats",
+    refresh: "Refresh",
+    incomplete: "No items available from the hosts that responded. Check the notices above.",
+    empty: "No items match this view.",
+    more: "Load more",
+    saveFailed: "Could not save. Please retry.",
+    openChat: "Open source chat",
+    artifact: "File artifact",
+    saving: "Saving…",
+    questionPlaceholder: "An answer you still need…",
+    addQuestion: "Add question",
+    writeUnavailable: "Connect to an updated host to change Stream items.",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",

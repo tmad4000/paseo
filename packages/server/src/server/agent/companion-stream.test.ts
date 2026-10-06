@@ -201,7 +201,7 @@ it("tracks prose questions without claiming a reply resolved a decision", () => 
       },
       timestamp,
     ),
-  ).toEqual([{ ...result[0], status: "reply_sent" }, result[1]]);
+  ).toEqual(result);
 });
 
 it.each(["Example: `ready?`", "Example:\n```js\nready?\n```", "See https://example.com/?"])(
@@ -319,4 +319,174 @@ it("bounds stored output and records failure independently of an assistant succe
   expect(entries.map((entry) => entry.id)).toEqual(
     Array.from({ length: COMPANION_ENTRY_LIMIT }, (_, i) => `turn:${i + 2}`),
   );
+});
+
+it("retains pins and each unanswered question beyond the recent outcome window", () => {
+  const collector = new CompanionStreamCollector();
+  let entries: CompanionEntry[] = [
+    { id: "q1", kind: "question", status: "open", text: "First?", timestamp, truncated: false },
+    {
+      id: "q2",
+      kind: "question",
+      status: "reviewed",
+      text: "Second?",
+      timestamp,
+      truncated: false,
+    },
+    { id: "pin", kind: "pin", text: "Keep this", timestamp, truncated: false },
+    {
+      id: "permission",
+      kind: "permission",
+      requestId: "p",
+      requestKind: "question",
+      status: "pending",
+      text: "Choose",
+      timestamp,
+      truncated: false,
+    },
+  ];
+  for (let i = 0; i < 60; i++) {
+    entries = collector.observe(
+      "a",
+      entries,
+      { type: "turn_completed", provider: "codex", turnId: String(i) },
+      timestamp,
+    );
+  }
+  expect(entries.slice(0, 4).map((entry) => entry.id)).toEqual(["q1", "q2", "pin", "permission"]);
+  expect(entries.filter((entry) => entry.kind === "outcome")).toHaveLength(50);
+});
+
+it("captures each explicitly labelled needed input even without a final question mark", () => {
+  const collector = new CompanionStreamCollector();
+  collector.observe(
+    "a",
+    [],
+    {
+      type: "timeline",
+      provider: "codex",
+      turnId: "list",
+      item: {
+        type: "assistant_message",
+        text: "Progress is saved.\n\n**Still need your input:**\n1. Choose the name\n2. Pick a release channel\n\n## Completed\n- Tests passed",
+      },
+    },
+    timestamp,
+  );
+  const entries = collector.observe(
+    "a",
+    [],
+    { type: "turn_completed", provider: "codex", turnId: "list" },
+    timestamp,
+  );
+  expect(entries.filter((entry) => entry.kind === "question").map((entry) => entry.text)).toEqual([
+    "Choose the name",
+    "Pick a release channel",
+  ]);
+  expect(entries.at(-1)?.kind).toBe("outcome");
+});
+
+import { listStreamRows } from "./global-stream.js";
+
+it("pages global items without collisions, includes dormant records and excludes hidden/archived agents", () => {
+  const entry: CompanionEntry = {
+    id: "same",
+    kind: "question",
+    status: "open",
+    text: "Pick a name?",
+    timestamp,
+    truncated: false,
+  };
+  const sources = [
+    { id: "a", cwd: "/project/a", companionEntries: [entry] },
+    { id: "b", cwd: "/project/b", companionEntries: [entry] },
+    { id: "hidden", cwd: "/project", internal: true, companionEntries: [entry] },
+    { id: "archived", cwd: "/project", archivedAt: timestamp, companionEntries: [entry] },
+  ];
+  const first = listStreamRows(sources, { limit: 1 });
+  const second = listStreamRows(sources, { limit: 1, cursor: first.nextCursor! });
+  expect(first.rows.map((row) => row.agentId)).toEqual(["a"]);
+  expect(second.rows.map((row) => row.agentId)).toEqual(["b"]);
+  expect(second.nextCursor).toBeNull();
+  expect(listStreamRows(sources, { includeArchived: true }).rows.map((row) => row.agentId)).toEqual(
+    ["a", "archived", "b"],
+  );
+  expect(
+    listStreamRows(sources, { search: "/project/b", filter: "pending" }).rows.map(
+      (row) => row.agentId,
+    ),
+  ).toEqual(["b"]);
+  expect(listStreamRows(sources, { filter: "pinned" }).rows).toEqual([]);
+  expect(() => listStreamRows(sources, { cursor: "bad" })).toThrow();
+});
+
+import { applyStreamEntryUpdate } from "./stream-entry-update.js";
+it("upserts durable questions by identity and resolves only the selected item", () => {
+  const base = { agentId: "a", action: "add_question" as const };
+  let entries = applyStreamEntryUpdate([], { ...base, entryId: "name", text: "Choose name" });
+  entries = applyStreamEntryUpdate(entries, {
+    ...base,
+    entryId: "channel",
+    text: "Choose channel",
+  });
+  entries = applyStreamEntryUpdate(entries, {
+    ...base,
+    entryId: "name",
+    text: "Name selected",
+    status: "done",
+  });
+  expect(
+    entries.map((entry) => ({
+      id: entry.id,
+      text: entry.text,
+      status: "status" in entry ? entry.status : null,
+    })),
+  ).toEqual([
+    { id: "question:name", text: "Name selected", status: "done" },
+    { id: "question:channel", text: "Choose channel", status: "open" },
+  ]);
+  expect(
+    listStreamRows([{ id: "a", cwd: "/project", companionEntries: entries }], {
+      filter: "pending",
+    }).rows.map((row) => row.item),
+  ).toEqual([{ kind: "entry", entry: entries[1] }]);
+  expect(() =>
+    applyStreamEntryUpdate(entries, {
+      agentId: "a",
+      action: "update_status",
+      entryId: "missing",
+      status: "done",
+    }),
+  ).toThrow("no longer exists");
+  expect(() => applyStreamEntryUpdate(entries, { ...base, text: " " })).toThrow("Enter between");
+});
+
+it("keeps needed input on provider recreation without reviving tool permissions", () => {
+  const base = {
+    id: "p",
+    kind: "permission" as const,
+    requestId: "q",
+    status: "pending" as const,
+    text: "Which channel?",
+    timestamp,
+    truncated: false,
+  };
+  expect(
+    restoreCompanionEntries({
+      companionEntries: [
+        { ...base, requestKind: "question" },
+        { ...base, id: "tool", requestKind: "tool" },
+      ],
+    }),
+  ).toEqual([
+    {
+      id: "p",
+      kind: "question",
+      status: "open",
+      text: "Which channel?",
+      timestamp,
+      truncated: false,
+    },
+    { ...base, id: "tool", requestKind: "tool", status: "expired" },
+  ]);
 });

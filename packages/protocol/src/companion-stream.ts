@@ -48,8 +48,8 @@ export type CompanionEntry = z.infer<typeof CompanionEntrySchema>;
 
 export function isCompanionEntryPending(entry: CompanionEntry): boolean {
   return (
-    (entry.kind === "question" && entry.status === "open") ||
-    (entry.kind === "feature_request" && entry.status === "open") ||
+    (entry.kind === "question" && entry.status !== "done") ||
+    (entry.kind === "feature_request" && entry.status !== "done") ||
     (entry.kind === "permission" && entry.status === "pending")
   );
 }

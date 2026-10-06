@@ -29,6 +29,16 @@ interface SeedProjectDescriptor {
  * prefer those wrappers over reaching for this client directly.
  */
 export interface SeedDaemonClient {
+  updateStreamEntry(
+    input: import("@getpaseo/protocol/global-stream").StreamEntryUpdate,
+  ): Promise<void>;
+  listGlobalStream(
+    options?: import("@getpaseo/protocol/global-stream").StreamListOptions,
+  ): Promise<{
+    rows: import("@getpaseo/protocol/global-stream").StreamRow[];
+    nextCursor: string | null;
+  }>;
+
   listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot>;
   editQueuedAgentMessage(input: {
     agentId: string;

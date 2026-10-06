@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { AgentSnapshotPayloadSchema } from "./messages.js";
+import {
+  AgentSnapshotPayloadSchema,
+  SessionInboundMessageSchema,
+  SessionOutboundMessageSchema,
+} from "./messages.js";
 
 describe("agent artifact snapshots", () => {
+  it("parses global Stream requests and correlated mutation failures through the wire unions", () => {
+    const read = { type: "stream.list.request", requestId: "read-1", filter: "pending", limit: 50 };
+    expect(SessionInboundMessageSchema.parse(JSON.parse(JSON.stringify(read)))).toEqual(read);
+    expect(SessionInboundMessageSchema.safeParse({ ...read, limit: 101 }).success).toBe(false);
+    const write = {
+      type: "stream.entry.update.request",
+      requestId: "write-1",
+      agentId: "agent-1",
+      action: "add_question",
+      entryId: "release",
+      text: "Choose a channel",
+    };
+    expect(SessionInboundMessageSchema.parse(write)).toEqual(write);
+    expect(
+      SessionInboundMessageSchema.safeParse({ ...write, text: "x".repeat(4001) }).success,
+    ).toBe(false);
+    const rejection = {
+      type: "stream.entry.update.response",
+      payload: { requestId: "write-1", accepted: false, error: "Agent not found" },
+    };
+    expect(SessionOutboundMessageSchema.parse(rejection)).toEqual(rejection);
+    const empty = {
+      type: "stream.list.response",
+      payload: { requestId: "read-1", rows: [], nextCursor: null, error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(empty)).toEqual(empty);
+  });
   it("accepts additive per-agent artifacts", () => {
     const snapshot = AgentSnapshotPayloadSchema.parse({
       id: "agent-1",

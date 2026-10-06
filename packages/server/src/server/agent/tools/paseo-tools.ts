@@ -2289,6 +2289,44 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   );
 
   registerTool(
+    "set_stream_question",
+    {
+      title: "Track an open Stream question",
+      description:
+        "Keep one durable question in this conversation's Stream and the global Stream. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. This records context, never grants permission or sends a chat message.",
+      inputSchema: {
+        agentId: z.string().optional().describe("Defaults to this calling agent."),
+        questionId: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe("Stable ID for this particular question; reuse for edits and resolution."),
+        text: z.string().min(1).max(4000),
+        status: z.enum(["open", "reviewed", "done"]).optional(),
+      },
+    },
+    async ({ agentId, questionId, text, status }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) throw new Error("An agentId is required");
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId: questionId,
+        action: "add_question",
+        text,
+        status,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: targetAgentId,
+          entryId: `question:${questionId}`,
+          status: status ?? "open",
+        }),
+      };
+    },
+  );
+
+  registerTool(
     "set_review_status",
     {
       title: "Set review status",

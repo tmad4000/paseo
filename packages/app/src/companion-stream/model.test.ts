@@ -53,6 +53,6 @@ describe("companion feed", () => {
       { ...base, kind: "permission", requestId: "p", requestKind: "plan", status: "expired" },
       { ...base, kind: "outcome", status: "completed" },
     ];
-    expect(entries.filter(isCompanionEntryPending)).toEqual([entries[0], entries[2]]);
+    expect(entries.filter(isCompanionEntryPending)).toEqual([entries[0], entries[1], entries[2]]);
   });
 });
