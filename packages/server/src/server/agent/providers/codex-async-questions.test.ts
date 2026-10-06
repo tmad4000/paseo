@@ -8,6 +8,7 @@ import {
 } from "./codex/test-utils/fake-app-server.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import type { AgentStreamEvent } from "../agent-sdk-types.js";
+import { CompanionStreamCollector, restoreCompanionEntries } from "../companion-stream.js";
 import { AgentManager } from "../agent-manager.js";
 
 const questionItem = {
@@ -371,6 +372,26 @@ test("Stop dismisses async questions before cancellation and keeps them dismisse
     await first.session.interrupt();
     await first.finish("interrupted");
     expect(first.session.getPendingPermissions()).toEqual([]);
+    const collector = new CompanionStreamCollector();
+    const entries = first.events.reduce(
+      (accumulated, event) =>
+        collector.observe("agent", accumulated, event, "2026-10-05T00:00:00Z"),
+      [] as import("@getpaseo/protocol/companion-stream").CompanionEntry[],
+    );
+    expect(restoreCompanionEntries({ companionEntries: entries })).toContainEqual(
+      expect.objectContaining({
+        id: "permission:permission-async-question-1",
+        kind: "question",
+        status: "open",
+        text: "Which color?",
+      }),
+    );
+    expect(first.events).toContainEqual(
+      expect.objectContaining({
+        type: "permission_resolved",
+        disposition: "expired",
+      }),
+    );
     expect(metadata?.asyncQuestions).toEqual([
       expect.objectContaining({ resolution: "dismissed" }),
     ]);

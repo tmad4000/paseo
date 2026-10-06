@@ -2463,8 +2463,13 @@ export class AgentManager {
     const next = applyStreamEntryUpdate(entries, input);
 
     if (liveAgent) {
+      this.requireRegistry();
       liveAgent.companionEntries = next;
-      this.emitState(liveAgent, { persist: true });
+      try {
+        await this.persistSnapshot(liveAgent);
+      } finally {
+        this.emitState(liveAgent, { persist: false });
+      }
     } else {
       await this.writeStoredMetadata(input.agentId, { companionEntries: next });
     }
@@ -4833,6 +4838,7 @@ export class AgentManager {
           provider,
           requestId,
           resolution: { behavior: "deny", message },
+          disposition: "expired",
         });
       }
     }

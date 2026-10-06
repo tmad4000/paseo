@@ -18,18 +18,20 @@ function excerpt(text: string): { text: string; truncated: boolean } {
   };
 }
 
-function requestText(request: AgentPermissionRequest): string {
+function requestQuestions(request: AgentPermissionRequest): string[] {
   const questions = request.input?.questions;
-  if (Array.isArray(questions)) {
-    const text = questions
-      .flatMap((question: unknown) => {
-        if (typeof question !== "object" || question === null || !("question" in question))
-          return [];
-        return typeof question.question === "string" ? [question.question] : [];
-      })
-      .join("\n\n");
-    if (text) return text;
-  }
+  if (!Array.isArray(questions)) return [];
+  return questions.flatMap((question: unknown) => {
+    if (typeof question !== "object" || question === null || !("question" in question)) return [];
+    return typeof question.question === "string" && question.question.trim()
+      ? [question.question]
+      : [];
+  });
+}
+
+function requestText(request: AgentPermissionRequest): string {
+  const text = requestQuestions(request).join("\n\n");
+  if (text) return text;
   if (request.kind === "plan") {
     if (typeof request.metadata?.planText === "string") return request.metadata.planText;
     if (typeof request.input?.plan === "string") return request.input.plan;
@@ -87,23 +89,30 @@ export class CompanionStreamCollector {
       return this.observeTimeline(agentId, entries, event, turnKey, turns);
     }
     if (event.type === "permission_requested") {
-      const entry: CompanionEntry = {
-        id: `permission:${event.request.id}`,
-        kind: "permission",
-        timestamp,
-        requestId: event.request.id,
-        requestKind: event.request.kind,
-        status: "pending",
-        ...excerpt(requestText(event.request)),
-      };
-      return upsert(entries, entry);
+      const questions = event.request.kind === "question" ? requestQuestions(event.request) : [];
+      let next = entries;
+      for (const [index, text] of (questions.length
+        ? questions
+        : [requestText(event.request)]
+      ).entries()) {
+        next = upsert(next, {
+          id: `permission:${event.request.id}${index ? `:question:${index}` : ""}`,
+          kind: "permission",
+          timestamp,
+          requestId: event.request.id,
+          requestKind: event.request.kind,
+          status: "pending",
+          ...excerpt(text),
+        });
+      }
+      return next;
     }
     if (event.type === "permission_resolved") {
-      return mapChanged(entries, (entry) =>
-        entry.kind === "permission" && entry.requestId === event.requestId
-          ? { ...entry, status: event.resolution.behavior === "allow" ? "allowed" : "denied" }
-          : entry,
-      );
+      return mapChanged(entries, (entry) => {
+        if (entry.kind !== "permission" || entry.requestId !== event.requestId) return entry;
+        if (event.disposition === "expired") return expirePendingPermission(entry);
+        return { ...entry, status: event.resolution.behavior === "allow" ? "allowed" : "denied" };
+      });
     }
     if (
       event.type !== "turn_completed" &&

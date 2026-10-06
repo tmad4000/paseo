@@ -55,6 +55,7 @@ export function CompanionFeed({
     (state) => state.sessions[serverId]?.serverInfo?.features?.globalStream === true,
   );
   const [saving, setSaving] = useState(false);
+  const draftEntryId = useRef<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [viewTab, setViewTab] = useState<ViewTab>("stream");
@@ -185,9 +186,11 @@ export function CompanionFeed({
     void save({
       agentId,
       action: viewTab === "pinned" ? "add_pin" : "add_question",
+      entryId: (draftEntryId.current ??= globalThis.crypto.randomUUID()),
       text: pinText.trim(),
     })
       .then(() => {
+        draftEntryId.current = null;
         setPinText("");
         noteInput.current?.replaceText("");
         return;

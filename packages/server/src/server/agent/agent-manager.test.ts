@@ -11970,3 +11970,92 @@ test("session search releases committed writes without losing a concurrent read 
     await manager.closeAgent(agent.id);
   }
 });
+
+test("stream writes reject failed persistence and preserve live state for retry", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "stream-write-failure-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {});
+  await manager.flush();
+  const write = vi.spyOn(storage, "applySnapshot").mockRejectedValueOnce(new Error("Disk full"));
+  try {
+    const input = {
+      agentId: agent.id,
+      entryId: "draft",
+      action: "add_question" as const,
+      text: "Choose channel",
+    };
+    await expect(manager.updateCompanionEntry(input)).rejects.toThrow("Disk full");
+    expect(manager.getAgent(agent.id)?.companionEntries).toContainEqual(
+      expect.objectContaining({ id: "question:draft", text: input.text }),
+    );
+    expect((await storage.get(agent.id))?.companionEntries ?? []).toEqual([]);
+    await manager.updateCompanionEntry(input);
+    expect((await storage.get(agent.id))?.companionEntries).toContainEqual(
+      expect.objectContaining({ id: "question:draft", text: input.text }),
+    );
+  } finally {
+    write.mockRestore();
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("stream writes await persistence without overwriting concurrent provider events", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "stream-write-concurrent-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {});
+  await manager.flush();
+  let release!: () => void;
+  let entered!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const apply = storage.applySnapshot.bind(storage);
+  const write = vi.spyOn(storage, "applySnapshot").mockImplementationOnce(async (...args) => {
+    entered();
+    await blocked;
+    await apply(...args);
+  });
+  try {
+    let acknowledged = false;
+    const mutation = manager
+      .updateCompanionEntry({
+        agentId: agent.id,
+        entryId: "draft",
+        action: "add_question",
+        text: "Choose name",
+      })
+      .then(() => {
+        acknowledged = true;
+        return;
+      });
+    await started;
+    await manager.runAgent(agent.id, { text: "Continue working" });
+    expect(acknowledged).toBe(false);
+    release();
+    await mutation;
+    await manager.flush();
+    const entries = manager.getAgent(agent.id)?.companionEntries;
+    expect(entries).toContainEqual(expect.objectContaining({ id: "question:draft" }));
+    expect(entries).toContainEqual(expect.objectContaining({ kind: "outcome" }));
+    expect((await storage.get(agent.id))?.companionEntries).toEqual(entries);
+  } finally {
+    release();
+    write.mockRestore();
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

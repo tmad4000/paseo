@@ -421,6 +421,17 @@ it("pages global items without collisions, includes dormant records and excludes
 });
 
 import { applyStreamEntryUpdate } from "./stream-entry-update.js";
+it("retries a pin save without duplicating the live entry after a failed acknowledgement", () => {
+  const input = {
+    agentId: "a",
+    action: "add_pin" as const,
+    entryId: "draft",
+    text: "Keep context",
+  };
+  const first = applyStreamEntryUpdate([], input);
+  expect(applyStreamEntryUpdate(first, input)).toEqual(first);
+});
+
 it("upserts durable questions by identity and resolves only the selected item", () => {
   const base = { agentId: "a", action: "add_question" as const };
   let entries = applyStreamEntryUpdate([], { ...base, entryId: "name", text: "Choose name" });
@@ -489,4 +500,113 @@ it("keeps needed input on provider recreation without reviving tool permissions"
     },
     { ...base, id: "tool", requestKind: "tool", status: "expired" },
   ]);
+});
+
+it.each(["interruption", "recreation"])(
+  "keeps structured questions independently resolvable after %s",
+  (expiry) => {
+    const collector = new CompanionStreamCollector();
+    const pending = collector.observe(
+      "a",
+      [],
+      {
+        type: "permission_requested",
+        provider: "codex",
+        request: {
+          id: "multi",
+          provider: "codex",
+          name: "request_user_input",
+          kind: "question",
+          input: {
+            questions: [
+              { id: "name", question: "Choose name" },
+              { id: "channel", question: "Choose channel" },
+            ],
+          },
+        },
+      },
+      timestamp,
+    );
+    expect(pending.map((entry) => entry.id)).toEqual([
+      "permission:multi",
+      "permission:multi:question:1",
+    ]);
+    expect(
+      pending.every((entry) => entry.kind === "permission" && entry.requestId === "multi"),
+    ).toBe(true);
+    const expired =
+      expiry === "recreation"
+        ? restoreCompanionEntries({ companionEntries: pending })
+        : collector.observe(
+            "a",
+            pending,
+            {
+              type: "permission_resolved",
+              provider: "codex",
+              requestId: "multi",
+              resolution: { behavior: "deny", message: "Interrupted" },
+              disposition: "expired",
+            },
+            timestamp,
+          );
+    const resolved = applyStreamEntryUpdate(expired, {
+      agentId: "a",
+      action: "update_status",
+      entryId: pending[0].id,
+      status: "done",
+    });
+    expect(resolved).toEqual([
+      expect.objectContaining({ kind: "question", text: "Choose name", status: "done" }),
+      expect.objectContaining({ kind: "question", text: "Choose channel", status: "open" }),
+    ]);
+    expect(
+      listStreamRows([{ id: "a", cwd: "/project", companionEntries: resolved }], {
+        filter: "pending",
+      }).rows,
+    ).toHaveLength(1);
+    const denied = collector.observe(
+      "a",
+      pending,
+      {
+        type: "permission_resolved",
+        provider: "codex",
+        requestId: "multi",
+        resolution: { behavior: "deny" },
+      },
+      timestamp,
+    );
+    expect(
+      restoreCompanionEntries({ companionEntries: denied }).every(
+        (entry) => entry.kind === "permission" && entry.status === "denied",
+      ),
+    ).toBe(true);
+  },
+);
+
+it("expires canceled approvals without reviving them as questions", () => {
+  const collector = new CompanionStreamCollector();
+  const pending = collector.observe(
+    "a",
+    [],
+    {
+      type: "permission_requested",
+      provider: "codex",
+      request: { id: "tool", provider: "codex", name: "shell", kind: "tool" },
+    },
+    timestamp,
+  );
+  expect(
+    collector.observe(
+      "a",
+      pending,
+      {
+        type: "permission_resolved",
+        provider: "codex",
+        requestId: "tool",
+        disposition: "expired",
+        resolution: { behavior: "deny" },
+      },
+      timestamp,
+    ),
+  ).toEqual([{ ...pending[0], status: "expired" }]);
 });

@@ -48,8 +48,16 @@ function createEntry(
         status: input.status ?? "open",
       };
     }
-    case "add_pin":
-      return { ...common, id: `pin:${randomUUID()}`, kind: "pin", sourceId: input.sourceId };
+    case "add_pin": {
+      const id = `pin:${input.entryId ?? randomUUID()}`;
+      return {
+        ...common,
+        id,
+        timestamp: entries.find((entry) => entry.id === id)?.timestamp ?? common.timestamp,
+        kind: "pin",
+        sourceId: input.sourceId,
+      };
+    }
     case "add_q_and_a":
       return { ...common, id: `qa:${randomUUID()}`, kind: "q_and_a", answer: input.answerText };
     default:

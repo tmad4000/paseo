@@ -18,6 +18,7 @@ import {
 } from "@/runtime/host-runtime";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { useSessionStore } from "@/stores/session-store";
 import { EntryCard } from "./feed";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
 
@@ -156,10 +157,13 @@ export function GlobalStreamScreen() {
   );
 }
 
-function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () => void }) {
+export function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () => void }) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
+  const supportsWrites = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.globalStream === true,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openChat = useCallback(() => {
@@ -167,7 +171,7 @@ function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () 
   }, [row.serverId, row.agentId, row.workspaceId]);
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
-      if (!client || connection !== "online" || busy) return;
+      if (!client || connection !== "online" || !supportsWrites || busy) return;
       setBusy(true);
       setError(null);
       try {
@@ -184,7 +188,7 @@ function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () 
         setBusy(false);
       }
     },
-    [client, connection, busy, row.agentId, onSaved, t],
+    [client, connection, supportsWrites, busy, row.agentId, onSaved, t],
   );
   const updateStatus = useCallback(
     (id: string, status: "open" | "reviewed" | "done") => {
@@ -214,7 +218,7 @@ function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () 
           onReplyInChat={openChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
-          disabled={busy || connection !== "online"}
+          disabled={busy || connection !== "online" || !supportsWrites}
         />
       ) : (
         <View style={styles.artifact}>

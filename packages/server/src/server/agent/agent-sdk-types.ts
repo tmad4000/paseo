@@ -462,6 +462,7 @@ export type AgentStreamEvent =
       provider: AgentProvider;
       requestId: string;
       resolution: AgentPermissionResponse;
+      disposition?: "expired";
       turnId?: string;
     }
   | {

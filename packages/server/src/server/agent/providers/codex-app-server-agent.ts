@@ -6389,6 +6389,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         provider: CODEX_PROVIDER,
         requestId: request.id,
         resolution,
+        disposition: "expired",
       });
     }
   }
