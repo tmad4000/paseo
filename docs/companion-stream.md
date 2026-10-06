@@ -33,7 +33,9 @@ acknowledged response, show failures, and preserve unsaved input after a failed 
 
 Automatic capture is deliberately limited: final prose lines ending in a question mark,
 and bullets beneath explicit English headings such as “Still need your input” or “Open
-questions”, become separately identified questions. Code and URLs are ignored. This syntax
+questions”, become separately identified questions. Recognition ignores code and URLs;
+captured prose preserves inline code and URL context. Fenced code and standalone code or
+URL examples are excluded. This syntax
 heuristic is not a semantic inventory of every unanswered question. The explicit tool is
 the reliable path, including other languages. No historical transcript backfill is claimed.
 Existing retained Reply sent questions become visible again; previously evicted content

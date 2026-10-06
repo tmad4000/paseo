@@ -204,28 +204,82 @@ it("tracks prose questions without claiming a reply resolved a decision", () => 
   ).toEqual(result);
 });
 
-it.each(["Example: `ready?`", "Example:\n```js\nready?\n```", "See https://example.com/?"])(
-  "does not turn code or URLs into open questions: %s",
-  (text) => {
-    const collector = new CompanionStreamCollector();
-    collector.observe(
-      "a",
-      [],
-      {
-        type: "timeline",
-        provider: "codex",
-        turnId: "r",
-        item: { type: "assistant_message", text },
-      },
-      timestamp,
-    );
-    expect(
-      collector
-        .observe("a", [], { type: "turn_completed", provider: "codex", turnId: "r" }, timestamp)
-        .map((entry) => entry.kind),
-    ).toEqual(["outcome"]);
+it.each([
+  "Example: `ready?`",
+  "Example:\n```js\nready?\n```",
+  "See https://example.com/?",
+  "`ready?`",
+  "https://example.com/?",
+  "Open questions:\n- `ready?`\n- https://example.com/?\n```text\n- Use production?\n```",
+])("does not turn code or URLs into open questions: %s", (text) => {
+  const collector = new CompanionStreamCollector();
+  collector.observe(
+    "a",
+    [],
+    {
+      type: "timeline",
+      provider: "codex",
+      turnId: "r",
+      item: { type: "assistant_message", text },
+    },
+    timestamp,
+  );
+  expect(
+    collector
+      .observe("a", [], { type: "turn_completed", provider: "codex", turnId: "r" }, timestamp)
+      .map((entry) => entry.kind),
+  ).toEqual(["outcome"]);
+});
+
+it.each([
+  {
+    text: "Use `staging`?\nUse `production`?\nUse `staging`?",
+    questions: ["Use `staging`?", "Use `production`?"],
   },
-);
+  {
+    text: "- Should we use https://staging.example.com/?preview=1 for preview?\n- Should we use https://production.example.com/?preview=1 for preview?",
+    questions: [
+      "Should we use https://staging.example.com/?preview=1 for preview?",
+      "Should we use https://production.example.com/?preview=1 for preview?",
+    ],
+  },
+  {
+    text: "**Still need your input:**\n1. Choose `staging` or `production`\n2. Confirm https://example.com/?preview=1 as the preview URL",
+    questions: [
+      "Choose `staging` or `production`",
+      "Confirm https://example.com/?preview=1 as the preview URL",
+    ],
+  },
+])("preserves original prose in separately captured questions: $text", ({ text, questions }) => {
+  const collector = new CompanionStreamCollector();
+  collector.observe(
+    "a",
+    [],
+    {
+      type: "timeline",
+      provider: "codex",
+      turnId: "preserved",
+      item: { type: "assistant_message", text },
+    },
+    timestamp,
+  );
+  const entries = collector.observe(
+    "a",
+    [],
+    { type: "turn_completed", provider: "codex", turnId: "preserved" },
+    timestamp,
+  );
+  expect(entries.filter((entry) => entry.kind === "question")).toEqual(
+    questions.map((question, index) => ({
+      id: `turn:preserved:question${index ? `:${index}` : ""}`,
+      kind: "question",
+      timestamp,
+      text: question,
+      truncated: false,
+      status: "open",
+    })),
+  );
+});
 
 it("retains structured questions after unrelated user messages and expires them on interruption", () => {
   const collector = new CompanionStreamCollector();

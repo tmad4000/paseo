@@ -240,11 +240,12 @@ export function retainCompanionEntries(entries: CompanionEntry[]): CompanionEntr
  * Agents use set_stream_question for authoritative, individually resolvable items.
  */
 export function extractCompanionQuestions(text: string): string[] {
-  const prose = text.replace(/```[\s\S]*?```|`[^`]*`|https?:\/\/\S+/g, "");
+  const prose = text.replace(/```[\s\S]*?```/g, "\n");
   const questions: string[] = [];
   let inputSection = false;
   for (const raw of prose.split("\n")) {
-    const line = raw.trim();
+    const originalLine = raw.trim();
+    const line = originalLine.replace(/`[^`]*`|https?:\/\/\S+/g, "").trim();
     const heading = line.replace(/^[#*\s]+|[*:\s]+$/g, "");
     if (
       /^(?:still )?(?:need(?:s)? (?:your )?input|open questions|questions for you|pending decisions|awaiting your (?:answer|input))$/i.test(
@@ -257,7 +258,7 @@ export function extractCompanionQuestions(text: string): string[] {
     if (/^#{1,6}\s|^\*\*[^*]+\*\*:?$/.test(line)) inputSection = false;
     const listItem = line.match(/^(?:[-*+] |\d+[.)] )(.+)$/);
     if (/[?？]\s*$/.test(line) || (inputSection && listItem)) {
-      const question = listItem?.[1] ?? line;
+      const question = listItem ? originalLine.replace(/^(?:[-*+] |\d+[.)] )/, "") : originalLine;
       if (question) questions.push(question);
     } else if (line && !listItem) inputSection = false;
   }
