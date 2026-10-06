@@ -5321,6 +5321,7 @@ describe("Codex app-server provider", () => {
       type: "permission_resolved",
       provider: "codex",
       requestId: pendingPlan!.id,
+      disposition: "expired",
       resolution: {
         behavior: "deny",
         message: "Dismissed by a new prompt",
