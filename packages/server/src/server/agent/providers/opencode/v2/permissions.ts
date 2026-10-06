@@ -12,6 +12,7 @@ export class SessionPermissions {
   private readonly pending = new Map<string, AgentPermissionRequest>();
   private readonly permissionOwners = new Map<string, string>();
   private readonly expiring = new Set<string>();
+  private readonly cancelling = new Set<string>();
   private readonly forms = new Map<string, FormInfo>();
   constructor(
     private readonly getClient: () => V2Api,
@@ -26,9 +27,12 @@ export class SessionPermissions {
       });
     }
     if (event.type === "form.replied" || event.type === "form.cancelled") {
-      this.resolvePending(event.data.id, {
-        behavior: event.type === "form.cancelled" ? "deny" : "allow",
-      });
+      this.resolvePending(
+        event.data.id,
+        { behavior: event.type === "form.cancelled" ? "deny" : "allow" },
+        this.expiring.has(event.data.id) ||
+          (event.type === "form.cancelled" && !this.cancelling.has(event.data.id)),
+      );
     }
   }
   list() {
@@ -47,8 +51,7 @@ export class SessionPermissions {
   async respondToPermission(requestId: string, response: AgentPermissionResponse) {
     const form = this.forms.get(requestId);
     if (form) {
-      if (response.behavior === "deny")
-        await this.getClient().session.form.cancel({ sessionID: form.sessionID, formID: form.id });
+      if (response.behavior === "deny") await this.cancelForm(form);
       else {
         const raw = response.updatedInput?.answers;
         const answer: Record<string, FormValue> = {};
@@ -123,8 +126,22 @@ export class SessionPermissions {
       this.emit({ type: "permission_requested", provider: "opencode", request: pending });
     }
   }
-  resolvePending(requestId: string, resolution: AgentPermissionResponse) {
+  private async cancelForm(form: FormInfo) {
+    this.cancelling.add(form.id);
+    try {
+      await this.getClient().session.form.cancel({ sessionID: form.sessionID, formID: form.id });
+    } catch (error) {
+      this.cancelling.delete(form.id);
+      throw error;
+    }
+  }
+  resolvePending(
+    requestId: string,
+    resolution: AgentPermissionResponse,
+    expired = this.expiring.has(requestId),
+  ) {
     if (!this.pending.delete(requestId)) return;
+    this.cancelling.delete(requestId);
     this.forms.delete(requestId);
     this.permissionOwners.delete(requestId);
     this.emit({
@@ -132,7 +149,7 @@ export class SessionPermissions {
       provider: "opencode",
       requestId,
       resolution,
-      ...(this.expiring.has(requestId) ? { disposition: "expired" as const } : {}),
+      ...(expired ? { disposition: "expired" as const } : {}),
     });
   }
 }
