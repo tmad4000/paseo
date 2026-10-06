@@ -11,6 +11,7 @@ import type {
 export class SessionPermissions {
   private readonly pending = new Map<string, AgentPermissionRequest>();
   private readonly permissionOwners = new Map<string, string>();
+  private readonly expiring = new Set<string>();
   private readonly forms = new Map<string, FormInfo>();
   constructor(
     private readonly getClient: () => V2Api,
@@ -32,6 +33,16 @@ export class SessionPermissions {
   }
   list() {
     return [...this.pending.values()];
+  }
+  async expireAll() {
+    for (const request of this.list()) {
+      this.expiring.add(request.id);
+      try {
+        await this.respondToPermission(request.id, { behavior: "deny" });
+      } finally {
+        this.expiring.delete(request.id);
+      }
+    }
   }
   async respondToPermission(requestId: string, response: AgentPermissionResponse) {
     const form = this.forms.get(requestId);
@@ -116,7 +127,13 @@ export class SessionPermissions {
     if (!this.pending.delete(requestId)) return;
     this.forms.delete(requestId);
     this.permissionOwners.delete(requestId);
-    this.emit({ type: "permission_resolved", provider: "opencode", requestId, resolution });
+    this.emit({
+      type: "permission_resolved",
+      provider: "opencode",
+      requestId,
+      resolution,
+      ...(this.expiring.has(requestId) ? { disposition: "expired" as const } : {}),
+    });
   }
 }
 function permissionReply(response: AgentPermissionResponse): "reject" | "once" | "always" {

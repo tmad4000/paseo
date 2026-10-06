@@ -17,6 +17,8 @@ import {
 } from "./agent.js";
 import { claudeProjectDirSync } from "./project-dir.js";
 import { streamSession } from "../test-utils/session-stream-adapter.js";
+import { CompanionStreamCollector } from "../../companion-stream.js";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type {
   AgentPromptInput,
   AgentSession,
@@ -692,6 +694,71 @@ describe("ClaudeAgentSession features", () => {
       await session.close();
     }
   });
+
+  test.each(["interrupt", "abort", "close", "deny"] as const)(
+    "%s preserves expired input without reviving approvals or explicit denials",
+    async (action) => {
+      const { queryFactory } = createQueryMock();
+      const session = await new ClaudeAgentClient({
+        logger,
+        queryFactory,
+        resolveBinary: async () => "/test/claude/bin",
+      }).createSession({ provider: "claude", cwd: process.cwd(), modeId: "default" });
+      const collector = new CompanionStreamCollector();
+      let entries: CompanionEntry[] = [];
+      const unsubscribe = session.subscribe((event) => {
+        entries = collector.observe("agent", entries, event, "2026-10-05T12:00:00Z");
+      });
+      try {
+        await session.startTurn("Ask before shipping");
+        const canUseTool = queryFactory.mock.calls[0]?.[0].options.canUseTool;
+        if (!canUseTool) throw new Error("Expected canUseTool callback");
+        const abort = new AbortController();
+        const question = canUseTool(
+          "AskUserQuestion",
+          {
+            questions: [{ question: "Which region?", header: "Region", options: [] }],
+          },
+          { signal: abort.signal, toolUseID: "question" },
+        );
+        const tool = canUseTool(
+          "Bash",
+          { command: "printf test" },
+          {
+            signal: abort.signal,
+            toolUseID: "tool",
+          },
+        );
+        const settled = Promise.allSettled([question, tool]);
+        if (action === "interrupt") await session.interrupt();
+        else if (action === "abort") abort.abort();
+        else if (action === "close") await session.close();
+        else {
+          for (const request of session.getPendingPermissions()) {
+            await session.respondToPermission(request.id, { behavior: "deny" });
+          }
+          await session.interrupt();
+        }
+        await settled;
+        expect(entries.filter((entry) => entry.kind !== "outcome")).toEqual([
+          expect.objectContaining({
+            kind: action === "deny" ? "permission" : "question",
+            status: action === "deny" ? "denied" : "open",
+            text: "Which region?",
+          }),
+          expect.objectContaining({
+            kind: "permission",
+            requestKind: "tool",
+            status: action === "deny" ? "denied" : "expired",
+          }),
+        ]);
+        expect(session.getPendingPermissions()).toEqual([]);
+      } finally {
+        unsubscribe();
+        await session.close();
+      }
+    },
+  );
 
   test("publishes a resolution when the SDK aborts a permission callback", async () => {
     const { queryFactory } = createQueryMock();

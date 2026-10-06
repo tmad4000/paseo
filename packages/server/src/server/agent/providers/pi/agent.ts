@@ -1323,10 +1323,14 @@ export class PiRpcAgentSession implements AgentSession {
     const requestIds = Array.from(this.pendingExtensionUiRequests.keys());
     for (const requestId of requestIds) {
       if (!this.pendingExtensionUiRequests.has(requestId)) continue;
-      await this.respondToPermission(requestId, {
-        behavior: "deny",
-        message: "The user answered with a message instead of approving. Their message follows.",
-      });
+      await this.resolvePermission(
+        requestId,
+        {
+          behavior: "deny",
+          message: "The user answered with a message instead of approving. Their message follows.",
+        },
+        "expired",
+      );
     }
   }
 
@@ -1387,6 +1391,14 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+    await this.resolvePermission(requestId, response);
+  }
+
+  private async resolvePermission(
+    requestId: string,
+    response: AgentPermissionResponse,
+    disposition?: "expired",
+  ): Promise<void> {
     const request = this.pendingExtensionUiRequests.get(requestId);
     if (!request) {
       throw new Error(`No pending permission request with id '${requestId}'`);
@@ -1404,6 +1416,7 @@ export class PiRpcAgentSession implements AgentSession {
       provider: this.provider,
       requestId,
       resolution: response,
+      ...(disposition ? { disposition } : {}),
       turnId: this.currentTurnIdForEvent(),
     });
   }

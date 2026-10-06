@@ -2358,6 +2358,10 @@ describe("PiRpcAgentSession steering", () => {
       { id: "perm-1", response: { cancelled: true } },
     ]);
     expect(session.getPendingPermissions()).toEqual([]);
+    expect(await events.nextPermissionResolution()).toMatchObject({
+      disposition: "expired",
+      resolution: { behavior: "deny" },
+    });
   });
 
   test("leaves permissions open for a steer without the clearing flag", async () => {

@@ -3,9 +3,56 @@ import { describe, expect, test } from "vitest";
 import { createTestLogger } from "../../../../../test-utils/test-logger.js";
 import type { V2Api } from "./api.js";
 import { OpenCodeV2AgentClient } from "./agent.js";
+import { SessionPermissions } from "./permissions.js";
+import { CompanionStreamCollector } from "../../../companion-stream.js";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { V2Harness } from "../test-utils/v2-harness.js";
 
 describe("OpenCode v2 questions", () => {
+  test.each([true, false])(
+    "preserves expired forms while keeping explicit denial (%s)",
+    async (expired) => {
+      const harness = new V2Harness();
+      const collector = new CompanionStreamCollector();
+      let entries: CompanionEntry[] = [];
+      const permissions = new SessionPermissions(
+        () => harness.api,
+        "session",
+        { provider: "opencode", cwd: "/tmp/project" },
+        (event) => {
+          entries = collector.observe("agent", entries, event, "2026-10-05T12:00:00Z");
+        },
+      );
+      harness.api.session.form.list = async () => [
+        {
+          id: "question",
+          sessionID: "session",
+          title: "Input",
+          fields: [{ key: "region", title: "Which region?", type: "string" }],
+        },
+      ];
+      harness.api.session.form.cancel = async () => {
+        permissions.observe({
+          id: "cancel",
+          created: 2,
+          type: "form.cancelled",
+          data: { id: "question", sessionID: "session" },
+        });
+      };
+      await permissions.reconcile("session");
+      if (expired) await permissions.expireAll();
+      else await permissions.respondToPermission("question", { behavior: "deny" });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          text: "Which region?",
+          kind: expired ? "question" : "permission",
+          status: expired ? "open" : "denied",
+        }),
+      ]);
+      expect(permissions.list()).toEqual([]);
+    },
+  );
+
   test("maps selected labels to native values and parses numeric and boolean answers", async () => {
     const harness = new V2Harness();
     harness.api.session.form.list = async () => [

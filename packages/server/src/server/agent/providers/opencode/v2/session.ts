@@ -92,8 +92,7 @@ export class OpenCodeV2Session implements AgentSession {
         return { info: this.info, history: this.history };
       },
       clearPermissions: async () => {
-        for (const request of this.permissions.list())
-          await this.permissions.respondToPermission(request.id, { behavior: "deny" });
+        await this.permissions.expireAll();
       },
     });
   }

@@ -14,6 +14,7 @@ import { useHostRuntimeConnectionStatus, useHostRuntimeClient } from "@/runtime/
 import { formatMessageTimestamp } from "@/utils/time";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildCompanionFeed, type CompanionFeedItem } from "./model";
+import { ArtifactPinOperations } from "./artifact-pin-operations";
 
 interface CompanionFeedProps {
   serverId: string;
@@ -56,6 +57,7 @@ export function CompanionFeed({
   );
   const [saving, setSaving] = useState(false);
   const draftEntryId = useRef<string | null>(null);
+  const artifactPins = useRef(new ArtifactPinOperations());
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [viewTab, setViewTab] = useState<ViewTab>("stream");
@@ -134,14 +136,9 @@ export function CompanionFeed({
   );
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
-      void save({
-        agentId,
-        action: "add_pin",
-        text: `Artifact: ${artifact.path}`,
-        sourceId: `artifact:${artifact.path}`,
-      }).catch(() => undefined);
+      void artifactPins.current.save(serverId, agentId, artifact.path, save).catch(() => undefined);
     },
-    [save, agentId],
+    [save, serverId, agentId],
   );
 
   const renderItem = useCallback(
