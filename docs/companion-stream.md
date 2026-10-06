@@ -30,6 +30,10 @@ per item. Reusing it edits the same entry, and status=done resolves only that qu
 tool defaults to the calling conversation and never approves a permission or sends a prompt.
 Users can also add a question in the per-chat queue or a note in Pinned. Saves await an
 acknowledged response, show failures, and preserve unsaved input after a failed save.
+An acknowledgement follows durable storage. Manual question and pin drafts, including
+artifact pins, retain their IDs across failed retries so a lost acknowledgement does not
+create a second entry. Cached cards cannot be changed while their host is offline or lacks
+the write capability.
 
 Automatic capture is deliberately limited: final prose lines ending in a question mark,
 and bullets beneath explicit English headings such as “Still need your input” or “Open

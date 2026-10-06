@@ -8,7 +8,7 @@ import { gotoAppShell } from "../support/helpers/app";
 for (const width of [390, 1440]) {
   test(`global Stream links conversations and resolves individual questions at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(180_000);
     const repo = await createTempGitRepo("global-stream-");
     const client = await connectSeedClient();
@@ -51,6 +51,7 @@ for (const width of [390, 1440]) {
       await page.goto("/stream");
       await expect(page.getByText("Choose the launch name", { exact: true })).toBeVisible();
       await expect(page.getByText("Choose the release channel", { exact: true })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("global-stream-all.png"), fullPage: true });
       await page.getByRole("button", { name: "Needs a reply", exact: true }).click();
       await page
         .getByTestId(`global-stream-row-${first.id}`)
@@ -81,11 +82,18 @@ for (const width of [390, 1440]) {
       });
       await page.getByRole("button", { name: "Unpin", exact: true }).click();
       await expect(page.getByText("Pinned item no longer exists", { exact: true })).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("global-stream-rejected-write.png"),
+        fullPage: true,
+      });
       await page.getByRole("button", { name: "All", exact: true }).click();
       await page.getByTestId("global-stream-search").fill("release channel");
       await expect(page.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
       await expect(page.getByText("Choose the release channel", { exact: true })).toBeVisible();
-      await page.screenshot({ path: `/tmp/paseo-global-stream-${width}.png`, fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath("global-stream-search.png"),
+        fullPage: true,
+      });
       await page
         .getByTestId(`global-stream-row-${second.id}`)
         .getByRole("button", { name: /Stream beta/ })
