@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
@@ -217,3 +217,40 @@ test("refuses an observed worker even if its supervisor lock and listener disapp
     await unchanged(home, plan, aliasBytes, canonicalBytes);
     assert(!(await readdir(home)).includes("paseo.pid"));
   }));
+
+test(
+  "retains originals and prevents replay when journal append fails after tombstoning",
+  { skip: process.platform === "win32" || process.getuid?.() === 0 },
+  async () =>
+    fixture(async ({ home, output, plan, aliasBytes, canonicalBytes }) => {
+      const journal = join(home, "queues", plan.alias + ".journal.jsonl");
+      await chmod(journal, 0o400);
+      try {
+        await assert.rejects(applyAliasRepair(plan, output), /EACCES/);
+        await unchanged(home, plan, aliasBytes, canonicalBytes);
+        assert.deepEqual(
+          await readFile(join(output, "original", "queues", plan.alias + ".json")),
+          aliasBytes,
+        );
+        const failure = JSON.parse(await readFile(join(output, "failure.json"), "utf8"));
+        assert.equal(failure.automaticRetry, false);
+        assert.equal(failure.restoreOriginalsAutomatically, false);
+        const receipts = new MessageReceipts(join(home, "agent-requests"));
+        let replays = 0;
+        for (const agentId of [plan.alias, plan.canonicalId]) {
+          assert.equal(await receipts.get(agentId, plan.itemId), "removed");
+          await receipts.send({
+            agentId,
+            messageId: plan.itemId,
+            request: { prompt: "Reviewed completed request", activeTurnBehavior: "interrupt" },
+            send: async () => {
+              replays++;
+            },
+          });
+        }
+        assert.equal(replays, 0);
+      } finally {
+        await chmod(journal, 0o600);
+      }
+    }),
+);
