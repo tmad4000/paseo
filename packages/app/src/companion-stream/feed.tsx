@@ -239,7 +239,7 @@ export function CompanionFeed({
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <Text style={styles.title}>{t("agentPanel.stream.title")}</Text>
+        <Text style={styles.title}>Stream</Text>
         <Text style={styles.description}>
           Activity, source messages and tracked asks in this conversation.
         </Text>
@@ -261,33 +261,28 @@ export function CompanionFeed({
           ]}
         />
 
-        <Button variant="outline" onPress={copyStreamLink}>
-          Copy Stream link
-        </Button>
+        <View style={styles.headerActions}>
+          <Button variant="outline" onPress={copyStreamLink}>
+            Copy Stream link
+          </Button>
+          <Button
+            variant="ghost"
+            onPress={refresh}
+            disabled={query.isFetching || connection !== "online"}
+          >
+            Refresh
+          </Button>
+        </View>
         {linkNotice ? (
           <Text accessibilityRole="alert" style={styles.description}>
             {linkNotice}
           </Text>
         ) : null}
-        <Button
-          variant="ghost"
-          onPress={refresh}
-          disabled={query.isFetching || connection !== "online"}
-        >
-          Refresh
-        </Button>
         {query.notices.map((notice) => (
           <Text key={notice} accessibilityRole="alert" style={styles.description}>
             {notice}
           </Text>
         ))}
-        {viewTab === "checklist" ? (
-          <Text style={styles.description}>
-            Confirmed asks and unreviewed user messages. A message can contain several asks. Ask
-            your agent to review each message, split its requests and record evidence. A reply, tool
-            call or turn ending never completes an ask.
-          </Text>
-        ) : null}
         {saveError ? (
           <Text accessibilityRole="alert" style={styles.description}>
             {saveError}
@@ -310,8 +305,8 @@ export function CompanionFeed({
         ) : null}
         <Text style={styles.description} testID="stream-coverage">
           {query.coverage === "loaded_history"
-            ? "Loaded Chat messages are indexed. Source review is not automatic semantic extraction; check unreviewed messages for every ask."
-            : "Older history is not fully indexed. Open Chat to load retained history, then refresh Stream. Unavailable or previously pruned records cannot be recovered here."}
+            ? "Loaded Chat history is included. Review user messages in Checklist to identify each ask. Completion always needs evidence."
+            : "Older history is not fully included. Open Chat to load retained messages, then refresh. Missing or previously pruned records cannot be restored here."}
         </Text>
 
         {supportsWrites && (
@@ -606,11 +601,11 @@ export function EntryCard({
         <View style={styles.notice}>
           <Text selectable style={styles.description}>
             {entry.messageReview.state === "unreviewed"
-              ? "This retained message may contain multiple asks. None are assumed complete. Ask your agent to inventory it using list_stream_asks and review_stream_message."
+              ? "This message may contain several asks. Ask your agent to review and track each request. None are assumed complete."
               : entry.messageReview.note}
           </Text>
           <Text selectable style={styles.description}>
-            {entry.messageReview.askIds.length} linked asks · Source: {entry.source?.messageId}
+            {entry.messageReview.askIds.length} linked asks
           </Text>
         </View>
       ) : null}
@@ -636,7 +631,7 @@ export function EntryCard({
               Remaining: {entry.ask.remaining || "Not yet specified"}
             </Text>
           ) : null}
-          {entry.ask.sourceMessageId ? (
+          {entry.ask.sourceMessageId && !entry.source ? (
             <Text selectable style={styles.description}>
               Source message: {entry.ask.sourceMessageId}
             </Text>
@@ -710,6 +705,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[12],
   },
   header: { gap: theme.spacing[2], paddingBottom: theme.spacing[6] },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   notice: {
     padding: theme.spacing[3],
     gap: theme.spacing[2],
