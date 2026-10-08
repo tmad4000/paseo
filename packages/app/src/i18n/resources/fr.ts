@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sessionPins: {
+    title: "Sessions épinglées",
+    pin: "Épingler la session",
+    unpin: "Désépingler la session",
+    open: "Ouvrir {{title}} sur {{host}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

@@ -127,6 +127,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     persistence: overrides.persistence ?? null,
     historyPrimed: overrides.historyPrimed ?? true,
     lastUserMessageAt: overrides.lastUserMessageAt ?? core.now,
+    labels: overrides.labels,
     lastUsage: overrides.lastUsage,
     lastError: overrides.lastError,
   };
@@ -146,6 +147,26 @@ describe("AgentStorage", () => {
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test("session pin labels survive reload, archive/restore, and unpin without changing other labels", async () => {
+    const labels = { role: "orchestrator", "paseo.session-pinned-at": "2026-10-07T12:00:00.000Z" };
+    await storage.applySnapshot(createManagedAgent({ id: "favorite", labels }));
+    const reloaded = new AgentStorage(storagePath, logger);
+    const record = (await reloaded.get("favorite"))!;
+    expect(record.labels).toEqual(labels);
+    await reloaded.upsert({ ...record, archivedAt: new Date().toISOString() });
+    const archived = (await new AgentStorage(storagePath, logger).get("favorite"))!;
+    expect(archived.labels).toEqual(labels);
+    await reloaded.upsert({
+      ...archived,
+      archivedAt: null,
+      labels: { ...labels, "paseo.session-pinned-at": "" },
+    });
+    expect((await new AgentStorage(storagePath, logger).get("favorite"))?.labels).toEqual({
+      role: "orchestrator",
+      "paseo.session-pinned-at": "",
+    });
   });
 
   test("applySnapshot persists configs and snapshot metadata", async () => {

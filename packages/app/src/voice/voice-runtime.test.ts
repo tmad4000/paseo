@@ -975,3 +975,94 @@ describe("voice runtime", () => {
     unsubscribe();
   });
 });
+
+describe("optional GPT voice privacy", () => {
+  async function cloud() {
+    const adapter = createSessionAdapter();
+    const realtime = {
+      provider: "openai-realtime" as const,
+      destination: "assistant" as const,
+      connection: "connected" as const,
+      mode: "conversation" as const,
+      epoch: "epoch-1",
+      draft: "",
+      muted: false,
+      error: null,
+      omittedContextEntries: 0,
+    };
+    vi.mocked(adapter.setVoiceMode).mockImplementation(async (_enabled, _agent, input) => ({
+      attachmentId: input?.attachmentId,
+      generation: "g1",
+      realtime: { ...realtime, muted: input?.isMuted ?? false },
+      isMuted: input?.isMuted ?? false,
+      voiceCommandsEnabled: false,
+    }));
+    adapter.controlRealtimeVoice = vi.fn().mockResolvedValue(realtime);
+    const { runtime, engine } = createRuntime({
+      getServerInfo: () => ({
+        ...createServerInfo(),
+        features: { voiceConcurrentInput: true, openaiRealtimeVoice: true },
+      }),
+    });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1", "openai-realtime");
+    return { runtime, engine, adapter, realtime };
+  }
+  it("stops capture for mic off and only explicitly unmutes", async () => {
+    const f = await cloud();
+    expect(f.engine.startCapture).toHaveBeenCalledTimes(1);
+    await f.runtime.toggleMute();
+    expect(f.engine.stopCapture).toHaveBeenCalled();
+    expect(f.runtime.getSnapshot().isMuted).toBe(true);
+    f.runtime.handleCapturePcm(new Uint8Array([1, 2]));
+    expect(f.adapter.sendVoiceAudioChunk).not.toHaveBeenCalled();
+    await f.runtime.toggleMute();
+    expect(f.engine.startCapture).toHaveBeenCalledTimes(2);
+    await f.runtime.stopVoice();
+  });
+  it("keeps a failed mute acknowledgement closed without switching providers", async () => {
+    const f = await cloud();
+    vi.mocked(f.adapter.setVoiceInputMuted).mockRejectedValue(new Error("lost ack"));
+    await f.runtime.toggleMute();
+    expect(f.runtime.getSnapshot()).toMatchObject({
+      isMuted: true,
+      voiceProvider: "openai-realtime",
+    });
+    expect(f.engine.startCapture).toHaveBeenCalledTimes(1);
+    expect(f.adapter.setVoiceMode).toHaveBeenCalledTimes(1);
+    await f.runtime.stopVoice();
+  });
+  it("cloud failure pauses capture and never silently activates Paseo", async () => {
+    const f = await cloud();
+    f.runtime.onRealtimeState("server-1", {
+      ...f.realtime,
+      connection: "unavailable",
+      muted: true,
+      error: "Disconnected",
+    });
+    expect(f.engine.stopCapture).toHaveBeenCalled();
+    expect(f.runtime.getSnapshot()).toMatchObject({
+      isMuted: true,
+      voiceProvider: "openai-realtime",
+    });
+    expect(f.adapter.setVoiceMode).toHaveBeenCalledTimes(1);
+    await f.runtime.stopVoice();
+  });
+  it("does not restart capture when voice is stopped during a clear", async () => {
+    const f = await cloud();
+    let acknowledge!: () => void;
+    vi.mocked(f.adapter.controlRealtimeVoice!).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = () => resolve(f.realtime);
+        }),
+    );
+    const clear = f.runtime.controlRealtime("clear");
+    await vi.waitFor(() => expect(f.adapter.controlRealtimeVoice).toHaveBeenCalled());
+    await f.runtime.stopVoice();
+    acknowledge();
+    await clear;
+    expect(f.engine.startCapture).toHaveBeenCalledTimes(1);
+    expect(f.runtime.getSnapshot().isVoiceMode).toBe(false);
+  });
+});

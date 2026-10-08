@@ -11,6 +11,7 @@ type VoiceMessage = Extract<
       | "abort_request"
       | "audio_played"
       | "set_voice_mode"
+      | "voice.realtime.control.request"
       | "voice.input.set_muted.request"
       | "dictation_stream_start"
       | "dictation_stream_chunk"
@@ -80,13 +81,15 @@ export class VoiceSessions {
     const existing = this.sources.get(source);
     if (existing?.closing) return existing.owner.release().then(() => this.handleMessage(message));
     const active = existing ?? this.startSource(source);
-    const before = message.type === "set_voice_mode" ? active.lifecycleTail : Promise.resolve();
+    const lifecycle =
+      message.type === "set_voice_mode" || message.type === "voice.realtime.control.request";
+    const before = lifecycle ? active.lifecycleTail : Promise.resolve();
     const pending = before
       .catch(() => undefined)
       .then(() => {
         return active.closing ? undefined : this.dispatch(active.voice, message);
       });
-    if (message.type === "set_voice_mode") active.lifecycleTail = pending;
+    if (lifecycle) active.lifecycleTail = pending;
     active.pending.add(pending);
     const finished = () => {
       active.pending.delete(pending);
@@ -150,6 +153,8 @@ export class VoiceSessions {
           voice.handleAudioPlayed(message.id, message.error);
         }
         return Promise.resolve();
+      case "voice.realtime.control.request":
+        return voice.handleRealtimeControl(message);
       case "set_voice_mode":
         return voice.handleSetVoiceMode(
           message.enabled,
@@ -182,6 +187,7 @@ function isVoiceOutput(message: SessionOutboundMessage): boolean {
     case "transcription_result":
     case "voice_input_state":
     case "set_voice_mode_response":
+    case "voice.realtime.control.response":
     case "voice.input.set_muted.response":
     case "dictation_stream_ack":
     case "dictation_stream_partial":

@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  sessionPins: {
+    title: "الجلسات المثبتة",
+    pin: "تثبيت الجلسة",
+    unpin: "إلغاء تثبيت الجلسة",
+    open: "فتح {{title}} على {{host}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

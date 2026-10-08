@@ -4020,6 +4020,7 @@ export class DaemonClient {
     enabled: boolean,
     agentId?: string,
     input?: {
+      voiceProvider?: "paseo" | "openai-realtime";
       voiceCommandsEnabled?: boolean;
       isMuted?: boolean;
       attachmentId?: string;
@@ -4055,6 +4056,25 @@ export class DaemonClient {
       throw new Error((response.error ?? "Failed to set voice mode") + codeSuffix);
     }
     return response;
+  }
+
+  async controlRealtimeVoice(
+    input: Omit<
+      Extract<SessionInboundMessage, { type: "voice.realtime.control.request" }>,
+      "type" | "requestId"
+    >,
+  ) {
+    const requestId = this.createRequestId();
+    const response = await this.sendRequest({
+      requestId,
+      message: { type: "voice.realtime.control.request", requestId, ...input },
+      select: (msg) =>
+        msg.type === "voice.realtime.control.response" && msg.payload.requestId === requestId
+          ? msg.payload
+          : null,
+    });
+    if (response.error) throw new Error(response.error);
+    return response.state;
   }
 
   async setVoiceInputMuted(

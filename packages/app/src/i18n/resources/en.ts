@@ -1,4 +1,10 @@
 export const en = {
+  sessionPins: {
+    title: "Pinned sessions",
+    pin: "Pin session",
+    unpin: "Unpin session",
+    open: "Open {{title}} on {{host}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

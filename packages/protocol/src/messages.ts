@@ -1118,7 +1118,37 @@ export const VoiceInputReceiptsReadResponseSchema = z.object({
   }),
 });
 
+export const RealtimeVoiceStateSchema = z.object({
+  provider: z.literal("openai-realtime"),
+  destination: z.enum(["assistant", "agent"]),
+  connection: z.enum(["connecting", "connected", "unavailable", "off"]),
+  mode: z.enum(["conversation", "listen"]),
+  epoch: z.string(),
+  draft: z.string(),
+  muted: z.boolean(),
+  error: z.string().nullable(),
+  omittedContextEntries: z.number(),
+});
+export type RealtimeVoiceState = z.infer<typeof RealtimeVoiceStateSchema>;
+export const RealtimeVoiceControlRequestSchema = z.object({
+  type: z.literal("voice.realtime.control.request"),
+  requestId: z.string(),
+  attachmentId: z.string(),
+  generation: z.string(),
+  action: z.enum(["listen", "end_listening", "clear", "retry", "focus_agent", "back_to_assistant"]),
+  expectedEpoch: z.string(),
+});
+export const RealtimeVoiceControlResponseSchema = z.object({
+  type: z.literal("voice.realtime.control.response"),
+  payload: z.object({
+    requestId: z.string(),
+    state: RealtimeVoiceStateSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const SetVoiceModeMessageSchema = z.object({
+  voiceProvider: z.enum(["paseo", "openai-realtime"]).optional(),
   type: z.literal("set_voice_mode"),
   attachmentId: z.string().optional(),
   generation: z.string().optional(),
@@ -2237,6 +2267,7 @@ export const WorkspaceRecoveryRestoreResponseSchema = z.object({
 export const SetVoiceModeResponseMessageSchema = z.object({
   type: z.literal("set_voice_mode_response"),
   payload: z.object({
+    realtime: RealtimeVoiceStateSchema.optional(),
     voiceCommandsEnabled: z.boolean().optional(),
     isMuted: z.boolean().optional(),
     requestId: z.string(),
@@ -3599,6 +3630,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceRecoveryInspectRequestSchema,
   WorkspaceRecoveryRestoreRequestSchema,
   SetVoiceModeMessageSchema,
+  RealtimeVoiceControlRequestSchema,
   VoiceInputSetMutedRequestSchema,
   VoiceInputReceiptsReadRequestSchema,
   SendAgentMessageRequestSchema,
@@ -3848,6 +3880,7 @@ export const TranscriptionResultMessageSchema = z.object({
 export const VoiceInputStateMessageSchema = z.object({
   type: z.literal("voice_input_state"),
   payload: z.object({
+    realtime: RealtimeVoiceStateSchema.optional(),
     error: z.string().optional(),
     isMuted: z.boolean().optional(),
     isSpeaking: z.boolean(),
@@ -3985,6 +4018,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceTerminals: z.boolean().optional(),
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: z.boolean().optional(),
+        openaiRealtimeVoice: z.boolean().optional(),
         // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
         voiceConcurrentInput: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
@@ -7328,6 +7362,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceMarkUnreadResponseSchema,
   SendAgentMessageResponseMessageSchema,
   SetVoiceModeResponseMessageSchema,
+  RealtimeVoiceControlResponseSchema,
   VoiceInputSetMutedResponseSchema,
   VoiceInputReceiptsReadResponseSchema,
   DaemonGetStatusResponseSchema,

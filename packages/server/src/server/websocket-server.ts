@@ -2020,6 +2020,7 @@ export class VoiceAssistantWebSocketServer {
         canonicalSubmittedPrompts: true,
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: true,
+        openaiRealtimeVoice: true,
         // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
         voiceConcurrentInput: this.agentQueueService !== null,
         // COMPAT(stableProjectIdentity): added in v0.1.109, remove gate after 2027-01-15.

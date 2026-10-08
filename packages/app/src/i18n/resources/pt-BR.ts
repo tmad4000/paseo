@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  sessionPins: {
+    title: "Sessões fixadas",
+    pin: "Fixar sessão",
+    unpin: "Desafixar sessão",
+    open: "Abrir {{title}} em {{host}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

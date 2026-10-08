@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  sessionPins: {
+    title: "已固定的会话",
+    pin: "固定会话",
+    unpin: "取消固定会话",
+    open: "在 {{host}} 上打开 {{title}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

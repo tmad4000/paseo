@@ -14,9 +14,10 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 
 | ID                        | Behavior to preserve / quick acceptance check                                                                                                                                                                                                               | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session-favorites`       | Pin/Unpin an individual session from Chat or Stream; open it from Pinned sessions above Workspaces after reload. Preserve host/session identity, stable pin order, and archive/restore behavior.                                                            | **Source prepared; not installed.** `pspin-3vx`; UI: `packages/app/src/session-pins`; persistence and controls: [agent lifecycle](agent-lifecycle.md#individual-session-favorites). Existing daemon label API; old clients preserve metadata but do not show favorites.                                                                                                   |
 | `footer-time`             | At the bottom of a completed assistant reply, show its local completion time and duration together, such as **Finished 4:32 PM · 6m**, without hover or tap. Start time remains available on hover/tap when known; missing timestamps must not be invented. | **Restored in this source change (`code-76g`); installation pending `code-9yr`.** `AssistantTurnFooter` shows completion and duration together, with the actual start from turn timing on hover/tap. Ten focused label/timing tests pass. Original owner was spend-blocked; rollout owner resumed the restoration. The heavier browser regression remains deferred below. |
 | `session-routing`         | Find an existing conversation within the chosen host/project scope, open or select it, and deliver a saved prompt to the chosen destination. Find includes host-acknowledged queued text and shows dated evidence.                                          | **On main.** [PR44](https://github.com/tmad4000/paseo/pull/44), [PR49](https://github.com/tmad4000/paseo/pull/49); contract: [session routing](session-routing.md); browser coverage: `packages/app/e2e/browser/session-routing.spec.ts`.                                                                                                                                 |
-| `dispatcher-create-modes` | From the central dispatcher, start a new conversation through the composer with workspace selection and the scratch-workspace default; offer Queue, Steer, and Interrupt for existing destinations.                                                         | **Pending, not baseline behavior on main.** [PR50](https://github.com/tmad4000/paseo/pull/50) owns implementation and acceptance gaps. Promote this row after merge and record installation separately.                                                                                                                                                                   |
+| `dispatcher-create-modes` | From the central dispatcher, start a new conversation through the composer with workspace selection and the scratch-workspace default; offer Queue, Steer, and Interrupt for existing destinations.                                                         | **Merged on main; installation pending `code-9yr`.** [PR50](https://github.com/tmad4000/paseo/pull/50) owns implementation; the installed acceptance checklist below remains open.                                                                                                                                                                                        |
 | `conversation-sort`       | Offer Latest conversation activity (default), Your last message, AI’s last reply, Manual order, and Title A–Z. Remember the choice; tools/settings do not advance message clocks; pinned order remains stable.                                              | **Merged on main; installation pending `code-9yr`.** [PR52](https://github.com/tmad4000/paseo/pull/52) owns role-clock semantics, unknown-history behavior, host gating, and acceptance evidence.                                                                                                                                                                         |
 | `busy-send-queue`         | Busy-chat send actions expose their delivery behavior. Queueing preserves the running turn; queued text survives host acknowledgement/reload and can be recovered for editing.                                                                              | **On main.** [PR23](https://github.com/tmad4000/paseo/pull/23), [PR32](https://github.com/tmad4000/paseo/pull/32), [PR36](https://github.com/tmad4000/paseo/pull/36), [PR38](https://github.com/tmad4000/paseo/pull/38); contract: [queue mirroring](queue-mirroring.md). Use a disposable agent for interruption checks.                                                 |
 | `artifact-feed`           | A conversation exposes its collected files for preview/opening, and persisted artifact metadata survives reload.                                                                                                                                            | **On main.** Original contract and prior verification: [artifact feed notes](../NOTES.md); source: `packages/app/src/artifacts/feed.tsx` and `packages/server/src/server/agent/artifacts/collector.ts`.                                                                                                                                                                   |
@@ -29,6 +30,35 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 “On main” above means source integration was found, not that every platform has been exercised.
 Pending rows become preservation requirements for the release that first includes them. Keep a
 regressed row visible until its restoration is verified; documenting it does not mark it fixed.
+
+## Combined beta.11 candidate (`code-9yr` / `code-c66`)
+
+Prepared from main `4357e22db` (including queue receipt fix PR56), Stream PR57
+`7f24232a6`, session favorites PR58 `b25764ec9`, and optional voice PR59 `f93c83685`.
+The pre-version combined tree is `4adbc80e5b5e807bed926e22a7483f0b7742d399`.
+This records source scope, not merge approval or installed acceptance.
+Stream test-only follow-up `4eebe5136` waits for a virtualized completed card to settle
+in the viewport. It changes no runtime source; retain exact old/new test blobs in the
+release source-equivalence receipt before reusing an already signed candidate.
+
+All existing register features are retained in this candidate. Session favorites and durable
+Stream are additions; optional OpenAI voice retains the existing Paseo provider and requires
+explicit opt-in. Its [acceptance limits](openai-realtime-voice.md#delivery-and-operational-limits)
+remain open, including physical audio and phone checks. No dependency versions are upgraded.
+The prior signed beta.10 package and TestFlight build 10000010 predate these additions.
+
+Release owner `code-9yr` must finish exact-source CI/review, signed desktop/iOS validation,
+and packaged feature acceptance before transitioning its existing controller. Desktop installs
+require fleet idle, idle voice, accounted queues, and no owned terminals. The hash-bound alias
+repair (`code-nnl`, PR55) is separate offline maintenance; its explicit maintenance-order
+exception is still held. No queue bypass or restart is implied by this source preparation.
+
+`code-tie` remains outstanding: provider and terminal ownership must survive daemon replacement,
+UI Quit must leave runtime running by default, and identities, events and pending permissions
+must reattach without duplicate prompts. This candidate does not implement those guarantees.
+Restoring saved conversation history does not preserve an in-flight turn. Idle-only delivery
+can proceed separately when its gates clear. Historical missing Stream entries (`code-g29`)
+remain a separate, unapplied recovery task; neither PR51 nor PR57 backfills provider history.
 
 ## Dispatcher follow-up checklist
 

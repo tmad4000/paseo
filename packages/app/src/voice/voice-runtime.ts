@@ -1,3 +1,4 @@
+import type { RealtimeVoiceState } from "@getpaseo/protocol/messages";
 import { Buffer } from "buffer";
 import type { AgentStreamEventPayload, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities";
@@ -53,6 +54,8 @@ export type VoiceRuntimePhase =
   | "stopping";
 
 export interface VoiceRuntimeSnapshot {
+  realtime?: RealtimeVoiceState;
+  voiceProvider?: "paseo" | "openai-realtime";
   phase: VoiceRuntimePhase;
   isVoiceMode: boolean;
   isVoiceSwitching: boolean;
@@ -79,17 +82,25 @@ export interface VoiceSessionAdapter {
     enabled: boolean,
     agentId?: string,
     input?: {
+      voiceProvider?: "paseo" | "openai-realtime";
       voiceCommandsEnabled?: boolean;
       isMuted?: boolean;
       attachmentId?: string;
       generation?: string;
     },
   ): Promise<{
+    realtime?: RealtimeVoiceState;
     voiceCommandsEnabled?: boolean;
     isMuted?: boolean;
     attachmentId?: string;
     generation?: string;
   }>;
+  controlRealtimeVoice?(input: {
+    action: "listen" | "end_listening" | "clear" | "retry" | "focus_agent" | "back_to_assistant";
+    attachmentId: string;
+    generation: string;
+    expectedEpoch: string;
+  }): Promise<RealtimeVoiceState | null>;
   setVoiceInputMuted(
     muted: boolean,
     transport?: { attachmentId: string; generation: string },
@@ -211,6 +222,8 @@ let nextVoiceRuntimeInstanceId = 1;
 
 function snapshotsEqual(left: VoiceRuntimeSnapshot, right: VoiceRuntimeSnapshot): boolean {
   return (
+    left.realtime === right.realtime &&
+    left.voiceProvider === right.voiceProvider &&
     left.phase === right.phase &&
     left.isVoiceMode === right.isVoiceMode &&
     left.isVoiceSwitching === right.isVoiceSwitching &&
@@ -246,7 +259,16 @@ export interface VoiceRuntime {
   handleCapturePcm(chunk: Uint8Array): void;
   handleCaptureVolume(level: number): void;
   handleAudioOutput(serverId: string, payload: AudioOutputPayload): void;
-  startVoice(serverId: string, agentId: string): Promise<void>;
+  startVoice(
+    serverId: string,
+    agentId: string,
+    provider?: "paseo" | "openai-realtime",
+    muted?: boolean,
+  ): Promise<void>;
+  controlRealtime(
+    action: "listen" | "end_listening" | "clear" | "retry" | "focus_agent" | "back_to_assistant",
+  ): Promise<void>;
+  onRealtimeState(serverId: string, realtime: RealtimeVoiceState): void;
   stopVoice(): Promise<void>;
   destroy(): Promise<void>;
   toggleMute(): void;
@@ -825,6 +847,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       if (generation !== state.generation) return;
       let options:
         | {
+            voiceProvider?: "paseo" | "openai-realtime";
             voiceCommandsEnabled?: boolean;
             isMuted?: boolean;
             attachmentId?: string;
@@ -840,6 +863,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       } else if (state.attachmentId) {
         options = { attachmentId: state.attachmentId };
       }
+      if (state.snapshot.voiceProvider === "openai-realtime")
+        options = { ...options, voiceProvider: "openai-realtime", isMuted: true };
       const response = options
         ? await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId, options)
         : await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
@@ -864,6 +889,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       state.transportGeneration = response.generation ?? null;
       reconcileInputReceipts(false);
       patchSnapshot({ muteError: null });
+      if (response.realtime) api.onRealtimeState(serverId, response.realtime);
       // The host re-created its recognizer, so every earlier failure is stale.
       const recovered = clearFailures([
         "host-disconnected",
@@ -939,6 +965,10 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       if (!connected) {
         state.transportReady = false;
         state.transportGeneration = null;
+        if (state.snapshot.voiceProvider === "openai-realtime") {
+          void deps.engine.stopCapture();
+          patchSnapshot({ isMuted: true });
+        }
         if (!state.snapshot.isVoiceMode) return;
         state.generation += 1;
         state.turnInProgress = false;
@@ -1033,7 +1063,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
     // Capture admission, generation checks, and rollback are one transition.
     // oxlint-disable-next-line complexity
-    async startVoice(serverId, agentId) {
+    async startVoice(serverId, agentId, provider = "paseo", muted) {
       const requestedGeneration = ++state.generation;
       const operation = voiceLifecycleTail
         .catch(() => undefined)
@@ -1050,10 +1080,16 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           }
 
           const serverInfo = deps.getServerInfo(serverId);
-          const unavailableMessage = resolveVoiceUnavailableMessage({
-            serverInfo,
-            mode: "voice",
-          });
+          // COMPAT(openaiRealtimeVoice): added in fork v0.10.0, remove after 2027-04-07.
+          if (provider === "openai-realtime" && serverInfo?.features?.openaiRealtimeVoice !== true)
+            throw new Error("Update the host to use GPT Realtime.");
+          const unavailableMessage =
+            provider === "openai-realtime"
+              ? null
+              : resolveVoiceUnavailableMessage({
+                  serverInfo,
+                  mode: "voice",
+                });
           if (unavailableMessage) {
             throw new Error(unavailableMessage);
           }
@@ -1075,6 +1111,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
             phase: "starting",
             activeServerId: serverId,
             activeAgentId: agentId,
+            voiceProvider: provider,
+            realtime: undefined,
           }));
 
           try {
@@ -1099,6 +1137,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
             // COMPAT(voiceVerbalMute): added in fork v0.2.0, remove gate after 2027-03-21.
             const supportsCommands = serverInfo?.features?.voiceVerbalMute === true;
             let response: {
+              realtime?: RealtimeVoiceState;
+              voiceProvider?: "paseo" | "openai-realtime";
               voiceCommandsEnabled?: boolean;
               isMuted?: boolean;
               attachmentId?: string;
@@ -1107,6 +1147,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
             try {
               let options:
                 | {
+                    voiceProvider?: "paseo" | "openai-realtime";
                     voiceCommandsEnabled?: boolean;
                     isMuted?: boolean;
                     attachmentId?: string;
@@ -1116,12 +1157,14 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
               if (supportsCommands) {
                 options = {
                   voiceCommandsEnabled: true,
-                  isMuted: false,
+                  isMuted: muted ?? false,
                   ...(state.attachmentId ? { attachmentId: state.attachmentId } : {}),
                 };
               } else if (state.attachmentId) {
                 options = { attachmentId: state.attachmentId };
               }
+              if (provider === "openai-realtime")
+                options = { ...options, voiceProvider: provider, isMuted: muted };
               response = options
                 ? await session.adapter.setVoiceMode(true, agentId, options)
                 : await session.adapter.setVoiceMode(true, agentId);
@@ -1144,7 +1187,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
               (response.attachmentId !== state.attachmentId || !response.generation)
             )
               throw new Error("Host did not acknowledge this voice attachment");
-            await deps.engine.startCapture();
+            if (!response.isMuted || response.voiceCommandsEnabled)
+              await deps.engine.startCapture();
             if (state.generation !== generation) {
               return undefined;
             }
@@ -1158,6 +1202,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
             patchSnapshot((prev) => ({
               ...prev,
               isVoiceMode: true,
+              realtime: response.realtime,
               isVoiceSwitching: false,
               phase: "listening",
               isMuted: response.isMuted ?? deps.engine.isMuted(),
@@ -1223,6 +1268,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       sessions.clear();
     },
 
+    // Cloud mic-off and local command-listening have distinct privacy transitions.
+    // oxlint-disable-next-line complexity
     async toggleMute() {
       if (
         !state.snapshot.isVoiceMode ||
@@ -1230,6 +1277,34 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         state.snapshot.isVoiceSwitching
       )
         return;
+      if (state.snapshot.realtime) {
+        const session = getActiveSession();
+        if (!session?.connected || state.snapshot.realtime.connection !== "connected") return;
+        const generation = state.generation;
+        const muted = !state.snapshot.isMuted;
+        state.transportReady = false;
+        uploader.reset();
+        patchSnapshot({ isMuteSwitching: true });
+        await deps.engine.stopCapture();
+        try {
+          const acknowledged = await session.adapter.setVoiceInputMuted(muted, voiceTransport());
+          if (generation !== state.generation) return;
+          if (acknowledged !== muted || state.snapshot.realtime?.connection !== "connected")
+            throw new Error("Microphone state not acknowledged");
+          if (!muted) await deps.engine.startCapture();
+          if (generation !== state.generation) {
+            await deps.engine.stopCapture();
+            return;
+          }
+          patchSnapshot({ isMuted: muted, muteError: null });
+          state.transportReady = true;
+        } catch {
+          patchSnapshot({ isMuted: true, muteError: "Microphone off. Retry after reconnecting." });
+        } finally {
+          patchSnapshot({ isMuteSwitching: false });
+        }
+        return;
+      }
       if (!state.snapshot.voiceCommandsEnabled) {
         api.onInputMutedChanged(state.snapshot.activeServerId!, deps.engine.toggleMute());
         return;
@@ -1264,6 +1339,55 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       } finally {
         if (state.generation === generation) patchSnapshot({ isMuteSwitching: false });
       }
+    },
+
+    async controlRealtime(action) {
+      const session = getActiveSession();
+      const transport = voiceTransport();
+      const realtime = state.snapshot.realtime;
+      if (!session?.adapter.controlRealtimeVoice || !transport || !realtime)
+        throw new Error("GPT Realtime is not attached");
+      state.transportReady = false;
+      uploader.reset();
+      if (action === "clear" || action === "retry" || action === "end_listening") {
+        await deps.engine.stopCapture();
+        deps.engine.stop();
+        deps.engine.clearQueue();
+      }
+      const generation = state.generation;
+      try {
+        const next = await session.adapter.controlRealtimeVoice({
+          ...transport,
+          action,
+          expectedEpoch: realtime.epoch,
+        });
+        if (generation !== state.generation || !next) return;
+        api.onRealtimeState(session.adapter.serverId, next);
+        if (!next.muted && next.connection === "connected") await deps.engine.startCapture();
+        state.transportReady = next.connection === "connected";
+      } catch (error) {
+        patchSnapshot({
+          isMuted: true,
+          muteError: error instanceof Error ? error.message : "Voice control failed",
+        });
+        await deps.engine.stopCapture();
+        throw error;
+      }
+    },
+
+    onRealtimeState(serverId, realtime) {
+      if (
+        serverId !== state.snapshot.activeServerId ||
+        state.snapshot.voiceProvider !== "openai-realtime"
+      )
+        return;
+      patchSnapshot({ realtime, isMuted: realtime.muted });
+      if (realtime.muted || realtime.connection !== "connected") {
+        state.transportReady = false;
+        uploader.reset();
+        void deps.engine.stopCapture();
+      }
+      if (realtime.connection === "off") void api.stopVoice();
     },
 
     onInputError(serverId, error) {

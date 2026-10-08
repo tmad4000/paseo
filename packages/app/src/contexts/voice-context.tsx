@@ -21,7 +21,8 @@ import {
 } from "@/voice/voice-runtime";
 
 interface VoiceContextValue extends VoiceRuntimeSnapshot {
-  startVoice: (serverId: string, agentId: string) => Promise<void>;
+  startVoice: VoiceRuntime["startVoice"];
+  controlRealtime: VoiceRuntime["controlRealtime"];
   stopVoice: () => Promise<void>;
   isVoiceModeForAgent: (serverId: string, agentId: string) => boolean;
   toggleMute: () => void;
@@ -81,6 +82,7 @@ export function useVoiceOptional(): VoiceContextValue | null {
     return {
       ...snapshot,
       startVoice: runtime.startVoice,
+      controlRealtime: runtime.controlRealtime,
       stopVoice: runtime.stopVoice,
       isVoiceModeForAgent: runtime.isVoiceModeForAgent,
       toggleMute: runtime.toggleMute,

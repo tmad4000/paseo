@@ -1221,6 +1221,7 @@ export class Session {
 
     this.voiceSessions = new VoiceSessions(
       {
+        realtimeHome: this.paseoHome,
         host: {
           emit: (msg) => this.emit(msg),
           loadAgent: (agentId) =>
@@ -2613,6 +2614,7 @@ export class Session {
       case "voice_audio_chunk":
       case "abort_request":
       case "audio_played":
+      case "voice.realtime.control.request":
       case "set_voice_mode":
       case "voice.input.set_muted.request":
       case "dictation_stream_start":

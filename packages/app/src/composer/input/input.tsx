@@ -1,3 +1,4 @@
+import { OpenAiVoiceControls } from "@/components/openai-voice-controls";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -1573,7 +1574,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isDictationProcessing,
       dictationStatus,
     );
-    const showRealtimeOverlay = isRealtimeVoiceForCurrentAgent;
+    const showRealtimeOverlay = showsLegacyVoiceOverlay(isRealtimeVoiceForCurrentAgent, voice);
     const showOverlay = showDictationOverlay || showRealtimeOverlay;
     const surfacePresentation = resolveComposerSurfacePresentation(showOverlay);
 
@@ -2007,6 +2008,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           autoFocusKey={autoFocusKey}
           textInputRef={textInputRef}
         />
+        <OpenAiVoiceControls serverId={voiceServerId} agentId={voiceAgentId} readOnly={readOnly} />
         {/* Regular input */}
         <View
           ref={inputWrapperRef}
@@ -2027,7 +2029,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               onChangeText={handleInputChange}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
-              editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
+              editable={!isDictating && !showRealtimeOverlay && !disabled}
               scrollEnabled={isComposerScrollEnabled}
               autoFocus={false}
               onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : undefined}
@@ -2338,3 +2340,10 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
+
+function showsLegacyVoiceOverlay(
+  active: boolean,
+  voice: { voiceProvider?: string } | null,
+): boolean {
+  return active && voice?.voiceProvider !== "openai-realtime";
+}

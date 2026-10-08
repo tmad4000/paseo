@@ -347,6 +347,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         }
         return client.setVoiceMode(enabled, agentId, input);
       },
+      controlRealtimeVoice: (input) => client.controlRealtimeVoice(input),
       setVoiceInputMuted: async (muted, transport) => {
         if (!client) throw new Error(t("common.errors.daemonUnavailable"));
         return client.setVoiceInputMuted(muted, transport);
@@ -743,6 +744,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     const unsubVoiceInputState = client.on("voice_input_state", (message) => {
       if (message.type !== "voice_input_state") return;
       if (voiceRuntime && !voiceRuntime.acceptsVoiceTransport(serverId, message.payload)) return;
+      if (message.payload.realtime)
+        voiceRuntime?.onRealtimeState(serverId, message.payload.realtime);
       if (message.payload.isMuted !== undefined) {
         voiceRuntime?.onInputMutedChanged(serverId, message.payload.isMuted);
       }

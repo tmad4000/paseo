@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sessionPins: {
+    title: "固定したセッション",
+    pin: "セッションを固定",
+    unpin: "固定を解除",
+    open: "{{host}} で {{title}} を開く",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

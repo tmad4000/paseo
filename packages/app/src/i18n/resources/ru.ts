@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  sessionPins: {
+    title: "Закреплённые сеансы",
+    pin: "Закрепить сеанс",
+    unpin: "Открепить сеанс",
+    open: "Открыть {{title}} на {{host}}",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",

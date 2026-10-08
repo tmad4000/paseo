@@ -2,6 +2,12 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  sessionPins: {
+    title: "고정된 세션",
+    pin: "세션 고정",
+    unpin: "세션 고정 해제",
+    open: "{{host}}에서 {{title}} 열기",
+  },
   globalStream: {
     title: "Stream",
     description: "Questions, context and outcomes across your conversations.",
