@@ -152,6 +152,33 @@ Closing a tab on a **subagent** (any agent with `parentAgentId`) is **layout-onl
 
 The asymmetry is intentional: a subagent's persistent relationship lives in the parent's track. Same-workspace subagents are not auto-opened as tabs; the user opens one from that track when needed. A cross-workspace subagent is also auto-opened as a tab in its own workspace so opening that workspace does not appear empty. It remains in the parent's track until it is actually detached.
 
+## Individual session favorites
+
+**Pin session / Unpin session** is always available beside the Chat / Stream controls.
+Pinned sessions appear above Workspaces in the main sidebar on mobile and desktop;
+selecting one opens that exact agent using the ordinary navigation path, preserving its
+current Chat/Stream selection. The client persists this selection per host and agent across
+app reloads; an explicit Chat/Stream deep link takes precedence over the saved choice.
+Long names wrap and actions have text accessibility labels.
+
+Favorites are separate from workspace pins, launch shortcuts, and layout `pinAgent` (open-tab
+retention). The existing agent label API persists `paseo.session-pinned-at` as an ISO timestamp
+on the owning daemon. Identity is `(serverId, agentId)`, never title, directory, or workspace.
+Newest pins come first; repeated pin requests retain the timestamp. Renames and workspace moves
+retain the favorite. Archive hides it and restore brings it back; permanent deletion removes it.
+Disconnected clients can show cached favorites, but writes require the host and report errors.
+
+Hands-free control works with the existing installed CLI and MCP API (no new daemon capability):
+
+```sh
+paseo agent update <id> --label paseo.session-pinned-at=2026-10-07T12:00:00.000Z
+paseo agent update <id> --label paseo.session-pinned-at=
+```
+
+Use the current ISO time when pinning, retaining an existing valid timestamp for idempotence.
+`update_agent` accepts the same label patch; an empty value unpins. Other labels stay untouched.
+Old clients preserve the label but need the new client build to display the favorites UI.
+
 ## Workspace activity
 
 Agent lifecycle status stays literal: a parent agent is `idle` when its own turn is idle, even if a child is running.
