@@ -83,8 +83,12 @@ gets an **unreviewed** record, including ambiguous prose, multiple requests, and
 messages. Assistant questions remain agent messages. Legacy manually entered questions/asks
 without a verified source remain unattributed; All sources includes them.
 
-IDs use role + SHA-256 of source text + occurrence ordinal, so repeated identical messages are
-separate, provider/client ID enrichment does not duplicate them, and repeat indexing is idempotent.
+IDs hash role, full source text, and provider message identity (or client message identity when
+available). Without stable provenance, identity is scoped to the timeline epoch and sequence
+range. Repeat indexing is idempotent, but a new epoch or ID enrichment can create another
+unreviewed observation. We deliberately prefer visible duplicate candidates over transferring
+reviewed status or linked asks to a different identical message. Existing records, reviews and
+ask links are preserved; only a proven identity can refresh their source position.
 The original transcript is never rewritten. Excerpts are bounded to 4,000 characters; source links
 open Chat. Old inventory records remain when a source later disappears. This is a coverage
 inventory, **not a guarantee of automatic semantic ask extraction**. Human/agent review is still
@@ -97,8 +101,9 @@ loaded, Stream says so and offers the path back to Chat. Refresh after loading r
 The loaded-history notice describes the messages available to Paseo, not completeness of the
 provider's original lifetime history. Previously pruned Stream events are not recovered by this
 index. If provider history is unavailable or truncated, coverage stays limited to retained records.
-Content/occurrence IDs cannot establish identity across a provider rewriting or truncating
-identical repeated messages; review such histories against Chat rather than inferring completeness.
+Legacy content/occurrence records are retained unchanged and are never matched to new
+observations by text. Missing stable provenance prevents cross-epoch reconciliation; review
+these unreviewed candidates against Chat rather than inferring identity or completeness.
 
 For orchestration, read `list_stream_asks` at start/resume and review **every unreviewed message**:
 create one stable ask per distinct request, reuse its `source.messageId` in every derived ask,

@@ -65,7 +65,7 @@ describe("Stream message inventory", () => {
   it("review of one multi-ask message never completes its separate tasks", () => {
     let entries = indexStreamMessages(
       [],
-      [message(1, "Fix filtering and add direct links")],
+      [{ ...message(1, "Fix filtering and add direct links"), providerMessageId: "multi-ask" }],
       "epoch",
     );
     const original = entries[0];
@@ -81,7 +81,7 @@ describe("Stream message inventory", () => {
       });
     entries = indexStreamMessages(
       entries,
-      [message(21, "Fix filtering and add direct links")],
+      [{ ...message(21, "Fix filtering and add direct links"), providerMessageId: "multi-ask" }],
       "refreshed-epoch",
     );
     expect(
@@ -144,6 +144,56 @@ describe("Stream message inventory", () => {
       }),
     ).toThrow(/reference this source/);
   });
+
+  it.each([false, true])(
+    "does not transfer reviewed state or linked asks when an identical message leaves the window (provenance=%s)",
+    (withProvenance) => {
+      const first = {
+        ...message(1, "Repeat this"),
+        ...(withProvenance ? { providerMessageId: "first" } : {}),
+      };
+      const second = {
+        ...message(2, "Repeat this"),
+        ...(withProvenance ? { providerMessageId: "second" } : {}),
+      };
+      let entries = indexStreamMessages([], [first, second], "old");
+      const original = entries[0];
+      entries = applyStreamEntryUpdate(entries, {
+        agentId: "session",
+        action: "set_ask",
+        entryId: "first-ask",
+        expectedRevision: 0,
+        text: "First request",
+        ask: {
+          state: "open",
+          remaining: "Implement",
+          evidence: "",
+          sourceMessageId: original.source!.messageId,
+        },
+      });
+      entries = applyStreamEntryUpdate(entries, {
+        agentId: "session",
+        action: "review_message",
+        entryId: original.id,
+        expectedRevision: 0,
+        review: { state: "reviewed", note: "First request inventoried", askIds: ["first-ask"] },
+      });
+      const reviewed = entries.find((entry) => entry.id === original.id)!;
+      const ask = entries.find((entry) => entry.ask)!;
+      const next = indexStreamMessages(entries, [second], "new");
+      expect(next.find((entry) => entry.id === reviewed.id)).toEqual(reviewed);
+      expect(next.find((entry) => entry.ask)).toEqual(ask);
+      const current = next.filter((entry) => entry.messageReview && entry.source?.epoch === "new");
+      expect(current).toHaveLength(1);
+      expect(current[0].source?.seq).toBe(2);
+      expect(current[0].messageReview).toMatchObject({ state: "unreviewed", askIds: [] });
+      expect(current[0].id).not.toBe(reviewed.id);
+      expect(indexStreamMessages(next, [second], "new")).toBe(next);
+      // Same-epoch window truncation must also preserve the first observation.
+      const sameEpoch = indexStreamMessages(entries, [second], "old");
+      expect(sameEpoch).toBe(entries);
+    },
+  );
 
   it("reports hidden counts for the installed-example shape without inventing open asks", () => {
     const entries: CompanionEntry[] = Array.from({ length: 8 }, (_, i) => ({

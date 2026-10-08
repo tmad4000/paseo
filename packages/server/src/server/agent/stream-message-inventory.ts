@@ -9,18 +9,26 @@ export function indexStreamMessages(
   epoch: string,
 ): CompanionEntry[] {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  const occurrences = new Map<string, number>();
   let changed = false;
   for (const row of rows) {
     const { item } = row;
     if (item.type !== "user_message" && item.type !== "assistant_message") continue;
     const role = item.type === "user_message" ? "user" : "agent";
-    // Content + occurrence survives provider/client ID enrichment and history rehydration.
-    // Repeated identical messages are still separate records. Never delete an older record.
-    const digest = createHash("sha256").update(`${role}\0${item.text}`).digest("hex");
-    const occurrence = (occurrences.get(digest) ?? 0) + 1;
-    occurrences.set(digest, occurrence);
-    const messageId = `message:${digest}:${occurrence}`;
+    // Text/ordinal is not identity: a retained window can drop an earlier identical
+    // message. Only provider/client provenance may carry review across epochs.
+    // Without it, preserve the old record and create an unreviewed local observation.
+    const providerId = row.providerMessageId ?? item.messageId;
+    const clientId = item.type === "user_message" ? item.clientMessageId : undefined;
+    let identity: (string | number)[] = ["local", epoch, row.seqStart, row.seqEnd];
+    if (providerId) {
+      identity = ["provider", providerId];
+    } else if (clientId) {
+      identity = ["client", clientId];
+    }
+    const digest = createHash("sha256")
+      .update(JSON.stringify([role, identity, item.text]))
+      .digest("hex");
+    const messageId = `message:${digest}`;
     const id = `source:${messageId}`;
     const previous = byId.get(id);
     const source = { role, messageId, seq: row.seqEnd, epoch } as const;
