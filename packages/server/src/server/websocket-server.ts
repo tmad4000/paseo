@@ -1964,6 +1964,7 @@ export class VoiceAssistantWebSocketServer {
         companionStream: true,
         globalStream: true,
         durableStream: true,
+        streamMessageInventory: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
         steerOnly: true,

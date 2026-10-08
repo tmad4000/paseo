@@ -123,3 +123,13 @@ Existing checks still apply to code changes.
 
 Until those automation items land, the preservation matrix and release smoke receipt are process
 checks, not an automated guarantee that a regression will be blocked.
+
+### Stream message coverage and navigation (pspin-05x; dependent on PR #57)
+
+Activity defaults to all captured content; explicit status/source filters show counts and reset.
+User-message coverage is durable and distinct from semantic asks and completion evidence.
+`list_stream_asks` includes unreviewed source messages; `review_stream_message` links multiple
+asks without resolving them. Copy Stream link preserves the host/session view across routing
+and reload. Requires `server_info.features.streamMessageInventory`. Older unavailable history
+is labeled; no provider-history rewrite, background inference service, deployment or favorite
+session implementation is included. See [companion-stream.md](companion-stream.md).

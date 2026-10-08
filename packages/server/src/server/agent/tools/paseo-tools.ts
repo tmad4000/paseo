@@ -2342,7 +2342,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Read the durable ask checklist",
       description:
-        "Read explicit tracked asks and their revisions without starting a provider. Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change.",
+        "Read explicit tracked asks plus unreviewed retained user messages. For each unreviewed message, record ALL its separate asks using set_stream_ask with its source.messageId, then review_stream_message with the linked ask IDs. Do not infer success from a reply, tool or turn end. Without starting a provider, Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change.",
       inputSchema: {
         agentId: z.string().optional(),
         cursor: z.string().optional(),
@@ -2356,6 +2356,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const page = await agentManager.listGlobalStream({
         agentId: targetAgentId,
         asksOnly: true,
+        includeMessageInventory: true,
         includeArchived: true,
         cursor,
         limit,
@@ -2367,10 +2368,47 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...page,
           rows: page.rows.map((row) =>
             Object.assign({}, row, {
-              askId: row.item.kind === "entry" ? row.item.entry.id.slice(4) : null,
+              askId:
+                row.item.kind === "entry" && row.item.entry.ask ? row.item.entry.id.slice(4) : null,
             }),
           ),
         }),
+      };
+    },
+  );
+
+  registerTool(
+    "review_stream_message",
+    {
+      title: "Review a source message for asks",
+      description:
+        "After inventorying ALL requests in one retained user message, link their stable askIds. Multiple asks may reference the same source.messageId. Review means extraction was checked, never that the tasks succeeded. Give a note even for messages with no asks. Reopen with state=unreviewed when the extraction needs correction. No model/provider calls are made.",
+      inputSchema: {
+        agentId: z.string().optional(),
+        entryId: z.string(),
+        expectedRevision: z.number().int().min(0),
+        state: z.enum(["unreviewed", "reviewed"]),
+        note: z.string().max(4000),
+        askIds: z.array(z.string().max(200)).max(100),
+      },
+    },
+    async ({ agentId, entryId, expectedRevision, state, note, askIds }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) throw new Error("An agentId is required");
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId,
+        expectedRevision,
+        action: "review_message",
+        review: { state, note, askIds },
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Source review saved. Ask completion states are unchanged.",
+          },
+        ],
       };
     },
   );

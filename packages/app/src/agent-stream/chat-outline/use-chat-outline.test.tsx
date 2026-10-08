@@ -377,3 +377,34 @@ describe("useChatOutline", () => {
     expect(scrollToMessage).toHaveBeenCalledWith("live-prompt");
   });
 });
+
+it("opens a Stream source through a bounded window even when the outline is disabled", async () => {
+  runtime.listAgentTimelinePrompts.mockReset();
+  runtime.fetchAgentTimeline.mockReset().mockResolvedValue(undefined);
+  const onJumpError = vi.fn();
+  const { result } = renderHook(() =>
+    useChatOutline({
+      agentId: "agent-source",
+      serverId: "host",
+      timelineEpoch: "source-epoch",
+      tail: [],
+      head: [],
+      enabled: false,
+      viewportRef: { current: null },
+      onJumpError,
+    }),
+  );
+  await act(async () => result.current.jumpToPrompt(7, "source-epoch"));
+  expect(runtime.listAgentTimelinePrompts).not.toHaveBeenCalled();
+  expect(runtime.fetchAgentTimeline).toHaveBeenCalledWith(
+    "host",
+    "agent-source",
+    expect.objectContaining({
+      direction: "before",
+      cursor: expect.objectContaining({ epoch: "source-epoch" }),
+      limit: 40,
+      mergeWindow: true,
+    }),
+  );
+  expect(onJumpError).not.toHaveBeenCalled();
+});

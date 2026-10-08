@@ -1182,6 +1182,13 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const handleReturnToChat = useCallback(() => {
     handleSetSelectedView("chat");
   }, [handleSetSelectedView]);
+  const handleOpenStreamSource = useCallback(
+    (seq: number, epoch: string) => {
+      handleReturnToChat();
+      streamViewRef.current?.jumpToSource(seq, epoch);
+    },
+    [handleReturnToChat, streamViewRef],
+  );
   const handleReplyInChat = useCallback(() => {
     handleReturnToChat();
     streamViewRef.current?.scrollToBottom("jump-to-bottom");
@@ -1394,6 +1401,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             onOpenWorkspaceFile={onOpenWorkspaceFile}
             onReturnToChat={handleReturnToChat}
             onReplyInChat={handleReplyInChat}
+            onOpenSource={handleOpenStreamSource}
           />
         ) : null}
 

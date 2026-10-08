@@ -29,6 +29,23 @@ const common = {
   text: z.string(),
   truncated: z.boolean(),
   ask: TrackedAskSchema.optional(),
+  source: z
+    .object({
+      role: z.enum(["user", "agent"]),
+      messageId: z.string(),
+      seq: z.number().int().optional(),
+      epoch: z.string().optional(),
+    })
+    .optional(),
+  // Message coverage is not semantic extraction or task completion.
+  messageReview: z
+    .object({
+      state: z.enum(["unreviewed", "reviewed"]),
+      revision: z.number().int().min(0),
+      note: z.string(),
+      askIds: z.array(z.string()),
+    })
+    .optional(),
 };
 
 export const CompanionEntrySchema = z.discriminatedUnion("kind", [
@@ -71,9 +88,17 @@ export const CompanionEntrySchema = z.discriminatedUnion("kind", [
 export type CompanionEntry = z.infer<typeof CompanionEntrySchema>;
 
 export function isCompanionEntryPending(entry: CompanionEntry): boolean {
+  if (entry.messageReview) return entry.messageReview.state === "unreviewed";
   return (
     (entry.kind === "question" && entry.status !== "done") ||
     (entry.kind === "feature_request" && entry.status !== "done") ||
     (entry.kind === "permission" && entry.status === "pending")
   );
+}
+
+export function companionSourceRole(entry: CompanionEntry): "user" | "agent" | "unknown" {
+  if (entry.source) return entry.source.role;
+  if (entry.kind === "outcome" || entry.kind === "permission" || entry.id.startsWith("turn:"))
+    return "agent";
+  return "unknown";
 }

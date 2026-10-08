@@ -41,7 +41,7 @@ questions”, become separately identified questions. Recognition ignores code a
 captured prose preserves inline code and URL context. Fenced code and standalone code or
 URL examples are excluded. This syntax
 heuristic is not a semantic inventory of every unanswered question. The explicit tool is
-the reliable path, including other languages. No historical transcript backfill is claimed.
+the reliable path, including other languages. Message inventory backfill is described below; this question heuristic does not backfill old events.
 Existing retained Reply sent questions become visible again; previously evicted content
 cannot be reconstructed by this change.
 
@@ -56,10 +56,57 @@ still deduplicates. This does not repair previously missing historical cards.
 
 ## Durable ask checklist
 
-Per-chat Stream opens on **Checklist**, showing unresolved explicitly tracked asks first.
-Use **Show completed too** to include completed work, and **Load more** to read older pages.
-Queue and Pinned retain their existing meanings. Refresh and reconnect reread durable records;
-offline pages remain readable with a stale-data notice. Cached data is not an offline archive.
+Per-chat Stream opens on **Activity**, a superset of captured events, retained message
+inventory, explicit asks, pins and artifacts. **Checklist** includes confirmed asks and
+unreviewed user messages; unresolved work comes first. **Pinned** is item pinning, not the
+separate conversation favorites feature. Named status (All/Open/Closed or Done) and source
+(All sources/Your messages/Agent messages) controls expose their selected states. Counts are
+computed across the full view before paging/status/source filters; the matching count reflects
+those filters. Clear filters/Show all items recover a filter-empty view. Loading, disconnected,
+failed, unsupported, no captured data and not-yet-loaded history are distinct states.
+
+**Copy Stream link** emits the existing host/agent route with `?view=stream`: same-origin URLs
+in browsers and `paseo-fork://` links in desktop/native. It adds no public host or sharing service.
+The router retains the selection while the host bootstraps, and per-session Chat/Stream selection
+is persisted locally so the workspace redirect/reload preserves it. Clipboard errors are visible.
+Source-message buttons use the existing bounded Chat timeline jump. A stale timeline epoch
+reports the existing history-load error rather than jumping to an unrelated row; refresh Stream
+after Chat reloads its history.
+
+### Message coverage versus semantic asks
+
+New user messages are captured into durable source records, even before anyone opens Stream.
+Opening the per-chat Stream or calling `list_stream_asks` indexes the currently loaded projected
+Chat messages and awaits storage. This is foreground local indexing, not provider execution,
+background inference, an additional model call, or transcript upload. Every retained user message
+gets an **unreviewed** record, including ambiguous prose, multiple requests, and non-request
+messages. Assistant questions remain agent messages. Legacy manually entered questions/asks
+without a verified source remain unattributed; All sources includes them.
+
+IDs use role + SHA-256 of source text + occurrence ordinal, so repeated identical messages are
+separate, provider/client ID enrichment does not duplicate them, and repeat indexing is idempotent.
+The original transcript is never rewritten. Excerpts are bounded to 4,000 characters; source links
+open Chat. Old inventory records remain when a source later disappears. This is a coverage
+inventory, **not a guarantee of automatic semantic ask extraction**. Human/agent review is still
+needed to identify every request, including several requests in one message.
+
+The production manager currently hydrates history through the existing provider history path;
+its optional durable timeline-store interface is not wired to a production implementation here.
+Indexing does not start that path or authenticate a provider. If older Chat history has not been
+loaded, Stream says so and offers the path back to Chat. Refresh after loading retained history.
+The loaded-history notice describes the messages available to Paseo, not completeness of the
+provider's original lifetime history. Previously pruned Stream events are not recovered by this
+index. If provider history is unavailable or truncated, coverage stays limited to retained records.
+Content/occurrence IDs cannot establish identity across a provider rewriting or truncating
+identical repeated messages; review such histories against Chat rather than inferring completeness.
+
+For orchestration, read `list_stream_asks` at start/resume and review **every unreviewed message**:
+create one stable ask per distinct request, reuse its `source.messageId` in every derived ask,
+then call `review_stream_message` with the source entry ID, revision, note, and all linked ask IDs.
+An explicit note is required even if the message contains no asks. Review completion means the
+message was checked for requests, never that the tasks succeeded. Reopen source review with
+`state=unreviewed` if extraction needs correction. Linked ask states remain independent.
+This uses the orchestrator's existing tools/reasoning budget, without a new inference service.
 
 Use the existing agent MCP interface:
 
@@ -81,11 +128,10 @@ invented when subtasks are absent. Evidence is an agent/user assertion, not inde
 
 Orchestrators should create one ask per request before delegation, keep IDs on the parent
 conversation, and revise each ask when evidence or blockers change. Read unresolved asks on
-resume. This is an explicit tool contract, not automatic semantic extraction: natural-language
-requests are not guaranteed to be inventoried unless the orchestrator records them. No background
-model, paid API, agent execution loop, provider-history edit, or transcript backfill is added.
-Automatic question cards remain distinct from explicit asks. Neither a turn ending, a child
-becoming idle, nor all subtasks being checked automatically completes an ask.
+resume. Explicit state and evidence remain an agent/user assertion, not independent verification.
+The message inventory closes the silent-omission gap by leaving each message visibly unreviewed
+until checked; it cannot promise every semantic ask is correctly extracted by an agent.
+Neither a turn ending, a child becoming idle, source review, nor checked subtasks completes an ask.
 
 Users can add an open ask in Checklist, reopen it or mark it in progress. Detailed progress,
 blockers, corrections and completion evidence use `set_stream_ask` in v1; ask Done cannot bypass
@@ -106,8 +152,9 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 reads and acknowledged writes; older hosts need updating. The old mutation RPC remains
 accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged.
 Ask data is optional metadata on the existing question shape, with open/done mirrored for older
-readers; no new entry kind or legacy status is emitted. `durableStream` gates per-chat pagination
-and checklist. New list scoping and mutation fields are additive and only used on capable hosts.
+readers; no new entry kind or legacy status is emitted. `durableStream` advertises the original
+explicit checklist; `streamMessageInventory` gates the extended per-chat Activity/Checklist UI,
+message coverage and counts. New list scoping and mutation fields are additive and only used on capable hosts.
 New response types are sent only when requested. Read/write permissions match other workspace
 metadata operations. Mutation serialization prevents concurrent question/pin writes from
 replacing each other, and missing items return errors rather than silent success.

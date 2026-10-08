@@ -40,7 +40,7 @@ export interface UseChatOutlineInput {
 export interface ChatOutline {
   prompts: ChatOutlinePrompt[];
   activePrompt: ActivePromptSource;
-  jumpToPrompt: (seq: number) => void;
+  jumpToPrompt: (seq: number, sourceEpoch?: string) => void;
   reportReadingPosition: (seq: number | null) => void;
 }
 
@@ -151,7 +151,7 @@ export function useChatOutline({
   }, [loadedItems, pendingJump, revealLoadedMessage, viewportRef, visibleMessageIds]);
 
   const jumpToPrompt = useCallback(
-    (seq: number) => {
+    (seq: number, sourceEpoch?: string) => {
       nextJumpRequestIdRef.current += 1;
       setPendingJump(null);
       const loaded = loadedItems.find((item) => item.timelineCursor?.seq === seq);
@@ -164,11 +164,15 @@ export function useChatOutline({
         viewportRef.current?.scrollToMessage?.(loaded.id);
         return;
       }
-      if (!index) return;
+      const epoch = sourceEpoch ?? index?.epoch;
+      if (!epoch) {
+        onJumpError();
+        return;
+      }
       const requestId = nextJumpRequestIdRef.current;
       setPendingJump({ requestId, seq, fetchSettled: false, hasScrolled: false });
       void getHostRuntimeStore()
-        .fetchAgentTimeline(serverId, agentId, planTimelinePromptJump({ epoch: index.epoch, seq }))
+        .fetchAgentTimeline(serverId, agentId, planTimelinePromptJump({ epoch, seq }))
         .catch((error: unknown) => {
           console.warn("Failed to load a Chat outline window", error);
           onJumpError();

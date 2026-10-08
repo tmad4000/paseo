@@ -9,6 +9,16 @@ export type GlobalStreamRow = StreamRow & { serverId: string; serverLabel: strin
 interface HostPage {
   rows: StreamRow[];
   hasMore: boolean;
+  counts?: {
+    total: number;
+    open: number;
+    done: number;
+    user: number;
+    agent: number;
+    unknown: number;
+    matching: number;
+  };
+  coverage?: "loaded_history" | "not_loaded";
 }
 
 export function useGlobalStream(
@@ -30,7 +40,7 @@ export function useGlobalStream(
     // COMPAT(globalStream): fork beta.11; remove after 2027-04-06.
     if (
       !(options.agentId
-        ? sessions[host.serverId]?.serverInfo?.features?.durableStream
+        ? sessions[host.serverId]?.serverInfo?.features?.streamMessageInventory
         : sessions[host.serverId]?.serverInfo?.features?.globalStream)
     )
       return "upgrade";
@@ -43,6 +53,9 @@ export function useGlobalStream(
         host.serverId,
         options.agentId,
         options.asksOnly,
+        options.includeMessageInventory,
+        options.sourceRole,
+        options.state,
         options.filter,
         options.search,
         options.includeArchived,
@@ -57,10 +70,15 @@ export function useGlobalStream(
         if (!client) throw new Error("Host disconnected");
         const rows: StreamRow[] = [];
         let cursor: string | undefined;
+        let counts: HostPage["counts"];
+        let coverage: HostPage["coverage"];
         for (let page = 0; page < depth; page++) {
           const result = await client.listGlobalStream({
             agentId: options.agentId,
             asksOnly: options.asksOnly,
+            includeMessageInventory: options.includeMessageInventory,
+            sourceRole: options.sourceRole,
+            state: options.state,
             filter: options.filter,
             search: options.search,
             includeArchived: options.includeArchived,
@@ -68,10 +86,12 @@ export function useGlobalStream(
             limit: 50,
           });
           rows.push(...result.rows);
+          counts = result.counts;
+          coverage = result.coverage;
           cursor = result.nextCursor ?? undefined;
           if (!cursor) break;
         }
-        return { rows, hasMore: Boolean(cursor) };
+        return { rows, counts, coverage, hasMore: Boolean(cursor) };
       },
     })),
   );
@@ -86,6 +106,9 @@ export function useGlobalStream(
           host.serverId,
           options.agentId,
           options.asksOnly,
+          options.includeMessageInventory,
+          options.sourceRole,
+          options.state,
           options.filter,
           options.search,
           options.includeArchived,
@@ -111,6 +134,9 @@ export function useGlobalStream(
     queryClient,
     options.agentId,
     options.asksOnly,
+    options.includeMessageInventory,
+    options.sourceRole,
+    options.state,
     options.filter,
     options.search,
     options.includeArchived,
@@ -135,6 +161,8 @@ export function useGlobalStream(
   const fetchNextPage = useCallback(() => setDepth((value) => value + 1), []);
   return {
     rows,
+    counts: results[0]?.data?.counts,
+    coverage: results[0]?.data?.coverage,
     notices,
     refetch,
     fetchNextPage,

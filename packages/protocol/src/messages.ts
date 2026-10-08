@@ -4074,6 +4074,7 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
         globalStream: z.boolean().optional(),
         durableStream: z.boolean().optional(),
+        streamMessageInventory: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
