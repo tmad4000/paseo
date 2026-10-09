@@ -313,7 +313,7 @@ test("retained user messages expose multiple asks without confusing agent questi
       .getByRole("button", { name: "Your messages", exact: true })
       .click();
     await expect(
-      feed.getByText("Fix filtering and add direct links.", { exact: true }),
+      feed.getByText("Fix filtering and add direct links.", { exact: true }).first(),
     ).toBeVisible();
     await expect(feed.getByText("Should I start deployment?", { exact: true })).toHaveCount(0);
     await feed
@@ -370,7 +370,7 @@ test("retained user messages expose multiple asks without confusing agent questi
       .click();
     await expect(page.getByTestId("companion-stream")).toHaveCount(0);
     await expect(
-      page.getByText("Fix filtering and add direct links.", { exact: true }),
+      page.getByText("Fix filtering and add direct links.", { exact: true }).first(),
     ).toBeVisible();
   } finally {
     await client.removeProject(workspace.projectId);
