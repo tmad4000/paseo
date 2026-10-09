@@ -120,6 +120,24 @@ retarget the PR to `next` and preserve that destination through delivery. Follow
 [release branch discipline](docs/release.md#release-branch-discipline) for creating
 and updating `next`, integrating it after a release, and releasing a hotfix from a tag.
 
+## Delivery cadence
+
+- Keep related fixes for one user-visible outcome on one feature branch. Commit and push
+  progress as useful, but finish the batch before opening its PR or starting a full
+  validation pipeline. A push to a branch without a PR does not run this repo's PR CI.
+- While implementing, run the tests for changed behavior. Before the PR, run
+  `npm run format`, `npm run lint`, and `npm run typecheck` once for the coherent
+  batch. Re-run only checks affected by later edits. Use the PR's routed GitHub
+  checks for full-suite verification; review their actual conclusions before merge.
+- `no-mistakes` is optional for routine work. Use it when the user asks for it,
+  or when its extra independent review is warranted by a broad or high-risk
+  change. Do not start it for each small follow-up in a batch. Once a run owns
+  a branch, finish or recover that run through its documented gates; do not
+  bypass an active run.
+- Do not bump all workspace versions in each feature or correction PR. The
+  release owner makes one version change for the release candidate after the
+  related code is integrated, following [docs/release.md](docs/release.md).
+
 ## Critical rules
 
 - **For fork feature changes, upstream updates, reconciliation, and fork releases, read and update [the fork feature register](docs/fork-features.md).** Preserve its user-visible acceptance checks and account for each included feature before declaring parity or an installation verified.
@@ -135,7 +153,7 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
   - Never re-run a test suite that another agent already ran and reported green — trust the result.
   - For full suite verification, push to CI and check GitHub Actions instead.
 - Add tests to existing suites and reuse their npm scripts and CI jobs instead of creating feature-specific ones.
-- **Always run typecheck and lint after every change.**
+- **Run typecheck and lint before the PR and after edits that could affect their result.**
 - **Build workspace packages before diagnosing cross-package type errors.** This repo consumes generated declarations across workspaces. If typecheck fails in a package that depends on another workspace, rebuild the owning stack first so `dist` declarations are current:
   - `npm run build:client` — rebuild protocol and client declarations.
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
