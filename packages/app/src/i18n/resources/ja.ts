@@ -1274,6 +1274,11 @@ export const ja: TranslationResources = {
       useChat: "Use this chat",
       sendHere: "Send here",
       chooseChat: "Choose an existing chat",
+      routeBestMatch: "Route to best match",
+      routeBestMatchAction: "Route this prompt to the best matching chat",
+      routeAmbiguous: "No clear best match. Choose the destination; nothing sent yet.",
+      routeNewConversation: "Start a new conversation with this draft",
+      moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
       placeholder: "プロジェクトやチャットを絞り込む",

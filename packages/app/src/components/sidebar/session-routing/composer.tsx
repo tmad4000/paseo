@@ -49,6 +49,7 @@ import {
   initialRoutingState,
   recipientInScope,
   routingReducer,
+  selectRouteBestMatch,
   type Recipient,
   type RoutingAction,
   type RoutingState,
@@ -61,6 +62,8 @@ interface MatchRequest {
 interface MatchResponse {
   recipients: Recipient[];
   notice: string;
+  /** True when any selected host failed or its directory was unavailable. */
+  incomplete: boolean;
 }
 interface ActiveMatch {
   requestId: string;
@@ -270,6 +273,7 @@ export function SessionRoutingComposer({
       return {
         recipients,
         notice: notices.join(" "),
+        incomplete: failures.length > 0,
       };
     },
   });
@@ -446,17 +450,20 @@ export function SessionRoutingComposer({
       itemId = uuid(),
       draftVersion = state.draftVersion,
       draftUpdatedAt = state.draftUpdatedAt,
+      options?: { forceQueue?: boolean; route?: boolean },
     ) => {
       const current = latest.current;
       const retry =
         current.state.phase.status === "pending" && current.state.phase.itemId === itemId;
       if (!canSendRoutedPrompt(current.state, current.serverIds, recipient, retry)) return;
       request.current = null;
+      const route = options?.route;
       dispatch({
         type: "phase",
-        phase: { status: "sending", recipient, text, itemId, draftVersion, draftUpdatedAt },
+        phase: { status: "sending", recipient, text, itemId, draftVersion, draftUpdatedAt, route },
       });
-      const mode = retry ? "queue" : current.state.deliveryMode;
+      // The route verb only ever queues; it never steers or interrupts a running agent.
+      const mode = retry || options?.forceQueue ? "queue" : current.state.deliveryMode;
       if (mode !== "queue") {
         await sendDirectFromComposer({
           recipient,
@@ -503,6 +510,7 @@ export function SessionRoutingComposer({
               draftVersion,
               draftUpdatedAt,
               error: message,
+              route,
             },
           });
       }
@@ -648,6 +656,88 @@ export function SessionRoutingComposer({
     }
   }, [match, send, t, dispatch, matchesContext, cancelMatch, continueNewConversation]);
 
+  // The explicit route verb: one action chaining search → select → deliver.
+  // It queues only, auto-selects solely under the documented threshold+margin
+  // gate, and otherwise falls back to the ordinary candidate list with the
+  // draft preserved. Passive Find/Send matching is unchanged.
+  const routeToBestMatch = useCallback(async () => {
+    const current = latest.current;
+    const submitted = current.state;
+    if (submitting.current || isRoutingLocked(submitted)) return;
+    if (submitted.mode !== "send" || submitted.newConversation || submitted.recipient) return;
+    const text = submitted.sendDraft;
+    if (!text.trim()) return;
+    const requestId = uuid();
+    const context: ActiveMatch = {
+      requestId,
+      mode: "send",
+      scope: submitted.scope,
+      hosts: current.hostMembership,
+      query: current.searchQuery,
+      draft: text,
+      draftVersion: submitted.draftVersion,
+      draftUpdatedAt: submitted.draftUpdatedAt,
+    };
+    const isCurrentMatch = () => {
+      const matchCurrent = latest.current;
+      return (
+        request.current === requestId &&
+        matchCurrent.state.phase.status === "matching" &&
+        matchCurrent.state.phase.requestId === requestId &&
+        matchesContext(context)
+      );
+    };
+    submitting.current = requestId;
+    try {
+      request.current = requestId;
+      activeMatch.current = context;
+      dispatch({
+        type: "phase",
+        phase: { status: "matching", requestId, mode: "send", text, route: true },
+      });
+      const result = await match.mutateAsync({ query: text, scope: submitted.scope });
+      if (!isCurrentMatch()) {
+        cancelMatch(requestId);
+        return;
+      }
+      request.current = null;
+      activeMatch.current = null;
+      const inScope = result.recipients.filter((recipient) =>
+        recipientInScope(recipient, context.scope),
+      );
+      // Never auto-select from partial coverage: a failed host could hide the
+      // real destination, so an incomplete search always asks.
+      const best = result.incomplete ? null : selectRouteBestMatch(inScope);
+      if (!best) {
+        dispatch({
+          type: "matched",
+          requestId,
+          recipients: result.recipients,
+          notice: result.notice,
+        });
+        return;
+      }
+      await send(best, text, undefined, context.draftVersion, context.draftUpdatedAt, {
+        forceQueue: true,
+        route: true,
+      });
+    } catch (error) {
+      if (!isCurrentMatch()) {
+        cancelMatch(requestId);
+        return;
+      }
+      dispatch({
+        type: "phase",
+        phase: {
+          status: "error",
+          message: error instanceof Error ? error.message : t("sidebar.routing.matchFailed"),
+        },
+      });
+    } finally {
+      if (submitting.current === requestId) submitting.current = null;
+    }
+  }, [match, send, t, dispatch, matchesContext, cancelMatch]);
+
   const select = useCallback(
     (recipient: Recipient | null) => {
       const current = latest.current;
@@ -767,16 +857,25 @@ export function SessionRoutingComposer({
     if (phase.status !== "pending" || submitting.current) return;
     const submissionId = uuid();
     submitting.current = submissionId;
-    void send(
-      phase.recipient,
-      phase.text,
-      phase.itemId,
-      phase.draftVersion,
-      phase.draftUpdatedAt,
-    ).finally(() => {
+    void send(phase.recipient, phase.text, phase.itemId, phase.draftVersion, phase.draftUpdatedAt, {
+      route: phase.route,
+    }).finally(() => {
       if (submitting.current === submissionId) submitting.current = null;
     });
   }, [send, state.phase]);
+  // "Wrong chat → move draft": restore the routed prompt and reopen the manual
+  // chooser. The queued copy keeps its durable-outbox semantics; this only
+  // brings the draft back for re-routing.
+  const moveDraft = useCallback(() => {
+    const phase = latest.current.state.phase;
+    if (phase.status !== "acknowledged" || !phase.route) return;
+    if (!latest.current.state.sendDraft.trim()) setDraft(phase.route.text);
+    dispatch({ type: "phase", phase: { status: "idle" } });
+    dispatch({ type: "picker", open: true });
+  }, [dispatch, setDraft]);
+  const routeFromButton = useCallback(() => {
+    void routeToBestMatch();
+  }, [routeToBestMatch]);
   const scopeName =
     allProjects.find((project) => project.viewKey === state.scope)?.projectName ??
     t("sidebar.routing.allProjects");
@@ -917,10 +1016,11 @@ export function SessionRoutingComposer({
         >
           {t("sidebar.routing.clear")}
         </Button>
+        <RouteBestMatchButton state={state} locked={locked} onPress={routeFromButton} />
         <Button
           size="xs"
           disabled={isSubmitDisabled(state, searchQuery, locked, newWorkspaceEligible())}
-          loading={state.phase.status === "matching" || state.phase.status === "sending"}
+          loading={isLookupOrDeliveryActive(state.phase) && !isRoutePhaseActive(state.phase)}
           onPress={submitFromButton}
           accessibilityLabel={t(routingSubmitLabel(state))}
           testID="routing-submit"
@@ -937,13 +1037,73 @@ export function SessionRoutingComposer({
         onOpen={open}
         onSend={sendChoice}
         onRetry={retryDelivery}
+        onMoveDraft={moveDraft}
       />
-      {state.phase.status === "results" && state.phase.recipients.length === 0 ? (
-        <Button size="sm" variant="outline" onPress={openPicker}>
-          {t("sidebar.routing.chooseChat")}
+      <RoutingNoResultActions
+        phase={state.phase}
+        onChooseChat={openPicker}
+        onNewConversation={selectNewConversation}
+      />
+    </View>
+  );
+}
+
+function isLookupOrDeliveryActive(phase: RoutingState["phase"]): boolean {
+  return phase.status === "matching" || phase.status === "sending";
+}
+
+function isRoutePhaseActive(phase: RoutingState["phase"]): boolean {
+  return (phase.status === "matching" || phase.status === "sending") && phase.route === true;
+}
+
+function RouteBestMatchButton({
+  state,
+  locked,
+  onPress,
+}: {
+  state: RoutingState;
+  locked: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (state.mode !== "send" || state.newConversation) return null;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={locked || !state.sendDraft.trim() || state.recipient !== null}
+      loading={isRoutePhaseActive(state.phase)}
+      onPress={onPress}
+      accessibilityLabel={t("sidebar.routing.routeBestMatchAction")}
+      testID="routing-route-best"
+    >
+      {t("sidebar.routing.routeBestMatch")}
+    </Button>
+  );
+}
+
+function RoutingNoResultActions({
+  phase,
+  onChooseChat,
+  onNewConversation,
+}: {
+  phase: RoutingState["phase"];
+  onChooseChat: () => void;
+  onNewConversation: () => void;
+}) {
+  const { t } = useTranslation();
+  if (phase.status !== "results" || phase.recipients.length > 0) return null;
+  return (
+    <>
+      <Button size="sm" variant="outline" onPress={onChooseChat}>
+        {t("sidebar.routing.chooseChat")}
+      </Button>
+      {phase.route ? (
+        <Button size="sm" variant="outline" onPress={onNewConversation}>
+          {t("sidebar.routing.routeNewConversation")}
         </Button>
       ) : null}
-    </View>
+    </>
   );
 }
 
@@ -1007,6 +1167,7 @@ function RoutingOutcome({
   onOpen,
   onSend,
   onRetry,
+  onMoveDraft,
 }: {
   phase: import("./model").RoutingPhase;
   resultsStale: boolean;
@@ -1016,6 +1177,7 @@ function RoutingOutcome({
   onOpen: (recipient: Recipient) => void;
   onSend: (recipient: Recipient) => void;
   onRetry: () => void;
+  onMoveDraft: () => void;
 }) {
   const { t } = useTranslation();
   const openReceipt = useCallback(() => {
@@ -1054,15 +1216,22 @@ function RoutingOutcome({
         <Button size="sm" variant="ghost" onPress={openReceipt}>
           {t("sidebar.routing.openChat")}
         </Button>
+        {phase.route ? (
+          <Button size="sm" variant="outline" onPress={onMoveDraft} testID="routing-move-draft">
+            {t("sidebar.routing.moveDraft")}
+          </Button>
+        ) : null}
       </View>
     );
   if (phase.status !== "results") return null;
   let headingKey:
     | "sidebar.routing.noMatch"
     | "sidebar.routing.found"
-    | "sidebar.routing.disambiguate" = "sidebar.routing.noMatch";
-  if (phase.recipients.length > 0)
-    headingKey = phase.mode === "find" ? "sidebar.routing.found" : "sidebar.routing.disambiguate";
+    | "sidebar.routing.disambiguate"
+    | "sidebar.routing.routeAmbiguous" = "sidebar.routing.noMatch";
+  if (phase.recipients.length > 0 && phase.mode === "find") headingKey = "sidebar.routing.found";
+  else if (phase.recipients.length > 0)
+    headingKey = phase.route ? "sidebar.routing.routeAmbiguous" : "sidebar.routing.disambiguate";
   return (
     <View style={styles.results}>
       {phase.notice ? <Text style={styles.muted}>{phase.notice}</Text> : null}
