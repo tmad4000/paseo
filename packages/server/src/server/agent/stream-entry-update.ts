@@ -70,12 +70,15 @@ function createEntry(
     }
     case "add_pin": {
       const id = `pin:${input.entryId ?? randomUUID()}`;
+      // Full replacement, like questions and asks: an update without sourceAgentId/link clears them.
       return {
         ...common,
         id,
         timestamp: entries.find((entry) => entry.id === id)?.timestamp ?? common.timestamp,
         kind: "pin",
         sourceId: input.sourceId,
+        ...(input.sourceAgentId ? { sourceAgentId: input.sourceAgentId } : {}),
+        ...(input.link ? { link: input.link } : {}),
       };
     }
     case "add_q_and_a":

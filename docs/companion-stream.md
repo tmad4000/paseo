@@ -28,6 +28,14 @@ A turn ending is not evidence its work shipped.
 Agents should use **set_stream_question** for each needed input, with one stable questionId
 per item. Reusing it edits the same entry, and status=done resolves only that question. This
 tool defaults to the calling conversation and never approves a permission or sends a prompt.
+**set_stream_pin** gives agents the same durable write for Pinned: create returns a stable
+pinId, reusing it edits the same pin (full replacement), and remove=true deletes it — removing
+an already-removed pin succeeds, so retries after a lost acknowledgement are safe. A pin may
+carry an optional source conversation (`sourceAgentId`, rendered as an open-session action)
+and an optional `link` URL. Both Stream write tools default to the calling conversation;
+set_stream_pin also accepts another conversation's id or exact unique title so an
+orchestrator can curate a hub conversation it owns. An ambiguous or unknown title is an
+error, never a silent fallback.
 Users can also add a question in the per-chat queue or a note in Pinned. Saves await an
 acknowledged response, show failures, and preserve unsaved input after a failed save.
 An acknowledgement follows durable storage. Manual question and pin drafts, including
@@ -104,7 +112,8 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 `global-stream.ts` defines additive `stream.list.request/response` and
 `stream.entry.update.request/response` RPCs. `server_info.features.globalStream` gates global
 reads and acknowledged writes; older hosts need updating. The old mutation RPC remains
-accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged.
+accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged;
+pin entries carry additive optional `sourceAgentId` and `link` fields that old readers ignore.
 Ask data is optional metadata on the existing question shape, with open/done mirrored for older
 readers; no new entry kind or legacy status is emitted. `durableStream` gates per-chat pagination
 and checklist. New list scoping and mutation fields are additive and only used on capable hosts.

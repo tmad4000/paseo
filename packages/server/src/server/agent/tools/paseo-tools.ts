@@ -1,4 +1,5 @@
 import { TrackedAskInputSchema } from "@getpaseo/protocol/companion-stream";
+import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
@@ -2408,6 +2409,124 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           agentId: targetAgentId,
           entryId: `question:${questionId}`,
           status: status ?? "open",
+        }),
+      };
+    },
+  );
+
+  // Resolves a Stream write target the way set_stream_ask/set_stream_question do
+  // (explicit value, else the caller), additionally accepting a conversation title
+  // so an orchestrator can curate a named hub conversation. An id is accepted as-is
+  // when it names a live or stored conversation; anything else must match exactly
+  // one visible conversation title.
+  const resolveStreamTargetAgentId = async (target: string | undefined): Promise<string> => {
+    const explicit = target?.trim();
+    if (!explicit) {
+      if (!callerAgentId) throw new Error("An agentId is required");
+      return callerAgentId;
+    }
+    if (agentManager.getAgent(explicit)) return explicit;
+    const storedById = await agentStorage.get(explicit);
+    if (storedById && !storedById.internal) return explicit;
+    const titles = new Map<string, string>();
+    for (const record of await agentStorage.list()) {
+      if (record.internal || !record.title) continue;
+      titles.set(record.id, record.title);
+    }
+    for (const agent of agentManager.listAgents()) {
+      if (!titles.has(agent.id) && agent.config.title) titles.set(agent.id, agent.config.title);
+    }
+    const matchIds = (matches: (title: string) => boolean) =>
+      [...titles.entries()].filter(([, title]) => matches(title)).map(([id]) => id);
+    let ids = matchIds((title) => title.trim() === explicit);
+    if (ids.length === 0) {
+      const lower = explicit.toLocaleLowerCase();
+      ids = matchIds((title) => title.trim().toLocaleLowerCase() === lower);
+    }
+    if (ids.length === 1) return ids[0];
+    if (ids.length > 1)
+      throw new Error(
+        `Conversation title "${explicit}" matches several conversations (${ids.join(", ")}); use an agent id`,
+      );
+    throw new Error(`Conversation not found: ${explicit}`);
+  };
+
+  registerTool(
+    "set_stream_pin",
+    {
+      title: "Pin a Stream note",
+      description:
+        "Create, update or remove a pinned note in a conversation's Stream Pinned tab. A pin is durable curated context, not a question or ask. Create returns a stable pinId; reuse that pinId to edit the same pin (full replacement: resend sourceAgentId/link you want kept) or pass remove=true to delete it. Removing an already-removed pin succeeds. Defaults to the calling conversation; agentId also accepts another conversation's id or exact title so an orchestrator can curate its own hub. This records context only and never prompts or runs an agent.",
+      inputSchema: {
+        agentId: z
+          .string()
+          .optional()
+          .describe("Target conversation id or exact title; defaults to this calling agent."),
+        pinId: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "Stable pin ID without the pin: prefix. Omit on create to generate one; pass it back to update or remove that pin.",
+          ),
+        text: z
+          .string()
+          .min(1)
+          .max(4000)
+          .optional()
+          .describe("Pin text; required unless remove=true."),
+        sourceAgentId: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("Optional Paseo conversation this pin came from; the pin links to it."),
+        link: z.string().max(2000).optional().describe("Optional URL shown on the pin."),
+        remove: z.boolean().optional().describe("Remove the pin with this pinId (idempotent)."),
+      },
+    },
+    async ({ agentId, pinId, text, sourceAgentId, link, remove }) => {
+      const targetAgentId = await resolveStreamTargetAgentId(agentId);
+      if (remove) {
+        if (!pinId) throw new Error("pinId is required to remove a pin");
+        try {
+          await agentManager.updateCompanionEntry({
+            agentId: targetAgentId,
+            entryId: `pin:${pinId}`,
+            action: "remove_pin",
+          });
+        } catch (error) {
+          // Idempotent remove: repeating a remove after a lost acknowledgement succeeds.
+          if (!(error instanceof Error) || !error.message.includes("Pinned item no longer exists"))
+            throw error;
+        }
+        return {
+          content: [],
+          structuredContent: ensureValidJson({
+            agentId: targetAgentId,
+            pinId,
+            entryId: `pin:${pinId}`,
+            removed: true,
+          }),
+        };
+      }
+      if (!text?.trim()) throw new Error("text is required to create or update a pin");
+      const resolvedPinId = pinId ?? randomUUID();
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId: resolvedPinId,
+        action: "add_pin",
+        text,
+        sourceAgentId,
+        link,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: targetAgentId,
+          pinId: resolvedPinId,
+          entryId: `pin:${resolvedPinId}`,
+          accepted: true,
         }),
       };
     },

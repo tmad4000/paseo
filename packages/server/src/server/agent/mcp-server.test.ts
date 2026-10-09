@@ -252,6 +252,7 @@ function buildAgentManagerSpies() {
     getPendingPermissions: vi.fn(),
     getRegisteredProviderIds: vi.fn().mockReturnValue(["claude"]),
     listDraftFeatures: vi.fn(),
+    updateCompanionEntry: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -4252,6 +4253,162 @@ describe("set_review_status MCP tool", () => {
       labels: { "paseo.review-status": null, "paseo.review-note": null },
     });
     expect(response.structuredContent).toEqual({ agentId: "agent-1", reviewStatus: null });
+  });
+});
+
+describe("set_stream_pin MCP tool", () => {
+  const logger = createTestLogger();
+
+  async function createPinServer(deps: TestDeps) {
+    return createAgentMcpServer({
+      agentManager: deps.agentManager,
+      agentStorage: deps.agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger,
+    });
+  }
+
+  it("creates a pin on the calling conversation and returns a generated stable pinId", async () => {
+    const deps = createTestDeps();
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    const response = await tool.handler({
+      text: "Review PR 61",
+      sourceAgentId: "child-agent",
+      link: "https://github.com/tmad4000/paseo/pull/61",
+    });
+
+    const content = response.structuredContent as {
+      agentId: string;
+      pinId: string;
+      entryId: string;
+      accepted: boolean;
+    };
+    expect(content.agentId).toBe("agent-1");
+    expect(content.pinId).toMatch(/[-\w]{10,}/);
+    expect(content.entryId).toBe(`pin:${content.pinId}`);
+    expect(content.accepted).toBe(true);
+    expect(deps.spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      entryId: content.pinId,
+      action: "add_pin",
+      text: "Review PR 61",
+      sourceAgentId: "child-agent",
+      link: "https://github.com/tmad4000/paseo/pull/61",
+    });
+  });
+
+  it("updates the same pin when the caller supplies its stable pinId", async () => {
+    const deps = createTestDeps();
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    const first = await tool.handler({ pinId: "hub-note", text: "First draft" });
+    const second = await tool.handler({ pinId: "hub-note", text: "Edited" });
+
+    expect(first.structuredContent).toMatchObject({ pinId: "hub-note", entryId: "pin:hub-note" });
+    expect(second.structuredContent).toMatchObject({ pinId: "hub-note", entryId: "pin:hub-note" });
+    const calls = deps.spies.agentManager.updateCompanionEntry.mock.calls.map(
+      ([input]: [{ entryId: string; text?: string }]) => input,
+    );
+    expect(calls.map((input) => input.entryId)).toEqual(["hub-note", "hub-note"]);
+    expect(calls.map((input) => input.text)).toEqual(["First draft", "Edited"]);
+  });
+
+  it("requires text to create and pinId to remove", async () => {
+    const deps = createTestDeps();
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    await expect(tool.handler({})).rejects.toThrow("text is required");
+    await expect(tool.handler({ remove: true })).rejects.toThrow("pinId is required");
+    expect(deps.spies.agentManager.updateCompanionEntry).not.toHaveBeenCalled();
+  });
+
+  it("removes a pin and treats an already-removed pin as success", async () => {
+    const deps = createTestDeps();
+    deps.spies.agentManager.updateCompanionEntry
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Pinned item no longer exists"));
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    const first = await tool.handler({ pinId: "hub-note", remove: true });
+    const second = await tool.handler({ pinId: "hub-note", remove: true });
+
+    expect(first.structuredContent).toEqual({
+      agentId: "agent-1",
+      pinId: "hub-note",
+      entryId: "pin:hub-note",
+      removed: true,
+    });
+    expect(second.structuredContent).toMatchObject({ removed: true });
+    expect(deps.spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      entryId: "pin:hub-note",
+      action: "remove_pin",
+    });
+  });
+
+  it("still surfaces non-pin errors from remove", async () => {
+    const deps = createTestDeps();
+    deps.spies.agentManager.updateCompanionEntry.mockRejectedValue(
+      new Error("Conversation no longer exists"),
+    );
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    await expect(tool.handler({ pinId: "hub-note", remove: true })).rejects.toThrow(
+      "Conversation no longer exists",
+    );
+  });
+
+  it("accepts an explicit target conversation by id", async () => {
+    const deps = createTestDeps();
+    deps.spies.agentManager.getAgent.mockImplementation((id: string) =>
+      id === "hub-agent" ? createManagedAgent({ id: "hub-agent" }) : null,
+    );
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    const response = await tool.handler({ agentId: "hub-agent", pinId: "note", text: "Curated" });
+
+    expect(response.structuredContent).toMatchObject({ agentId: "hub-agent" });
+    expect(deps.spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: "hub-agent" }),
+    );
+  });
+
+  it("resolves an explicit target conversation by its title", async () => {
+    const deps = createTestDeps();
+    deps.spies.agentManager.getAgent.mockReturnValue(null);
+    deps.spies.agentStorage.list.mockResolvedValue([
+      { id: "hub-agent", title: "Review Hub" },
+      { id: "other-agent", title: "Other work" },
+      { id: "internal-agent", title: "Review Hub", internal: true },
+    ]);
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    const response = await tool.handler({ agentId: "review hub", pinId: "note", text: "Curated" });
+
+    expect(response.structuredContent).toMatchObject({ agentId: "hub-agent" });
+    expect(deps.spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: "hub-agent" }),
+    );
+  });
+
+  it("rejects an unknown or ambiguous target conversation", async () => {
+    const deps = createTestDeps();
+    deps.spies.agentManager.getAgent.mockReturnValue(null);
+    deps.spies.agentStorage.list.mockResolvedValue([
+      { id: "hub-a", title: "Review Hub" },
+      { id: "hub-b", title: "Review Hub" },
+    ]);
+    const tool = registeredTool(await createPinServer(deps), "set_stream_pin");
+
+    await expect(tool.handler({ agentId: "No such chat", pinId: "n", text: "x" })).rejects.toThrow(
+      "Conversation not found: No such chat",
+    );
+    await expect(tool.handler({ agentId: "Review Hub", pinId: "n", text: "x" })).rejects.toThrow(
+      "matches several conversations",
+    );
+    expect(deps.spies.agentManager.updateCompanionEntry).not.toHaveBeenCalled();
   });
 });
 
