@@ -58,6 +58,8 @@ export const CompanionEntrySchema = z.discriminatedUnion("kind", [
     ...common,
     kind: z.literal("pin"),
     sourceId: z.string().optional(),
+    sourceAgentId: z.string().optional(),
+    link: z.string().optional(),
   }),
   z.object({
     ...common,

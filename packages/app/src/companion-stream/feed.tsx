@@ -16,6 +16,7 @@ import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildCompanionFeed, type CompanionFeedItem } from "./model";
 import { useGlobalStream } from "./use-global-stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 
 interface CompanionFeedProps {
@@ -474,6 +475,14 @@ export function EntryCard({
     if (serverId && entry.ask?.delegatedAgentId)
       navigateToAgent({ serverId, agentId: entry.ask.delegatedAgentId });
   }, [serverId, entry.ask?.delegatedAgentId]);
+  const pinLink = entry.kind === "pin" ? entry.link : undefined;
+  const pinSourceAgentId = entry.kind === "pin" ? entry.sourceAgentId : undefined;
+  const openPinLink = useCallback(() => {
+    if (pinLink) void openExternalUrl(pinLink);
+  }, [pinLink]);
+  const openPinSource = useCallback(() => {
+    if (serverId && pinSourceAgentId) navigateToAgent({ serverId, agentId: pinSourceAgentId });
+  }, [serverId, pinSourceAgentId]);
   const pending = isCompanionEntryPending(entry);
   const expandedAccessibilityState = useMemo(() => ({ expanded }), [expanded]);
 
@@ -562,6 +571,30 @@ export function EntryCard({
       ) : null}
 
       {body}
+      {pinLink || pinSourceAgentId ? (
+        <View style={styles.notice}>
+          {pinLink ? (
+            <Text selectable style={styles.description} numberOfLines={1}>
+              {pinLink}
+            </Text>
+          ) : null}
+          {pinLink ? (
+            <Button variant="outline" onPress={openPinLink}>
+              Open link
+            </Button>
+          ) : null}
+          {pinSourceAgentId && serverId ? (
+            <Button variant="outline" onPress={openPinSource}>
+              Open source session
+            </Button>
+          ) : null}
+          {pinSourceAgentId && !serverId ? (
+            <Text selectable style={styles.description}>
+              Source: {pinSourceAgentId}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       {entry.ask ? (
         <View style={styles.notice}>
           {entry.ask.subtasks?.length ? (

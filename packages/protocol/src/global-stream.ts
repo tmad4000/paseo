@@ -55,6 +55,8 @@ export const StreamUpdateRequestSchema = z.object({
   expectedRevision: z.number().int().min(0).optional(),
   answerText: z.string().max(4000).optional(),
   sourceId: z.string().optional(),
+  sourceAgentId: z.string().max(200).optional(),
+  link: z.string().max(2000).optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),

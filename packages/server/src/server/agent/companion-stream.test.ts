@@ -486,6 +486,47 @@ it("retries a pin save without duplicating the live entry after a failed acknowl
   expect(applyStreamEntryUpdate(first, input)).toEqual(first);
 });
 
+it("stores a pin's source agent and link, replaces them on upsert and requires an existing pin to remove", () => {
+  const first = applyStreamEntryUpdate([], {
+    agentId: "a",
+    action: "add_pin",
+    entryId: "hub",
+    text: "Review PR 61",
+    sourceAgentId: "child-agent",
+    link: "https://github.com/tmad4000/paseo/pull/61",
+  });
+  expect(first).toMatchObject([
+    {
+      id: "pin:hub",
+      kind: "pin",
+      text: "Review PR 61",
+      sourceAgentId: "child-agent",
+      link: "https://github.com/tmad4000/paseo/pull/61",
+    },
+  ]);
+  const updated = applyStreamEntryUpdate(first, {
+    agentId: "a",
+    action: "add_pin",
+    entryId: "hub",
+    text: "PR 61 merged",
+  });
+  expect(updated).toHaveLength(1);
+  expect(updated[0]).toMatchObject({ id: "pin:hub", kind: "pin", text: "PR 61 merged" });
+  // Full replacement: an update that omits source/link clears them.
+  expect(updated[0]).not.toHaveProperty("sourceAgentId");
+  expect(updated[0]).not.toHaveProperty("link");
+  expect(updated[0].timestamp).toBe(first[0].timestamp);
+  const removed = applyStreamEntryUpdate(updated, {
+    agentId: "a",
+    action: "remove_pin",
+    entryId: "pin:hub",
+  });
+  expect(removed).toEqual([]);
+  expect(() =>
+    applyStreamEntryUpdate(removed, { agentId: "a", action: "remove_pin", entryId: "pin:hub" }),
+  ).toThrow("no longer exists");
+});
+
 it("upserts durable questions by identity and resolves only the selected item", () => {
   const base = { agentId: "a", action: "add_question" as const };
   let entries = applyStreamEntryUpdate([], { ...base, entryId: "name", text: "Choose name" });
