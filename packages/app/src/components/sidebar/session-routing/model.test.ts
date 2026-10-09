@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { initialRoutingState, routingReducer, type Recipient } from "./model";
+import {
+  ROUTE_AUTO_SELECT_MIN_CONFIDENCE,
+  ROUTE_AUTO_SELECT_MIN_MARGIN,
+  initialRoutingState,
+  routingReducer,
+  selectRouteBestMatch,
+  type Recipient,
+} from "./model";
 
 const recipient: Recipient = {
   serverId: "host-a",
@@ -321,5 +328,105 @@ describe("retained lookup results", () => {
     expect(routingReducer(pending, { type: "hosts", serverIds: [] }).phase).toBe(pending.phase);
     const handoff = routingReducer(pending, { type: "phase", phase: { status: "handoff" } });
     expect(routingReducer(handoff, { type: "clear" })).toBe(handoff);
+  });
+});
+
+describe("route to best match auto-selection", () => {
+  const candidate = (agentId: string, confidence: number): Recipient => ({
+    ...recipient,
+    agentId,
+    confidence,
+  });
+
+  test("auto-selects only a near-certain top match with a decisive margin", () => {
+    const clear = candidate("clear", 0.95);
+    expect(selectRouteBestMatch([clear, candidate("faint", 0.4)])).toBe(clear);
+    // A sole result competes against an implicit runner-up of 0.
+    expect(selectRouteBestMatch([clear])).toBe(clear);
+    // Input order must not matter; confidence alone ranks.
+    expect(selectRouteBestMatch([candidate("faint", 0.4), clear])).toBe(clear);
+  });
+
+  test("exact threshold and margin boundaries are inclusive", () => {
+    const top = candidate("top", ROUTE_AUTO_SELECT_MIN_CONFIDENCE);
+    const second = candidate(
+      "second",
+      ROUTE_AUTO_SELECT_MIN_CONFIDENCE - ROUTE_AUTO_SELECT_MIN_MARGIN,
+    );
+    expect(selectRouteBestMatch([top, second])).toBe(top);
+  });
+
+  test("ambiguity, low confidence, and empty results all refuse auto-selection", () => {
+    expect(selectRouteBestMatch([])).toBeNull();
+    expect(selectRouteBestMatch([candidate("vague", 0.84)])).toBeNull();
+    expect(selectRouteBestMatch([candidate("a", 0.95), candidate("b", 0.9)])).toBeNull();
+    // Custom thresholds stay honored.
+    expect(
+      selectRouteBestMatch([candidate("a", 0.95), candidate("b", 0.875)], {
+        minConfidence: 0.9,
+        minMargin: 0.05,
+      })?.agentId,
+    ).toBe("a");
+  });
+
+  test("the route flag survives matching, results, delivery, and the receipt", () => {
+    let state = routingReducer(
+      { ...initialRoutingState, mode: "send", sendDraft: "continue" },
+      {
+        type: "phase",
+        phase: {
+          status: "matching",
+          mode: "send",
+          requestId: "route",
+          text: "continue",
+          route: true,
+        },
+      },
+    );
+    const results = routingReducer(state, {
+      type: "matched",
+      requestId: "route",
+      recipients: [recipient],
+      notice: "",
+    });
+    expect(results.phase).toMatchObject({ status: "results", route: true });
+    state = routingReducer(state, {
+      type: "phase",
+      phase: {
+        status: "sending",
+        recipient,
+        text: "continue",
+        itemId: "routed-item",
+        draftVersion: 0,
+        route: true,
+      },
+    });
+    const receipt = routingReducer(state, {
+      type: "acknowledged",
+      itemId: "routed-item",
+      queued: true,
+    });
+    expect(receipt.phase).toMatchObject({
+      status: "acknowledged",
+      queued: true,
+      route: { text: "continue" },
+    });
+  });
+
+  test("a manual delivery receipt never offers the move-draft affordance", () => {
+    const state = routingReducer(
+      {
+        ...initialRoutingState,
+        phase: {
+          status: "sending",
+          recipient,
+          text: "continue",
+          itemId: "manual-item",
+          draftVersion: 0,
+        },
+      },
+      { type: "acknowledged", itemId: "manual-item", queued: true },
+    );
+    expect(state.phase).toMatchObject({ status: "acknowledged", route: undefined });
   });
 });
