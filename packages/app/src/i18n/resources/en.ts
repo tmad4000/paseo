@@ -149,6 +149,7 @@ export const en = {
       terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}} to focus",
       addAttachment: "Add attachment",
+      dismissKeyboard: "Dismiss keyboard",
       interruptAgent: "Interrupt agent",
       queueMessage: "Queue message",
       sendAndInterrupt: "Send and interrupt",

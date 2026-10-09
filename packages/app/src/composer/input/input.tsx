@@ -66,6 +66,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useComposerHeight } from "./height";
+import { ComposerKeyboardDismissButton } from "./keyboard-dismiss-button";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
 import {
@@ -2057,6 +2058,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 attachmentMenuItems={attachmentMenuItems}
                 addAttachmentLabel={t("composer.input.addAttachment")}
               />
+              <ComposerKeyboardDismissButton />
               {leftContent}
             </View>
 

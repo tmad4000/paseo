@@ -154,6 +154,7 @@ export const ru: TranslationResources = {
       terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}}, для фокуса",
       addAttachment: "Добавить вложение",
+      dismissKeyboard: "Скрыть клавиатуру",
       interruptAgent: "Прервать агента",
       queueMessage: "Сообщение в очередь",
       sendAndInterrupt: "Отправить и прервать",

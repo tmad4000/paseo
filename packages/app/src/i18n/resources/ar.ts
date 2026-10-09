@@ -153,6 +153,7 @@ export const ar: TranslationResources = {
       terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}}للتركيز",
       addAttachment: "إضافة مرفق",
+      dismissKeyboard: "إخفاء لوحة المفاتيح",
       interruptAgent: "عامل المقاطعة",
       queueMessage: "رسالة قائمة الانتظار",
       sendAndInterrupt: "إرسال ومقاطعة",

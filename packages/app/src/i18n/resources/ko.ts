@@ -153,6 +153,7 @@ export const ko: TranslationResources = {
       terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}}로 포커스",
       addAttachment: "첨부 추가",
+      dismissKeyboard: "키보드 닫기",
       interruptAgent: "에이전트 중단",
       queueMessage: "메시지 대기열에 추가",
       sendAndInterrupt: "보내고 중단",

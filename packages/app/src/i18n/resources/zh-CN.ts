@@ -153,6 +153,7 @@ export const zhCN: TranslationResources = {
       terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}} 聚焦",
       addAttachment: "添加附件",
+      dismissKeyboard: "收起键盘",
       interruptAgent: "中断 Agent",
       queueMessage: "消息排队",
       sendAndInterrupt: "发送并中断",
