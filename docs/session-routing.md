@@ -19,13 +19,49 @@ state, even if a newer lookup has started. Host changes
 also clear excluded results and editable recipients; a pending delivery keeps its original destination
 and item ID until acknowledgement or rejection. Explicit recipient selection
 bypasses matching. In Send mode, **Find first** only presents candidate chats, including when one
-match has high confidence. Delivery requires an explicit destination choice and uses the current
-saved draft. Once a destination is selected, the main action names its actual delivery mode: Queue,
+match has high confidence. Passive matching never selects a destination; delivery through Find
+first requires an explicit destination choice and uses the current saved draft. The one exception
+is the explicit **Route to best match** verb below: invoking it is itself the destination decision,
+and it may deliver without a per-candidate choice only under its documented threshold-and-margin
+gate. Once a destination is selected, the main action names its actual delivery mode: Queue,
 Steer, or Interrupt. Find remains search-only.
 In Find results, Open chat navigates and Use this chat selects without sending. In Send results,
 the Queue here, Steer here, or Interrupt here action delivers the current saved prompt to that chat. Choose an existing chat opens the manual
 picker when matching returns no results. Routing requires a host advertising `sessionSearch`;
 delivery also requires `agentMessageQueue`. Update an older host when prompted.
+
+## Route to best match
+
+**Route to best match** is an explicit verb on a drafted Send prompt — a keyboard-accessible
+button beside the main Send action — that chains one search, one selection decision, and one
+delivery. It is user-invoked every time; typing, editing, or passive Find/Send matching never
+triggers it. It is available only while no recipient is pinned and New conversation is not
+selected: explicit recipient selection already bypasses matching, so the verb disables rather
+than silently re-routing a pinned destination.
+
+The verb auto-selects the top match only when both configurable gates hold
+(`ROUTE_AUTO_SELECT_MIN_CONFIDENCE` and `ROUTE_AUTO_SELECT_MIN_MARGIN` in
+`packages/app/src/components/sidebar/session-routing/model.ts`): the top result's confidence must
+reach **0.85**, and it must lead the runner-up by at least **0.2** (a missing runner-up counts as
+0). The matcher reserves 0.90+ for a conversation the user clearly identifies, so these defaults
+are deliberately conservative; vague prompts fall back to a choice. A search with any failed or
+unhydrated host never auto-selects, because the missing host could hold the real destination.
+When the gate does not clear, the verb falls back to the existing candidate-choice UI with the
+draft preserved and nothing sent; when there is no match at all, it additionally offers starting
+a new conversation with the same draft through the existing New conversation handoff.
+
+Route delivery is **queue-mode only** (`deliverRoutedPrompt`): the verb never steers or
+interrupts a running agent, regardless of the currently selected delivery mode, and it keeps the
+durable outbox contract, atomic destination guard, and retry idempotency unchanged. The
+post-route receipt names the destination project and chat and offers **Wrong chat? Move draft**,
+which restores the routed text as the editable draft (never overwriting a newer edit) and reopens
+the manual chooser. Moving the draft does not recall the already-queued item; cancel it from the
+destination's queue if it should not run.
+
+The verb submits the search with the composer's current scope. The default scope is All
+projects — deliberately, because a project scope excludes chats whose workspaces live elsewhere
+(for example tmpworkspace scratch chats, per the project-identity rule below) — and an explicitly
+chosen scope is respected exactly like any other lookup.
 
 ## New conversation and delivery mode
 

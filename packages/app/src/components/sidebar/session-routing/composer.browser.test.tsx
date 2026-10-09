@@ -335,6 +335,74 @@ test("ambiguous send asks first and query edits retain previous Find results", a
   await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
 });
 
+test("Route to best match queues a clear winner and Move draft reopens the chooser with the draft", async () => {
+  const view = await mount();
+  act(() => view.getByTestId("routing-send-mode").click());
+  type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue the offline work");
+  // The route verb must queue even when a direct delivery mode is selected.
+  act(() => view.getByTestId("routing-delivery-steer").click());
+  act(() => view.getByTestId("routing-route-best").click());
+  await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
+  expect(fixture.search).toHaveBeenCalledTimes(1);
+  expect(fixture.enqueue.mock.calls[0]?.[0]).toMatchObject({
+    agentId: "chat",
+    text: "continue the offline work",
+    expectedWorkspaceId: "workspace",
+  });
+  await waitFor(() => expect(view.getByText("Routed to Paseo · Offline indicator")).toBeTruthy());
+  await waitFor(() =>
+    expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(""),
+  );
+  act(() => view.getByRole("button", { name: "Wrong chat? Move draft" }).click());
+  await waitFor(() =>
+    expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(
+      "continue the offline work",
+    ),
+  );
+  // The manual chooser reopened; nothing was delivered a second time.
+  expect(view.getByRole("button", { name: "Find a chat" })).toBeTruthy();
+  expect(fixture.enqueue).toHaveBeenCalledTimes(1);
+});
+
+test("Route to best match without a decisive winner presents candidates and preserves the draft", async () => {
+  fixture.search.mockResolvedValue({
+    results: [
+      result,
+      { ...result, agentId: "other", title: "Relay diagnostics", confidence: 0.93 },
+    ],
+    searchedCount: 2,
+    totalCount: 2,
+  });
+  const view = await mount();
+  act(() => view.getByTestId("routing-send-mode").click());
+  type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
+  act(() => view.getByTestId("routing-route-best").click());
+  await waitFor(() => expect(view.getAllByRole("button", { name: "Queue here" })).toHaveLength(2));
+  expect(
+    view.getByText("No clear best match. Choose the destination; nothing sent yet."),
+  ).toBeTruthy();
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+  expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
+});
+
+test("Route to best match with no match offers a new conversation with the draft", async () => {
+  fixture.search.mockResolvedValue({ results: [], searchedCount: 1, totalCount: 1 });
+  const view = await mount();
+  act(() => view.getByTestId("routing-send-mode").click());
+  type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "brand new idea");
+  act(() => view.getByTestId("routing-route-best").click());
+  await waitFor(() =>
+    expect(
+      view.getByRole("button", { name: "Start a new conversation with this draft" }),
+    ).toBeTruthy(),
+  );
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+  act(() => view.getByRole("button", { name: "Start a new conversation with this draft" }).click());
+  expect(view.getByTestId("routing-recipient").textContent).toContain("New conversation");
+  expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("brand new idea");
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+});
+
 test("Find renders queued recording evidence with local dates without sending", async () => {
   fixture.query = "Where were we discussing recording on Notestream Vision?";
   const timestamp = "2026-10-04T19:38:08.993Z";
