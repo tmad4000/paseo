@@ -93,6 +93,19 @@ IDs also serve as the follow-up issue list.
 These extend `dispatcher-create-modes` and `session-routing`; preserve them when an upstream
 implementation replaces either feature. The deferred footer test below remains a separate task.
 
+## Sidebar follow-up
+
+Repository issues are disabled, so this stable ID also serves as the follow-up ticket.
+
+- [ ] `pfork-sbt`: show a visible last-message timestamp on each sidebar session row.
+      [PR52](https://github.com/tmad4000/paseo/pull/52) added the `messageActivity` role clocks
+      and the sort modes only — nothing renders a time in the sidebar list today (no time
+      formatting in the `packages/app/src/components/sidebar/` row components). Render the same
+      clock the active message sort uses ([sidebar sorting](sidebar-sorting.md)): accepted user
+      messages and completed assistant replies only, and never an invented time when a clock is
+      unknown, matching `footer-time`'s no-invented-timestamps rule. Once implemented, this
+      becomes a register row to preserve across upstream merges.
+
 ## Reviewing an upstream update or reconciliation
 
 1. Record the previous shipped fork commit, candidate fork commit, and incoming upstream tag/commit.
