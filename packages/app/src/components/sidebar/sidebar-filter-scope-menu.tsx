@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ListFilter } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
