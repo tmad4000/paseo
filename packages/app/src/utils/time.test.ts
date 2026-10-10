@@ -91,12 +91,14 @@ describe("formatDuration", () => {
 });
 
 describe("formatMessageTimestamp", () => {
-  it("shows only time for same-day timestamps", () => {
+  it("shows the date with the time even on the same day", () => {
     const now = new Date(2026, 4, 14, 17, 30);
     const date = new Date(2026, 4, 14, 12, 23);
     const formatted = formatMessageTimestamp(date, now);
     expect(formatted).toMatch(/12:23/);
-    expect(formatted).not.toMatch(/May|Thursday/);
+    expect(formatted).toMatch(/May/);
+    expect(formatted).toMatch(/14/);
+    expect(formatted).not.toMatch(/2026|Thursday/);
   });
 
   it("shows the date, not a weekday, for the previous calendar day", () => {
