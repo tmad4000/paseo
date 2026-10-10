@@ -8,7 +8,7 @@ export type QuickLaunchDestination =
   | ({ kind: "workspace" } & QuickLaunchWorkspaceRef);
 
 export interface QuickLaunchRequest {
-  /** Replaces the Quick launch draft. */
+  /** Goes into the Quick launch draft, above any unsent text already there. */
   prompt?: string;
   /** A workspace opens on "New tab in <workspace>"; a project on "New workspace" in it. */
   destination?: QuickLaunchDestination;
@@ -62,9 +62,9 @@ function hasRequestContent(request: QuickLaunchRequest): boolean {
 }
 
 /**
- * Opens Quick launch. Every entry point — the shortcut, the command center, the sidebar item, the
- * sidebar router's Start without leaving, and the sidebar find field — goes through here, so all
- * of them share the dialog's single creation path.
+ * Opens Quick launch. Every entry point (the shortcut, the command center, the sidebar item, and
+ * callers such as the sidebar router's Start without leaving) goes through here, so all of them
+ * share the dialog's single creation path.
  *
  * Reopening with nothing new keeps an open dialog and its unsent choices; a prompt, destination,
  * or start-and-open request replaces it.

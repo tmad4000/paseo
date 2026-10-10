@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Text,
-  View,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
-} from "react-native";
+import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { createNameId } from "mnemonic-id";
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
@@ -36,6 +31,8 @@ import {
 } from "./destination";
 import type { QuickLaunchSubmission } from "./launch";
 import type { QuickLaunchRequest, QuickLaunchSession } from "./store";
+import { mergeQuickLaunchPrompt } from "./prompt";
+import { useQuickLaunchSubmit } from "./submit";
 import { useQuickLaunchDestination } from "./use-destination";
 
 export interface QuickLaunchStartRequest {
@@ -57,10 +54,6 @@ interface QuickLaunchDialogProps {
   onStart: (request: QuickLaunchStartRequest) => void;
 }
 
-type WebKeyPressEvent = NativeSyntheticEvent<
-  TextInputKeyPressEventData & { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }
->;
-
 const START_KEYS = ["mod", "Enter"];
 const START_AND_OPEN_KEYS = ["mod", "shift", "Enter"];
 const startShortcut = <Shortcut keys={START_KEYS} />;
@@ -70,8 +63,8 @@ const SNAP_POINTS = ["70%", "92%"];
 
 /**
  * The Quick launch prompt is one draft-store draft, so it survives closing the dialog. A requested
- * prompt (Retry, or one handed over by another surface) replaces it once the store has loaded the
- * saved draft, so hydration cannot overwrite the handed-over text.
+ * prompt (Retry, or one handed over by another surface) is applied once the store has loaded the
+ * saved draft, so hydration cannot overwrite it, and any unsent draft is kept below it.
  */
 function useQuickLaunchPrompt(input: {
   serverId: string;
@@ -94,13 +87,13 @@ function useQuickLaunchPrompt(input: {
     draft.textSource.getSnapshot,
   );
   const appliedPromptRef = useRef(false);
-  const { isHydrated, replaceText } = draft;
+  const { isHydrated, replaceText, textSource } = draft;
   const { prompt } = input;
   useEffect(() => {
     if (!isHydrated || appliedPromptRef.current || prompt === undefined) return;
     appliedPromptRef.current = true;
-    replaceText(prompt);
-  }, [isHydrated, prompt, replaceText]);
+    replaceText(mergeQuickLaunchPrompt({ requested: prompt, existing: textSource.getSnapshot() }));
+  }, [isHydrated, prompt, replaceText, textSource]);
   return { draft, text };
 }
 
@@ -137,11 +130,11 @@ export function QuickLaunchDialog({
   const clearDraft = draft.clear;
   const tabWorkspaceName = tabWorkspace?.name ?? null;
   const opensAfterStart = request.startAndOpen === true;
-  const start = useCallback(
-    (openAfterStart: boolean) => {
+  const submit = useCallback(
+    (openAfterStart: boolean): boolean => {
       const prompt = (inputRef.current?.getText() ?? text).trim();
       const provider = composerState?.selectedProvider;
-      if (!prompt || !target || !shownProject || !composerState || !provider) return;
+      if (!prompt || !target || !shownProject || !composerState || !provider) return false;
       void composerState.persistFormPreferences();
       onStart({
         submission: {
@@ -167,6 +160,7 @@ export function QuickLaunchDialog({
         },
       });
       clearDraft("sent");
+      return true;
     },
     [
       clearDraft,
@@ -179,18 +173,9 @@ export function QuickLaunchDialog({
       text,
     ],
   );
+  const { start, handleKeyPress } = useQuickLaunchSubmit({ visible, submit });
   const startInBackground = useCallback(() => start(false), [start]);
   const startAndOpen = useCallback(() => start(true), [start]);
-
-  const handleKeyPress = useCallback(
-    (event: WebKeyPressEvent) => {
-      const { key, metaKey, ctrlKey, shiftKey } = event.nativeEvent;
-      if (key !== "Enter" || !(metaKey || ctrlKey)) return;
-      event.preventDefault();
-      start(shiftKey === true);
-    },
-    [start],
-  );
 
   const header = useMemo(() => ({ title: t("quickLaunch.title") }), [t]);
   const canStart = Boolean(
