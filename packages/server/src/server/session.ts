@@ -4125,7 +4125,10 @@ export class Session {
       // even when it is the only observer, matching project rename.
       await this.emitProjectUpdate({ kind: "upsert", project: updated });
     } catch (error) {
-      this.sessionLogger.error({ ...logContext, err: error }, "session: project.pin.set.request error");
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: project.pin.set.request error",
+      );
       emitResponse(false, null, getErrorMessageOr(error, "Failed to pin project"));
     }
   }

@@ -42,15 +42,18 @@ export function useProjectPinActions(): ProjectPinActions {
       if (pendingKeys.has(key)) return;
       pendingKeys.add(key);
       // Settles every host before reporting, so one offline host does not hide the others' result.
-      void Promise.allSettled(targets.map(write))
-        .then((results) => {
+      const settle = async () => {
+        try {
+          const results = await Promise.allSettled(targets.map(write));
           const failure = results.find((result) => result.status === "rejected");
-          if (failure) {
-            const reason = failure.reason;
-            toast.error(reason instanceof Error ? reason.message : t("defaultProject.toasts.failed"));
-          }
-        })
-        .finally(() => pendingKeys.delete(key));
+          if (!failure) return;
+          const reason: unknown = failure.reason;
+          toast.error(reason instanceof Error ? reason.message : t("defaultProject.toasts.failed"));
+        } finally {
+          pendingKeys.delete(key);
+        }
+      };
+      void settle();
     },
     [t, toast],
   );

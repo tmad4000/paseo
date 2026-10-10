@@ -86,7 +86,11 @@ describe("orderProjectsWithPins", () => {
   const projects = ["a", "b", "c", "d", "e"].map((viewKey) => ({ viewKey }));
 
   it("leaves the order alone when nothing is pinned", () => {
-    const result = orderProjectsWithPins({ projects, pinStates: new Map(), pinnedProjectOrder: [] });
+    const result = orderProjectsWithPins({
+      projects,
+      pinStates: new Map(),
+      pinnedProjectOrder: [],
+    });
     expect(result.projects.map((project) => project.viewKey)).toEqual(["a", "b", "c", "d", "e"]);
     expect(result.pinnedViewKeys.size).toBe(0);
   });

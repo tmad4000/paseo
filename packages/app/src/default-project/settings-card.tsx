@@ -81,10 +81,7 @@ export function DefaultProjectSettingsCard({ serverId }: { serverId: string }) {
     [actions, current, serverId],
   );
 
-  const items = useMemo(
-    () => [null, ...choices],
-    [choices],
-  );
+  const items = useMemo(() => [null, ...choices], [choices]);
 
   return (
     <View style={settingsStyles.card} testID="host-page-default-project-card">
@@ -92,7 +89,9 @@ export function DefaultProjectSettingsCard({ serverId }: { serverId: string }) {
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("defaultProject.settings.title")}</Text>
           <Text style={settingsStyles.rowHint}>
-            {supported ? t("defaultProject.settings.hint") : t("defaultProject.settings.updateHost")}
+            {supported
+              ? t("defaultProject.settings.hint")
+              : t("defaultProject.settings.updateHost")}
           </Text>
         </View>
         {supported ? (

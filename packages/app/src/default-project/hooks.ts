@@ -51,7 +51,9 @@ export function selectDefaultProjectForHost(
  * none (or predates project pinning). Quick launch and New conversation resolve their default
  * destination through this.
  */
-export function useDefaultProjectForHost(serverId: string | null | undefined): DefaultProject | null {
+export function useDefaultProjectForHost(
+  serverId: string | null | undefined,
+): DefaultProject | null {
   return useStoreWithEqualityFn(
     useSessionStore,
     (state) => selectDefaultProjectForHost(state, serverId),
@@ -94,7 +96,9 @@ export function useProjectPinStates(
   const projectMaps = useProjectMaps(serverIds);
   const previous = useRef<ReadonlyMap<string, ProjectPinState>>(new Map());
   return useMemo(() => {
-    const mapByServerId = new Map(serverIds.map((serverId, index) => [serverId, projectMaps[index]] as const));
+    const mapByServerId = new Map(
+      serverIds.map((serverId, index) => [serverId, projectMaps[index]] as const),
+    );
     const defaultProjectIdByServerId = buildDefaultProjectIdByServerId(serverIds, projectMaps);
     const next = new Map<string, ProjectPinState>();
     for (const project of projects) {

@@ -3265,16 +3265,15 @@ export class DaemonClient {
     isDefault: boolean,
     requestId?: string,
   ): Promise<{ defaultAt: string | null }> {
-    const payload = await this.sendNamespacedCorrelatedSessionRequest<"project.default.set.response">(
-      {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"project.default.set.response">({
         requestId,
         message: {
           type: "project.default.set.request",
           projectId,
           isDefault,
         },
-      },
-    );
+      });
     if (!payload.accepted) {
       throw new Error(payload.error ?? "setProjectDefault rejected");
     }
