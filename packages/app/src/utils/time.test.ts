@@ -96,34 +96,52 @@ describe("formatMessageTimestamp", () => {
     const date = new Date(2026, 4, 14, 12, 23);
     const formatted = formatMessageTimestamp(date, now);
     expect(formatted).toMatch(/12:23/);
-    expect(formatted).not.toMatch(/Thursday|Wednesday/);
+    expect(formatted).not.toMatch(/May|Thursday/);
   });
 
-  it("includes weekday for timestamps within the last 6 days", () => {
+  it("shows the date, not a weekday, for the previous calendar day", () => {
+    // 2026-05-13 is a Wednesday; its date must be readable without weekday math.
+    const now = new Date(2026, 4, 14, 0, 30);
+    const date = new Date(2026, 4, 13, 22, 12);
+    const formatted = formatMessageTimestamp(date, now);
+    expect(formatted).toMatch(/May/);
+    expect(formatted).toMatch(/13/);
+    expect(formatted).not.toMatch(/Wednesday/);
+    expect(formatted).toMatch(/10:12 PM|22:12/);
+  });
+
+  it("shows the date within the last week instead of a weekday", () => {
     // 2026-05-14 is a Thursday. 2026-05-11 is a Monday.
     const now = new Date(2026, 4, 14, 17, 30);
     const date = new Date(2026, 4, 11, 22, 12);
     const formatted = formatMessageTimestamp(date, now);
-    expect(formatted).toMatch(/Monday/);
-    expect(formatted).toMatch(/10:12 PM|22:12/);
+    expect(formatted).toMatch(/May/);
+    expect(formatted).toMatch(/11/);
+    expect(formatted).not.toMatch(/Monday/);
   });
 
-  it("shows the full date for last week's same weekday, even under seven days ago", () => {
-    // 2026-09-18 is a Friday. The reply is 6 days 23h45m old and lands on today's weekday,
-    // so a weekday label would read as today.
-    const now = new Date(2026, 8, 25, 11, 47);
-    const date = new Date(2026, 8, 18, 12, 2);
-    const formatted = formatMessageTimestamp(date, now);
-    expect(formatted).toMatch(/Sep|September/);
-    expect(formatted).toMatch(/18/);
-    expect(formatted).not.toMatch(/Friday/);
-  });
-
-  it("includes full date for older timestamps", () => {
+  it("omits the year for an older same-year date", () => {
     const now = new Date(2026, 4, 14, 17, 30);
     const date = new Date(2026, 3, 1, 9, 5);
     const formatted = formatMessageTimestamp(date, now);
     expect(formatted).toMatch(/Apr|April/);
-    expect(formatted).toMatch(/2026/);
+    expect(formatted).not.toMatch(/2026/);
+  });
+
+  it("includes the year for a prior-year date", () => {
+    const now = new Date(2026, 4, 14, 17, 30);
+    const date = new Date(2025, 9, 9, 21, 15);
+    const formatted = formatMessageTimestamp(date, now);
+    expect(formatted).toMatch(/Oct|October/);
+    expect(formatted).toMatch(/2025/);
+    expect(formatted).toMatch(/9:15 PM|21:15/);
+  });
+
+  it("includes the year across a year boundary even one day apart", () => {
+    const now = new Date(2026, 0, 1, 10, 0);
+    const date = new Date(2025, 11, 31, 23, 45);
+    const formatted = formatMessageTimestamp(date, now);
+    expect(formatted).toMatch(/Dec|December/);
+    expect(formatted).toMatch(/2025/);
   });
 });

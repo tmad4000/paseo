@@ -120,28 +120,26 @@ function getTimeFormatter(): Intl.DateTimeFormat {
 }
 
 /**
- * Format a chat-message timestamp for hover-revealed UI.
+ * Format a chat-message timestamp (message footers, feed eyebrows).
  * - Same day: "10:11 PM" or "22:11" depending on user preference
- * - The previous 6 calendar days: "Wednesday 10:11 PM"
- * - Older, including today's weekday last week: "14 May 2026, 10:11 PM"
+ * - Any other day this year: "14 May, 10:11 PM" (locale-ordered short date)
+ * - A different year: "14 May 2025, 10:11 PM"
+ *
+ * A weekday alone used to stand in for the date within the last week, but it
+ * left messages from earlier dates indistinguishable without mental math; a
+ * real date stays compact and never ambiguous.
  */
 export function formatMessageTimestamp(date: Date, now: Date = new Date()): string {
   const time = getTimeFormatter().format(date);
-  const daysAgo = localCalendarDaysBetween(date, now);
 
-  if (daysAgo === 0) {
+  if (localCalendarDaysBetween(date, now) === 0) {
     return time;
-  }
-
-  if (daysAgo > 0 && daysAgo < 7) {
-    const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
-    return `${weekday} ${time}`;
   }
 
   const dateLabel = date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
-    year: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   });
   return `${dateLabel}, ${time}`;
 }
