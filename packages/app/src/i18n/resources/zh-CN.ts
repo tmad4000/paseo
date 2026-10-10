@@ -1304,6 +1304,7 @@ export const zhCN: TranslationResources = {
       sortHeading: "聊天排序",
       sortBy: "聊天排序：{{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "手动排序",
         recent: "Latest conversation activity",

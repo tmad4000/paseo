@@ -1325,6 +1325,7 @@ export const en = {
       sortHeading: "Sort chats",
       sortBy: "Sort chats: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "Manual order",
         recent: "Latest conversation activity",

@@ -2,7 +2,11 @@ import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSessionStore, type Agent } from "@/stores/session-store";
-import { effectiveSidebarSortMode, messageSortAvailability } from "./message-sort-capability";
+import {
+  effectiveSidebarSortMode,
+  messageSortAvailability,
+  type MessageSortAvailability,
+} from "./message-sort-capability";
 import React, {
   createContext,
   useContext,
@@ -75,8 +79,11 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   hasProjectsBeforeFilter: boolean;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  /** The saved preference. */
   sortMode: SidebarSortMode;
-  messageSortAvailability: "ready" | "loading" | "unsupported";
+  /** The order actually applied; differs from `sortMode` while no host supports message sorts. */
+  effectiveSortMode: SidebarSortMode;
+  messageSortAvailability: MessageSortAvailability;
   setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
@@ -330,6 +337,7 @@ export function SidebarModelProvider({
       searchQuery,
       setSearchQuery,
       sortMode,
+      effectiveSortMode: effectiveSort,
       setSortMode,
       messageSortAvailability: sortAvailability,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
@@ -348,6 +356,7 @@ export function SidebarModelProvider({
       normalizedQuery,
       searchQuery,
       sortMode,
+      effectiveSort,
       setSortMode,
       sortAvailability,
       groupMode,

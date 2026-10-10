@@ -39,8 +39,11 @@ default applies it on each of its hosts; the host Workspaces settings page sets 
 
 ## Host compatibility
 
-All three message sorts require every selected host to advertise `conversationMessageActivity`.
-Until server info arrives, or while an older host is selected, the sidebar uses stored manual order
-and retains the user's selected preference. Known older hosts show an update notice and disable the
-message choices. Manual and Title remain available; supporting hosts automatically restore the
-retained preference without rewriting it.
+The three message sorts are available once at least one selected host advertises
+`conversationMessageActivity`. A connected older host no longer disables them for every host: its
+chats sort by the legacy last-user-message time (falling back to creation time), and the menu shows a
+notice that some hosts need an update. Until server info arrives, or when every connected host is
+older, the sidebar uses stored manual order, shows the update notice in the latter case, and disables
+the message choices. The menu's checkmark and trigger label always name the order actually applied;
+the saved preference is never rewritten and is restored as soon as a supporting host appears.
+Manual and Title remain available throughout.
