@@ -20,6 +20,22 @@ export function workspaceMatchesSidebarQuery(
   );
 }
 
+/**
+ * The live filter's workspace test: the workspace's own names, or any of its tab titles. Tab
+ * matches are computed once per keystroke for every host (`matchSidebarTabTitles`), so this only
+ * asks whether the workspace is among them.
+ */
+export function workspaceMatchesSidebarFilter(
+  workspace: SidebarWorkspaceEntry,
+  query: string,
+  tabMatchedWorkspaceKeys?: ReadonlySet<string>,
+): boolean {
+  return (
+    workspaceMatchesSidebarQuery(workspace, query) ||
+    tabMatchedWorkspaceKeys?.has(workspace.workspaceKey) === true
+  );
+}
+
 export function sortSidebarWorkspaces<T extends SidebarWorkspacePlacement>(
   workspaces: readonly T[],
   entries: ReadonlyMap<string, SidebarWorkspaceEntry>,
@@ -47,8 +63,10 @@ export function filterAndSortSidebarProjects(input: {
   entries: ReadonlyMap<string, SidebarWorkspaceEntry>;
   query: string;
   mode: SidebarSortMode;
+  /** Workspaces kept because one of their tab titles matches `query`. */
+  tabMatchedWorkspaceKeys?: ReadonlySet<string>;
 }): SidebarProjectEntry[] {
-  const { projects, entries, query, mode } = input;
+  const { projects, entries, query, mode, tabMatchedWorkspaceKeys } = input;
   if (!query && mode === "manual") return [...projects];
   const visibleProjects = projects.flatMap((project) => {
     const projectMatches = project.projectName
@@ -58,7 +76,7 @@ export function filterAndSortSidebarProjects(input: {
     const workspaces = project.workspaces.filter((workspace) => {
       if (!query || projectMatches) return true;
       const entry = entries.get(workspace.workspaceKey);
-      return entry ? workspaceMatchesSidebarQuery(entry, query) : false;
+      return entry ? workspaceMatchesSidebarFilter(entry, query, tabMatchedWorkspaceKeys) : false;
     });
     if (query && !projectMatches && workspaces.length === 0) return [];
     return [{ ...project, workspaces: sortSidebarWorkspaces(workspaces, entries, mode) }];

@@ -90,6 +90,8 @@ export const es: TranslationResources = {
     actions: {
       back: "Atrás",
       navigateBack: "Volver",
+      forward: "Adelante",
+      navigateForward: "Avanzar",
       cancel: "Cancelar",
       close: "Cerrar",
       copy: "Copiar",
@@ -1338,6 +1340,16 @@ export const es: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "Se buscó en {{searched}} de {{total}} chats",
+        inMessages: "En mensajes",
+        searching: "Buscando en mensajes...",
+        moreTabs: "+{{count}} más",
+        fewerTabs: "Mostrar menos",
+        enterHint: "Pulsa Intro para la búsqueda inteligente (Find)",
+        openTab: "Abrir {{title}}",
+        openMessage: "Abrir {{title}}: {{snippet}}",
+      },
       placeholder: "Filtrar proyectos o chats",
       clear: "Borrar filtro lateral",
       sortHeading: "Ordenar chats",

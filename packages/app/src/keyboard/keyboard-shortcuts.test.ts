@@ -235,6 +235,12 @@ describe("keyboard-shortcuts", () => {
       action: "navigation.back",
     },
     {
+      name: "matches navigation forward via Mod+Alt+ArrowRight",
+      event: { key: "ArrowRight", code: "ArrowRight", ctrlKey: true, altKey: true },
+      context: { isDesktop: true },
+      action: "navigation.forward",
+    },
+    {
       name: "matches workspace relative navigation on desktop via Mod+]",
       event: { key: "]", code: "BracketRight", ctrlKey: true },
       context: { isDesktop: true },

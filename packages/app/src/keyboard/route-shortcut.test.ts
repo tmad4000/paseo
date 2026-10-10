@@ -362,6 +362,7 @@ describe("routeKeyboardShortcut — callbacks and pickers", () => {
     ["sidebar.toggle.both", "toggle-both-sidebars"],
     ["theme.cycle", "cycle-theme"],
     ["navigation.back", "navigate-back"],
+    ["navigation.forward", "navigate-forward"],
   ] as const)("%s → callback %s", (action, name) => {
     expect(routeKeyboardShortcut({ action, payload: null }, makeCtx())).toEqual<ShortcutAction>({
       kind: "callback",

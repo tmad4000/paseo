@@ -118,10 +118,11 @@ import {
   SidebarWorkspaceTrailingActionSlot,
 } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
+import { SidebarProjectEmptyState } from "@/components/sidebar/empty-states";
 import {
-  SidebarFilterEmptyState,
-  SidebarProjectEmptyState,
-} from "@/components/sidebar/empty-states";
+  SidebarFilterResultsTail,
+  SidebarWorkspaceTabMatches,
+} from "@/components/sidebar/sidebar-filter-results";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
@@ -1447,29 +1448,37 @@ function WorkspaceRowItem({
   }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
 
   return (
-    <WorkspaceRow
-      workspaceEntry={workspaceEntry}
-      hostBadge={hostBadge}
-      leadingProjectName={leadingProjectName}
-      leadingProjectIconDataUri={leadingProjectIconDataUri}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      canCopyBranchName={canCopyBranchName}
-      canPin={canPin}
-      onToggleWorkspacePin={onToggleWorkspacePin}
-      reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      isCreating={isCreating}
-      selected={isWorkspaceSelected({
-        selection: activeWorkspaceSelection,
-        serverId: workspace.serverId,
-        workspaceId: workspace.workspaceId,
-        enabled: selectionEnabled,
-      })}
-      onPress={handlePress}
-      drag={drag ?? noop}
-      isDragging={isDragging}
-      dragHandleProps={dragHandleProps}
-    />
+    <>
+      <WorkspaceRow
+        workspaceEntry={workspaceEntry}
+        hostBadge={hostBadge}
+        leadingProjectName={leadingProjectName}
+        leadingProjectIconDataUri={leadingProjectIconDataUri}
+        shortcutNumber={shortcutNumber}
+        showShortcutBadge={showShortcutBadge}
+        canCopyBranchName={canCopyBranchName}
+        canPin={canPin}
+        onToggleWorkspacePin={onToggleWorkspacePin}
+        reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+        isCreating={isCreating}
+        selected={isWorkspaceSelected({
+          selection: activeWorkspaceSelection,
+          serverId: workspace.serverId,
+          workspaceId: workspace.workspaceId,
+          enabled: selectionEnabled,
+        })}
+        onPress={handlePress}
+        drag={drag ?? noop}
+        isDragging={isDragging}
+        dragHandleProps={dragHandleProps}
+      />
+      {/* Tab-title matches from the sidebar filter; renders nothing when there are none. */}
+      <SidebarWorkspaceTabMatches
+        workspaceKey={workspace.workspaceKey}
+        workspace={workspaceEntry}
+        onNavigate={onWorkspacePress}
+      />
+    </>
   );
 }
 
@@ -2545,7 +2554,8 @@ function ProjectModeList({
       sidebarFilterEmpty
         ? listHeaderComponent
         : null}
-      {sidebarFilterEmpty ? <SidebarFilterEmptyState /> : projectBody}
+      {sidebarFilterEmpty ? null : projectBody}
+      <SidebarFilterResultsTail treeEmpty={sidebarFilterEmpty} onNavigate={onWorkspacePress} />
       {listFooterComponent}
     </>
   );

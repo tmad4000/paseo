@@ -89,6 +89,8 @@ export const ko: TranslationResources = {
     actions: {
       back: "뒤로",
       navigateBack: "뒤로 가기",
+      forward: "앞으로",
+      navigateForward: "앞으로 가기",
       cancel: "취소",
       close: "닫기",
       copy: "복사",
@@ -1308,6 +1310,16 @@ export const ko: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "채팅 {{total}}개 중 {{searched}}개 검색함",
+        inMessages: "메시지에서",
+        searching: "메시지 검색 중...",
+        moreTabs: "+{{count}}개 더",
+        fewerTabs: "간략히 보기",
+        enterHint: "Enter 키를 눌러 지능형 검색(Find)",
+        openTab: "{{title}} 열기",
+        openMessage: "{{title}} 열기: {{snippet}}",
+      },
       placeholder: "프로젝트 또는 채팅 필터",
       clear: "사이드바 필터 지우기",
       sortHeading: "채팅 정렬",

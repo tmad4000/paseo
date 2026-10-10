@@ -89,6 +89,8 @@ export const ar: TranslationResources = {
     actions: {
       back: "خلف",
       navigateBack: "الرجوع",
+      forward: "للأمام",
+      navigateForward: "التقدم للأمام",
       cancel: "يلغي",
       close: "يغلق",
       copy: "ينسخ",
@@ -1298,6 +1300,16 @@ export const ar: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "تم البحث في {{searched}} من {{total}} محادثة",
+        inMessages: "في الرسائل",
+        searching: "جارٍ البحث في الرسائل...",
+        moreTabs: "+{{count}} أخرى",
+        fewerTabs: "عرض أقل",
+        enterHint: "اضغط Enter للبحث الذكي (Find)",
+        openTab: "فتح {{title}}",
+        openMessage: "فتح {{title}}: {{snippet}}",
+      },
       placeholder: "تصفية المشاريع أو المحادثات",
       clear: "مسح تصفية الشريط الجانبي",
       sortHeading: "ترتيب المحادثات",

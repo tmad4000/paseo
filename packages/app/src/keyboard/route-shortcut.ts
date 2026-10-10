@@ -24,7 +24,8 @@ export type ShortcutCallbackName =
   | "toggle-agent-list"
   | "toggle-both-sidebars"
   | "cycle-theme"
-  | "navigate-back";
+  | "navigate-back"
+  | "navigate-forward";
 
 export type ShortcutAction =
   | { kind: "none" }
@@ -75,6 +76,7 @@ const PASSTHROUGH_DISPATCH: Record<string, KeyboardActionDefinition> = {
 const SIMPLE_CALLBACKS: Record<string, ShortcutCallbackName> = {
   "sidebar.toggle.left": "toggle-agent-list",
   "navigation.back": "navigate-back",
+  "navigation.forward": "navigate-forward",
   "sidebar.toggle.both": "toggle-both-sidebars",
   "theme.cycle": "cycle-theme",
 };

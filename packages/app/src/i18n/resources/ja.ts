@@ -90,6 +90,8 @@ export const ja: TranslationResources = {
     actions: {
       back: "戻る",
       navigateBack: "戻る",
+      forward: "進む",
+      navigateForward: "進む",
       cancel: "キャンセル",
       close: "閉じる",
       copy: "コピー",
@@ -1312,6 +1314,16 @@ export const ja: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "{{total}} 件中 {{searched}} 件のチャットを検索",
+        inMessages: "メッセージ内",
+        searching: "メッセージを検索中...",
+        moreTabs: "他 {{count}} 件",
+        fewerTabs: "表示を減らす",
+        enterHint: "Enter キーでインテリジェント検索 (Find)",
+        openTab: "{{title}} を開く",
+        openMessage: "{{title}} を開く: {{snippet}}",
+      },
       placeholder: "プロジェクトやチャットを絞り込む",
       clear: "サイドバーの絞り込みを解除",
       sortHeading: "チャットの並び替え",

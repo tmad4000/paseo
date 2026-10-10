@@ -1,11 +1,14 @@
 import { useShallow } from "zustand/react/shallow";
-import { useSessionStore } from "@/stores/session-store";
+import { shallow } from "zustand/shallow";
+import { useStoreWithEqualityFn } from "zustand/traditional";
+import { useSessionStore, type Agent } from "@/stores/session-store";
 import { effectiveSidebarSortMode, messageSortAvailability } from "./message-sort-capability";
 import React, {
   createContext,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,9 +36,23 @@ import {
   filterAndSortSidebarProjects,
   normalizeSidebarQuery,
   sortSidebarWorkspaces,
-  workspaceMatchesSidebarQuery,
+  workspaceMatchesSidebarFilter,
   type SidebarSortMode,
 } from "./sidebar-filter-sort";
+import {
+  areSidebarTabMatchesEqual,
+  collectSidebarTabTitles,
+  EMPTY_SIDEBAR_TAB_MATCHES,
+  matchSidebarTabTitles,
+  type SidebarTabMatches,
+} from "./sidebar-filter-matches";
+import {
+  buildSidebarMessageSearchScope,
+  EMPTY_SIDEBAR_MESSAGE_SEARCH_SCOPE,
+  SidebarMessageSearchProvider,
+  SidebarTabMatchesProvider,
+  type SidebarMessageSearchScope,
+} from "./sidebar-filter-context";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
@@ -73,6 +90,41 @@ interface SidebarModel extends SidebarWorkspacesListResult {
 }
 
 const SidebarModelContext = createContext<SidebarModel | null>(null);
+
+const NO_AGENT_MAPS: ReadonlyArray<ReadonlyMap<string, Agent> | undefined> = [];
+
+/**
+ * Tab-title matches for the live filter. The agent directory is only read while a query is
+ * active, and the result keeps its previous identity when only statuses changed, so a running
+ * agent does not recompute the filtered tree on every update.
+ */
+function useSidebarTabMatches(
+  serverIds: readonly string[],
+  normalizedQuery: string,
+): SidebarTabMatches {
+  const agentMaps = useStoreWithEqualityFn(
+    useSessionStore,
+    (state) =>
+      normalizedQuery
+        ? serverIds.map((serverId) => state.sessions[serverId]?.agents)
+        : NO_AGENT_MAPS,
+    shallow,
+  );
+  const tabTitles = useMemo(
+    () =>
+      collectSidebarTabTitles(
+        serverIds.map((serverId, index) => ({ serverId, agents: agentMaps[index] })),
+      ),
+    [agentMaps, serverIds],
+  );
+  const previousRef = useRef<SidebarTabMatches>(EMPTY_SIDEBAR_TAB_MATCHES);
+  return useMemo(() => {
+    const next = matchSidebarTabTitles(tabTitles, normalizedQuery);
+    if (areSidebarTabMatchesEqual(previousRef.current, next)) return previousRef.current;
+    previousRef.current = next;
+    return next;
+  }, [normalizedQuery, tabTitles]);
+}
 
 export function SidebarModelProvider({
   active,
@@ -145,17 +197,41 @@ export function SidebarModelProvider({
     list.workspacePlacements,
     active !== false || needsWorkspaceEntries,
   );
-  const filteredWorkspaceEntriesByKey = useMemo(() => {
+  const tabMatches = useSidebarTabMatches(list.serverIds, normalizedQuery);
+  const tabMatchedWorkspaceKeys = useMemo(() => new Set(tabMatches.keys()), [tabMatches]);
+  // Project and label filters, before the text query: what the query's tiers may search.
+  const scopedWorkspaces = useMemo(() => {
     const byProject = filterWorkspacesByProjects({
       workspaces: [...workspaceEntriesByKey.values()],
       projectFilters: resolvedProjectFilters,
     });
-    const filtered = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter }).filter(
-      (workspace) => workspaceMatchesSidebarQuery(workspace, normalizedQuery),
+    return filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
+  }, [labelFilter, resolvedProjectFilters, workspaceEntriesByKey]);
+  const filteredWorkspaceEntriesByKey = useMemo(() => {
+    const filtered = scopedWorkspaces.filter((workspace) =>
+      workspaceMatchesSidebarFilter(workspace, normalizedQuery, tabMatchedWorkspaceKeys),
     );
     const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, effectiveSort);
     return new Map(sorted.map((workspace) => [workspace.workspaceKey, workspace]));
-  }, [labelFilter, normalizedQuery, resolvedProjectFilters, effectiveSort, workspaceEntriesByKey]);
+  }, [
+    normalizedQuery,
+    effectiveSort,
+    scopedWorkspaces,
+    tabMatchedWorkspaceKeys,
+    workspaceEntriesByKey,
+  ]);
+  const messageSearchScopeRef = useRef<SidebarMessageSearchScope>(
+    EMPTY_SIDEBAR_MESSAGE_SEARCH_SCOPE,
+  );
+  // Entries change identity on every status update; the scope only changes when its membership
+  // does, so the debounced message search is not restarted by unrelated activity.
+  const messageSearchScope = useMemo(() => {
+    if (!normalizedQuery) return messageSearchScopeRef.current;
+    const next = buildSidebarMessageSearchScope(scopedWorkspaces);
+    if (next.key === messageSearchScopeRef.current.key) return messageSearchScopeRef.current;
+    messageSearchScopeRef.current = next;
+    return next;
+  }, [normalizedQuery, scopedWorkspaces]);
   const visibleWorkspaceKeys = useMemo(
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
@@ -190,6 +266,7 @@ export function SidebarModelProvider({
       entries: filteredWorkspaceEntriesByKey,
       query: normalizedQuery,
       mode: effectiveSort,
+      tabMatchedWorkspaceKeys,
     });
   }, [
     hasActiveLabelFilter,
@@ -199,6 +276,7 @@ export function SidebarModelProvider({
     filteredWorkspaceEntriesByKey,
     resolvedProjectFilters,
     list.projects,
+    tabMatchedWorkspaceKeys,
     visibleWorkspaceKeys,
   ]);
   const projectPinStates = useProjectPinStates(list.projects);
@@ -282,7 +360,19 @@ export function SidebarModelProvider({
     ],
   );
 
-  return <SidebarModelContext.Provider value={value}>{children}</SidebarModelContext.Provider>;
+  return (
+    <SidebarModelContext.Provider value={value}>
+      <SidebarTabMatchesProvider tabMatches={tabMatches}>
+        <SidebarMessageSearchProvider
+          rawQuery={searchQuery}
+          normalizedQuery={normalizedQuery}
+          scope={messageSearchScope}
+        >
+          {children}
+        </SidebarMessageSearchProvider>
+      </SidebarTabMatchesProvider>
+    </SidebarModelContext.Provider>
+  );
 }
 
 export function useSidebarModel(): SidebarModel {
