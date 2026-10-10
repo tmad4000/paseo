@@ -80,6 +80,10 @@ sends the prompt. The original dispatcher draft is retained as a copy; editing t
 does not change it. Controls lock during handoff, and the captured destination is revalidated
 after persistence. A failure preserves the source prompt.
 
+**Start without leaving** sends the same prompt and destination to [Quick launch](quick-launch.md)
+instead, which starts the agent in a new tab of that workspace while the user stays put. The
+prompt moves into Quick launch and is cleared here, so it cannot also be continued.
+
 Existing-chat delivery offers **Queue** (default), **Steer**, and **Interrupt**. Queue retains
 the durable outbox contract below. Steer and Interrupt use the ordinary chat composer submission
 path and require an explicitly selected conversation; intelligent matching presents candidates

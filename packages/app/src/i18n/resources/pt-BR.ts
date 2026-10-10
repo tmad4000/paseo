@@ -2159,6 +2159,49 @@ export const ptBR: TranslationResources = {
     },
     and: "e",
   },
+  quickLaunch: {
+    title: "Início rápido",
+    commandCenterTitle: "Início rápido de agente…",
+    placeholder: "O que o novo agente deve fazer?",
+    promptLabel: "Prompt para o novo agente",
+    project: {
+      title: "Projeto",
+      label: "Projeto: {{project}}",
+      choose: "Escolher projeto",
+      search: "Buscar projetos",
+      empty: "Nenhum projeto disponível",
+    },
+    host: {
+      title: "Host",
+      label: "Host: {{host}}",
+    },
+    where: {
+      newWorkspace: "Novo workspace",
+      newTab: "Nova aba em {{workspace}}",
+    },
+    actions: {
+      start: "Iniciar",
+      startHint: "Inicia o agente sem sair de onde você está",
+      startAndOpen: "Iniciar e abrir",
+      startAndOpenHint: "Inicia o agente e o abre",
+    },
+    toast: {
+      starting: "Iniciando em {{project}} · {{workspace}}…",
+      started: "Iniciado em {{project}} · {{workspace}}",
+      newWorkspace: "novo workspace",
+      open: "Abrir",
+      retry: "Tentar novamente",
+      failed: "Não foi possível iniciar o agente: {{error}}",
+    },
+    errors: {
+      noAgent: "O workspace foi criado sem agente",
+      createFailed: "Não foi possível criar o workspace",
+    },
+    router: {
+      startWithoutLeaving: "Iniciar sem sair",
+      startWithoutLeavingHint: "Inicia este prompt com o Início rápido e mantém você aqui",
+    },
+  },
   views: {
     sidebar: {
       title: "Visões",

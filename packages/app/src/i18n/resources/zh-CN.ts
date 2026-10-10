@@ -2096,6 +2096,49 @@ export const zhCN: TranslationResources = {
     },
     and: "并",
   },
+  quickLaunch: {
+    title: "快速启动",
+    commandCenterTitle: "快速启动 Agent…",
+    placeholder: "新的 Agent 要做什么？",
+    promptLabel: "给新 Agent 的提示",
+    project: {
+      title: "项目",
+      label: "项目：{{project}}",
+      choose: "选择项目",
+      search: "搜索项目",
+      empty: "没有可用的项目",
+    },
+    host: {
+      title: "主机",
+      label: "主机：{{host}}",
+    },
+    where: {
+      newWorkspace: "新建工作区",
+      newTab: "在 {{workspace}} 中新建标签页",
+    },
+    actions: {
+      start: "启动",
+      startHint: "启动 Agent 并留在当前位置",
+      startAndOpen: "启动并打开",
+      startAndOpenHint: "启动 Agent 并打开它",
+    },
+    toast: {
+      starting: "正在 {{project}} · {{workspace}} 中启动…",
+      started: "已在 {{project}} · {{workspace}} 中启动",
+      newWorkspace: "新工作区",
+      open: "打开",
+      retry: "重试",
+      failed: "无法启动 Agent：{{error}}",
+    },
+    errors: {
+      noAgent: "工作区已创建，但没有 Agent",
+      createFailed: "无法创建工作区",
+    },
+    router: {
+      startWithoutLeaving: "不离开当前页启动",
+      startWithoutLeavingHint: "通过快速启动开始此提示并留在当前位置",
+    },
+  },
   views: {
     sidebar: {
       title: "视图",

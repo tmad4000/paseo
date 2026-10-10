@@ -50,6 +50,7 @@ export type KeyboardActionId =
   | "shortcuts.dialog.toggle"
   | "workspace.terminal.new"
   | "workspace.new"
+  | "quick-launch.open"
   | "workspace.project.pick"
   | "worktree.new"
   | "workspace.archive"

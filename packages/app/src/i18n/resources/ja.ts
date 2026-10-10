@@ -2143,6 +2143,49 @@ export const ja: TranslationResources = {
     },
     and: "および",
   },
+  quickLaunch: {
+    title: "クイック起動",
+    commandCenterTitle: "エージェントをクイック起動…",
+    placeholder: "新しいエージェントに何をさせますか？",
+    promptLabel: "新しいエージェントへのプロンプト",
+    project: {
+      title: "プロジェクト",
+      label: "プロジェクト: {{project}}",
+      choose: "プロジェクトを選択",
+      search: "プロジェクトを検索",
+      empty: "利用できるプロジェクトがありません",
+    },
+    host: {
+      title: "ホスト",
+      label: "ホスト: {{host}}",
+    },
+    where: {
+      newWorkspace: "新しいワークスペース",
+      newTab: "{{workspace}} の新しいタブ",
+    },
+    actions: {
+      start: "開始",
+      startHint: "今の画面のままエージェントを開始します",
+      startAndOpen: "開始して開く",
+      startAndOpenHint: "エージェントを開始して開きます",
+    },
+    toast: {
+      starting: "{{project}} · {{workspace}} で開始中…",
+      started: "{{project}} · {{workspace}} で開始しました",
+      newWorkspace: "新しいワークスペース",
+      open: "開く",
+      retry: "再試行",
+      failed: "エージェントを開始できません: {{error}}",
+    },
+    errors: {
+      noAgent: "ワークスペースはエージェントなしで作成されました",
+      createFailed: "ワークスペースを作成できません",
+    },
+    router: {
+      startWithoutLeaving: "移動せずに開始",
+      startWithoutLeavingHint: "このプロンプトをクイック起動で開始し、この画面に留まります",
+    },
+  },
   views: {
     sidebar: {
       title: "ビュー",

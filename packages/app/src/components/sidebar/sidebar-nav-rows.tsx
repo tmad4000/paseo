@@ -1,5 +1,5 @@
 import { router, usePathname } from "expo-router";
-import { CalendarClock, History, Plus, Search } from "lucide-react-native";
+import { CalendarClock, History, Plus, Search, Zap } from "lucide-react-native";
 import { memo, useCallback, useMemo, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
@@ -7,6 +7,7 @@ import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { PluginSidebarItemRow } from "@/plugins/sidebar-items";
 import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
+import { useQuickLaunchStore } from "@/quick-launch/store";
 import { useHostFeature } from "@/runtime/host-features";
 import {
   builtinSidebarNavLabelKey,
@@ -109,6 +110,28 @@ const SidebarNewWorkspaceRow = memo(function SidebarNewWorkspaceRow({
   );
 });
 
+function SidebarQuickLaunchRow({ onBeforeNavigate }: SidebarNavRowProps) {
+  const { t } = useTranslation();
+  const shortcutKeys = useShortcutKeys(builtinSidebarNavShortcutAction("quick-launch"));
+  const openQuickLaunch = useQuickLaunchStore((state) => state.open);
+  const handlePress = useCallback(() => {
+    // Closes the compact sidebar overlay; Quick launch itself never navigates.
+    onBeforeNavigate?.();
+    openQuickLaunch();
+  }, [onBeforeNavigate, openQuickLaunch]);
+
+  return (
+    <SidebarHeaderRow
+      icon={Zap}
+      label={t(builtinSidebarNavLabelKey("quick-launch"))}
+      onPress={handlePress}
+      testID="sidebar-quick-launch"
+      variant="compact"
+      shortcutKeys={shortcutKeys}
+    />
+  );
+}
+
 function SidebarHistoryRow({ onBeforeNavigate }: SidebarNavRowProps) {
   const { t } = useTranslation();
   const pathname = usePathname();
@@ -172,6 +195,7 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
 
 const BUILTIN_ROWS: Record<BuiltinSidebarNavId, ComponentType<SidebarNavRowProps>> = {
   "new-workspace": SidebarNewWorkspaceRow,
+  "quick-launch": SidebarQuickLaunchRow,
   history: SidebarHistoryRow,
   search: SidebarSearchRow,
   schedules: SidebarSchedulesRow,

@@ -43,6 +43,7 @@ import {
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { defaultNewConversationWorkspace, prepareNewConversationDraft } from "./new-conversation";
+import { useQuickLaunchStore } from "@/quick-launch/store";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { deliverDirectRoutedPrompt, deliverRoutedPrompt } from "./delivery";
 import {
@@ -800,6 +801,24 @@ export function SessionRoutingComposer({
     else setDraft("");
     dispatch({ type: "clear" });
   }, [cancelMatch, dispatch, setDraft, setSearchQuery]);
+  const openQuickLaunch = useQuickLaunchStore((store) => store.open);
+  // Same destination as Continue, created through Quick launch instead of navigating there. The
+  // prompt moves into Quick launch so it cannot also be continued from here.
+  const startWithoutLeaving = useCallback(() => {
+    const current = latest.current.state;
+    const workspace = current.newWorkspace;
+    if (!workspace || !current.sendDraft.trim() || isRoutingLocked(current)) return;
+    if (!newWorkspaceEligible()) return;
+    openQuickLaunch({
+      prefill: {
+        text: current.sendDraft,
+        workspace: { serverId: workspace.serverId, workspaceId: workspace.workspaceId },
+        where: "existing-workspace",
+      },
+    });
+    setDraft("");
+  }, [newWorkspaceEligible, openQuickLaunch, setDraft]);
+
   const resultsStale =
     state.phase.status === "results" &&
     state.phase.text !== (state.mode === "find" ? searchQuery : state.sendDraft);
@@ -1016,6 +1035,12 @@ export function SessionRoutingComposer({
         >
           {t("sidebar.routing.clear")}
         </Button>
+        <StartWithoutLeavingButton
+          state={state}
+          locked={locked}
+          eligible={newWorkspaceEligible()}
+          onPress={startWithoutLeaving}
+        />
         <RouteBestMatchButton state={state} locked={locked} onPress={routeFromButton} />
         <Button
           size="xs"
@@ -1078,6 +1103,33 @@ function RouteBestMatchButton({
       testID="routing-route-best"
     >
       {t("sidebar.routing.routeBestMatch")}
+    </Button>
+  );
+}
+
+function StartWithoutLeavingButton({
+  state,
+  locked,
+  eligible,
+  onPress,
+}: {
+  state: RoutingState;
+  locked: boolean;
+  eligible: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (state.mode !== "send" || !state.newConversation) return null;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={locked || !eligible || !state.sendDraft.trim()}
+      onPress={onPress}
+      accessibilityLabel={t("quickLaunch.router.startWithoutLeavingHint")}
+      testID="routing-start-without-leaving"
+    >
+      {t("quickLaunch.router.startWithoutLeaving")}
     </Button>
   );
 }
