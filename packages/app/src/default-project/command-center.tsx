@@ -98,6 +98,11 @@ export function useDefaultProjectCommandCenterActions(): void {
   const pinState = useProjectPinState(currentHosts);
   const actions = useProjectPinActions();
   const defaultHostId = useDefaultProjectHostId(serverId);
+  const defaultProjectName = useDefaultProjectForHost(defaultHostId)?.displayName ?? null;
+  const defaultProjectNameKeywords = useMemo(
+    () => (defaultProjectName ? [defaultProjectName] : []),
+    [defaultProjectName],
+  );
 
   const goToDefault = useCallback(() => {
     if (!defaultHostId) return;
@@ -114,7 +119,7 @@ export function useDefaultProjectCommandCenterActions(): void {
         group: "actions",
         groupRank: 0,
         rank: 40,
-        keywords: ["default", "project", "home", "tmpworkspace", "go"],
+        keywords: ["default", "project", "home", "go", ...defaultProjectNameKeywords],
         visibility: "always",
         run: goToDefault,
         presentation: {
@@ -181,7 +186,16 @@ export function useDefaultProjectCommandCenterActions(): void {
       },
     );
     return list;
-  }, [actions, canPin, currentHosts, defaultHostId, goToDefault, pinState, t]);
+  }, [
+    actions,
+    canPin,
+    currentHosts,
+    defaultHostId,
+    defaultProjectNameKeywords,
+    goToDefault,
+    pinState,
+    t,
+  ]);
 
   useCommandCenterActions({
     sourceId: "default-project",

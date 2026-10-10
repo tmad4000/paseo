@@ -579,6 +579,9 @@ export class WorkspaceDirectory {
         projectCustomIconRevision: project.customIconRevision ?? null,
         projectRootPath: project.rootPath,
         projectKind: project.kind,
+        // Present only when set, matching the session's project descriptor.
+        ...(project.pinnedAt ? { projectPinnedAt: project.pinnedAt } : {}),
+        ...(project.defaultAt ? { projectDefaultAt: project.defaultAt } : {}),
       }));
   }
 

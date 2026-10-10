@@ -117,6 +117,33 @@ describe("project pins and the Default project", () => {
     expect((await registry.get("b"))?.pinnedAt).toBe("2026-10-02T00:00:00.000Z");
   });
 
+  test("concurrent defaults from two devices leave exactly one default", async () => {
+    await registry.upsert(project("a"));
+    await registry.upsert(project("b"));
+    await registry.upsert(project("c", { defaultAt: "2026-10-01T00:00:00.000Z" }));
+
+    await Promise.all([
+      setProjectDefault({
+        registry,
+        projectId: "a",
+        isDefault: true,
+        now: "2026-10-10T10:00:00.000Z",
+      }),
+      setProjectDefault({
+        registry,
+        projectId: "b",
+        isDefault: true,
+        now: "2026-10-10T10:00:00.001Z",
+      }),
+    ]);
+
+    const defaults = (await registry.list()).filter((record) => record.defaultAt);
+    expect(defaults.map((record) => record.projectId)).toEqual(["b"]);
+    const reloaded = new FileBackedProjectRegistry(filePath, createTestLogger());
+    const persistedDefaults = (await reloaded.list()).filter((record) => record.defaultAt);
+    expect(persistedDefaults.map((record) => record.projectId)).toEqual(["b"]);
+  });
+
   test("removing the default clears only that project", async () => {
     await registry.upsert(project("a", { defaultAt: "2026-10-01T00:00:00.000Z" }));
     await registry.upsert(project("b"));
