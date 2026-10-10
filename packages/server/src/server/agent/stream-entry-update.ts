@@ -179,5 +179,11 @@ function reviewMessage(entries: CompanionEntry[], input: StreamEntryUpdate): Com
 
 function findAskSource(entries: CompanionEntry[], messageId: string | undefined) {
   if (!messageId) return undefined;
-  return entries.find((item) => item.messageReview && item.source?.messageId === messageId)?.source;
+  const source = entries.find(
+    (item) => item.messageReview && item.source?.messageId === messageId,
+  )?.source;
+  if (!source) return undefined;
+  // Provenance aliases only identify the source record; asks need its position.
+  const { aliases: _aliases, ...position } = source;
+  return position;
 }

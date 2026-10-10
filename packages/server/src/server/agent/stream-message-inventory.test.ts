@@ -217,7 +217,8 @@ describe("Stream message inventory", () => {
     });
     const enriched = { ...submitted, providerMessageId: "provider-1" };
     const next = indexStreamMessages(entries, [enriched], "epoch");
-    expect(next).toBe(entries);
+    expect(next[0].source?.aliases?.length).toBeGreaterThan(0);
+    expect(indexStreamMessages(next, [enriched], "epoch")).toBe(next);
     expect(next.filter((entry) => entry.messageReview)).toHaveLength(1);
     expect(next[0].messageReview?.state).toBe("reviewed");
     // A rehydrated row carrying both provenances resolves to the same record.
@@ -303,6 +304,64 @@ describe("Stream message inventory", () => {
       epoch: "e2",
     });
     expect(next.find((entry) => entry.id === unreviewedProvider.id)?.source?.seq).toBe(1);
+  });
+
+  it("finds a client-keyed source after enrichment when history replays only the provider ID", () => {
+    const submitted: ProjectedTimelineRow = {
+      ...message(1, "Late echo."),
+      item: {
+        type: "user_message",
+        text: "Late echo.",
+        messageId: "client-4",
+        clientMessageId: "client-4",
+      },
+    };
+    let entries = indexStreamMessages([], [submitted], "epoch");
+    const original = entries[0];
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "session",
+      action: "set_ask",
+      entryId: "late-ask",
+      expectedRevision: 0,
+      text: "Late ask",
+      ask: {
+        state: "open",
+        remaining: "Do it",
+        evidence: "",
+        sourceMessageId: original.source!.messageId,
+      },
+    });
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "session",
+      action: "review_message",
+      entryId: original.id,
+      expectedRevision: 0,
+      review: { state: "reviewed", note: "One ask", askIds: ["late-ask"] },
+    });
+    // Provider echo arrives after acceptance: the row is enriched, and the alias is recorded.
+    entries = indexStreamMessages(
+      entries,
+      [{ ...submitted, providerMessageId: "provider-4" }],
+      "epoch",
+    );
+    const aliased = entries.find((entry) => entry.id === original.id)!;
+    expect(aliased.source?.aliases?.length).toBeGreaterThan(0);
+    expect(entries.find((entry) => entry.ask)?.source?.aliases).toBeUndefined();
+    // Restart: provider history carries only the provider ID, no client ID.
+    const replayed: ProjectedTimelineRow = {
+      ...message(6, "Late echo."),
+      item: { type: "user_message", text: "Late echo.", messageId: "provider-4" },
+    };
+    const restored = JSON.parse(JSON.stringify(entries));
+    const next = indexStreamMessages(restored, [replayed], "restart");
+    expect(next.filter((entry) => entry.messageReview)).toHaveLength(1);
+    expect(next.find((entry) => entry.messageReview)).toMatchObject({
+      id: original.id,
+      messageReview: { state: "reviewed" },
+      source: { seq: 6, epoch: "restart" },
+    });
+    expect(next.find((entry) => entry.ask)?.source).toMatchObject({ seq: 6, epoch: "restart" });
+    expect(indexStreamMessages(next, [replayed], "restart")).toBe(next);
   });
 
   it("reports hidden counts for the installed-example shape without inventing open asks", () => {

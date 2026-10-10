@@ -5053,7 +5053,11 @@ export class AgentManager {
         clientMessageId,
         messageId,
       );
-      if (enriched) this.enqueueDurableTimelineUpdate(agent.id, enriched);
+      if (enriched) {
+        this.enqueueDurableTimelineUpdate(agent.id, enriched);
+        // Record the provider ID as a source alias before any restart replays history.
+        this.indexUserMessageSources(agent.id);
+      }
     }
     return existing;
   }
@@ -5124,20 +5128,24 @@ export class AgentManager {
     item = limitAgentTimelineItemContent(item);
     const row = this.timelineStore.append(agentId, item, options);
     this.enqueueDurableTimelineAppend(agentId, row);
-    if (item.type === "user_message") {
-      const agent = this.agents.get(agentId);
-      if (agent) {
-        agent.companionEntries = indexStreamMessages(
-          agent.companionEntries ?? [],
-          this.timelineStore
-            .getRows(agentId)
-            .filter((timelineRow) => timelineRow.item.type === "user_message"),
-          this.timelineStore.getEpoch(agentId),
-        );
-        this.enqueueBackgroundPersist(agent);
-      }
-    }
+    if (item.type === "user_message") this.indexUserMessageSources(agentId);
     return row;
+  }
+
+  private indexUserMessageSources(agentId: string): void {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+    const entries = agent.companionEntries ?? [];
+    const indexed = indexStreamMessages(
+      entries,
+      this.timelineStore
+        .getRows(agentId)
+        .filter((timelineRow) => timelineRow.item.type === "user_message"),
+      this.timelineStore.getEpoch(agentId),
+    );
+    if (indexed === entries) return;
+    agent.companionEntries = indexed;
+    this.enqueueBackgroundPersist(agent);
   }
 
   private emitState(agent: ManagedAgent, options?: { persist?: boolean }): void {
