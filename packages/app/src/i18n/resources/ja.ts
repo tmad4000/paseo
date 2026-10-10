@@ -1282,6 +1282,15 @@ export const ja: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        inMessages: "メッセージ内",
+        searching: "メッセージを検索中...",
+        moreTabs: "他 {{count}} 件",
+        fewerTabs: "表示を減らす",
+        enterHint: "Enter キーでインテリジェント検索 (Find)",
+        openTab: "{{title}} を開く",
+        openMessage: "{{title}} を開く: {{snippet}}",
+      },
       placeholder: "プロジェクトやチャットを絞り込む",
       clear: "サイドバーの絞り込みを解除",
       sortHeading: "チャットの並び替え",

@@ -1278,6 +1278,15 @@ export const en = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        inMessages: "In messages",
+        searching: "Searching messages...",
+        moreTabs: "+{{count}} more",
+        fewerTabs: "Show fewer",
+        enterHint: "Press Enter for intelligent Find",
+        openTab: "Open {{title}}",
+        openMessage: "Open {{title}}: {{snippet}}",
+      },
       placeholder: "Filter projects or chats",
       clear: "Clear sidebar filter",
       sortHeading: "Sort chats",

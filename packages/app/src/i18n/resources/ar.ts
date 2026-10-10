@@ -1268,6 +1268,15 @@ export const ar: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        inMessages: "في الرسائل",
+        searching: "جارٍ البحث في الرسائل...",
+        moreTabs: "+{{count}} أخرى",
+        fewerTabs: "عرض أقل",
+        enterHint: "اضغط Enter للبحث الذكي (Find)",
+        openTab: "فتح {{title}}",
+        openMessage: "فتح {{title}}: {{snippet}}",
+      },
       placeholder: "تصفية المشاريع أو المحادثات",
       clear: "مسح تصفية الشريط الجانبي",
       sortHeading: "ترتيب المحادثات",

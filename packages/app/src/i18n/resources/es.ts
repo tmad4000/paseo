@@ -1308,6 +1308,15 @@ export const es: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        inMessages: "En mensajes",
+        searching: "Buscando en mensajes...",
+        moreTabs: "+{{count}} más",
+        fewerTabs: "Mostrar menos",
+        enterHint: "Pulsa Intro para la búsqueda inteligente (Find)",
+        openTab: "Abrir {{title}}",
+        openMessage: "Abrir {{title}}: {{snippet}}",
+      },
       placeholder: "Filtrar proyectos o chats",
       clear: "Borrar filtro lateral",
       sortHeading: "Ordenar chats",
