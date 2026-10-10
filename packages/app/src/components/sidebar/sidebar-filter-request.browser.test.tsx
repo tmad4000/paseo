@@ -50,7 +50,13 @@ test("a command center request fills and focuses the find field exactly once", a
   expect(useSidebarFilterRequestStore.getState().focusedRequestId).toBe(1);
 
   // Remounting the sidebar must not take focus again for a request already handled.
-  await act(async () => root.render(<React.Fragment key="remount"><FindField /></React.Fragment>));
+  await act(async () =>
+    root.render(
+      <React.Fragment key="remount">
+        <FindField />
+      </React.Fragment>,
+    ),
+  );
   await act(async () => {
     await nextTask();
   });
