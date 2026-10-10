@@ -1286,9 +1286,12 @@ export class AgentManager {
   }
 
   /**
-   * The last user and assistant messages of a session, oldest first, read from persisted history
-   * without loading the agent. Shared by intelligent Find and the sidebar's message search, so
-   * both see the same bounded window (`limit` projected rows, default 400).
+   * The last user and assistant messages of a session, oldest first, from the daemon's own
+   * timeline: the durable timeline store when one is configured, otherwise the in-memory store,
+   * which only holds agents loaded since the daemon started. Returns [] for an agent that is not
+   * loaded; it never loads or resumes one. Shared by intelligent Find and the sidebar's message
+   * search (`limit` projected rows, default 400). The sidebar search reads unloaded agents from
+   * their provider transcripts instead (`session-text-history.ts`).
    */
   async readRecentConversationMessages(
     id: string,

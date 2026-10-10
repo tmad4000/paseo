@@ -1271,6 +1271,7 @@ export const zhCN: TranslationResources = {
           messagesDescription: "同时搜索消息文本",
           needsHostUpdate: "消息搜索需要更新主机",
         },
+        coverage: "已搜索 {{total}} 个聊天中的 {{searched}} 个",
         inMessages: "消息中",
         searching: "正在搜索消息...",
         moreTabs: "还有 {{count}} 个",

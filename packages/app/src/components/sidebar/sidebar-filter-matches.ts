@@ -245,3 +245,24 @@ export function trimSidebarSnippetLead(
     range: { start: range.start - cut + 1, length: range.length },
   };
 }
+
+export interface SidebarMessageSearchCoverage {
+  searchedCount: number;
+  totalCount: number;
+  /** A host stopped at one of its bounds (sessions, hits, or time) before reading every chat. */
+  truncated: boolean;
+}
+
+export function sumSidebarMessageSearchCoverage(
+  results: Iterable<SidebarMessageSearchCoverage>,
+): SidebarMessageSearchCoverage {
+  let searchedCount = 0;
+  let totalCount = 0;
+  let truncated = false;
+  for (const result of results) {
+    searchedCount += result.searchedCount;
+    totalCount += result.totalCount;
+    truncated ||= result.truncated;
+  }
+  return { searchedCount, totalCount, truncated };
+}

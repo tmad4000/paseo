@@ -1322,6 +1322,7 @@ export const fr: TranslationResources = {
           messagesDescription: "Recherche aussi dans le texte des messages",
           needsHostUpdate: "Les messages nécessitent une mise à jour de l’hôte",
         },
+        coverage: "{{searched}} discussions sur {{total}} parcourues",
         inMessages: "Dans les messages",
         searching: "Recherche dans les messages...",
         moreTabs: "+{{count}} de plus",

@@ -1292,6 +1292,7 @@ export const en = {
           messagesDescription: "Also searches message text",
           needsHostUpdate: "Messages need a host update",
         },
+        coverage: "Searched {{searched}} of {{total}} chats",
         inMessages: "In messages",
         searching: "Searching messages...",
         moreTabs: "+{{count}} more",

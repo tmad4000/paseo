@@ -6,6 +6,7 @@ import {
   type SessionSearchCandidate,
 } from "./session-search.js";
 import { searchSessionText, type SessionTextSearchCandidate } from "./session-text-search.js";
+import { getSharedPersistedConversationReader } from "./session-text-history.js";
 import type { StructuredTextGeneration } from "./session/checkout/git-metadata-generator.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -8335,6 +8336,7 @@ export class Session {
       const projectById = new Map(projects.map((project) => [project.projectId, project]));
       const allowed = msg.workspaceIds ? new Set(msg.workspaceIds) : null;
       const candidates: SessionTextSearchCandidate[] = [];
+      const recordsById = new Map<string, (typeof records)[number]>();
       for (const record of records) {
         const workspace = record.workspaceId ? workspaceById.get(record.workspaceId) : undefined;
         const project = workspace ? projectById.get(workspace.projectId) : undefined;
@@ -8344,6 +8346,7 @@ export class Session {
         if (record.internal || record.archivedAt || record.labels["paseo.parent-agent-id"])
           continue;
         const workspaceTitle = resolveWorkspaceDisplayName(workspace);
+        recordsById.set(record.id, record);
         candidates.push({
           agentId: record.id,
           workspaceId: workspace.workspaceId,
@@ -8357,7 +8360,20 @@ export class Session {
       const result = await searchSessionText({
         query: msg.query,
         candidates,
-        readMessages: (agentId) => this.agentManager.readRecentConversationMessages(agentId),
+        // Loaded agents answer from the daemon's timeline. Everything else is read, never resumed,
+        // from the provider transcript its record points to (see session-text-history.ts).
+        readMessages: async (agentId) => {
+          const live = await this.agentManager.readRecentConversationMessages(agentId);
+          const record = recordsById.get(agentId);
+          if (live.length > 0 || !record) return live;
+          return getSharedPersistedConversationReader().read({
+            agentId,
+            provider: record.provider,
+            cwd: record.cwd,
+            persistence: record.persistence,
+            activityStamp: `${record.lastActivityAt ?? ""}|${record.updatedAt}`,
+          });
+        },
         signal,
       });
       this.emitForSource(

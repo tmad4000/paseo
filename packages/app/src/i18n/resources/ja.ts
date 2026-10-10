@@ -1296,6 +1296,7 @@ export const ja: TranslationResources = {
           messagesDescription: "メッセージ本文も検索します",
           needsHostUpdate: "メッセージ検索にはホストの更新が必要です",
         },
+        coverage: "{{total}} 件中 {{searched}} 件のチャットを検索",
         inMessages: "メッセージ内",
         searching: "メッセージを検索中...",
         moreTabs: "他 {{count}} 件",

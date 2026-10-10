@@ -4,7 +4,8 @@ import type { SessionTextSearchHit } from "@getpaseo/protocol/messages";
 /**
  * Lexical message search behind the sidebar filter's "In messages" tier. It runs on every pause in
  * typing, so unlike `session.search` it never calls a model: it is a bounded, case-insensitive
- * substring scan over the recent conversation text the daemon already keeps.
+ * substring scan over each session's recent messages — the daemon's timeline for loaded agents,
+ * the provider transcript for the rest (`session-text-history.ts`), supplied by `readMessages`.
  *
  * Every bound exists so a long history cannot turn typing into daemon work. The caller passes the
  * candidates (scope and exclusions are its job); this module decides how many of them to read, in

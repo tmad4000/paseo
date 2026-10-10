@@ -1292,6 +1292,7 @@ export const ko: TranslationResources = {
           messagesDescription: "메시지 본문도 검색합니다",
           needsHostUpdate: "메시지 검색에는 호스트 업데이트가 필요합니다",
         },
+        coverage: "채팅 {{total}}개 중 {{searched}}개 검색함",
         inMessages: "메시지에서",
         searching: "메시지 검색 중...",
         moreTabs: "+{{count}}개 더",

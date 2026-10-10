@@ -1300,6 +1300,7 @@ export const ru: TranslationResources = {
           messagesDescription: "Также ищет в тексте сообщений",
           needsHostUpdate: "Для поиска по сообщениям нужно обновить хост",
         },
+        coverage: "Просмотрено чатов: {{searched}} из {{total}}",
         inMessages: "В сообщениях",
         searching: "Поиск по сообщениям...",
         moreTabs: "Ещё {{count}}",

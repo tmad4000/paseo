@@ -1282,6 +1282,7 @@ export const ar: TranslationResources = {
           messagesDescription: "يبحث أيضًا في نص الرسائل",
           needsHostUpdate: "تتطلب الرسائل تحديث المضيف",
         },
+        coverage: "تم البحث في {{searched}} من {{total}} محادثة",
         inMessages: "في الرسائل",
         searching: "جارٍ البحث في الرسائل...",
         moreTabs: "+{{count}} أخرى",

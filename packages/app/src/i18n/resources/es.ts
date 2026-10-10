@@ -1322,6 +1322,7 @@ export const es: TranslationResources = {
           messagesDescription: "También busca en el texto de los mensajes",
           needsHostUpdate: "Los mensajes requieren actualizar el host",
         },
+        coverage: "Se buscó en {{searched}} de {{total}} chats",
         inMessages: "En mensajes",
         searching: "Buscando en mensajes...",
         moreTabs: "+{{count}} más",
