@@ -76,6 +76,7 @@ import { ThemedStack } from "@/navigation/themed-stack";
 import {
   useNativeNavigationBackHandler,
   useNavigationFocusHistoryTracker,
+  useNavigationGestureHandlers,
 } from "@/navigation/focus-history-runtime";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { AgentNavigationListener } from "@/desktop/agent-navigation";
@@ -492,6 +493,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const hasMountedDesktopSidebar = useLatchedBoolean(chromeEnabled);
   useNavigationFocusHistoryTracker({ enabled: chromeEnabled });
   useNativeNavigationBackHandler({ enabled: chromeEnabled });
+  useNavigationGestureHandlers({ enabled: chromeEnabled });
   const toggleAgentList = isCompactLayout ? toggleMobileAgentList : toggleDesktopAgentList;
   const toggleDesktopSidebars = useCallback(() => {
     // The focused workspace owns its layout key, its checkout, and therefore the

@@ -9,6 +9,9 @@ import { createDefaultLayout } from "@/stores/workspace-layout-store";
 import { FOCUSED_PANE_PLACEMENT, openTabInLayoutFocused } from "@/stores/workspace-layout-actions";
 import {
   buildWorkspaceFocusLocation,
+  createGestureDeduper,
+  focusHistoryDirectionForMouseButton,
+  parseDesktopNavigationDirection,
   restoreNavigationFocusLocation,
   type RestoreNavigationFocusLocationDeps,
 } from "./focus-history-runtime";
@@ -85,5 +88,34 @@ describe("workspace focus locations", () => {
     expect(deps.navigateRoute).toHaveBeenCalledWith("/settings/general");
     expect(deps.navigateWorkspace).not.toHaveBeenCalled();
     expect(deps.restoreView).not.toHaveBeenCalled();
+  });
+});
+
+describe("navigation gestures", () => {
+  it("maps mouse side buttons to Back and Forward", () => {
+    expect(focusHistoryDirectionForMouseButton(3)).toBe("back");
+    expect(focusHistoryDirectionForMouseButton(4)).toBe("forward");
+    expect(focusHistoryDirectionForMouseButton(0)).toBeNull();
+    expect(focusHistoryDirectionForMouseButton(2)).toBeNull();
+  });
+
+  it("accepts only well-formed desktop navigation payloads", () => {
+    expect(parseDesktopNavigationDirection({ direction: "back" })).toBe("back");
+    expect(parseDesktopNavigationDirection({ direction: "forward" })).toBe("forward");
+    expect(parseDesktopNavigationDirection({ direction: "up" })).toBeNull();
+    expect(parseDesktopNavigationDirection("back")).toBeNull();
+    expect(parseDesktopNavigationDirection(null)).toBeNull();
+  });
+
+  it("acts once when one press arrives as both a mouse event and an app command", () => {
+    let now = 1_000;
+    const accept = createGestureDeduper(() => now);
+
+    expect(accept("back")).toBe(true);
+    now += 20;
+    expect(accept("back")).toBe(false);
+    expect(accept("forward")).toBe(true);
+    now += 400;
+    expect(accept("forward")).toBe(true);
   });
 });

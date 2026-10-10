@@ -85,6 +85,8 @@ export const en = {
     actions: {
       back: "Back",
       navigateBack: "Go back",
+      forward: "Forward",
+      navigateForward: "Go forward",
       cancel: "Cancel",
       close: "Close",
       copy: "Copy",
