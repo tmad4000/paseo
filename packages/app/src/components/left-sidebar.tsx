@@ -43,7 +43,7 @@ import {
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
-import { useSidebarFilterRequestStore } from "@/components/sidebar/sidebar-filter-request";
+import { useSidebarFilterRequestFocus } from "@/components/sidebar/sidebar-filter-request";
 import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
@@ -885,16 +885,7 @@ function SidebarSearchControls() {
     if (!searchQuery && searchInputRef.current?.getText()) searchInputRef.current.reset();
   }, [searchQuery]);
   // A command center "Search messages for …" request: show its text and take focus, once.
-  const filterRequest = useSidebarFilterRequestStore((state) => state.request);
-  const focusedRequestId = useSidebarFilterRequestStore((state) => state.focusedRequestId);
-  const markRequestFocused = useSidebarFilterRequestStore((state) => state.markFocused);
-  useEffect(() => {
-    if (!filterRequest || filterRequest.id <= focusedRequestId) return undefined;
-    markRequestFocused(filterRequest.id);
-    searchInputRef.current?.replaceText(filterRequest.query);
-    const timer = setTimeout(() => searchInputRef.current?.focus(), 0);
-    return () => clearTimeout(timer);
-  }, [filterRequest, focusedRequestId, markRequestFocused]);
+  useSidebarFilterRequestFocus(searchInputRef);
   const isCompact = useIsCompactFormFactor();
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
   const startChat = useStartChatFromFilterQuery(isCompact ? showMobileAgent : undefined);
@@ -906,9 +897,12 @@ function SidebarSearchControls() {
         metaKey?: boolean;
         ctrlKey?: boolean;
         shiftKey?: boolean;
+        repeat?: boolean;
       };
       if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
       event.preventDefault();
+      // A held Mod+Enter auto-repeats; only the first press starts a chat.
+      if (native.repeat) return;
       startChat(native.shiftKey === true);
     },
     [startChat],

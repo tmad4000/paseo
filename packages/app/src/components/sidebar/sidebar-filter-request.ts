@@ -1,3 +1,4 @@
+import { useEffect, type RefObject } from "react";
 import { create } from "zustand";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
@@ -33,4 +34,30 @@ export function openSidebarMessageSearch(query: string, layout: { isCompact: boo
   useSidebarViewStore.getState().setFilterScope("messages");
   usePanelStore.getState().openAgentListForLayout(layout);
   useSidebarFilterRequestStore.getState().requestSidebarFilter(query);
+}
+
+export interface SidebarFindFieldHandle {
+  replaceText(text: string): void;
+  focus(): void;
+}
+
+/**
+ * Shows a pending request's text in the find field and focuses it, once per request id.
+ *
+ * The handled id is read from the store inside the effect and written after `focus()` runs, not
+ * subscribed to: subscribing made marking the request re-run this effect, whose cleanup then
+ * cancelled the pending focus before it fired.
+ */
+export function useSidebarFilterRequestFocus(input: RefObject<SidebarFindFieldHandle | null>) {
+  const request = useSidebarFilterRequestStore((state) => state.request);
+  useEffect(() => {
+    if (!request) return undefined;
+    if (request.id <= useSidebarFilterRequestStore.getState().focusedRequestId) return undefined;
+    input.current?.replaceText(request.query);
+    const timer = setTimeout(() => {
+      input.current?.focus();
+      useSidebarFilterRequestStore.getState().markFocused(request.id);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [input, request]);
 }
