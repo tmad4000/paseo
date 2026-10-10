@@ -571,18 +571,21 @@ export class WorkspaceDirectory {
       .filter(
         (project) => !project.archivedAt && !projectIdsWithActiveWorkspaces.has(project.projectId),
       )
-      .map((project) => ({
-        projectId: project.projectId,
-        projectKey: project.projectKey ?? undefined,
-        projectDisplayName: resolveProjectDisplayName(project),
-        projectCustomName: project.customName ?? null,
-        projectCustomIconRevision: project.customIconRevision ?? null,
-        projectRootPath: project.rootPath,
-        projectKind: project.kind,
+      .map((project) => {
+        const descriptor: WorkspaceProjectDescriptor = {
+          projectId: project.projectId,
+          projectKey: project.projectKey ?? undefined,
+          projectDisplayName: resolveProjectDisplayName(project),
+          projectCustomName: project.customName ?? null,
+          projectCustomIconRevision: project.customIconRevision ?? null,
+          projectRootPath: project.rootPath,
+          projectKind: project.kind,
+        };
         // Present only when set, matching the session's project descriptor.
-        ...(project.pinnedAt ? { projectPinnedAt: project.pinnedAt } : {}),
-        ...(project.defaultAt ? { projectDefaultAt: project.defaultAt } : {}),
-      }));
+        if (project.pinnedAt) descriptor.projectPinnedAt = project.pinnedAt;
+        if (project.defaultAt) descriptor.projectDefaultAt = project.defaultAt;
+        return descriptor;
+      });
   }
 
   async listObservationTargets(): Promise<
