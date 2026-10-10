@@ -23,7 +23,6 @@ import { useImportSession } from "@/hooks/use-import-session";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
 import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
-import { openRecentSessionsInCommandCenter } from "@/components/headers/recent-sessions-button";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
@@ -243,10 +242,11 @@ export function CommandCenterRootActions() {
         rank: 4,
         keywords: ["recent", "sessions", "agents", "chats", "switch", "last"],
         visibility: "always",
+        // Switch Cmd+K to the recent list in place: closing and reopening would lose the
+        // focus-restore target and race a phone's sheet dismissal.
+        keepOpen: true,
         run: () => {
-          // Selecting closes Cmd+K first; reopen on the next tick so it starts with an
-          // empty query on the recent list rather than keeping what was typed to find this.
-          setTimeout(openRecentSessionsInCommandCenter, 0);
+          useKeyboardShortcutsStore.getState().setCommandCenterScope("recent");
         },
         presentation: {
           kind: "action",

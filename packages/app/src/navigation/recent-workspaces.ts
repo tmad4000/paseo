@@ -72,7 +72,26 @@ export function touchRecentVisit(
       !sameVisit(entry, next) &&
       !(next.agentId !== null && entry.agentId === null && sameWorkspace(entry, next)),
   );
-  return [next, ...rest].slice(0, maxLength);
+  return trimRecentVisits([next, ...rest], maxLength);
+}
+
+/**
+ * Over the cap, drop the oldest visit whose workspace also has a newer one, so many
+ * sessions in one workspace cannot push other workspaces out of Ctrl+Tab and Cmd+K.
+ * Only when every visit is its workspace's latest does the oldest go.
+ */
+function trimRecentVisits(visits: RecentVisit[], maxLength: number): RecentVisit[] {
+  while (visits.length > maxLength) {
+    const seen = new Set<string>();
+    let redundant = -1;
+    visits.forEach((visit, index) => {
+      const key = recentWorkspaceKey(visit);
+      if (seen.has(key)) redundant = index;
+      seen.add(key);
+    });
+    visits.splice(redundant === -1 ? visits.length - 1 : redundant, 1);
+  }
+  return visits;
 }
 
 /** Workspaces in the order any of their visits were last made. */

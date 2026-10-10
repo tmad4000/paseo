@@ -38,6 +38,19 @@ describe("recent workspaces", () => {
     expect(touchRecentVisit(visits, { ...visit("a", 99), agentId: "agent-1" })).toBe(visits);
   });
 
+  it("keeps every workspace when one workspace's sessions fill the list", () => {
+    let visits: readonly RecentVisit[] = [{ ...visit("other"), agentId: null }];
+    for (const agentId of ["s1", "s2", "s3", "s4"]) {
+      visits = touchRecentVisit(visits, { ...visit("busy"), agentId }, 3);
+    }
+
+    expect(visits.map((entry) => entry.agentId ?? entry.workspaceId)).toEqual([
+      "s4",
+      "s3",
+      "other",
+    ]);
+  });
+
   it("lets a session visit stand in for its workspace's session-less entry", () => {
     let visits: readonly RecentVisit[] = [{ ...visit("a"), agentId: null }];
     visits = touchRecentVisit(visits, { ...visit("b"), agentId: null });

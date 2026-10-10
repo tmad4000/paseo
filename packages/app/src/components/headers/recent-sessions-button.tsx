@@ -18,6 +18,9 @@ import { iconButtonChromeStyle } from "@/components/ui/icon-button-chrome";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { isWeb } from "@/constants/platform";
+import { useMenuContext } from "@/components/ui/menu";
+import { setCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { RECENT_SESSIONS_MENU_LIMIT, type RecentSessionRow } from "@/navigation/recent-sessions";
 import { useRecentSessionRows } from "@/navigation/use-recent-session-rows";
@@ -43,7 +46,9 @@ function triggerStyle({
   return iconButtonChromeStyle({ size: "large", state: { hovered, pressed, open } });
 }
 
-export function openRecentSessionsInCommandCenter(): void {
+/** `restoreFocusTo` is where focus returns when Cmd+K closes (web/desktop). */
+function openRecentSessionsInCommandCenter(restoreFocusTo: HTMLElement | null): void {
+  setCommandCenterFocusRestoreElement(restoreFocusTo);
   useKeyboardShortcutsStore.getState().setCommandCenterOpen(true, "recent");
 }
 
@@ -87,6 +92,14 @@ function RecentSessionItem({ row }: { row: RecentSessionRow }) {
 function RecentSessionsMenuItems() {
   const { t } = useTranslation();
   const rows = useRecentSessionRows(RECENT_SESSIONS_MENU_LIMIT);
+  const menu = useMenuContext("RecentSessionsMenuItems");
+  const handleShowAll = useCallback(() => {
+    // The menu's own rows are gone by now; Escape out of Cmd+K returns to the button.
+    const trigger = menu.triggerRef.current;
+    openRecentSessionsInCommandCenter(
+      isWeb && trigger ? (trigger as unknown as HTMLElement) : null,
+    );
+  }, [menu.triggerRef]);
   return (
     <>
       {rows.length === 0 ? (
@@ -95,10 +108,7 @@ function RecentSessionsMenuItems() {
         rows.map((row) => <RecentSessionItem key={row.key} row={row} />)
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        testID="recent-sessions-show-all"
-        onSelect={openRecentSessionsInCommandCenter}
-      >
+      <DropdownMenuItem testID="recent-sessions-show-all" onSelect={handleShowAll}>
         {t("shell.recentSessions.showAll")}
       </DropdownMenuItem>
     </>

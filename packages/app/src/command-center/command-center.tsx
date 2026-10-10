@@ -13,7 +13,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePathname } from "expo-router";
-import { Check, ChevronRight, Folder, X } from "lucide-react-native";
+import { Check, ChevronRight, Clock, Folder, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   BottomSheetBackdrop,
@@ -94,6 +94,7 @@ const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedClock = withUnistyles(Clock, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCheck = withUnistyles(Check, (theme) => ({ color: theme.colors.foreground }));
 const ThemedChevronRight = withUnistyles(ChevronRight, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -400,11 +401,25 @@ function useCommandCenterState(): CommandCenterState {
   const close = useCallback(() => setOpen(false), [setOpen]);
   const select = useCallback(
     (result: CommandCenterResult) => {
-      setOpen(false);
+      if (!(result.kind === "contribution" && result.contribution.keepOpen)) {
+        setOpen(false);
+      }
       void result.run();
     },
     [setOpen],
   );
+
+  // Switching scope while open (the "Recent sessions…" action) starts the new scope from an
+  // empty query, as opening into it would.
+  const previousScopeRef = useRef(scope);
+  useEffect(() => {
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = scope;
+    if (!open || previousScope === scope || scope === null) return;
+    setQueryState("");
+    setActiveId(null);
+    inputRef.current?.reset();
+  }, [open, scope]);
   const key = useCallback(
     (pressed: string): boolean => {
       if (!open) return false;
@@ -678,6 +693,15 @@ export function CommandCenter() {
   const bottomSheetListRef = useRef<BottomSheetFlatListMethods>(null);
   const bottomSheetInputRef = useRef<EditingTextInputHandle>(null);
   const scrollMetricsRef = useRef({ offset: 0, visibleLength: 0 });
+  const previousScopeRef = useRef(state.scope);
+  useEffect(() => {
+    // The sheet's input is its own editor; clear it too when the scope switches in place.
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = state.scope;
+    if (state.open && previousScope !== state.scope && state.scope !== null) {
+      bottomSheetInputRef.current?.reset();
+    }
+  }, [state.open, state.scope]);
   const { sheetRef, handleSheetChange, handleSheetDismiss } = useIsolatedBottomSheetVisibility({
     visible: state.open,
     isEnabled: showBottomSheet,
@@ -835,7 +859,11 @@ export function CommandCenter() {
       >
         <View style={[styles.bottomSheetHeader, styles.searchRow]} testID="command-center-header">
           {state.scope ? (
-            <ScopeChip label={scopeLabel(state.scope, t)} onRemove={state.clearScope} />
+            <ScopeChip
+              scope={state.scope}
+              label={scopeLabel(state.scope, t)}
+              onRemove={state.clearScope}
+            />
           ) : null}
           <ThemedBottomSheetTextInput
             testID="command-center-input"
@@ -870,7 +898,11 @@ export function CommandCenter() {
           <View ref={setWebOverlayScope} testID="command-center-panel" style={styles.panel}>
             <View style={[styles.header, styles.searchRow]} testID="command-center-header">
               {state.scope ? (
-                <ScopeChip label={scopeLabel(state.scope, t)} onRemove={state.clearScope} />
+                <ScopeChip
+                  scope={state.scope}
+                  label={scopeLabel(state.scope, t)}
+                  onRemove={state.clearScope}
+                />
               ) : null}
               <ThemedTextInput
                 testID="command-center-input"
@@ -926,16 +958,28 @@ function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; labe
 // The chip sits at the input's own height and type size so it reads as the scope of the field
 // rather than a badge dropped into the query. Its 28px matches the input's line box, so showing or
 // dropping the scope cannot resize the header.
-function ScopeChip({ label, onRemove }: { label: string; onRemove(): void }) {
+function ScopeChip({
+  scope,
+  label,
+  onRemove,
+}: {
+  scope: Exclude<CommandCenterScope, null>;
+  label: string;
+  onRemove(): void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onRemove}
       style={styles.scopeChip}
-      testID="command-center-files-scope"
+      testID={`command-center-${scope}-scope`}
     >
-      <ThemedFolder size={14} strokeWidth={2.2} />
+      {scope === "files" ? (
+        <ThemedFolder size={14} strokeWidth={2.2} />
+      ) : (
+        <ThemedClock size={14} strokeWidth={2.2} />
+      )}
       <Text style={styles.scopeChipLabel}>{label}</Text>
       <ThemedX size={12} strokeWidth={2.2} />
     </Pressable>
