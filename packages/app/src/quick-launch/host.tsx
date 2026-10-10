@@ -25,6 +25,7 @@ import {
   openQuickLaunch,
   takeQuickLaunchFocusRestoreElement,
   useQuickLaunchStore,
+  type QuickLaunchRequest,
   type QuickLaunchSession,
 } from "./store";
 
@@ -130,45 +131,45 @@ export function QuickLaunchHost() {
   );
 
   const start = useCallback(
-    (request: QuickLaunchStartRequest) => {
+    async (request: QuickLaunchStartRequest) => {
       close();
       const destination = request.workspaceName ?? t("quickLaunch.toast.newWorkspace");
       const names = { project: request.projectName, workspace: destination };
       toast.show(t("quickLaunch.toast.starting", names), { durationMs: null });
-      void runQuickLaunch(request.submission, ports, {
-        createFailed: t("quickLaunch.errors.createFailed"),
-        noAgent: t("quickLaunch.errors.noAgent"),
-      })
-        .then((started) => {
-          if (request.openAfterStart) {
-            openStartedAgent(started);
-            toast.show(t("quickLaunch.toast.started", names), { variant: "success" });
-            return;
-          }
-          toast.show(
-            <QuickLaunchToastContent
-              message={t("quickLaunch.toast.started", names)}
-              actionLabel={t("quickLaunch.toast.open")}
-              onAction={() => openStartedAgent(started)}
-              testID="quick-launch-toast-open"
-            />,
-            { variant: "success", durationMs: RESULT_TOAST_DURATION_MS },
-          );
-        })
-        .catch((error: unknown) => {
-          restoreFailedPrompt(request.submission.text);
-          toast.show(
-            <QuickLaunchToastContent
-              message={t("quickLaunch.toast.failed", { error: toErrorMessage(error) })}
-              actionLabel={t("quickLaunch.toast.retry")}
-              onAction={() => openQuickLaunch(request.retry)}
-              testID="quick-launch-toast-retry"
-            />,
-            { variant: "error", durationMs: FAILURE_TOAST_DURATION_MS },
-          );
+      let started: QuickLaunchStarted;
+      try {
+        started = await runQuickLaunch(request.submission, ports, {
+          createFailed: t("quickLaunch.errors.createFailed"),
+          noAgent: t("quickLaunch.errors.noAgent"),
         });
+      } catch (error) {
+        restoreFailedPrompt(request.submission.text);
+        toast.show(
+          <QuickLaunchFailedToast
+            message={t("quickLaunch.toast.failed", { error: toErrorMessage(error) })}
+            retry={request.retry}
+          />,
+          { variant: "error", durationMs: FAILURE_TOAST_DURATION_MS },
+        );
+        return;
+      }
+      if (request.openAfterStart) {
+        openStartedAgent(started);
+        toast.show(t("quickLaunch.toast.started", names), { variant: "success" });
+        return;
+      }
+      toast.show(
+        <QuickLaunchStartedToast message={t("quickLaunch.toast.started", names)} started={started} />,
+        { variant: "success", durationMs: RESULT_TOAST_DURATION_MS },
+      );
     },
     [close, ports, t, toast],
+  );
+  const handleStart = useCallback(
+    (request: QuickLaunchStartRequest) => {
+      void start(request);
+    },
+    [start],
   );
 
   if (!mountedSession) return null;
@@ -180,27 +181,44 @@ export function QuickLaunchHost() {
       active={active}
       onClose={close}
       onDismiss={handleDismiss}
-      onStart={start}
+      onStart={handleStart}
     />
   );
 }
 
-function QuickLaunchToastContent({
+function QuickLaunchStartedToast({
   message,
-  actionLabel,
-  onAction,
-  testID,
+  started,
 }: {
   message: string;
-  actionLabel: string;
-  onAction: () => void;
-  testID: string;
+  started: QuickLaunchStarted;
 }) {
+  const { t } = useTranslation();
+  const open = useCallback(() => openStartedAgent(started), [started]);
   return (
     <View style={styles.toastRow}>
       <Text style={styles.toastMessage}>{message}</Text>
-      <Button size="xs" variant="outline" onPress={onAction} testID={testID}>
-        {actionLabel}
+      <Button size="xs" variant="outline" onPress={open} testID="quick-launch-toast-open">
+        {t("quickLaunch.toast.open")}
+      </Button>
+    </View>
+  );
+}
+
+function QuickLaunchFailedToast({
+  message,
+  retry,
+}: {
+  message: string;
+  retry: QuickLaunchRequest;
+}) {
+  const { t } = useTranslation();
+  const reopen = useCallback(() => openQuickLaunch(retry), [retry]);
+  return (
+    <View style={styles.toastRow}>
+      <Text style={styles.toastMessage}>{message}</Text>
+      <Button size="xs" variant="outline" onPress={reopen} testID="quick-launch-toast-retry">
+        {t("quickLaunch.toast.retry")}
       </Button>
     </View>
   );

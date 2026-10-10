@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Text,
-  View,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
-} from "react-native";
+import { Text, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { createNameId } from "mnemonic-id";
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
@@ -23,33 +18,20 @@ import { DraftAgentControls } from "@/composer/agent-controls";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
-import { useFormPreferences } from "@/hooks/use-form-preferences";
-import {
-  filterWorkspaceProjectsForHost,
-  getHostProjectSourceDirectory,
-  getWorktreeSupportForHostProject,
-  useHostProjects,
-  type HostProjectListItem,
-} from "@/projects/host-projects";
+import { getHostProjectSourceDirectory, type HostProjectListItem } from "@/projects/host-projects";
 import { useProjectIcons } from "@/projects/icons";
-import { useHostFeature } from "@/runtime/host-features";
-import { useHosts } from "@/runtime/host-runtime";
 import { buildNewWorkspaceProjectIconTargets } from "@/screens/new-workspace/project-icon-targets";
 import { generateDraftId, QUICK_LAUNCH_DRAFT_KEY } from "@/stores/draft-keys";
-import { useWorkspace } from "@/stores/session-store-hooks";
 import type { HostProfile } from "@/types/host-connection";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
-  findProjectChoice,
-  findProjectForWorkspace,
-  resolveQuickLaunchDefaultDestination,
-  resolveQuickLaunchTarget,
-  type QuickLaunchProjectChoice,
+  destinationOfTarget,
   type QuickLaunchWhere,
   type QuickLaunchWorkspaceRef,
 } from "./destination";
-import type { QuickLaunchSubmission, QuickLaunchTarget } from "./launch";
-import type { QuickLaunchDestination, QuickLaunchRequest, QuickLaunchSession } from "./store";
+import type { QuickLaunchSubmission } from "./launch";
+import type { QuickLaunchRequest, QuickLaunchSession } from "./store";
+import { useQuickLaunchDestination } from "./use-destination";
 
 export interface QuickLaunchStartRequest {
   submission: QuickLaunchSubmission;
@@ -76,7 +58,46 @@ type WebKeyPressEvent = NativeSyntheticEvent<
 
 const START_KEYS = ["mod", "Enter"];
 const START_AND_OPEN_KEYS = ["mod", "shift", "Enter"];
+const startShortcut = <Shortcut keys={START_KEYS} />;
+const startAndOpenShortcut = <Shortcut keys={START_AND_OPEN_KEYS} />;
 const PROJECT_ICON_FALLBACK_FONT_SIZE = 10;
+const SNAP_POINTS = ["70%", "92%"];
+
+/**
+ * The Quick launch prompt is one draft-store draft, so it survives closing the dialog. A requested
+ * prompt (Retry, or one handed over by another surface) replaces it once the store has loaded the
+ * saved draft, so hydration cannot overwrite the handed-over text.
+ */
+function useQuickLaunchPrompt(input: {
+  serverId: string;
+  workingDir: string | undefined;
+  visible: boolean;
+  prompt: string | undefined;
+}) {
+  const composerOptions = useMemo(
+    () => ({
+      initialServerId: input.serverId || null,
+      isVisible: input.visible,
+      lockedWorkingDir: input.workingDir,
+    }),
+    [input.serverId, input.visible, input.workingDir],
+  );
+  const draft = useAgentInputDraft({ draftKey: QUICK_LAUNCH_DRAFT_KEY, composer: composerOptions });
+  const text = useSyncExternalStore(
+    draft.textSource.subscribe,
+    draft.textSource.getSnapshot,
+    draft.textSource.getSnapshot,
+  );
+  const appliedPromptRef = useRef(false);
+  const { isHydrated, replaceText } = draft;
+  const { prompt } = input;
+  useEffect(() => {
+    if (!isHydrated || appliedPromptRef.current || prompt === undefined) return;
+    appliedPromptRef.current = true;
+    replaceText(prompt);
+  }, [isHydrated, prompt, replaceText]);
+  return { draft, text };
+}
 
 export function QuickLaunchDialog({
   visible,
@@ -89,122 +110,34 @@ export function QuickLaunchDialog({
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const { request } = session;
-  const requestedWorkspace =
-    request.destination?.kind === "workspace"
-      ? { serverId: request.destination.serverId, workspaceId: request.destination.workspaceId }
-      : null;
-  const requestedProject =
-    request.destination?.kind === "project"
-      ? {
-          serverId: request.destination.serverId,
-          projectViewKey: request.destination.projectViewKey,
-        }
-      : null;
-  const hosts = useHosts();
-  const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
-  const projects = useHostProjects(serverIds);
-
-  const anchor = requestedWorkspace ?? active;
-  const anchorWorkspace = useWorkspace(anchor?.serverId ?? null, anchor?.workspaceId ?? null);
-  const [where, setWhere] = useState<QuickLaunchWhere>(
-    requestedWorkspace ? "existing-workspace" : "new-workspace",
-  );
-  const effectiveWhere: QuickLaunchWhere =
-    where === "existing-workspace" && anchor && anchorWorkspace
-      ? "existing-workspace"
-      : "new-workspace";
-
-  const defaultDestination = useMemo(
-    () => resolveQuickLaunchDefaultDestination({ projects, serverIds, active }),
-    [active, projects, serverIds],
-  );
-  const [manualProject, setManualProject] = useState<QuickLaunchProjectChoice | null>(
-    requestedProject,
-  );
-  const projectChoice = manualProject ?? defaultDestination;
-  const projectServerId = projectChoice?.serverId ?? active?.serverId ?? serverIds[0] ?? "";
-  // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
-  const supportsMultiplicity = useHostFeature(projectServerId, "workspaceMultiplicity");
-  const projectsOnHost = useMemo(
-    () =>
-      filterWorkspaceProjectsForHost({
-        projects,
-        serverId: projectServerId,
-        allowAllProjects: supportsMultiplicity,
-      }),
-    [projectServerId, projects, supportsMultiplicity],
-  );
-  const chosenProject = findProjectChoice(projectsOnHost, projectChoice);
-  const anchorProject = anchor ? findProjectForWorkspace(projects, anchor) : null;
-  const shownProject = effectiveWhere === "existing-workspace" ? anchorProject : chosenProject;
-  const serverId =
-    effectiveWhere === "existing-workspace" && anchor ? anchor.serverId : projectServerId;
-
-  const { preferences: formPreferences } = useFormPreferences();
-  const target = resolveQuickLaunchTarget({
-    where: effectiveWhere,
-    workspace:
-      anchor && anchorWorkspace
-        ? {
-            serverId: anchor.serverId,
-            workspaceId: anchor.workspaceId,
-            workspaceDirectory: anchorWorkspace.workspaceDirectory,
-          }
-        : null,
-    project: chosenProject,
-    serverId: projectServerId,
-    supportsMultiplicity,
-    isolation: formPreferences.isolation ?? "local",
-    worktreeSupport: chosenProject
-      ? getWorktreeSupportForHostProject({ project: chosenProject, serverId: projectServerId })
-      : "unknown",
-  });
+  const destination = useQuickLaunchDestination({ request, active });
+  const { target, shownProject, tabWorkspace } = destination;
   const workingDir =
     target?.kind === "existing-workspace" ? target.workspaceDirectory : target?.sourceDirectory;
-
-  const composerOptions = useMemo(
-    () => ({
-      initialServerId: serverId || null,
-      isVisible: visible,
-      lockedWorkingDir: workingDir,
-    }),
-    [serverId, visible, workingDir],
-  );
-  const draft = useAgentInputDraft({ draftKey: QUICK_LAUNCH_DRAFT_KEY, composer: composerOptions });
+  const { draft, text } = useQuickLaunchPrompt({
+    serverId: destination.serverId,
+    workingDir,
+    visible,
+    prompt: request.prompt,
+  });
   const composerState = draft.composerState;
-  const text = useSyncExternalStore(
-    draft.textSource.subscribe,
-    draft.textSource.getSnapshot,
-    draft.textSource.getSnapshot,
-  );
   const inputRef = useRef<EditingTextInputHandle | null>(null);
 
-  // A requested prompt (Retry, or one handed over from the sidebar) replaces the saved draft once
-  // the draft store has loaded it, so the hydrated text cannot overwrite the handed-over prompt.
-  const prefillText = request.prompt;
-  const appliedPrefillRef = useRef(false);
-  const { isHydrated, replaceText } = draft;
-  useEffect(() => {
-    if (!isHydrated || appliedPrefillRef.current || prefillText === undefined) return;
-    appliedPrefillRef.current = true;
-    replaceText(prefillText);
-  }, [isHydrated, prefillText, replaceText]);
-
   const projectIconTargets = useMemo(
-    () => buildNewWorkspaceProjectIconTargets(projects, serverId),
-    [projects, serverId],
+    () => buildNewWorkspaceProjectIconTargets(destination.projects, destination.serverId),
+    [destination.projects, destination.serverId],
   );
   const projectIcons = useProjectIcons({ projects: projectIconTargets });
 
   const clearDraft = draft.clear;
+  const tabWorkspaceName = tabWorkspace?.name ?? null;
+  const opensAfterStart = request.startAndOpen === true;
   const start = useCallback(
     (openAfterStart: boolean) => {
       const prompt = (inputRef.current?.getText() ?? text).trim();
       const provider = composerState?.selectedProvider;
       if (!prompt || !target || !shownProject || !composerState || !provider) return;
       void composerState.persistFormPreferences();
-      const workspaceName = target.kind === "existing-workspace" ? anchorWorkspaceName : null;
-      const retryDestination = destinationOfTarget(target);
       onStart({
         submission: {
           launchId: generateDraftId(),
@@ -221,22 +154,22 @@ export function QuickLaunchDialog({
         },
         openAfterStart,
         projectName: shownProject.projectName,
-        workspaceName,
+        workspaceName: target.kind === "existing-workspace" ? tabWorkspaceName : null,
         retry: {
           prompt,
-          destination: retryDestination,
-          ...(request.startAndOpen ? { startAndOpen: true } : {}),
+          destination: destinationOfTarget(target),
+          ...(opensAfterStart ? { startAndOpen: true } : {}),
         },
       });
       clearDraft("sent");
     },
     [
-      anchorWorkspaceName,
       clearDraft,
       composerState,
       onStart,
-      request.startAndOpen,
+      opensAfterStart,
       shownProject,
+      tabWorkspaceName,
       target,
       text,
     ],
@@ -254,79 +187,18 @@ export function QuickLaunchDialog({
     [start],
   );
 
-  const handleSelectProject = useCallback(
-    (projectViewKey: string) => {
-      setManualProject({ serverId: projectServerId, projectViewKey });
-    },
-    [projectServerId],
-  );
-  const handleSelectHost = useCallback(
-    (nextServerId: string) => {
-      if (chosenProject?.hosts.some((host) => host.serverId === nextServerId)) {
-        setManualProject({ serverId: nextServerId, projectViewKey: chosenProject.viewKey });
-        return;
-      }
-      setManualProject(
-        resolveQuickLaunchDefaultDestination({
-          projects,
-          serverIds: [nextServerId],
-          active: null,
-        }) ?? { serverId: nextServerId, projectViewKey: null },
-      );
-    },
-    [chosenProject, projects],
-  );
-
-  const whereOptions = useMemo<SegmentedControlOption<QuickLaunchWhere>[]>(() => {
-    const options: SegmentedControlOption<QuickLaunchWhere>[] = [
-      {
-        value: "new-workspace",
-        label: t("quickLaunch.where.newWorkspace"),
-        testID: "quick-launch-where-new-workspace",
-      },
-    ];
-    if (anchorWorkspace) {
-      options.push({
-        value: "existing-workspace",
-        label: t("quickLaunch.where.newTab", { workspace: anchorWorkspace.name }),
-        testID: "quick-launch-where-existing-workspace",
-      });
-    }
-    return options;
-  }, [anchorWorkspace, t]);
-
   const header = useMemo(() => ({ title: t("quickLaunch.title") }), [t]);
   const canStart = Boolean(text.trim() && target && shownProject && composerState?.selectedProvider);
   const agentControls = composerState?.agentControls;
-
-  // Whichever action the opener asked for is the accent one; the shortcuts never move.
-  const opensAfterStart = request.startAndOpen === true;
+  const destinationLocked = destination.where === "existing-workspace";
+  const shownIcon = shownProject ? (projectIcons.get(shownProject.viewKey) ?? null) : null;
   const footer = (
-    <>
-      <View style={styles.footerSpacer} />
-      <Button
-        variant={opensAfterStart ? "default" : "secondary"}
-        size="sm"
-        onPress={startAndOpen}
-        disabled={!canStart}
-        trailing={<Shortcut keys={START_AND_OPEN_KEYS} />}
-        accessibilityHint={t("quickLaunch.actions.startAndOpenHint")}
-        testID="quick-launch-start-and-open"
-      >
-        {t("quickLaunch.actions.startAndOpen")}
-      </Button>
-      <Button
-        variant={opensAfterStart ? "secondary" : "default"}
-        size="sm"
-        onPress={startInBackground}
-        disabled={!canStart}
-        trailing={<Shortcut keys={START_KEYS} />}
-        accessibilityHint={t("quickLaunch.actions.startHint")}
-        testID="quick-launch-start"
-      >
-        {t("quickLaunch.actions.start")}
-      </Button>
-    </>
+    <QuickLaunchFooter
+      canStart={canStart}
+      opensAfterStart={opensAfterStart}
+      onStart={startInBackground}
+      onStartAndOpen={startAndOpen}
+    />
   );
 
   return (
@@ -355,34 +227,27 @@ export function QuickLaunchDialog({
       />
       <View style={styles.destination}>
         <QuickLaunchProjectPicker
-          projects={projectsOnHost}
-          selectedProjectViewKey={shownProject?.viewKey ?? null}
-          projectName={shownProject?.projectName ?? null}
-          iconDataUri={shownProject ? (projectIcons.get(shownProject.viewKey) ?? null) : null}
-          disabled={effectiveWhere === "existing-workspace"}
-          serverId={projectServerId}
-          onSelect={handleSelectProject}
+          projects={destination.projectsOnHost}
+          project={shownProject}
+          iconDataUri={shownIcon}
+          disabled={destinationLocked}
+          serverId={destination.projectServerId}
+          onSelect={destination.selectProject}
         />
-        {hosts.length > 1 ? (
+        {destination.hosts.length > 1 ? (
           <QuickLaunchHostPicker
-            hosts={hosts}
-            serverId={serverId}
-            disabled={effectiveWhere === "existing-workspace"}
-            onSelect={handleSelectHost}
+            hosts={destination.hosts}
+            serverId={destination.serverId}
+            disabled={destinationLocked}
+            onSelect={destination.selectHost}
           />
         ) : null}
       </View>
-      {whereOptions.length > 1 ? (
-        <SegmentedControl
-          options={whereOptions}
-          value={effectiveWhere}
-          onValueChange={setWhere}
-          size="xs"
-          style={styles.where}
-          segmentStyle={styles.whereSegment}
-          testID="quick-launch-where"
-        />
-      ) : null}
+      <QuickLaunchWhereControl
+        where={destination.where}
+        tabWorkspaceName={tabWorkspaceName}
+        onChange={destination.setWhere}
+      />
       {agentControls ? (
         <View style={styles.agentControls} testID="quick-launch-agent-controls">
           <DraftAgentControls {...agentControls} isCompactLayout={isCompact} />
@@ -392,27 +257,97 @@ export function QuickLaunchDialog({
   );
 }
 
-const SNAP_POINTS = ["70%", "92%"];
+function QuickLaunchFooter({
+  canStart,
+  opensAfterStart,
+  onStart,
+  onStartAndOpen,
+}: {
+  canStart: boolean;
+  /** The opener asked for Start and open, so it takes the accent. The shortcuts never move. */
+  opensAfterStart: boolean;
+  onStart: () => void;
+  onStartAndOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <View style={styles.footerSpacer} />
+      <Button
+        variant={opensAfterStart ? "default" : "secondary"}
+        size="sm"
+        onPress={onStartAndOpen}
+        disabled={!canStart}
+        trailing={startAndOpenShortcut}
+        accessibilityHint={t("quickLaunch.actions.startAndOpenHint")}
+        testID="quick-launch-start-and-open"
+      >
+        {t("quickLaunch.actions.startAndOpen")}
+      </Button>
+      <Button
+        variant={opensAfterStart ? "secondary" : "default"}
+        size="sm"
+        onPress={onStart}
+        disabled={!canStart}
+        trailing={startShortcut}
+        accessibilityHint={t("quickLaunch.actions.startHint")}
+        testID="quick-launch-start"
+      >
+        {t("quickLaunch.actions.start")}
+      </Button>
+    </>
+  );
+}
 
-function destinationOfTarget(target: QuickLaunchTarget): QuickLaunchDestination {
-  if (target.kind === "existing-workspace") {
-    return { kind: "workspace", serverId: target.serverId, workspaceId: target.workspaceId };
-  }
-  return { kind: "project", serverId: target.serverId, projectViewKey: target.project.viewKey };
+function QuickLaunchWhereControl({
+  where,
+  tabWorkspaceName,
+  onChange,
+}: {
+  where: QuickLaunchWhere;
+  tabWorkspaceName: string | null;
+  onChange: (where: QuickLaunchWhere) => void;
+}) {
+  const { t } = useTranslation();
+  const options = useMemo<SegmentedControlOption<QuickLaunchWhere>[]>(() => {
+    if (tabWorkspaceName === null) return [];
+    return [
+      {
+        value: "new-workspace",
+        label: t("quickLaunch.where.newWorkspace"),
+        testID: "quick-launch-where-new-workspace",
+      },
+      {
+        value: "existing-workspace",
+        label: t("quickLaunch.where.newTab", { workspace: tabWorkspaceName }),
+        testID: "quick-launch-where-existing-workspace",
+      },
+    ];
+  }, [t, tabWorkspaceName]);
+  if (options.length === 0) return null;
+  return (
+    <SegmentedControl
+      options={options}
+      value={where}
+      onValueChange={onChange}
+      size="xs"
+      style={styles.where}
+      segmentStyle={styles.whereSegment}
+      testID="quick-launch-where"
+    />
+  );
 }
 
 function QuickLaunchProjectPicker({
   projects,
-  selectedProjectViewKey,
-  projectName,
+  project,
   iconDataUri,
   disabled,
   serverId,
   onSelect,
 }: {
   projects: HostProjectListItem[];
-  selectedProjectViewKey: string | null;
-  projectName: string | null;
+  project: HostProjectListItem | null;
   iconDataUri: string | null;
   disabled: boolean;
   serverId: string;
@@ -438,7 +373,8 @@ function QuickLaunchProjectPicker({
     },
     [onSelect],
   );
-  const label = projectName ?? t("quickLaunch.project.choose");
+  const selectedProjectViewKey = project?.viewKey ?? null;
+  const label = project?.projectName ?? t("quickLaunch.project.choose");
   const placeholderInitial =
     projectIconPlaceholderLabelFromDisplayName(label).charAt(0).toUpperCase() || "?";
 

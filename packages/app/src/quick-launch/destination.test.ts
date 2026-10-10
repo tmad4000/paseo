@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { HostProjectListItem } from "@/projects/host-projects";
 import {
+  destinationOfTarget,
   findProjectChoice,
+  projectChoiceOfDestination,
   resolveCreatesWorktree,
   resolveQuickLaunchDefaultDestination,
+  resolveQuickLaunchSelection,
   resolveQuickLaunchTarget,
+  workspaceOfDestination,
 } from "./destination";
 
 function project(input: {
@@ -196,5 +200,70 @@ describe("resolveQuickLaunchTarget", () => {
         project: scratch,
       }),
     ).toBeNull();
+  });
+});
+
+describe("resolveQuickLaunchSelection", () => {
+  const base = {
+    projects: [paseo, scratch],
+    projectChoice: { serverId: "m4", projectViewKey: "view-scratch" },
+    projectServerId: "m4",
+    supportsMultiplicity: true,
+    isolation: "local" as const,
+  };
+
+  it("names the tab workspace's project and host when starting a new tab", () => {
+    const selection = resolveQuickLaunchSelection({
+      ...base,
+      where: "existing-workspace",
+      tabWorkspace: { serverId: "m4", workspaceId: "ws-paseo", workspaceDirectory: "/w/paseo" },
+    });
+
+    expect(selection.where).toBe("existing-workspace");
+    expect(selection.shownProject).toBe(paseo);
+    expect(selection.target).toEqual({
+      kind: "existing-workspace",
+      serverId: "m4",
+      workspaceId: "ws-paseo",
+      workspaceDirectory: "/w/paseo",
+    });
+  });
+
+  it("falls back to a new workspace when the tab workspace is unknown", () => {
+    const selection = resolveQuickLaunchSelection({
+      ...base,
+      where: "existing-workspace",
+      tabWorkspace: null,
+    });
+
+    expect(selection.where).toBe("new-workspace");
+    expect(selection.shownProject).toBe(scratch);
+    expect(selection.target?.kind).toBe("new-workspace");
+  });
+});
+
+describe("destination round trip", () => {
+  it("reopens Retry on the same project or workspace", () => {
+    expect(
+      projectChoiceOfDestination(
+        destinationOfTarget({
+          kind: "new-workspace",
+          serverId: "m4",
+          project: scratch,
+          sourceDirectory: "/scratch",
+          createsWorktree: false,
+        }),
+      ),
+    ).toEqual({ serverId: "m4", projectViewKey: "view-scratch" });
+    expect(
+      workspaceOfDestination(
+        destinationOfTarget({
+          kind: "existing-workspace",
+          serverId: "m4",
+          workspaceId: "ws-paseo",
+          workspaceDirectory: "/w/paseo",
+        }),
+      ),
+    ).toEqual({ serverId: "m4", workspaceId: "ws-paseo" });
   });
 });
