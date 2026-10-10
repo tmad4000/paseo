@@ -32,6 +32,7 @@ interface CompanionFeedProps {
 }
 
 const keyExtractor = (item: CompanionFeedItem) => item.id;
+const NO_NOTICES: readonly string[] = [];
 const NoteInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
@@ -92,6 +93,8 @@ export function CompanionFeed({
     enabled: isSupported && supportsDurableStream,
   });
   const { refetch, fetchNextPage } = query;
+  // Global-Stream notices describe the durable query, which older hosts never run.
+  const notices = supportsDurableStream ? query.notices : NO_NOTICES;
   const items = useMemo(
     () =>
       supportsDurableStream
@@ -122,6 +125,8 @@ export function CompanionFeed({
         }
 
         if (viewTab !== "checklist" && filter !== "all" && item.entry.kind !== filter) return false;
+        // The durable query filters to explicit asks; legacy entries need the same rule here.
+        if (viewTab === "checklist" && !supportsDurableStream && !item.entry.ask) return false;
 
         if (onlyOpen) {
           if (item.entry.kind === "question" || item.entry.kind === "feature_request") {
@@ -136,7 +141,7 @@ export function CompanionFeed({
         return true;
       }
     });
-  }, [items, viewTab, filter, onlyOpen]);
+  }, [items, viewTab, filter, onlyOpen, supportsDurableStream]);
 
   const openArtifact = useCallback(
     (artifact: AgentArtifact) => {
@@ -285,7 +290,7 @@ export function CompanionFeed({
         >
           Refresh
         </Button>
-        {query.notices.map((notice) => (
+        {notices.map((notice) => (
           <Text key={notice} accessibilityRole="alert" style={styles.description}>
             {notice}
           </Text>
@@ -371,7 +376,7 @@ export function CompanionFeed({
       connection,
       refresh,
       query.isFetching,
-      query.notices,
+      notices,
       viewTab,
       filter,
       onlyOpen,
