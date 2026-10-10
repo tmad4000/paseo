@@ -1973,6 +1973,7 @@ export const ja: TranslationResources = {
   realtimeVoice: {
     muted: "エージェントへのマイク入力はミュート中",
     listening: "マイクはオン",
+    connecting: "音声に接続中…",
     commandHint: "「mute microphone」だけを話すと入力を一時停止します。",
     mutedHint:
       "ホスト上で「unmute microphone」だけを認識します。他の発話は破棄されます。マイクをオフにするには音声セッションを終了してください。",

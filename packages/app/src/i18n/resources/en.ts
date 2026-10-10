@@ -1980,6 +1980,7 @@ export const en = {
   realtimeVoice: {
     muted: "Microphone muted to agent",
     listening: "Microphone on",
+    connecting: "Connecting voice…",
     commandHint: "Say “mute microphone” on its own to pause input.",
     mutedHint:
       "Listening on your host only for “unmute microphone”. Other speech is discarded. Stop voice to turn the mic off.",

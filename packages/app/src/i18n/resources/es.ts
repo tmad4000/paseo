@@ -2005,6 +2005,7 @@ export const es: TranslationResources = {
   realtimeVoice: {
     muted: "Micrófono silenciado para el agente",
     listening: "Micrófono activado",
+    connecting: "Conectando la voz…",
     commandHint: "Di «mute microphone» como frase independiente para pausar la entrada.",
     mutedHint:
       "Tu equipo escucha solo «unmute microphone». El resto se descarta. Detén la sesión de voz para apagar el micrófono.",

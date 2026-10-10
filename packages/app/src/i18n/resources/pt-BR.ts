@@ -1990,6 +1990,7 @@ export const ptBR: TranslationResources = {
   realtimeVoice: {
     muted: "Microfone silenciado para o agente",
     listening: "Microfone ligado",
+    connecting: "Conectando a voz…",
     commandHint: "Diga apenas “mute microphone” para pausar a entrada.",
     mutedHint:
       "Seu host escuta apenas “unmute microphone”. As outras falas são descartadas. Encerre a sessão de voz para desligar o microfone.",

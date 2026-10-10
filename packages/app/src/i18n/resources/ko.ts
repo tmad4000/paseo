@@ -1966,6 +1966,7 @@ export const ko: TranslationResources = {
   realtimeVoice: {
     muted: "에이전트에 대한 마이크 음소거됨",
     listening: "마이크 켜짐",
+    connecting: "음성 연결 중…",
     commandHint: "입력을 일시 중지하려면 “mute microphone”이라고만 말하세요.",
     mutedHint:
       "호스트에서 “unmute microphone”만 듣고 있습니다. 다른 음성은 무시됩니다. 마이크를 끄려면 음성을 중지하세요.",

@@ -48,6 +48,16 @@ export function realtimeKey(env = process.env): string {
   return key;
 }
 
+/** Hosts without a resolvable credential must not advertise GPT Realtime; clients then use Paseo voice. */
+export function realtimeAvailable(env = process.env): boolean {
+  try {
+    realtimeKey(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const Event = z.object({
   type: z.string(),
   error: z.object({ code: z.string().optional() }).optional(),

@@ -1986,6 +1986,7 @@ export const ru: TranslationResources = {
   realtimeVoice: {
     muted: "Микрофон отключён для агента",
     listening: "Микрофон включён",
+    connecting: "Подключение голоса…",
     commandHint: "Произнесите отдельно «mute microphone», чтобы приостановить ввод.",
     mutedHint:
       "На вашем хосте распознаётся только «unmute microphone». Остальная речь отбрасывается. Завершите голосовой сеанс, чтобы выключить микрофон.",

@@ -38,11 +38,19 @@ A chained pipeline can reduce expensive speech-model reasoning, but introduces s
 
 Use the same utterances, microphone, network, agent task and playback hardware for each candidate. Measure median/p95 time to **useful audible answer**, interruption-to-silence delay, premature turn rate, names/numbers/code-token transcription errors, wrong-target and duplicate dispatch count, incomplete final segments, reconnect behavior, cost from actual usage and a foreground memory soak. Include long pauses and corrections, simultaneous agent completion, mute/unmute, app background/route changes and expired sessions. Synthetic state tests cannot establish acoustic echo cancellation, phone background capture or naturalness. No physical microphone testing is authorized implicitly by starting a build.
 
+## UX: one voice button
+
+There is no separate "Start GPT voice" panel. The composer's standard voice-mode button is the single entry point: pressing it starts GPT realtime when the host advertises `openaiRealtimeVoice`, and starts the host's own Paseo voice otherwise. The active session uses the same realtime overlay (status, volume meter, interrupt/mute/stop) for both providers; GPT sessions additionally show connecting/unavailable status and connection errors in that overlay, and suppress the host verbal-command hints that do not apply to cloud capture.
+
+Hosts advertise `openaiRealtimeVoice` only when an OpenAI credential actually resolves, so a host without a key silently yields the Paseo-voice button, not an error. If a GPT start fails anyway (revoked key, connect timeout, race), the client falls back to starting Paseo voice in the same press. Because GPT voice converses beside a working agent (work requests are queued, never interrupting), the voice button stays available while the agent is running on GPT-capable hosts; Paseo-only old hosts keep the interrupt-first gate. Mid-session connection loss still pauses capture and preserves context without switching providers — the automatic fallback applies at start only.
+
+The advanced realtime controls (listen-until-I-finish, clear voice context, focus agent directly) remain in the protocol (`voice.realtime.control.request`) but are not currently surfaced in the composer; reintroducing them belongs behind a compact affordance, not an explanatory panel.
+
 ## Runtime configuration and privacy
 
-Opt in with Start GPT voice. The host reads `OPENAI_API_KEY` or the explicitly configured `PASEO_OPENAI_REALTIME_API_KEY_FILE` in place. No default search across credential files; no key reaches app state or protocol. Jacob's established VA3 credential was found and verified safely, but production configuration was not changed.
+The host reads `OPENAI_API_KEY` or the explicitly configured `PASEO_OPENAI_REALTIME_API_KEY_FILE` in place. No default search across credential files; no key reaches app state or protocol. Jacob's established VA3 credential was found and verified safely, but production configuration was not changed.
 
-GPT Microphone off stops capture; it cannot hear voice unmute. Use the button or OS accessibility control. No browser SpeechRecognition or wake-word detector is introduced. Existing Paseo fallback is explicit, with its different host-side command-listening semantics disclosed. The current code's retry is user initiated; network failures pause capture and preserve context, with no automatic provider substitution.
+GPT Microphone off stops capture; it cannot hear voice unmute. Use the button or OS accessibility control. No browser SpeechRecognition or wake-word detector is introduced. Network failures pause capture and preserve context, with no mid-session provider substitution.
 
 Source ownership: `session/voice/openai-realtime.ts` owns cloud events; `realtime-context.ts` owns voice-only history; existing `VoiceSessions` owns socket leases and existing agent queue owns accepted work. UI target selection does not follow another tab invisibly. Direct focus sends finalized text to the displayed agent queue; assistant mode uses one bounded forwarding tool. Queue admission is not strict steer or task completion. End voice/clear/barging-in have no agent-cancel/reload capability.
 
