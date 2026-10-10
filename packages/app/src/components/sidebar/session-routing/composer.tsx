@@ -43,6 +43,7 @@ import {
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { defaultNewConversationWorkspace, prepareNewConversationDraft } from "./new-conversation";
+import { openQuickLaunch } from "@/quick-launch/store";
 import { useDefaultProjectPlacements } from "@/default-project/hooks";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { deliverDirectRoutedPrompt, deliverRoutedPrompt } from "./delivery";
@@ -802,6 +803,24 @@ export function SessionRoutingComposer({
     else setDraft("");
     dispatch({ type: "clear" });
   }, [cancelMatch, dispatch, setDraft, setSearchQuery]);
+  // Same destination as Continue, created through Quick launch instead of navigating there. The
+  // prompt moves into Quick launch so it cannot also be continued from here.
+  const startWithoutLeaving = useCallback(() => {
+    const current = latest.current.state;
+    const workspace = current.newWorkspace;
+    if (!workspace || !current.sendDraft.trim() || isRoutingLocked(current)) return;
+    if (!newWorkspaceEligible()) return;
+    openQuickLaunch({
+      prompt: current.sendDraft,
+      destination: {
+        kind: "workspace",
+        serverId: workspace.serverId,
+        workspaceId: workspace.workspaceId,
+      },
+    });
+    setDraft("");
+  }, [newWorkspaceEligible, setDraft]);
+
   const resultsStale =
     state.phase.status === "results" &&
     state.phase.text !== (state.mode === "find" ? searchQuery : state.sendDraft);
@@ -1019,6 +1038,12 @@ export function SessionRoutingComposer({
         >
           {t("sidebar.routing.clear")}
         </Button>
+        <StartWithoutLeavingButton
+          state={state}
+          locked={locked}
+          eligible={newWorkspaceEligible()}
+          onPress={startWithoutLeaving}
+        />
         <RouteBestMatchButton state={state} locked={locked} onPress={routeFromButton} />
         <Button
           size="xs"
@@ -1081,6 +1106,33 @@ function RouteBestMatchButton({
       testID="routing-route-best"
     >
       {t("sidebar.routing.routeBestMatch")}
+    </Button>
+  );
+}
+
+function StartWithoutLeavingButton({
+  state,
+  locked,
+  eligible,
+  onPress,
+}: {
+  state: RoutingState;
+  locked: boolean;
+  eligible: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (state.mode !== "send" || !state.newConversation) return null;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={locked || !eligible || !state.sendDraft.trim()}
+      onPress={onPress}
+      accessibilityHint={t("quickLaunch.router.startWithoutLeavingHint")}
+      testID="routing-start-without-leaving"
+    >
+      {t("quickLaunch.router.startWithoutLeaving")}
     </Button>
   );
 }

@@ -333,6 +333,8 @@ export const en = {
       updateHost: "Update the host to use Stream",
       updateHostDescription:
         "Questions and responses need a newer host. Your file artifacts are below.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "Reconnecting. Saved items remain available; pending status may be out of date.",
       showAll: "Show all items",
       pending: "Needs a reply ({{count}})",
@@ -2203,6 +2205,49 @@ export const en = {
       other: "called Paseo {{count}} times",
     },
     and: "and",
+  },
+  quickLaunch: {
+    title: "Quick launch",
+    commandCenterTitle: "Quick launch agent…",
+    placeholder: "What should the new agent do?",
+    promptLabel: "Prompt for the new agent",
+    project: {
+      title: "Project",
+      label: "Project: {{project}}",
+      choose: "Choose project",
+      search: "Search projects",
+      empty: "No projects available",
+    },
+    host: {
+      title: "Host",
+      label: "Host: {{host}}",
+    },
+    where: {
+      newWorkspace: "New workspace",
+      newTab: "New tab in {{workspace}}",
+    },
+    actions: {
+      start: "Start",
+      startHint: "Starts the agent and keeps you where you are",
+      startAndOpen: "Start and open",
+      startAndOpenHint: "Starts the agent and opens it",
+    },
+    toast: {
+      starting: "Starting in {{project}} · {{workspace}}…",
+      started: "Started in {{project}} · {{workspace}}",
+      newWorkspace: "new workspace",
+      open: "Open",
+      retry: "Retry",
+      failed: "Unable to start agent: {{error}}",
+    },
+    errors: {
+      noAgent: "The workspace was created without an agent",
+      createFailed: "Unable to create workspace",
+    },
+    router: {
+      startWithoutLeaving: "Start without leaving",
+      startWithoutLeavingHint: "Start this prompt with Quick launch and stay here",
+    },
   },
   views: {
     sidebar: {

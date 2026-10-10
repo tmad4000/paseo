@@ -1,0 +1,230 @@
+import {
+  defaultNewConversationWorkspace,
+  type NewConversationCandidate,
+} from "@/components/sidebar/session-routing/new-conversation";
+import type { DefaultProjectPlacement } from "@/default-project/model";
+import {
+  filterWorkspaceProjectsForHost,
+  getHostProjectSourceDirectory,
+  getWorktreeSupportForHostProject,
+  type HostProjectListItem,
+} from "@/projects/host-projects";
+import type { QuickLaunchTarget } from "./launch";
+import type { QuickLaunchDestination } from "./store";
+
+export interface QuickLaunchWorkspaceRef {
+  serverId: string;
+  workspaceId: string;
+}
+
+/** A project on one host; `projectViewKey` is null when a host was chosen without a project. */
+export interface QuickLaunchProjectChoice {
+  serverId: string;
+  projectViewKey: string | null;
+}
+
+/** Where the agent opens: a new workspace in the chosen project, or a new tab in a workspace. */
+export type QuickLaunchWhere = "new-workspace" | "existing-workspace";
+
+export function findProjectForWorkspace(
+  projects: readonly HostProjectListItem[],
+  workspace: QuickLaunchWorkspaceRef,
+): HostProjectListItem | null {
+  const workspaceKey = `${workspace.serverId}:${workspace.workspaceId}`;
+  return projects.find((project) => project.workspaceKeys.includes(workspaceKey)) ?? null;
+}
+
+export function findProjectChoice(
+  projects: readonly HostProjectListItem[],
+  choice: QuickLaunchProjectChoice | null,
+): HostProjectListItem | null {
+  if (!choice?.projectViewKey) return null;
+  const project = projects.find((candidate) => candidate.viewKey === choice.projectViewKey);
+  if (!project?.hosts.some((host) => host.serverId === choice.serverId)) return null;
+  return project;
+}
+
+/**
+ * The project Quick launch starts in unless the user picks another one for this launch.
+ *
+ * This is the single place that decides the default, and it follows New conversation
+ * (`defaultNewConversationWorkspace`, All projects scope): the preferred host's Default project,
+ * else its tmpworkspace scratch project. It runs that rule at project granularity, one root
+ * candidate per project placement, so a project with many workspaces still resolves. With
+ * neither, the active workspace's project is used. Nothing remembers the last destination: the
+ * default wins on every open.
+ */
+export function resolveQuickLaunchDefaultDestination(input: {
+  projects: readonly HostProjectListItem[];
+  serverIds: readonly string[];
+  active: QuickLaunchWorkspaceRef | null;
+  /** Each host's Default project (`useDefaultProjectPlacements`). */
+  defaultProjects: readonly DefaultProjectPlacement[];
+}): QuickLaunchProjectChoice | null {
+  const projectRoots: NewConversationCandidate[] = input.projects.flatMap((project) =>
+    project.hosts.map((host) => ({
+      serverId: host.serverId,
+      // Only read for scoped lookups; with All projects scope the heuristic keys on directories.
+      workspaceId: host.projectId,
+      projectViewKey: project.viewKey,
+      projectName: project.projectName,
+      name: project.projectName,
+      workspaceDirectory: host.iconWorkingDir,
+      projectRootPath: host.iconWorkingDir,
+    })),
+  );
+  const scratch = defaultNewConversationWorkspace({
+    workspaces: projectRoots,
+    serverIds: input.serverIds,
+    scope: null,
+    active: input.active,
+    defaultProjects: input.defaultProjects,
+  });
+  if (scratch) {
+    return { serverId: scratch.serverId, projectViewKey: scratch.projectViewKey };
+  }
+  if (!input.active || !input.serverIds.includes(input.active.serverId)) return null;
+  const activeProject = findProjectForWorkspace(input.projects, input.active);
+  if (!activeProject) return null;
+  return { serverId: input.active.serverId, projectViewKey: activeProject.viewKey };
+}
+
+/**
+ * Whether a new workspace gets its own Paseo worktree. Mirrors the New workspace screen: hosts
+ * without workspace multiplicity only create worktrees; otherwise the remembered Isolation choice
+ * applies wherever the project supports worktrees.
+ */
+export function resolveCreatesWorktree(input: {
+  supportsMultiplicity: boolean;
+  isolation: "local" | "worktree";
+  worktreeSupport: "supported" | "unsupported" | "unknown";
+}): boolean {
+  // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
+  if (!input.supportsMultiplicity) return true;
+  return input.isolation === "worktree" && input.worktreeSupport !== "unsupported";
+}
+
+/** What Start would create from the dialog's current choices, or null when it cannot start. */
+export function resolveQuickLaunchTarget(input: {
+  where: QuickLaunchWhere;
+  workspace: (QuickLaunchWorkspaceRef & { workspaceDirectory: string }) | null;
+  project: HostProjectListItem | null;
+  serverId: string;
+  supportsMultiplicity: boolean;
+  isolation: "local" | "worktree";
+  worktreeSupport: "supported" | "unsupported" | "unknown";
+}): QuickLaunchTarget | null {
+  if (input.where === "existing-workspace") {
+    if (!input.workspace) return null;
+    return {
+      kind: "existing-workspace",
+      serverId: input.workspace.serverId,
+      workspaceId: input.workspace.workspaceId,
+      workspaceDirectory: input.workspace.workspaceDirectory,
+    };
+  }
+  if (!input.project) return null;
+  const sourceDirectory = getHostProjectSourceDirectory(input.project, input.serverId);
+  if (!sourceDirectory) return null;
+  return {
+    kind: "new-workspace",
+    serverId: input.serverId,
+    project: input.project,
+    sourceDirectory,
+    createsWorktree: resolveCreatesWorktree(input),
+  };
+}
+
+export function workspaceOfDestination(
+  destination: QuickLaunchDestination | undefined,
+): QuickLaunchWorkspaceRef | null {
+  if (destination?.kind !== "workspace") return null;
+  return { serverId: destination.serverId, workspaceId: destination.workspaceId };
+}
+
+export function projectChoiceOfDestination(
+  destination: QuickLaunchDestination | undefined,
+): QuickLaunchProjectChoice | null {
+  if (destination?.kind !== "project") return null;
+  return { serverId: destination.serverId, projectViewKey: destination.projectViewKey };
+}
+
+/** The destination that reopens the dialog on the same target, for Retry. */
+export function destinationOfTarget(target: QuickLaunchTarget): QuickLaunchDestination {
+  if (target.kind === "existing-workspace") {
+    return { kind: "workspace", serverId: target.serverId, workspaceId: target.workspaceId };
+  }
+  return { kind: "project", serverId: target.serverId, projectViewKey: target.project.viewKey };
+}
+
+/** The host whose projects the project picker lists. */
+export function resolveProjectServerId(input: {
+  choice: QuickLaunchProjectChoice | null;
+  active: QuickLaunchWorkspaceRef | null;
+  serverIds: readonly string[];
+}): string {
+  if (input.choice) return input.choice.serverId;
+  if (input.active) return input.active.serverId;
+  return input.serverIds[0] ?? "";
+}
+
+export interface QuickLaunchSelection {
+  where: QuickLaunchWhere;
+  /** The host the agent runs on. */
+  serverId: string;
+  projectsOnHost: HostProjectListItem[];
+  /** The project the destination line names: the chosen one, or the tab workspace's. */
+  shownProject: HostProjectListItem | null;
+  target: QuickLaunchTarget | null;
+}
+
+/** Everything the dialog shows and starts from its current choices. */
+export function resolveQuickLaunchSelection(input: {
+  where: QuickLaunchWhere;
+  /** The "New tab in" workspace, once its descriptor is known. */
+  tabWorkspace: (QuickLaunchWorkspaceRef & { workspaceDirectory: string }) | null;
+  projects: readonly HostProjectListItem[];
+  projectChoice: QuickLaunchProjectChoice | null;
+  projectServerId: string;
+  supportsMultiplicity: boolean;
+  isolation: "local" | "worktree";
+}): QuickLaunchSelection {
+  const projectsOnHost = filterWorkspaceProjectsForHost({
+    projects: input.projects,
+    serverId: input.projectServerId,
+    allowAllProjects: input.supportsMultiplicity,
+  });
+  const chosenProject = findProjectChoice(projectsOnHost, input.projectChoice);
+  const tabWorkspace = input.where === "existing-workspace" ? input.tabWorkspace : null;
+  const where: QuickLaunchWhere = tabWorkspace ? "existing-workspace" : "new-workspace";
+  const target = resolveQuickLaunchTarget({
+    where,
+    workspace: tabWorkspace,
+    project: chosenProject,
+    serverId: input.projectServerId,
+    supportsMultiplicity: input.supportsMultiplicity,
+    isolation: input.isolation,
+    worktreeSupport: chosenProject
+      ? getWorktreeSupportForHostProject({
+          project: chosenProject,
+          serverId: input.projectServerId,
+        })
+      : "unknown",
+  });
+  if (tabWorkspace) {
+    return {
+      where,
+      serverId: tabWorkspace.serverId,
+      projectsOnHost,
+      shownProject: findProjectForWorkspace(input.projects, tabWorkspace),
+      target,
+    };
+  }
+  return {
+    where,
+    serverId: input.projectServerId,
+    projectsOnHost,
+    shownProject: chosenProject,
+    target,
+  };
+}
