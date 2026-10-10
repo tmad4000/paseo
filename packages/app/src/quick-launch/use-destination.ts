@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useDefaultProjectPlacements } from "@/default-project/hooks";
 import { useFormPreferences } from "@/hooks/use-form-preferences";
 import { useHostProjects, type HostProjectListItem } from "@/projects/host-projects";
 import { useHostFeature } from "@/runtime/host-features";
@@ -40,6 +41,7 @@ export function useQuickLaunchDestination(input: {
   const hosts = useHosts();
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const projects = useHostProjects(serverIds);
+  const defaultProjects = useDefaultProjectPlacements(projects);
 
   const requestedWorkspace = workspaceOfDestination(request.destination);
   const tabRef = requestedWorkspace ?? active;
@@ -49,8 +51,8 @@ export function useQuickLaunchDestination(input: {
   );
 
   const defaultDestination = useMemo(
-    () => resolveQuickLaunchDefaultDestination({ projects, serverIds, active }),
-    [active, projects, serverIds],
+    () => resolveQuickLaunchDefaultDestination({ projects, serverIds, active, defaultProjects }),
+    [active, defaultProjects, projects, serverIds],
   );
   const [manualProject, setManualProject] = useState<QuickLaunchProjectChoice | null>(() =>
     projectChoiceOfDestination(request.destination),
@@ -91,10 +93,11 @@ export function useQuickLaunchDestination(input: {
         projects,
         serverIds: [nextServerId],
         active: null,
+        defaultProjects,
       });
       setManualProject(hostDefault ?? { serverId: nextServerId, projectViewKey: null });
     },
-    [chosenOnHost, projects],
+    [chosenOnHost, defaultProjects, projects],
   );
 
   return {

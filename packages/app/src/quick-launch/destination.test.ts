@@ -70,6 +70,7 @@ describe("resolveQuickLaunchDefaultDestination", () => {
         projects: [paseo, scratch],
         serverIds: ["m4"],
         active: { serverId: "m4", workspaceId: "ws-paseo" },
+        defaultProjects: [],
       }),
     ).toEqual({ serverId: "m4", projectViewKey: "view-scratch" });
   });
@@ -80,6 +81,7 @@ describe("resolveQuickLaunchDefaultDestination", () => {
         projects: [paseo, scratch, remote],
         serverIds: ["m4", "m3"],
         active: { serverId: "m4", workspaceId: "ws-paseo" },
+        defaultProjects: [],
       }),
     ).toEqual({ serverId: "m4", projectViewKey: "view-scratch" });
   });
@@ -90,8 +92,31 @@ describe("resolveQuickLaunchDefaultDestination", () => {
         projects: [paseo, scratch, remote],
         serverIds: ["m4", "m3"],
         active: { serverId: "m3", workspaceId: "ws-notes" },
+        defaultProjects: [],
       }),
     ).toEqual({ serverId: "m3", projectViewKey: "view-remote" });
+  });
+
+  it("prefers the host's Default project over the scratch project", () => {
+    expect(
+      resolveQuickLaunchDefaultDestination({
+        projects: [paseo, scratch],
+        serverIds: ["m4"],
+        active: { serverId: "m4", workspaceId: "ws-1" },
+        defaultProjects: [{ serverId: "m4", projectViewKey: "view-paseo" }],
+      }),
+    ).toEqual({ serverId: "m4", projectViewKey: "view-paseo" });
+  });
+
+  it("ignores another host's Default project", () => {
+    expect(
+      resolveQuickLaunchDefaultDestination({
+        projects: [paseo, scratch, remote],
+        serverIds: ["m4", "m3"],
+        active: { serverId: "m4", workspaceId: "ws-paseo" },
+        defaultProjects: [{ serverId: "m3", projectViewKey: "view-remote" }],
+      }),
+    ).toEqual({ serverId: "m4", projectViewKey: "view-scratch" });
   });
 
   it("returns null when nothing identifies a project", () => {
@@ -100,6 +125,7 @@ describe("resolveQuickLaunchDefaultDestination", () => {
         projects: [paseo, remote],
         serverIds: ["m4", "m3"],
         active: null,
+        defaultProjects: [],
       }),
     ).toBeNull();
   });

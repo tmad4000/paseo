@@ -2,6 +2,7 @@ import {
   defaultNewConversationWorkspace,
   type NewConversationCandidate,
 } from "@/components/sidebar/session-routing/new-conversation";
+import type { DefaultProjectPlacement } from "@/default-project/model";
 import {
   filterWorkspaceProjectsForHost,
   getHostProjectSourceDirectory,
@@ -46,17 +47,19 @@ export function findProjectChoice(
 /**
  * The project Quick launch starts in unless the user picks another one for this launch.
  *
- * This is the single place that decides the default. It reuses New conversation's scratch
- * destination (`defaultNewConversationWorkspace`, All projects scope) at project granularity:
- * one root candidate per project placement, so a scratch project with many workspaces still
- * resolves. When no scratch project exists on the preferred host, the active workspace's project
- * is used. The Default project setting replaces the scratch lookup here once it lands.
- * Nothing remembers the last destination: the default wins on every open.
+ * This is the single place that decides the default, and it follows New conversation
+ * (`defaultNewConversationWorkspace`, All projects scope): the preferred host's Default project,
+ * else its tmpworkspace scratch project. It runs that rule at project granularity, one root
+ * candidate per project placement, so a project with many workspaces still resolves. With
+ * neither, the active workspace's project is used. Nothing remembers the last destination: the
+ * default wins on every open.
  */
 export function resolveQuickLaunchDefaultDestination(input: {
   projects: readonly HostProjectListItem[];
   serverIds: readonly string[];
   active: QuickLaunchWorkspaceRef | null;
+  /** Each host's Default project (`useDefaultProjectPlacements`). */
+  defaultProjects: readonly DefaultProjectPlacement[];
 }): QuickLaunchProjectChoice | null {
   const projectRoots: NewConversationCandidate[] = input.projects.flatMap((project) =>
     project.hosts.map((host) => ({
@@ -75,6 +78,7 @@ export function resolveQuickLaunchDefaultDestination(input: {
     serverIds: input.serverIds,
     scope: null,
     active: input.active,
+    defaultProjects: input.defaultProjects,
   });
   if (scratch) {
     return { serverId: scratch.serverId, projectViewKey: scratch.projectViewKey };

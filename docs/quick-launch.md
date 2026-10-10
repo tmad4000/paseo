@@ -33,10 +33,10 @@ The dialog offers a project (and a host when more than one host is configured) a
 active workspace, or a prefilled one from the router.
 
 The default project comes from `resolveQuickLaunchDefaultDestination`
-(`quick-launch/destination.ts`) and nowhere else. It runs New conversation's scratch heuristic
-at project granularity, then falls back to the active workspace's project. When the Default
-project setting lands, it replaces the scratch lookup inside that one function. Nothing
-remembers a previous choice: a changed destination applies to that launch only.
+(`quick-launch/destination.ts`) and nowhere else. It applies New conversation's rule at project
+granularity: the preferred host's Default project, else its `tmpworkspace` scratch project, else
+the active workspace's project. Nothing remembers a previous choice: a changed destination
+applies to that launch only.
 
 A new workspace uses the remembered Isolation choice from the New workspace screen, so a git
 project creates a worktree exactly when New workspace would.
