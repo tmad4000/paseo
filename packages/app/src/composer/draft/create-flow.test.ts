@@ -7,10 +7,96 @@ import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { UserMessageImageAttachment } from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "./create-flow";
+import { handoffCreatedAgentMessageSubmission } from "@/composer/submission/writer";
+
+vi.mock("@/composer/submission/writer", () => ({
+  handoffCreatedAgentMessageSubmission: vi.fn(() => true),
+}));
 
 describe("useDraftAgentCreateFlow", () => {
   beforeEach(() => {
     useCreateFlowStore.setState({ pendingByDraftId: {} });
+    vi.mocked(handoffCreatedAgentMessageSubmission).mockClear();
+  });
+
+  it("creates an empty-prompt agent for voice and resolves to its id", async () => {
+    const createRequest = vi.fn(async () => ({
+      agentId: "agent-voice",
+      result: { id: "agent-voice" },
+    }));
+    const validateBeforeSubmit = vi.fn(() => null);
+    const onCreateSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useDraftAgentCreateFlow({
+        draftId: "draft-voice",
+        getPendingServerId: () => "server-1",
+        validateBeforeSubmit,
+        buildDraftAgent: () => ({}),
+        createRequest,
+        onCreateSuccess,
+      }),
+    );
+
+    let agentId: string | null = null;
+    await act(async () => {
+      agentId = await result.current.handleCreateFromInput({
+        text: "",
+        attachments: [],
+        cwd: "/repo",
+        allowEmptyText: true,
+      });
+    });
+
+    expect(agentId).toBe("agent-voice");
+    expect(validateBeforeSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "", allowEmptyText: true }),
+    );
+    expect(createRequest).toHaveBeenCalledWith(expect.objectContaining({ text: "", cwd: "/repo" }));
+    expect(onCreateSuccess).toHaveBeenCalledTimes(1);
+    // No prompt means no turn, so no optimistic user message waits for the host.
+    expect(handoffCreatedAgentMessageSubmission).not.toHaveBeenCalled();
+    expect(useCreateFlowStore.getState().pendingByDraftId["draft-voice"]?.lifecycle).toBe("sent");
+  });
+
+  it("still requires a prompt for a normal empty submit", async () => {
+    const createRequest = vi.fn(async () => ({ agentId: "agent-1", result: { id: "agent-1" } }));
+    const { result } = renderHook(() =>
+      useDraftAgentCreateFlow({
+        draftId: "draft-empty",
+        getPendingServerId: () => "server-1",
+        buildDraftAgent: () => ({}),
+        createRequest,
+        onCreateSuccess: () => undefined,
+      }),
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.handleCreateFromInput({ text: "  ", attachments: [], cwd: "/repo" }),
+      ).rejects.toThrow();
+    });
+    expect(createRequest).not.toHaveBeenCalled();
+  });
+
+  it("hands off the first user message when the create has a prompt", async () => {
+    const { result } = renderHook(() =>
+      useDraftAgentCreateFlow({
+        draftId: "draft-text",
+        getPendingServerId: () => "server-1",
+        buildDraftAgent: () => ({}),
+        createRequest: async () => ({ agentId: "agent-2", result: { id: "agent-2" } }),
+        onCreateSuccess: () => undefined,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleCreateFromInput({ text: "hi", attachments: [], cwd: "/repo" });
+    });
+    expect(handoffCreatedAgentMessageSubmission).toHaveBeenCalledWith(
+      "server-1",
+      "agent-2",
+      expect.objectContaining({ text: "hi" }),
+    );
   });
 
   it("renders a prepared new-workspace submission before continuing it", async () => {

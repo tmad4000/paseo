@@ -44,6 +44,8 @@ There is no separate "Start GPT voice" panel. The composer's standard voice-mode
 
 Hosts advertise `openaiRealtimeVoice` only when an OpenAI credential actually resolves, so a host without a key silently yields the Paseo-voice button, not an error. If a GPT start fails anyway (revoked key, connect timeout, race), the client falls back to starting Paseo voice in the same press. Because GPT voice converses beside a working agent (work requests are queued, never interrupting), the voice button stays available while the agent is running on GPT-capable hosts; Paseo-only old hosts keep the interrupt-first gate. Mid-session connection loss still pauses capture and preserves context without switching providers — the automatic fallback applies at start only.
 
+Voice attaches to an agent, and a brand-new chat has none until its first message. Pressing the voice button on an empty draft chat therefore creates the agent first — with the draft's provider, model, mode, and working directory, and no prompt, so no turn starts — and then starts voice on it with the same GPT-first, Paseo-fallback rule. This is client-only and uses the existing create-agent and voice-start messages, so it works against older hosts too. A draft with typed text or attachments keeps the normal send path (the voice button is hidden while the draft has content); voice is available on the created chat afterwards.
+
 The advanced realtime controls (listen-until-I-finish, clear voice context, focus agent directly) remain in the protocol (`voice.realtime.control.request`) but are not currently surfaced in the composer; reintroducing them belongs behind a compact affordance, not an explanatory panel.
 
 ## Runtime configuration and privacy

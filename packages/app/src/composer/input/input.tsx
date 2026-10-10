@@ -165,6 +165,8 @@ export interface MessageInputProps {
   supportsVoiceConcurrentInput?: boolean;
   /** Host advertises GPT realtime voice (credential configured); the voice toggle prefers it. */
   preferRealtimeGpt?: boolean;
+  /** Draft chats (no agent yet): the voice toggle calls this to create the agent and start voice. */
+  onStartVoiceWithoutAgent?: () => void;
   isCancellingAgent?: boolean;
   onCancelAgent?: () => void;
   /** Controls what the default send action (Enter, send button, dictation) does when the agent is
@@ -1015,6 +1017,7 @@ interface ToggleRealtimeVoiceContext {
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
   preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   handleStopRealtimeVoice: () => Promise<unknown> | void;
   toast: { error: (msg: string) => void };
   interruptBeforeVoiceMessage: string;
@@ -1025,6 +1028,10 @@ function toggleRealtimeVoiceImpl(ctx: ToggleRealtimeVoiceContext): void {
     return;
   }
   if (ctx.voice.isVoiceSwitching) return;
+  if (ctx.onStartVoiceWithoutAgent) {
+    ctx.onStartVoiceWithoutAgent();
+    return;
+  }
   if (ctx.voice.isVoiceModeForAgent(ctx.voiceServerId, ctx.voiceAgentId)) {
     void ctx.handleStopRealtimeVoice();
     return;
@@ -1264,6 +1271,7 @@ interface ResolvedMessageInputProps {
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
   preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   defaultSendBehavior: "interrupt" | "steer" | "queue";
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmitLoadingPress: (() => void) | undefined;
@@ -1313,6 +1321,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     isAgentRunning: props.isAgentRunning ?? false,
     supportsVoiceConcurrentInput: props.supportsVoiceConcurrentInput ?? false,
     preferRealtimeGpt: props.preferRealtimeGpt ?? false,
+    onStartVoiceWithoutAgent: props.onStartVoiceWithoutAgent,
     defaultSendBehavior: props.defaultSendBehavior,
     onQueue: props.onQueue,
     onSubmitLoadingPress: props.onSubmitLoadingPress,
@@ -1370,6 +1379,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isAgentRunning,
       supportsVoiceConcurrentInput,
       preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       defaultSendBehavior,
       onQueue,
       onSubmitLoadingPress,
@@ -1683,6 +1693,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isAgentRunning,
         supportsVoiceConcurrentInput,
         preferRealtimeGpt,
+        onStartVoiceWithoutAgent,
         handleStopRealtimeVoice,
         toast,
         interruptBeforeVoiceMessage: t("composer.voice.interruptBeforeVoice"),
@@ -1693,6 +1704,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isAgentRunning,
       supportsVoiceConcurrentInput,
       preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       isConnected,
       t,
       toast,
