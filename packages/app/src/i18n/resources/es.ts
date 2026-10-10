@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "Fijar proyecto",
+      unpin: "Desfijar proyecto",
+      makeDefault: "Convertir en proyecto predeterminado",
+      removeDefault: "Quitar como proyecto predeterminado",
+    },
+    badges: {
+      default: "Proyecto predeterminado",
+      pinned: "Proyecto fijado",
+    },
+    commandCenter: {
+      goToDefault: "Ir al proyecto predeterminado",
+      pinCurrent: "Fijar el proyecto actual",
+      unpinCurrent: "Desfijar el proyecto actual",
+      makeCurrentDefault: "Convertir el proyecto actual en predeterminado",
+      removeCurrentDefault: "Quitar el proyecto actual como predeterminado",
+    },
+    settings: {
+      title: "Proyecto predeterminado",
+      hint: "Quick launch y New conversation empiezan aquí.",
+      updateHost: "Actualiza este host para elegir un proyecto predeterminado.",
+      none: "Ninguno",
+      accessibilityLabel: "Proyecto predeterminado: {{value}}",
+    },
+    toasts: {
+      failed: "No se pudo actualizar el proyecto",
+      hostDisconnected: "El host no está conectado",
+    },
+  },
   sessionPins: {
     title: "Sesiones fijadas",
     pin: "Fijar sesión",

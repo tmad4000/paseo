@@ -1000,6 +1000,23 @@ export const ProjectRemoveRequestSchema = z.object({
   requestId: z.string(),
 });
 
+// COMPAT(projectPinning): fork feature, gated on server_info.features.projectPinning.
+export const ProjectPinSetRequestSchema = z.object({
+  type: z.literal("project.pin.set.request"),
+  projectId: z.string(),
+  pinned: z.boolean(),
+  requestId: z.string(),
+});
+
+// Exactly one Default project per host: setting one clears the previous default on that host.
+// COMPAT(projectPinning): fork feature, gated on server_info.features.projectPinning.
+export const ProjectDefaultSetRequestSchema = z.object({
+  type: z.literal("project.default.set.request"),
+  projectId: z.string(),
+  isDefault: z.boolean(),
+  requestId: z.string(),
+});
+
 export const WorkspaceTitleSetRequestSchema = z.object({
   type: z.literal("workspace.title.set.request"),
   workspaceId: z.string(),
@@ -2202,6 +2219,32 @@ export const ProjectRemoveResponsePayloadSchema = z.object({
 export const ProjectRemoveResponseSchema = z.object({
   type: z.literal("project.remove.response"),
   payload: ProjectRemoveResponsePayloadSchema,
+});
+
+export const ProjectPinSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  accepted: z.boolean(),
+  pinnedAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+export const ProjectPinSetResponseSchema = z.object({
+  type: z.literal("project.pin.set.response"),
+  payload: ProjectPinSetResponsePayloadSchema,
+});
+
+export const ProjectDefaultSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  accepted: z.boolean(),
+  defaultAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+export const ProjectDefaultSetResponseSchema = z.object({
+  type: z.literal("project.default.set.response"),
+  payload: ProjectDefaultSetResponsePayloadSchema,
 });
 
 export const WorkspaceTitleSetResponsePayloadSchema = z.object({
@@ -3662,6 +3705,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
+  ProjectPinSetRequestSchema,
+  ProjectDefaultSetRequestSchema,
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceLabelListRequestSchema,
@@ -4179,6 +4224,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerSubagentNesting: z.boolean().optional(),
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
         workspacePinning: z.boolean().optional(),
+        // COMPAT(projectPinning): fork feature, added in fork v0.10.0-beta.12, drop the gate after 2027-04-10.
+        projectPinning: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
@@ -4715,6 +4762,10 @@ export const WorkspaceProjectDescriptorPayloadSchema = z.object({
   projectIconRevision: z.string().optional(),
   projectRootPath: z.string(),
   projectKind: z.enum(["git", "non_git", "directory"]),
+  // ISO timestamps; absent or null means not pinned / not the host's Default project.
+  // COMPAT(projectPinning): fork feature, added in fork v0.10.0-beta.12, keep optional.
+  projectPinnedAt: z.string().nullable().optional(),
+  projectDefaultAt: z.string().nullable().optional(),
   // COMPAT(directorySync): sequence of this latest directory projection.
   syncSeq: z.number().int().positive().optional(),
 });
@@ -7445,6 +7496,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   StreamUpdateResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
+  ProjectPinSetResponseSchema,
+  ProjectDefaultSetResponseSchema,
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
@@ -7650,6 +7703,8 @@ export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessa
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
 export type ProjectIconSetResponse = z.infer<typeof ProjectIconSetResponseSchema>;
 export type ProjectRemoveResponse = z.infer<typeof ProjectRemoveResponseSchema>;
+export type ProjectPinSetResponse = z.infer<typeof ProjectPinSetResponseSchema>;
+export type ProjectDefaultSetResponse = z.infer<typeof ProjectDefaultSetResponseSchema>;
 export type WorkspaceTitleSetResponse = z.infer<typeof WorkspaceTitleSetResponseSchema>;
 export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
@@ -7804,6 +7859,8 @@ export type UpdateCompanionEntryRequestMessage = z.infer<
 export type ProjectRenameRequest = z.infer<typeof ProjectRenameRequestSchema>;
 export type ProjectIconSetRequest = z.infer<typeof ProjectIconSetRequestSchema>;
 export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
+export type ProjectPinSetRequest = z.infer<typeof ProjectPinSetRequestSchema>;
+export type ProjectDefaultSetRequest = z.infer<typeof ProjectDefaultSetRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
