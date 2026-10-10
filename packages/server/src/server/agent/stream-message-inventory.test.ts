@@ -364,6 +364,32 @@ describe("Stream message inventory", () => {
     expect(indexStreamMessages(next, [replayed], "restart")).toBe(next);
   });
 
+  it("stays idempotent at the alias cap and never aliases assistant records", () => {
+    const aliases = Array.from({ length: 8 }, (_, i) => `message:old-${i}`);
+    const row: ProjectedTimelineRow = {
+      ...message(2, "Capped."),
+      providerMessageId: "provider-5",
+      item: {
+        type: "user_message",
+        text: "Capped.",
+        messageId: "client-5",
+        clientMessageId: "client-5",
+      },
+    };
+    const [created] = indexStreamMessages([], [{ ...row, providerMessageId: undefined }], "e");
+    const capped = { ...created, source: { ...created.source!, seq: 2, epoch: "e", aliases } };
+    const entries = [capped];
+    expect(indexStreamMessages(entries, [row], "e")).toBe(entries);
+    const assistant: ProjectedTimelineRow = {
+      ...message(3, "Answer.", "assistant_message"),
+      providerMessageId: "provider-6",
+      item: { type: "assistant_message", text: "Answer.", messageId: "item-6" },
+    };
+    const [answer] = indexStreamMessages([], [{ ...assistant, providerMessageId: undefined }], "e");
+    const next = indexStreamMessages([answer], [assistant], "e");
+    expect(next.every((entry) => entry.source?.aliases === undefined)).toBe(true);
+  });
+
   it("reports hidden counts for the installed-example shape without inventing open asks", () => {
     const entries: CompanionEntry[] = Array.from({ length: 8 }, (_, i) => ({
       id: `turn:${i}`,

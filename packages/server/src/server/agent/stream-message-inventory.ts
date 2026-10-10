@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { ProjectedTimelineRow } from "./timeline-projection.js";
 
+const MAX_SOURCE_ALIASES = 8;
+
 type MessageRow = ProjectedTimelineRow & {
   item: Extract<ProjectedTimelineRow["item"], { type: "user_message" | "assistant_message" }>;
 };
@@ -27,11 +29,13 @@ export function indexStreamMessages(
     const candidates = provenanceCandidates(messageRow, epoch);
     const previous = findSourceRecord(candidates, byId, byAlias);
     const next = previous
-      ? refreshSourceRecord(previous, candidates, messageRow, epoch, byId)
+      ? refreshSourceRecord(previous, candidates, messageRow, epoch, byId, byAlias)
       : newSourceRecord(candidates[0], messageRow, epoch);
     if (!next) continue;
     byId.set(next.id, next);
-    for (const alias of next.source?.aliases ?? []) byAlias.set(alias, next.id);
+    if (next.messageReview) {
+      for (const alias of next.source?.aliases ?? []) byAlias.set(alias, next.id);
+    }
     changed = true;
   }
   changed = refreshAskSourcePositions(byId) || changed;
@@ -79,15 +83,20 @@ function refreshSourceRecord(
   row: MessageRow,
   epoch: string,
   byId: Map<string, CompanionEntry>,
+  byAlias: Map<string, string>,
 ): CompanionEntry | undefined {
-  const known = new Set([previous.source?.messageId, ...(previous.source?.aliases ?? [])]);
-  // Never alias another record's own key.
-  const added = candidates.filter(
-    (candidate) => !known.has(candidate) && !byId.has(`source:${candidate}`),
-  );
+  const existingAliases = previous.source?.aliases ?? [];
+  const known = new Set([previous.source?.messageId, ...existingAliases]);
+  // Only source records carry aliases; never alias another record's key or alias.
+  const added = previous.messageReview
+    ? candidates.filter(
+        (candidate) =>
+          !known.has(candidate) && !byId.has(`source:${candidate}`) && !byAlias.has(candidate),
+      )
+    : [];
+  const aliases = [...existingAliases, ...added].slice(0, MAX_SOURCE_ALIASES);
   const moved = previous.source?.seq !== row.seqEnd || previous.source?.epoch !== epoch;
-  if (added.length === 0 && !moved) return undefined;
-  const aliases = [...(previous.source?.aliases ?? []), ...added].slice(0, 8);
+  if (aliases.length === existingAliases.length && !moved) return undefined;
   return {
     ...previous,
     source: {

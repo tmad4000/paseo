@@ -35,8 +35,9 @@ const common = {
       messageId: z.string(),
       seq: z.number().int().optional(),
       epoch: z.string().optional(),
-      // Other provenance hashes the same message was observed under (server-maintained).
-      aliases: z.array(z.string()).max(8).optional(),
+      // Other provenance hashes the same message was observed under (server-maintained,
+      // capped by the writer; no read-side limit so one bad record cannot fail a restore).
+      aliases: z.array(z.string()).optional(),
     })
     .optional(),
   // Message coverage is not semantic extraction or task completion.
