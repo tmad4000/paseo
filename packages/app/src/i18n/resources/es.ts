@@ -1382,6 +1382,7 @@ export const es: TranslationResources = {
       sortHeading: "Ordenar chats",
       sortBy: "Ordenar chats: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "Orden manual",
         recent: "Latest conversation activity",

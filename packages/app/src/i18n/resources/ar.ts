@@ -1342,6 +1342,7 @@ export const ar: TranslationResources = {
       sortHeading: "ترتيب المحادثات",
       sortBy: "ترتيب المحادثات: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "الترتيب اليدوي",
         recent: "Latest conversation activity",

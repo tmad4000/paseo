@@ -1356,6 +1356,7 @@ export const ja: TranslationResources = {
       sortHeading: "チャットの並び替え",
       sortBy: "チャットの並び替え: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "手動の順序",
         recent: "Latest conversation activity",

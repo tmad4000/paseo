@@ -1352,6 +1352,7 @@ export const ko: TranslationResources = {
       sortHeading: "채팅 정렬",
       sortBy: "채팅 정렬: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "수동 순서",
         recent: "Latest conversation activity",

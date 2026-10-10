@@ -1360,6 +1360,7 @@ export const ru: TranslationResources = {
       sortHeading: "Сортировка чатов",
       sortBy: "Сортировка чатов: {{value}}",
       sortUpdateHost: "Update selected hosts to sort by message activity.",
+      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
       sort: {
         manual: "Ручной порядок",
         recent: "Latest conversation activity",
