@@ -50,14 +50,14 @@ best-effort and never shows an error.
 The daemon side (`packages/server/src/server/session-text-search.ts`) is a lexical scan, never a
 model call, because it runs on every pause in typing. Its bounds are the contract:
 
-| Bound              | Value                                               |
-| ------------------ | --------------------------------------------------- |
-| Sessions read      | 200 most recently active                            |
+| Bound              | Value                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| Sessions read      | 200 most recently active                                                                                |
 | Window per session | Loaded: last 400 timeline rows. Unloaded: last 1 MiB of the transcript, ≤ 400 messages of ≤ 8,000 chars |
-| Hits per session   | 3, newest first                                     |
-| Hits per response  | 50                                                  |
-| Time budget        | 1 s, then returns what it has with `truncated`      |
-| Snippet            | ≤ 160 characters, centered on the match             |
+| Hits per session   | 3, newest first                                                                                         |
+| Hits per response  | 50                                                                                                      |
+| Time budget        | 1 s, then returns what it has with `truncated`                                                          |
+| Snippet            | ≤ 160 characters, centered on the match                                                                 |
 
 Where the text comes from matters more than the scan. The daemon's timeline only holds agents
 opened since it started, and agent records hold no messages, so a search over the timeline alone
@@ -65,11 +65,11 @@ misses most chats after a restart. Unloaded agents are read from the provider tr
 record's `persistence` handle names (`session-text-history.ts`), opened read-only. They are never
 resumed, because resuming spawns the provider and registers the agent.
 
-| Provider       | Transcript read                                                              |
-| -------------- | ---------------------------------------------------------------------------- |
-| Claude         | `$CLAUDE_CONFIG_DIR` or `~/.claude`, `projects/<encoded cwd>/<sessionId>.jsonl` |
-| Codex          | `$CODEX_HOME` or `~/.codex`, `sessions/YYYY/MM/DD` and `archived_sessions`, `rollout-*-<threadId>.jsonl` |
-| Others         | Searched only while loaded (OpenCode, ACP agents such as Gemini, Pi)          |
+| Provider | Transcript read                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| Claude   | `$CLAUDE_CONFIG_DIR` or `~/.claude`, `projects/<encoded cwd>/<sessionId>.jsonl`                          |
+| Codex    | `$CODEX_HOME` or `~/.codex`, `sessions/YYYY/MM/DD` and `archived_sessions`, `rollout-*-<threadId>.jsonl` |
+| Others   | Searched only while loaded (OpenCode, ACP agents such as Gemini, Pi)                                     |
 
 Only typed text counts: tool results, thinking, sidechains, and Codex's injected AGENTS.md and
 environment blocks are skipped. Parsed transcripts are cached per agent and activity stamp
