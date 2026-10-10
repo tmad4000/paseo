@@ -5,9 +5,9 @@ import { startChatFromFilterQuery } from "./find-to-prompt";
 describe("startChatFromFilterQuery", () => {
   it("opens Quick launch with the trimmed query and no destination", () => {
     const open = vi.fn<(request: QuickLaunchRequest) => void>();
-    expect(startChatFromFilterQuery({ query: "  relay reconnect  ", startAndOpen: false }, open)).toBe(
-      true,
-    );
+    expect(
+      startChatFromFilterQuery({ query: "  relay reconnect  ", startAndOpen: false }, open),
+    ).toBe(true);
     expect(open).toHaveBeenCalledWith({ prompt: "relay reconnect", startAndOpen: false });
     expect(open.mock.calls[0]![0]).not.toHaveProperty("destination");
   });
