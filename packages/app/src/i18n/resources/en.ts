@@ -1,4 +1,34 @@
 export const en = {
+  defaultProject: {
+    actions: {
+      pin: "Pin project",
+      unpin: "Unpin project",
+      makeDefault: "Make default project",
+      removeDefault: "Remove as default project",
+    },
+    badges: {
+      default: "Default project",
+      pinned: "Pinned project",
+    },
+    commandCenter: {
+      goToDefault: "Go to default project",
+      pinCurrent: "Pin current project",
+      unpinCurrent: "Unpin current project",
+      makeCurrentDefault: "Make current project default",
+      removeCurrentDefault: "Remove current project as default",
+    },
+    settings: {
+      title: "Default project",
+      hint: "Quick launch and New conversation start here.",
+      updateHost: "Update this host to choose a default project.",
+      none: "None",
+      accessibilityLabel: "Default project: {{value}}",
+    },
+    toasts: {
+      failed: "Couldn't update the project",
+      hostDisconnected: "Host is not connected",
+    },
+  },
   sessionPins: {
     title: "Pinned sessions",
     pin: "Pin session",
