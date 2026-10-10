@@ -1287,6 +1287,7 @@ export const ru: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "Просмотрено чатов: {{searched}} из {{total}}",
         inMessages: "В сообщениях",
         searching: "Поиск по сообщениям...",
         moreTabs: "Ещё {{count}}",

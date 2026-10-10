@@ -12,7 +12,9 @@ import { useHostFeatureMap } from "@/runtime/host-features";
 import {
   EMPTY_SIDEBAR_TAB_MATCHES,
   mergeSidebarMessageHits,
+  sumSidebarMessageSearchCoverage,
   type SidebarMessageHit,
+  type SidebarMessageSearchCoverage,
   type SidebarTabMatch,
   type SidebarTabMatches,
 } from "./sidebar-filter-matches";
@@ -82,37 +84,66 @@ export interface SidebarMessageSearchState {
   query: string;
   status: SidebarMessageSearchStatus;
   hits: readonly SidebarMessageHit[];
+  /** Summed over the hosts that answered; null until one has. */
+  coverage: SidebarMessageSearchCoverage | null;
 }
 
-const IDLE_MESSAGE_SEARCH: SidebarMessageSearchState = { query: "", status: "idle", hits: [] };
+const IDLE_MESSAGE_SEARCH: SidebarMessageSearchState = {
+  query: "",
+  status: "idle",
+  hits: [],
+  coverage: null,
+};
 
 const SidebarMessageSearchContext = createContext<SidebarMessageSearchState>(IDLE_MESSAGE_SEARCH);
 
 export const SIDEBAR_MESSAGE_SEARCH_MIN_QUERY = 3;
 export const SIDEBAR_MESSAGE_SEARCH_DEBOUNCE_MS = 300;
 
+interface HostSearchResult extends SidebarMessageSearchCoverage {
+  hits: readonly SessionTextSearchHit[];
+}
+
+const EMPTY_HOST_RESULT: HostSearchResult = {
+  hits: [],
+  searchedCount: 0,
+  totalCount: 0,
+  truncated: false,
+};
+
 async function searchHost(input: {
   serverId: string;
   query: string;
   workspaceIds: readonly string[];
-}): Promise<readonly SessionTextSearchHit[]> {
+}): Promise<HostSearchResult> {
   const client = getHostRuntimeStore().getClient(input.serverId);
-  if (!client || input.workspaceIds.length === 0) return [];
+  if (!client || input.workspaceIds.length === 0) return EMPTY_HOST_RESULT;
   try {
     const payload = await client.searchSessionText({
       query: input.query,
       workspaceIds: [...input.workspaceIds],
     });
-    return payload.hits;
+    return payload;
   } catch {
     // Disconnected, superseded, or failed: the tier is best-effort and never shows an error.
-    return [];
+    return EMPTY_HOST_RESULT;
   }
+}
+
+function hitsByServer(
+  byServer: ReadonlyMap<string, HostSearchResult>,
+): Map<string, readonly SessionTextSearchHit[]> {
+  return new Map([...byServer].map(([serverId, answer]) => [serverId, answer.hits]));
 }
 
 /**
  * Debounced, capability-gated message search across every host in scope. A newer query cancels
  * this hook's interest in older responses; the daemon separately aborts the older scan.
+ *
+ * Status is derived during render, not set by the effect: whenever tier 2 is eligible and the
+ * latest answer is for a different query or scope, the state reads "searching" in the same render
+ * that changed the query. Setting it from the effect left one frame of "idle", which flashed the
+ * empty state on an empty tree.
  */
 export function useSidebarMessageSearch(
   rawQuery: string,
@@ -128,30 +159,29 @@ export function useSidebarMessageSearch(
   const query = rawQuery.trim();
   const enabled =
     normalizedQuery.length >= SIDEBAR_MESSAGE_SEARCH_MIN_QUERY && capableServerIds.length > 0;
+  const requestKey = `${query}\n${scope.key}\n${capableServerIds.join(",")}`;
   const [result, setResult] = useState<{
-    status: Exclude<SidebarMessageSearchStatus, "idle">;
+    key: string;
+    complete: boolean;
     hits: readonly SidebarMessageHit[];
+    coverage: SidebarMessageSearchCoverage;
   } | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
-      setResult(null);
-      return undefined;
-    }
+    if (!enabled) return undefined;
     let cancelled = false;
-    // Earlier hits stay visible while the next search runs; the group below the tree changes in
-    // place instead of collapsing and reappearing on each keystroke.
-    setResult((previous) => ({ status: "searching", hits: previous?.hits ?? [] }));
     const timer = setTimeout(() => {
-      const hitsByServer = new Map<string, readonly SessionTextSearchHit[]>();
+      const byServer = new Map<string, HostSearchResult>();
       for (const serverId of capableServerIds) {
         const workspaceIds = scope.workspaceIdsByServer.get(serverId) ?? [];
-        void searchHost({ serverId, query, workspaceIds }).then((hits) => {
+        void searchHost({ serverId, query, workspaceIds }).then((answer) => {
           if (cancelled) return null;
-          hitsByServer.set(serverId, hits);
+          byServer.set(serverId, answer);
           setResult({
-            status: hitsByServer.size === capableServerIds.length ? "done" : "searching",
-            hits: mergeSidebarMessageHits(hitsByServer),
+            key: requestKey,
+            complete: byServer.size === capableServerIds.length,
+            hits: mergeSidebarMessageHits(hitsByServer(byServer)),
+            coverage: sumSidebarMessageSearchCoverage(byServer.values()),
           });
           return null;
         });
@@ -161,12 +191,20 @@ export function useSidebarMessageSearch(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [capableServerIds, enabled, query, scope]);
+  }, [capableServerIds, enabled, query, requestKey, scope]);
 
-  return useMemo(() => {
-    if (!enabled || !result) return { ...IDLE_MESSAGE_SEARCH, query: normalizedQuery };
-    return { query: normalizedQuery, status: result.status, hits: result.hits };
-  }, [enabled, normalizedQuery, result]);
+  return useMemo((): SidebarMessageSearchState => {
+    if (!enabled) return { ...IDLE_MESSAGE_SEARCH, query: normalizedQuery };
+    // Earlier hits stay visible while the next search runs, so the group below the tree changes in
+    // place instead of collapsing and reappearing on each keystroke.
+    const current = result !== null && result.key === requestKey ? result : null;
+    return {
+      query: normalizedQuery,
+      status: current?.complete ? "done" : "searching",
+      hits: result?.hits ?? [],
+      coverage: current?.coverage ?? null,
+    };
+  }, [enabled, normalizedQuery, requestKey, result]);
 }
 
 export function SidebarMessageSearchProvider({

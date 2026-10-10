@@ -1279,6 +1279,7 @@ export const ko: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "채팅 {{total}}개 중 {{searched}}개 검색함",
         inMessages: "메시지에서",
         searching: "메시지 검색 중...",
         moreTabs: "+{{count}}개 더",

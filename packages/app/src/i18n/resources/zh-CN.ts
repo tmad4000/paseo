@@ -1258,6 +1258,7 @@ export const zhCN: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "已搜索 {{total}} 个聊天中的 {{searched}} 个",
         inMessages: "消息中",
         searching: "正在搜索消息...",
         moreTabs: "还有 {{count}} 个",

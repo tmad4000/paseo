@@ -1269,6 +1269,7 @@ export const ar: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "تم البحث في {{searched}} من {{total}} محادثة",
         inMessages: "في الرسائل",
         searching: "جارٍ البحث في الرسائل...",
         moreTabs: "+{{count}} أخرى",

@@ -1283,6 +1283,7 @@ export const ja: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "{{total}} 件中 {{searched}} 件のチャットを検索",
         inMessages: "メッセージ内",
         searching: "メッセージを検索中...",
         moreTabs: "他 {{count}} 件",

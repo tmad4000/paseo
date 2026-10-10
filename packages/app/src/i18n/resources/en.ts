@@ -1279,6 +1279,7 @@ export const en = {
     },
     filterSidebar: {
       matches: {
+        coverage: "Searched {{searched}} of {{total}} chats",
         inMessages: "In messages",
         searching: "Searching messages...",
         moreTabs: "+{{count}} more",

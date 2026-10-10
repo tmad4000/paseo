@@ -1309,6 +1309,7 @@ export const fr: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "{{searched}} discussions sur {{total}} parcourues",
         inMessages: "Dans les messages",
         searching: "Recherche dans les messages...",
         moreTabs: "+{{count}} de plus",

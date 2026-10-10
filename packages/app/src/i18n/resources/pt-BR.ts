@@ -1299,6 +1299,7 @@ export const ptBR: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        coverage: "Buscou em {{searched}} de {{total}} chats",
         inMessages: "Nas mensagens",
         searching: "Buscando nas mensagens...",
         moreTabs: "+{{count}} a mais",

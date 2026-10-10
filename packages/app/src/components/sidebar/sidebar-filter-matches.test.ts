@@ -8,6 +8,7 @@ import {
   mergeSidebarMessageHits,
   selectNestedTabMatches,
   splitSidebarMatch,
+  sumSidebarMessageSearchCoverage,
   trimSidebarSnippetLead,
   type SidebarTabSource,
 } from "./sidebar-filter-matches";
@@ -172,5 +173,19 @@ describe("message hits", () => {
     expect(
       mergeSidebarMessageHits(new Map([["mini", [hit("a"), hit("b"), hit("c")]]]), 2),
     ).toHaveLength(2);
+  });
+});
+
+it("sums message-search coverage across hosts and flags any partial host", () => {
+  expect(
+    sumSidebarMessageSearchCoverage([
+      { searchedCount: 180, totalCount: 300, truncated: true },
+      { searchedCount: 12, totalCount: 12, truncated: false },
+    ]),
+  ).toEqual({ searchedCount: 192, totalCount: 312, truncated: true });
+  expect(sumSidebarMessageSearchCoverage([])).toEqual({
+    searchedCount: 0,
+    totalCount: 0,
+    truncated: false,
   });
 });

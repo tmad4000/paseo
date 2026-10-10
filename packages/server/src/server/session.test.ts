@@ -3,7 +3,15 @@ import {
   createTestCreationService,
 } from "./test-utils/session-stubs.js";
 import { execSync } from "child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join, resolve as resolvePath } from "path";
 import pino from "pino";
@@ -34,6 +42,7 @@ import type { AgentManagerEvent } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { WorkspaceLabelError, type WorkspaceLabelService } from "./workspace-labels/index.js";
 import { createPersistedProjectRecord } from "./workspace-registry.js";
+import { claudeProjectDirSync } from "./agent/providers/claude/project-dir.js";
 import { deriveProjectKey } from "./project-key.js";
 import type { SessionOptions } from "./session.js";
 import type { SessionInboundMessage, SessionOutboundMessage } from "./messages.js";
@@ -6125,5 +6134,87 @@ test("sidebar message search scans scoped root sessions lexically and never call
     ]);
   } finally {
     matcher.mockRestore();
+  }
+});
+
+test("sidebar message search reads unloaded Claude agents from their transcript without loading them", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "paseo-text-search-unloaded-")));
+  const configDir = join(root, "claude");
+  const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = configDir;
+  try {
+    const project = createPersistedProjectRecord({
+      ...createProjectRecord(root),
+      displayName: "fixture",
+    });
+    const workspace = {
+      workspaceId: "unloaded-ws",
+      projectId: project.projectId,
+      cwd: root,
+      kind: "local_checkout" as const,
+      displayName: "Unloaded work",
+      archivedAt: null,
+    };
+    const sessionId = "0d6f7a1e-unloaded-transcript";
+    const transcriptDir = claudeProjectDirSync(root, { configDir });
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(
+      join(transcriptDir, `${sessionId}.jsonl`),
+      `${JSON.stringify({
+        type: "user",
+        timestamp: "2026-09-01T08:00:00.000Z",
+        message: { role: "user", content: [{ type: "text", text: "Track the quokka migration" }] },
+      })}\n`,
+    );
+    const record = createStoredAgentRecord({
+      id: "unloaded-claude-agent",
+      provider: "claude",
+      cwd: root,
+      workspaceId: workspace.workspaceId,
+      title: "Old chat",
+      persistence: { provider: "claude", sessionId },
+    });
+    const readRecentConversationMessages = vi.fn(async () => []);
+    const resumeAgentFromPersistence = vi.fn();
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentStorage: { list: async () => [record] },
+      agentManager: { readRecentConversationMessages, resumeAgentFromPersistence },
+      workspaceRegistry: { get: vi.fn(), list: vi.fn(async () => [workspace]) },
+      projectRegistry: { list: async () => [project] },
+    });
+    await session.handleMessage({
+      type: "session.text_search.request",
+      requestId: "unloaded",
+      query: "QUOKKA",
+    });
+    expect(resumeAgentFromPersistence).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        type: "session.text_search.response",
+        payload: expect.objectContaining({
+          requestId: "unloaded",
+          searchedCount: 1,
+          totalCount: 1,
+          truncated: false,
+          error: null,
+          hits: [
+            expect.objectContaining({
+              agentId: "unloaded-claude-agent",
+              role: "user",
+              snippet: "Track the quokka migration",
+              matchStart: 10,
+              matchLength: 6,
+              timestamp: "2026-09-01T08:00:00.000Z",
+            }),
+          ],
+        }),
+      },
+    ]);
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
+    rmSync(root, { recursive: true, force: true });
   }
 });

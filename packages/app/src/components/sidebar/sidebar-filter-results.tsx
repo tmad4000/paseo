@@ -278,10 +278,12 @@ export function SidebarFilterResultsTail({
   if (!search.query) return treeEmpty ? <SidebarFilterEmptyState /> : null;
   const searching = search.status === "searching";
   const hasHits = search.hits.length > 0;
+  // Shown only when a host stopped at a bound, so "no hits" is not mistaken for "not mentioned".
+  const partial = !searching && search.coverage?.truncated === true ? search.coverage : null;
   return (
     <>
       {treeEmpty && !hasHits && !searching ? <SidebarFilterEmptyState /> : null}
-      {hasHits || searching ? (
+      {hasHits || searching || partial ? (
         <View style={styles.messageGroup} testID="sidebar-filter-message-matches">
           <View style={styles.groupHeader}>
             <Text style={styles.groupTitle}>{t("sidebar.filterSidebar.matches.inMessages")}</Text>
@@ -299,6 +301,14 @@ export function SidebarFilterResultsTail({
           {search.hits.map((hit) => (
             <MessageHitRow key={hit.key} hit={hit} onNavigate={onNavigate} />
           ))}
+          {partial ? (
+            <Text style={styles.coverage} testID="sidebar-filter-message-coverage">
+              {t("sidebar.filterSidebar.matches.coverage", {
+                searched: partial.searchedCount,
+                total: partial.totalCount,
+              })}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       <Text style={styles.enterHint} testID="sidebar-filter-enter-hint">
@@ -405,6 +415,12 @@ const styles = StyleSheet.create((theme) => ({
   snippet: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  coverage: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    paddingHorizontal: theme.spacing[2],
+    paddingTop: theme.spacing[1],
   },
   enterHint: {
     color: theme.colors.foregroundMuted,
