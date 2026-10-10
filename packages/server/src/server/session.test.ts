@@ -6026,3 +6026,98 @@ test("session Find uses only Codex matching despite Claude metadata configuratio
     },
   ]);
 });
+
+test("sidebar message search scans scoped root sessions lexically and never calls a model", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const project = createPersistedProjectRecord({
+    ...createProjectRecord("/fixture/tmpworkspace"),
+    displayName: "tmpworkspace",
+  });
+  const workspace = (workspaceId: string, archivedAt: string | null = null) => ({
+    workspaceId,
+    projectId: project.projectId,
+    cwd: project.rootPath,
+    kind: "local_checkout" as const,
+    displayName: `${workspaceId} title`,
+    archivedAt,
+  });
+  const record = (id: string, workspaceId: string, extra: Partial<StoredAgentRecord> = {}) =>
+    createStoredAgentRecord({ id, cwd: project.rootPath, workspaceId, title: `${id} chat`, ...extra });
+  const readRecentConversationMessages = vi.fn(async (agentId: string) => [
+    {
+      text: `Earlier note from ${agentId}: the Relay reconnect loop`,
+      role: "user" as const,
+      timestamp: "2026-10-01T12:00:00.000Z",
+      seq: 3,
+    },
+  ]);
+  const generate = vi.fn();
+  const matcher = vi
+    .spyOn(sessionSearchGeneration, "createCodexSessionSearchGeneration")
+    .mockReturnValue({ generate });
+  const session = createSessionForTest({
+    messages,
+    agentStorage: {
+      list: async () => [
+        record("visible", "scoped"),
+        record("outside", "other"),
+        record("archived-chat", "scoped", { archivedAt: "2026-10-02T00:00:00.000Z" }),
+        record("internal-chat", "scoped", { internal: true }),
+        record("child-chat", "scoped", { labels: { "paseo.parent-agent-id": "visible" } }),
+        record("archived-workspace-chat", "gone"),
+      ],
+    },
+    agentManager: { readRecentConversationMessages },
+    workspaceRegistry: {
+      get: vi.fn(),
+      list: vi.fn(async () => [
+        workspace("scoped"),
+        workspace("other"),
+        workspace("gone", "2026-10-03T00:00:00.000Z"),
+      ]),
+    },
+    projectRegistry: { list: async () => [project] },
+  });
+  try {
+    await session.handleMessage({
+      type: "session.text_search.request",
+      requestId: "text-search",
+      query: "relay RECONNECT",
+      workspaceIds: ["scoped", "gone"],
+    });
+    expect(readRecentConversationMessages.mock.calls.map(([agentId]) => agentId)).toEqual([
+      "visible",
+    ]);
+    expect(generate).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        type: "session.text_search.response",
+        payload: {
+          requestId: "text-search",
+          searchedCount: 1,
+          totalCount: 1,
+          truncated: false,
+          error: null,
+          hits: [
+            {
+              agentId: "visible",
+              workspaceId: "scoped",
+              workspaceTitle: "scoped title",
+              projectName: "tmpworkspace",
+              title: "visible chat",
+              provider: "codex",
+              role: "user",
+              snippet: "Earlier note from visible: the Relay reconnect loop",
+              matchStart: 31,
+              matchLength: 15,
+              timestamp: "2026-10-01T12:00:00.000Z",
+              seq: 3,
+            },
+          ],
+        },
+      },
+    ]);
+  } finally {
+    matcher.mockRestore();
+  }
+});

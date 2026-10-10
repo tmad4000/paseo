@@ -3467,6 +3467,22 @@ export class DaemonClient {
     return payload;
   }
 
+  /**
+   * Lexical message search across sessions (`session.text_search`). Gate on
+   * `server_info.features.sessionTextSearch`. The daemon supersedes an older request from the
+   * same connection; the superseded call rejects with the daemon's error.
+   */
+  async searchSessionText(input: { query: string; workspaceIds?: string[] }) {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"session.text_search.response">(
+      {
+        message: { type: "session.text_search.request", ...input },
+        timeout: 10000,
+      },
+    );
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
   async searchAgentTimeline({
     agentId,
     query,

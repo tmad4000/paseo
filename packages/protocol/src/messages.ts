@@ -2677,6 +2677,48 @@ export const SessionSearchResponseSchema = z.object({
 
 export type SessionSearchResult = z.infer<typeof SessionSearchResultSchema>;
 
+// Lexical message search for the sidebar filter. Unlike `session.search` it never calls a model;
+// the daemon bounds the scan (sessions, hits, time) and supersedes an older request from the same
+// client. See docs/sidebar-filter.md.
+export const SessionTextSearchHitSchema = z.object({
+  agentId: z.string(),
+  workspaceId: z.string(),
+  workspaceTitle: z.string(),
+  projectName: z.string(),
+  title: z.string(),
+  provider: z.string(),
+  role: z.enum(["user", "assistant"]),
+  snippet: z.string(),
+  /** Offsets into `snippet`, in UTF-16 code units. */
+  matchStart: z.number().int().nonnegative(),
+  matchLength: z.number().int().nonnegative(),
+  timestamp: z.string().optional(),
+  seq: z.number().int().optional(),
+});
+
+export const SessionTextSearchRequestSchema = z.object({
+  type: z.literal("session.text_search.request"),
+  requestId: z.string(),
+  query: z.string().min(1).max(500),
+  /** Restricts the search to these workspaces. Omitted searches every active workspace. */
+  workspaceIds: z.array(z.string()).max(2000).optional(),
+});
+
+export const SessionTextSearchResponseSchema = z.object({
+  type: z.literal("session.text_search.response"),
+  payload: z.object({
+    requestId: z.string(),
+    hits: z.array(SessionTextSearchHitSchema),
+    searchedCount: z.number().int().nonnegative(),
+    totalCount: z.number().int().nonnegative(),
+    /** True when a bound stopped the scan before every candidate was read. */
+    truncated: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type SessionTextSearchHit = z.infer<typeof SessionTextSearchHitSchema>;
+
 export const AgentQueueSnapshotSchema = z.object({
   agentId: z.string(),
   /** Increments on every mutation so clients can drop a stale broadcast. */
@@ -3704,6 +3746,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentArtifactsScanRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   SessionSearchRequestSchema,
+  SessionTextSearchRequestSchema,
   AgentQueueEnqueueRequestSchema,
   AgentQueueRemoveRequestSchema,
   AgentQueueEditRequestSchema,
@@ -4083,6 +4126,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentHistorySearch: z.boolean().optional(),
         // COMPAT(sessionSearch): added in v0.10.0, remove gate after 2027-04-04.
         sessionSearch: z.boolean().optional(),
+        // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
+        sessionTextSearch: z.boolean().optional(),
         // COMPAT(conversationMessageActivity): added in v0.10.0; remove gate after 2027-04-06.
         conversationMessageActivity: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
@@ -7385,6 +7430,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentArtifactsScanResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   SessionSearchResponseSchema,
+  SessionTextSearchResponseSchema,
   AgentQueueEnqueueResponseSchema,
   AgentQueueRemoveResponseSchema,
   AgentQueueEditResponseSchema,
