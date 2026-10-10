@@ -313,7 +313,7 @@ test("retained user messages expose multiple asks without confusing agent questi
       .getByRole("button", { name: "Your messages", exact: true })
       .click();
     await expect(
-      feed.getByText("Fix filtering and add direct links.", { exact: true }).first(),
+      feed.getByText("Fix filtering and add direct links.", { exact: true }),
     ).toBeVisible();
     await expect(feed.getByText("Should I start deployment?", { exact: true })).toHaveCount(0);
     await feed
@@ -328,7 +328,7 @@ test("retained user messages expose multiple asks without confusing agent questi
     ).toBeVisible();
     await feed.getByRole("button", { name: "Clear filters", exact: true }).click();
     await feed.getByRole("button", { name: "Checklist", exact: true }).click();
-    await expect(feed.getByText("Needs ask review", { exact: true }).first()).toBeVisible();
+    await expect(feed.getByText("Needs ask review", { exact: true })).toBeVisible();
     for (const id of ["filters", "links"])
       await client.updateStreamEntry({
         agentId: agent.id,
@@ -356,9 +356,9 @@ test("retained user messages expose multiple asks without confusing agent questi
     });
     await feed.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(feed.getByText("Needs ask review", { exact: true })).toHaveCount(0);
-    await expect(feed.getByText("Blocked", { exact: true }).first()).toBeVisible();
+    await expect(feed.getByText("Blocked", { exact: true })).toBeVisible();
     await expect(
-      feed.getByText("Completion evidence: Filter regression passed", { exact: true }).first(),
+      feed.getByText("Completion evidence: Filter regression passed", { exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath("stream-multiple-asks.png"),
@@ -370,7 +370,7 @@ test("retained user messages expose multiple asks without confusing agent questi
       .click();
     await expect(page.getByTestId("companion-stream")).toHaveCount(0);
     await expect(
-      page.getByText("Fix filtering and add direct links.", { exact: true }).first(),
+      page.getByText("Fix filtering and add direct links.", { exact: true }),
     ).toBeVisible();
   } finally {
     await client.removeProject(workspace.projectId);

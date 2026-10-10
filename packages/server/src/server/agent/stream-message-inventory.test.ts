@@ -195,6 +195,41 @@ describe("Stream message inventory", () => {
     },
   );
 
+  it("keeps one reviewed source when a submitted prompt gains its provider ID", () => {
+    const submitted: ProjectedTimelineRow = {
+      ...message(1, "Fix filtering and add direct links."),
+      item: {
+        type: "user_message",
+        text: "Fix filtering and add direct links.",
+        messageId: "client-1",
+        clientMessageId: "client-1",
+      },
+    };
+    let entries = indexStreamMessages([], [submitted], "epoch");
+    expect(entries).toHaveLength(1);
+    const original = entries[0];
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "session",
+      action: "review_message",
+      entryId: original.id,
+      expectedRevision: 0,
+      review: { state: "reviewed", note: "No separate asks", askIds: [] },
+    });
+    const enriched = { ...submitted, providerMessageId: "provider-1" };
+    const next = indexStreamMessages(entries, [enriched], "epoch");
+    expect(next).toBe(entries);
+    expect(next.filter((entry) => entry.messageReview)).toHaveLength(1);
+    expect(next[0].messageReview?.state).toBe("reviewed");
+    // A rehydrated row carrying both provenances resolves to the same record.
+    const rehydrated = indexStreamMessages(next, [{ ...enriched, seq: 9, seqEnd: 9 }], "new");
+    expect(rehydrated).toHaveLength(1);
+    expect(rehydrated[0]).toMatchObject({
+      id: original.id,
+      messageReview: { state: "reviewed" },
+      source: { seq: 9, epoch: "new" },
+    });
+  });
+
   it("reports hidden counts for the installed-example shape without inventing open asks", () => {
     const entries: CompanionEntry[] = Array.from({ length: 8 }, (_, i) => ({
       id: `turn:${i}`,
