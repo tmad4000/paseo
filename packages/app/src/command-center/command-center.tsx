@@ -13,7 +13,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePathname } from "expo-router";
-import { Check, ChevronRight, Clock, Folder, X } from "lucide-react-native";
+import { Check, ChevronRight, Clock, Folder, MessageSquare, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   BottomSheetBackdrop,
@@ -86,6 +86,11 @@ import {
   type CommandCenterWorkspaceResult,
 } from "./results";
 import { useWorkspaceFileSearch } from "./workspace-file-search";
+import { buildMessageSearchSection } from "./message-search-section";
+import { getCommandCenterIcon } from "./icon";
+import { openSidebarMessageSearch } from "@/components/sidebar/sidebar-filter-request";
+
+const MessageSearchIcon = getCommandCenterIcon(MessageSquare);
 
 const ThemedBottomSheetTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
@@ -383,11 +388,38 @@ function useCommandCenterState(): CommandCenterState {
     () => buildContributionSections(snapshot.contributions, query),
     [query, snapshot.contributions],
   );
+  const isCompactLayout = useIsCompactFormFactor();
+  // Message search is offered from the default scope only. The Files and Recent scopes are
+  // focused lists; a query there narrows that list rather than asking for something else.
+  // Recent-session and agent title hits do not suppress it: searching message text is the next
+  // step after a title failed to find the chat.
+  const messageSearchSection = useMemo(
+    () =>
+      scope === "files" || scope === "recent"
+        ? null
+        : buildMessageSearchSection({
+            query,
+            sections: [...contributionSections, ...builtInSections],
+            title: t("sidebar.filterSidebar.matches.searchMessages", { query: query.trim() }),
+            icon: MessageSearchIcon,
+            run: (text) => {
+              // The sidebar's find field takes focus; returning it to the old element would undo that.
+              clearCommandCenterFocusRestoreElement();
+              openSidebarMessageSearch(text, { isCompact: isCompactLayout });
+            },
+          }),
+    [builtInSections, contributionSections, isCompactLayout, query, scope, t],
+  );
   const projection = useMemo(() => {
     if (scope === "files") return projectCommandCenterRows(fileSections);
     if (scope === "recent") return projectCommandCenterRows(builtInSections);
-    return projectCommandCenterRows([...contributionSections, ...fileSections, ...builtInSections]);
-  }, [builtInSections, contributionSections, fileSections, scope]);
+    return projectCommandCenterRows([
+      ...contributionSections,
+      ...fileSections,
+      ...builtInSections,
+      ...(messageSearchSection ? [messageSearchSection] : []),
+    ]);
+  }, [builtInSections, contributionSections, fileSections, messageSearchSection, scope]);
   const resolvedActiveId = preserveActiveResultId(activeId, projection.selectableResults);
 
   // Editing the query re-ranks everything, so an arrow-key selection made under the previous

@@ -1317,6 +1317,17 @@ export const zhCN: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "以“{{query}}”开始聊天",
+        searchMessages: "在消息中搜索“{{query}}”",
+        scope: {
+          trigger: "筛选范围：{{value}}",
+          heading: "搜索范围",
+          names: "名称",
+          messages: "名称 + 消息",
+          namesDescription: "项目、工作区和标签页标题",
+          messagesDescription: "同时搜索消息文本",
+          needsHostUpdate: "消息搜索需要更新主机",
+        },
         coverage: "已搜索 {{total}} 个聊天中的 {{searched}} 个",
         inMessages: "消息中",
         searching: "正在搜索消息...",

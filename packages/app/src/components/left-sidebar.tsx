@@ -18,7 +18,9 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type NativeSyntheticEvent,
   type PressableStateCallbackType,
+  type TextInputKeyPressEventData,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -40,6 +42,9 @@ import {
 } from "@/components/ui/text-input";
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
+import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
+import { useSidebarFilterRequestFocus } from "@/components/sidebar/sidebar-filter-request";
+import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -879,6 +884,28 @@ function SidebarSearchControls() {
   useEffect(() => {
     if (!searchQuery && searchInputRef.current?.getText()) searchInputRef.current.reset();
   }, [searchQuery]);
+  // A command center "Search messages for …" request: show its text and take focus, once.
+  useSidebarFilterRequestFocus(searchInputRef);
+  const startChat = useStartChatFromFilterQuery();
+  // Enter stays intelligent Find. Mod+Enter opens Quick launch with the query, and Mod+Shift+Enter
+  // opens it with Start and open preselected; preventing the default keeps the web input from also
+  // submitting Find.
+  const handleFindKeyPress = useCallback(
+    (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+      const native = event.nativeEvent as TextInputKeyPressEventData & {
+        metaKey?: boolean;
+        ctrlKey?: boolean;
+        shiftKey?: boolean;
+        repeat?: boolean;
+      };
+      if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
+      event.preventDefault();
+      // A held Mod+Enter auto-repeats; only the first press opens Quick launch.
+      if (native.repeat) return;
+      startChat(native.shiftKey === true);
+    },
+    [startChat],
+  );
   const renderFindField = useCallback(
     (submit: () => void, clear: () => void) => (
       <View style={styles.sidebarSearchControls}>
@@ -894,6 +921,7 @@ function SidebarSearchControls() {
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
+            onKeyPress={handleFindKeyPress}
             onSubmitEditing={submit}
             testID="sidebar-title-project-filter"
             style={styles.sidebarSearchInput}
@@ -909,6 +937,7 @@ function SidebarSearchControls() {
             </Pressable>
           ) : null}
         </View>
+        <SidebarFilterScopeMenu />
         <DropdownMenu compactMode="sheet">
           <DropdownMenuTrigger
             style={styles.sidebarSortTrigger}
@@ -946,7 +975,16 @@ function SidebarSearchControls() {
         </DropdownMenu>
       </View>
     ),
-    [theme, searchQuery, setSearchQuery, sortMode, setSortMode, messageSortAvailability, t],
+    [
+      theme,
+      searchQuery,
+      setSearchQuery,
+      sortMode,
+      setSortMode,
+      messageSortAvailability,
+      handleFindKeyPress,
+      t,
+    ],
   );
   return <SessionRoutingComposer>{renderFindField}</SessionRoutingComposer>;
 }

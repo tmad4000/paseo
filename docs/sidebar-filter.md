@@ -12,8 +12,35 @@ says why a row is there, so a workspace you did not expect in the list explains 
 | Tab titles  | Agent session titles in that workspace               | Compact rows nested under the workspace row   | Same pass as the tree                    |
 | In messages | User and assistant message text                      | A group below the tree, newest first          | Daemon RPC, debounced, bounded           |
 
-Then a muted "Press Enter for intelligent Find" line. The empty state appears only when the tree is
-empty and the message tier has finished with nothing.
+Below them sit a **Start a chat with "<query>"** row and a muted "Press Enter for intelligent Find"
+line. The empty state appears only when the tree is empty and the message tier has finished with
+nothing; it then carries Start a chat as its primary button instead of the row.
+
+## Keys and scope
+
+| Key / control            | Does                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| Typing                   | Live filter (all tiers in the current scope)                      |
+| Enter                    | Intelligent Find, unchanged                                       |
+| Mod+Enter, or the row    | Open Quick launch with the query as the prompt                    |
+| Mod+Shift+Enter          | Same, with Start and open preselected                             |
+| Scope menu (filter icon) | **Names** (tree and tab titles) or **Names + messages** (default) |
+
+The scope is per device (`filterScope` in the sidebar view store). When no host in the sidebar
+advertises `sessionTextSearch`, the Names + messages item says that messages need a host update; the
+choice is kept and takes effect once a host updates.
+
+Starting a chat goes through one function, `startChatFromFilterQuery`
+(`packages/app/src/components/sidebar/find-to-prompt.ts`, bound to the app by
+`use-start-chat-from-filter-query.ts`). It opens [Quick launch](quick-launch.md) with the query as
+the prompt and no destination, so Quick launch's Default-project resolver picks where it goes and
+the person confirms in the dialog. The filter, Send → New conversation, and Quick launch share that
+one creation path. On web, Mod+Enter calls `preventDefault` on the key press so the field does not also
+submit Find.
+
+The command center offers **Search messages for "<q>"** when a query of three or more characters
+matches no command and no workspace. It opens the sidebar (if collapsed), switches the scope to
+Names + messages, and puts the query in this field with focus. It searches nothing itself.
 
 ## Tree and tab titles
 
