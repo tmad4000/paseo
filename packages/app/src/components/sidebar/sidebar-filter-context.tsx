@@ -111,6 +111,7 @@ export function useSidebarMessageSearch(
   rawQuery: string,
   normalizedQuery: string,
   scope: SidebarMessageSearchScope,
+  messagesEnabled = true,
 ): SidebarMessageSearchState {
   const serverIds = useMemo(() => [...scope.workspaceIdsByServer.keys()], [scope]);
   const support = useHostFeatureMap(serverIds, "sessionTextSearch");
@@ -120,7 +121,9 @@ export function useSidebarMessageSearch(
   );
   const query = rawQuery.trim();
   const enabled =
-    normalizedQuery.length >= SIDEBAR_MESSAGE_SEARCH_MIN_QUERY && capableServerIds.length > 0;
+    messagesEnabled &&
+    normalizedQuery.length >= SIDEBAR_MESSAGE_SEARCH_MIN_QUERY &&
+    capableServerIds.length > 0;
   const [result, setResult] = useState<{
     status: Exclude<SidebarMessageSearchStatus, "idle">;
     hits: readonly SidebarMessageHit[];
@@ -166,14 +169,17 @@ export function SidebarMessageSearchProvider({
   rawQuery,
   normalizedQuery,
   scope,
+  messagesEnabled,
   children,
 }: {
   rawQuery: string;
   normalizedQuery: string;
   scope: SidebarMessageSearchScope;
+  /** False when the filter scope is Names only. */
+  messagesEnabled: boolean;
   children: ReactNode;
 }) {
-  const value = useSidebarMessageSearch(rawQuery, normalizedQuery, scope);
+  const value = useSidebarMessageSearch(rawQuery, normalizedQuery, scope, messagesEnabled);
   return (
     <SidebarMessageSearchContext.Provider value={value}>
       {children}

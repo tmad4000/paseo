@@ -1309,6 +1309,19 @@ export const es: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "Iniciar un chat con \"{{query}}\"",
+        noChatDestination: "No hay espacio de trabajo predeterminado para chats nuevos",
+        startChatFailed: "No se pudo iniciar el chat",
+        searchMessages: "Buscar \"{{query}}\" en los mensajes",
+        scope: {
+          trigger: "Alcance del filtro: {{value}}",
+          heading: "Buscar en",
+          names: "Nombres",
+          messages: "Nombres + mensajes",
+          namesDescription: "Proyectos, espacios de trabajo y títulos de pestañas",
+          messagesDescription: "También busca en el texto de los mensajes",
+          needsHostUpdate: "Los mensajes requieren actualizar el host",
+        },
         inMessages: "En mensajes",
         searching: "Buscando en mensajes...",
         moreTabs: "+{{count}} más",

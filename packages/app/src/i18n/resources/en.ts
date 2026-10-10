@@ -1279,6 +1279,19 @@ export const en = {
     },
     filterSidebar: {
       matches: {
+        startChat: "Start a chat with \"{{query}}\"",
+        noChatDestination: "No default workspace for new chats",
+        startChatFailed: "Unable to start chat",
+        searchMessages: "Search messages for \"{{query}}\"",
+        scope: {
+          trigger: "Filter scope: {{value}}",
+          heading: "Search in",
+          names: "Names",
+          messages: "Names + messages",
+          namesDescription: "Projects, workspaces, and tab titles",
+          messagesDescription: "Also searches message text",
+          needsHostUpdate: "Messages need a host update",
+        },
         inMessages: "In messages",
         searching: "Searching messages...",
         moreTabs: "+{{count}} more",

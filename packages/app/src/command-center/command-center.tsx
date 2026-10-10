@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronRight, Folder, X } from "lucide-react-native";
+import { Check, ChevronRight, Folder, MessageSquare, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   BottomSheetBackdrop,
@@ -74,6 +74,11 @@ import {
   type CommandCenterWorkspaceResult,
 } from "./results";
 import { useWorkspaceFileSearch } from "./workspace-file-search";
+import { buildMessageSearchSection } from "./message-search-section";
+import { getCommandCenterIcon } from "./icon";
+import { openSidebarMessageSearch } from "@/components/sidebar/sidebar-filter-request";
+
+const MessageSearchIcon = getCommandCenterIcon(MessageSquare);
 
 const ThemedBottomSheetTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
@@ -288,14 +293,37 @@ function useCommandCenterState(): CommandCenterState {
     () => buildContributionSections(snapshot.contributions, query),
     [query, snapshot.contributions],
   );
+  const isCompactLayout = useIsCompactFormFactor();
+  const messageSearchSection = useMemo(
+    () =>
+      scope === "files"
+        ? null
+        : buildMessageSearchSection({
+            query,
+            sections: [...contributionSections, ...builtInSections],
+            title: t("sidebar.filterSidebar.matches.searchMessages", { query: query.trim() }),
+            icon: MessageSearchIcon,
+            run: (text) => {
+              // The sidebar's find field takes focus; returning it to the old element would undo that.
+              clearCommandCenterFocusRestoreElement();
+              openSidebarMessageSearch(text, { isCompact: isCompactLayout });
+            },
+          }),
+    [builtInSections, contributionSections, isCompactLayout, query, scope, t],
+  );
   const projection = useMemo(
     () =>
       projectCommandCenterRows(
         scope === "files"
           ? fileSections
-          : [...contributionSections, ...fileSections, ...builtInSections],
+          : [
+              ...contributionSections,
+              ...fileSections,
+              ...builtInSections,
+              ...(messageSearchSection ? [messageSearchSection] : []),
+            ],
       ),
-    [builtInSections, contributionSections, fileSections, scope],
+    [builtInSections, contributionSections, fileSections, messageSearchSection, scope],
   );
   const resolvedActiveId = preserveActiveResultId(activeId, projection.selectableResults);
 

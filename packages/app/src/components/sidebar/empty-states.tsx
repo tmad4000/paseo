@@ -15,7 +15,12 @@ import { useSidebarModel } from "./sidebar-model";
  * trigger, and an empty state that replaces the list rather than its body takes the header with
  * it — which is how filtering the last row away used to close the menu you were filtering from.
  */
-export function SidebarFilterEmptyState() {
+export function SidebarFilterEmptyState({
+  primaryAction,
+}: {
+  /** The filter's own way forward when nothing matched, e.g. starting a chat from the query. */
+  primaryAction?: { label: string; onPress: () => void; testID?: string } | null;
+} = {}) {
   const { t } = useTranslation();
   const clearLabelFilter = useSidebarViewStore((state) => state.clearLabelFilter);
   const clearProjectFilters = useSidebarViewStore((state) => state.clearProjectFilters);
@@ -33,6 +38,16 @@ export function SidebarFilterEmptyState() {
     <View style={styles.container} testID="sidebar-filter-empty-state">
       <Text style={styles.title}>{t("sidebar.filterEmpty.title")}</Text>
       <Text style={styles.description}>{t("sidebar.filterEmpty.description")}</Text>
+      {primaryAction ? (
+        <Button
+          variant="default"
+          size="sm"
+          onPress={primaryAction.onPress}
+          testID={primaryAction.testID}
+        >
+          {primaryAction.label}
+        </Button>
+      ) : null}
       <Button variant="ghost" size="sm" onPress={clearFilters}>
         {t("sidebar.filterEmpty.clear")}
       </Button>

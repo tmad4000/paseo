@@ -1269,6 +1269,19 @@ export const ar: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "بدء محادثة بـ \"{{query}}\"",
+        noChatDestination: "لا توجد مساحة عمل افتراضية للمحادثات الجديدة",
+        startChatFailed: "تعذّر بدء المحادثة",
+        searchMessages: "البحث في الرسائل عن \"{{query}}\"",
+        scope: {
+          trigger: "نطاق التصفية: {{value}}",
+          heading: "البحث في",
+          names: "الأسماء",
+          messages: "الأسماء + الرسائل",
+          namesDescription: "المشاريع ومساحات العمل وعناوين علامات التبويب",
+          messagesDescription: "يبحث أيضًا في نص الرسائل",
+          needsHostUpdate: "تتطلب الرسائل تحديث المضيف",
+        },
         inMessages: "في الرسائل",
         searching: "جارٍ البحث في الرسائل...",
         moreTabs: "+{{count}} أخرى",

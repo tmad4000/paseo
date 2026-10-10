@@ -1279,6 +1279,19 @@ export const ko: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "\"{{query}}\"(으)로 채팅 시작",
+        noChatDestination: "새 채팅을 위한 기본 워크스페이스가 없습니다",
+        startChatFailed: "채팅을 시작할 수 없습니다",
+        searchMessages: "메시지에서 \"{{query}}\" 검색",
+        scope: {
+          trigger: "필터 범위: {{value}}",
+          heading: "검색 대상",
+          names: "이름",
+          messages: "이름 + 메시지",
+          namesDescription: "프로젝트, 워크스페이스, 탭 제목",
+          messagesDescription: "메시지 본문도 검색합니다",
+          needsHostUpdate: "메시지 검색에는 호스트 업데이트가 필요합니다",
+        },
         inMessages: "메시지에서",
         searching: "메시지 검색 중...",
         moreTabs: "+{{count}}개 더",

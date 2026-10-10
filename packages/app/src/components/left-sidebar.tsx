@@ -18,7 +18,9 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type NativeSyntheticEvent,
   type PressableStateCallbackType,
+  type TextInputKeyPressEventData,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -40,6 +42,9 @@ import {
 } from "@/components/ui/text-input";
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
+import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
+import { useSidebarFilterRequestStore } from "@/components/sidebar/sidebar-filter-request";
+import { useStartChatFromFilterQuery } from "@/components/sidebar/find-to-prompt";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -879,6 +884,35 @@ function SidebarSearchControls() {
   useEffect(() => {
     if (!searchQuery && searchInputRef.current?.getText()) searchInputRef.current.reset();
   }, [searchQuery]);
+  // A command center "Search messages for …" request: show its text and take focus, once.
+  const filterRequest = useSidebarFilterRequestStore((state) => state.request);
+  const focusedRequestId = useSidebarFilterRequestStore((state) => state.focusedRequestId);
+  const markRequestFocused = useSidebarFilterRequestStore((state) => state.markFocused);
+  useEffect(() => {
+    if (!filterRequest || filterRequest.id <= focusedRequestId) return undefined;
+    markRequestFocused(filterRequest.id);
+    searchInputRef.current?.replaceText(filterRequest.query);
+    const timer = setTimeout(() => searchInputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [filterRequest, focusedRequestId, markRequestFocused]);
+  const isCompact = useIsCompactFormFactor();
+  const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
+  const startChat = useStartChatFromFilterQuery(isCompact ? showMobileAgent : undefined);
+  // Enter stays intelligent Find. Mod+Enter starts a chat from the query and Mod+Shift+Enter
+  // starts and opens it; preventing the default keeps the web input from also submitting Find.
+  const handleFindKeyPress = useCallback(
+    (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+      const native = event.nativeEvent as TextInputKeyPressEventData & {
+        metaKey?: boolean;
+        ctrlKey?: boolean;
+        shiftKey?: boolean;
+      };
+      if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
+      event.preventDefault();
+      startChat(native.shiftKey === true);
+    },
+    [startChat],
+  );
   const renderFindField = useCallback(
     (submit: () => void, clear: () => void) => (
       <View style={styles.sidebarSearchControls}>
@@ -894,6 +928,7 @@ function SidebarSearchControls() {
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
+            onKeyPress={handleFindKeyPress}
             onSubmitEditing={submit}
             testID="sidebar-title-project-filter"
             style={styles.sidebarSearchInput}
@@ -909,6 +944,7 @@ function SidebarSearchControls() {
             </Pressable>
           ) : null}
         </View>
+        <SidebarFilterScopeMenu />
         <DropdownMenu compactMode="sheet">
           <DropdownMenuTrigger
             style={styles.sidebarSortTrigger}
@@ -946,7 +982,16 @@ function SidebarSearchControls() {
         </DropdownMenu>
       </View>
     ),
-    [theme, searchQuery, setSearchQuery, sortMode, setSortMode, messageSortAvailability, t],
+    [
+      theme,
+      searchQuery,
+      setSearchQuery,
+      sortMode,
+      setSortMode,
+      messageSortAvailability,
+      handleFindKeyPress,
+      t,
+    ],
   );
   return <SessionRoutingComposer>{renderFindField}</SessionRoutingComposer>;
 }
