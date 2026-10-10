@@ -41,7 +41,10 @@ import {
   useActiveWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { dispatchTopWebOverlayKeyDown } from "@/lib/overlay-root";
-import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
+import {
+  navigateBackInFocusHistory,
+  navigateForwardInFocusHistory,
+} from "@/navigation/focus-history-runtime";
 
 export function useKeyboardShortcuts({
   enabled,
@@ -162,6 +165,9 @@ export function useKeyboardShortcuts({
         return;
       }
       navigateToLastWorkspace();
+    },
+    "navigate-forward": () => {
+      navigateForwardInFocusHistory({ isCompact: isMobile });
     },
     "toggle-agent-list": toggleAgentList,
     "toggle-both-sidebars": toggleBothSidebars,

@@ -9,6 +9,7 @@ import {
   readWindowChromeUpdate,
   readWindowTheme,
   resolveWindowBounds,
+  setupNavigationGestureEvents,
 } from "./window-manager";
 
 describe("window-manager", () => {
@@ -143,6 +144,47 @@ describe("window-manager", () => {
         width: 1024,
         height: 720,
       });
+    });
+  });
+
+  describe("setupNavigationGestureEvents", () => {
+    function fakeWindow(destroyed = false) {
+      const handlers = new Map<string, (...args: unknown[]) => void>();
+      const send = vi.fn();
+      const win = {
+        on: (event: string, handler: (...args: unknown[]) => void) => handlers.set(event, handler),
+        isDestroyed: () => destroyed,
+        webContents: { isDestroyed: () => destroyed, send },
+      };
+      setupNavigationGestureEvents(win as never);
+      return { emit: (event: string, arg: string) => handlers.get(event)?.({}, arg), send };
+    }
+
+    it("forwards page swipes and browser app commands as history navigation", () => {
+      const { emit, send } = fakeWindow();
+
+      emit("swipe", "left");
+      emit("swipe", "right");
+      emit("app-command", "browser-backward");
+      emit("app-command", "browser-forward");
+
+      expect(send.mock.calls).toEqual([
+        ["paseo:event:navigate-history", { direction: "back" }],
+        ["paseo:event:navigate-history", { direction: "forward" }],
+        ["paseo:event:navigate-history", { direction: "back" }],
+        ["paseo:event:navigate-history", { direction: "forward" }],
+      ]);
+    });
+
+    it("ignores unrelated gestures and destroyed windows", () => {
+      const live = fakeWindow();
+      live.emit("swipe", "up");
+      live.emit("app-command", "media-play-pause");
+      expect(live.send).not.toHaveBeenCalled();
+
+      const closed = fakeWindow(true);
+      closed.emit("swipe", "left");
+      expect(closed.send).not.toHaveBeenCalled();
     });
   });
 });

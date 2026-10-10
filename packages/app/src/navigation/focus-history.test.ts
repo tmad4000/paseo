@@ -87,4 +87,109 @@ describe("navigation focus history", () => {
 
     expect(history.back()).toEqual(workspaceLocation);
   });
+
+  it("moves forward again after going back, like a browser", () => {
+    const history = createNavigationFocusHistory();
+    const first = workspace("workspace-a", "agent-a");
+    const second = workspace("workspace-b", "agent-b");
+    const third = workspace("workspace-c", "agent-c");
+    history.record(first);
+    history.record(second);
+    history.record(third);
+
+    expect(history.back()).toEqual(second);
+    history.record(second);
+    expect(history.back()).toEqual(first);
+    history.record(first);
+    expect(history.getSnapshot()).toMatchObject({ canGoBack: false, canGoForward: true });
+
+    expect(history.forward()).toEqual(second);
+    history.record(second);
+    expect(history.forward()).toEqual(third);
+    history.record(third);
+    expect(history.getSnapshot()).toMatchObject({
+      current: third,
+      canGoBack: true,
+      canGoForward: false,
+    });
+  });
+
+  it("drops the forward branch when focusing somewhere new", () => {
+    const history = createNavigationFocusHistory();
+    const first = workspace("workspace-a", "agent-a");
+    const second = workspace("workspace-b", "agent-b");
+    const elsewhere = workspace("workspace-d", "agent-d");
+    history.record(first);
+    history.record(second);
+    history.back();
+    history.record(first);
+
+    history.record(elsewhere);
+
+    expect(history.getSnapshot().canGoForward).toBe(false);
+    expect(history.back()).toEqual(first);
+  });
+
+  it("disables both directions while a restore is in flight", () => {
+    const history = createNavigationFocusHistory();
+    history.record(workspace("workspace-a", "agent-a"));
+    history.record(workspace("workspace-b", "agent-b"));
+    history.record(workspace("workspace-c", "agent-c"));
+    history.back();
+
+    expect(history.getSnapshot()).toMatchObject({
+      canGoBack: false,
+      canGoForward: false,
+      restoring: true,
+    });
+    expect(history.back()).toBeNull();
+    expect(history.forward()).toBeNull();
+  });
+
+  it("skips a target whose restore failed instead of failing on it again", () => {
+    const history = createNavigationFocusHistory();
+    const first = workspace("workspace-a", "agent-a");
+    const deleted = workspace("workspace-gone", "agent-x");
+    const current = workspace("workspace-c", "agent-c");
+    history.record(first);
+    history.record(deleted);
+    history.record(current);
+
+    expect(history.back()).toEqual(deleted);
+    history.cancelRestore();
+
+    expect(history.getSnapshot()).toMatchObject({ current, canGoForward: false, restoring: false });
+    expect(history.back()).toEqual(first);
+  });
+
+  it("settles a restore that changed nothing on screen, keeping what is focused", () => {
+    const history = createNavigationFocusHistory();
+    const closedTab = workspace("workspace-a", "agent-closed");
+    const current = workspace("workspace-a", "agent-b");
+    history.record(closedTab);
+    history.record(current);
+
+    expect(history.back()).toEqual(closedTab);
+    history.settleRestore(current);
+
+    expect(history.getSnapshot()).toMatchObject({ current, restoring: false, canGoForward: true });
+    history.record(workspace("workspace-z", "agent-z"));
+    expect(history.back()).toEqual(current);
+  });
+
+  it("treats a cross-route restore that never arrived as failed", () => {
+    const history = createNavigationFocusHistory();
+    const first = workspace("workspace-a", "agent-a");
+    const unreachable = workspace("workspace-b", "agent-b");
+    const current = workspace("workspace-c", "agent-c");
+    history.record(first);
+    history.record(unreachable);
+    history.record(current);
+
+    history.back();
+    history.settleRestore(current);
+
+    expect(history.getSnapshot()).toMatchObject({ current, restoring: false });
+    expect(history.back()).toEqual(first);
+  });
 });

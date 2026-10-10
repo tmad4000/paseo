@@ -230,6 +230,40 @@ export function setupWindowResizeEvents(win: BrowserWindow): void {
   win.on("leave-full-screen", notifyResized);
 }
 
+export type WindowNavigationDirection = "back" | "forward";
+
+export function navigationDirectionForSwipe(direction: string): WindowNavigationDirection | null {
+  // Same mapping as VS Code's swipe-to-navigate.
+  if (direction === "left") return "back";
+  if (direction === "right") return "forward";
+  return null;
+}
+
+export function navigationDirectionForAppCommand(
+  command: string,
+): WindowNavigationDirection | null {
+  if (command === "browser-backward") return "back";
+  if (command === "browser-forward") return "forward";
+  return null;
+}
+
+/**
+ * Trackpad page swipes (macOS, with "Swipe between pages" set to three fingers) and
+ * the Windows/Linux browser back/forward app commands reach the window, not the page.
+ * Forward them to the renderer's focus history.
+ */
+export function setupNavigationGestureEvents(win: BrowserWindow): void {
+  const send = (direction: WindowNavigationDirection | null) => {
+    if (!direction || win.isDestroyed() || win.webContents.isDestroyed()) {
+      return;
+    }
+    win.webContents.send("paseo:event:navigate-history", { direction });
+  };
+
+  win.on("swipe", (_event, direction) => send(navigationDirectionForSwipe(direction)));
+  win.on("app-command", (_event, command) => send(navigationDirectionForAppCommand(command)));
+}
+
 /**
  * Persist the window's size/position/maximized state so it can be restored on
  * the next launch. Debounces disk writes on resize/move, writes immediately on

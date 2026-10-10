@@ -25,7 +25,10 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import invariant from "tiny-invariant";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
-import { NavigationBackButton } from "@/components/headers/navigation-back-button";
+import {
+  NavigationBackButton,
+  NavigationForwardButton,
+} from "@/components/headers/navigation-back-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HostBadge } from "@/hosts/host-badge";
@@ -262,6 +265,7 @@ const GATED_WORKSPACE_HEADER_LEFT = (
   <>
     <SidebarMenuToggle />
     <NavigationBackButton />
+    <NavigationForwardButton />
   </>
 );
 
@@ -4015,6 +4019,7 @@ function WorkspaceScreenContent({
             <>
               <SidebarMenuToggle />
               <NavigationBackButton />
+              <NavigationForwardButton />
               <WorkspaceHeaderTitleBar
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}

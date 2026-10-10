@@ -60,6 +60,8 @@ export const fr: TranslationResources = {
     actions: {
       back: "Dos",
       navigateBack: "Revenir en arrière",
+      forward: "Suivant",
+      navigateForward: "Aller en avant",
       cancel: "Annuler",
       close: "Fermer",
       copy: "Copie",
