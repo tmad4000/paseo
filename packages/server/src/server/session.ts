@@ -164,6 +164,7 @@ import {
   type WorkspaceMutation,
   type WorkspaceRegistry,
 } from "./workspace-registry.js";
+import { setProjectDefault, setProjectPinned } from "./project-pins.js";
 import { isVoicePermissionAllowed } from "./voice-permission-policy.js";
 import {
   ProjectIconReader,
@@ -3078,6 +3079,10 @@ export class Session {
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
+      case "project.pin.set.request":
+        return this.handleProjectPinSetRequest(msg);
+      case "project.default.set.request":
+        return this.handleProjectDefaultSetRequest(msg);
       default:
         return undefined;
     }
@@ -4089,6 +4094,75 @@ export class Session {
           error: getErrorMessageOr(error, "Failed to set workspace title"),
         },
       });
+    }
+  }
+
+  private async handleProjectPinSetRequest(
+    request: Extract<SessionInboundMessage, { type: "project.pin.set.request" }>,
+  ): Promise<void> {
+    const { projectId, pinned, requestId } = request;
+    const logContext = { projectId, pinned, requestId };
+    this.sessionLogger.info(logContext, "session: project.pin.set.request");
+    const emitResponse = (accepted: boolean, pinnedAt: string | null, error: string | null) => {
+      this.emit({
+        type: "project.pin.set.response",
+        payload: { requestId, projectId, accepted, pinnedAt, error },
+      });
+    };
+    try {
+      const updated = await setProjectPinned({
+        registry: this.projectRegistry,
+        projectId,
+        pinned,
+        now: new Date().toISOString(),
+      });
+      if (!updated) {
+        emitResponse(false, null, "Project not found");
+        return;
+      }
+      emitResponse(true, updated.pinnedAt ?? null, null);
+      // The registry mutation also broadcasts to every client; this keeps the requester current
+      // even when it is the only observer, matching project rename.
+      await this.emitProjectUpdate({ kind: "upsert", project: updated });
+    } catch (error) {
+      this.sessionLogger.error({ ...logContext, err: error }, "session: project.pin.set.request error");
+      emitResponse(false, null, getErrorMessageOr(error, "Failed to pin project"));
+    }
+  }
+
+  private async handleProjectDefaultSetRequest(
+    request: Extract<SessionInboundMessage, { type: "project.default.set.request" }>,
+  ): Promise<void> {
+    const { projectId, isDefault, requestId } = request;
+    const logContext = { projectId, isDefault, requestId };
+    this.sessionLogger.info(logContext, "session: project.default.set.request");
+    const emitResponse = (accepted: boolean, defaultAt: string | null, error: string | null) => {
+      this.emit({
+        type: "project.default.set.response",
+        payload: { requestId, projectId, accepted, defaultAt, error },
+      });
+    };
+    try {
+      const result = await setProjectDefault({
+        registry: this.projectRegistry,
+        projectId,
+        isDefault,
+        now: new Date().toISOString(),
+      });
+      if (!result.project) {
+        emitResponse(false, null, "Project not found");
+        return;
+      }
+      emitResponse(true, result.project.defaultAt ?? null, null);
+      for (const project of result.changed) {
+        await this.emitProjectUpdate({ kind: "upsert", project });
+      }
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: project.default.set.request error",
+      );
+      emitResponse(false, null, getErrorMessageOr(error, "Failed to set the default project"));
     }
   }
 
@@ -6254,6 +6328,9 @@ export class Session {
       projectIconRevision: icon.revision,
       projectRootPath: project.rootPath,
       projectKind: project.kind,
+      // Omitted rather than null when unset so pre-pinning clients see an unchanged payload.
+      ...(project.pinnedAt ? { projectPinnedAt: project.pinnedAt } : {}),
+      ...(project.defaultAt ? { projectDefaultAt: project.defaultAt } : {}),
     };
   }
 

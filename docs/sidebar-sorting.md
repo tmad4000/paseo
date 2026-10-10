@@ -26,6 +26,19 @@ creation time when its assistant clock is unknown. A known original timestamp wi
 when it predates an imported conversation's creation time. Reopening, refreshing undated history,
 or reconnecting does not synthesize new activity.
 
+## Pinned projects
+
+Pinned projects lead the project list in every sort mode, above a divider, the way pinned rows
+keep their order. The Default project comes first, then the order you dragged pinned projects
+into, then most recently pinned. That drag order is per device and separate from Manual order,
+so dragging a pinned project never switches the sort mode. Pinned projects still collapse,
+filter and list their workspaces like any other project. Pin state and the Default live on the
+host's project record (`~/.paseo/projects/projects.json`), so the phone and desktop agree; the
+actions hide on hosts that do not advertise `projectPinning`. Making a grouped project the
+default applies it on each of its hosts; the host Workspaces settings page sets one host only.
+
+## Host compatibility
+
 All three message sorts require every selected host to advertise `conversationMessageActivity`.
 Until server info arrives, or while an older host is selected, the sidebar uses stored manual order
 and retains the user's selected preference. Known older hosts show an update notice and disable the

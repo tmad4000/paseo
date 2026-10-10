@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "프로젝트 고정",
+      unpin: "프로젝트 고정 해제",
+      makeDefault: "기본 프로젝트로 설정",
+      removeDefault: "기본 프로젝트에서 제거",
+    },
+    badges: {
+      default: "기본 프로젝트",
+      pinned: "고정된 프로젝트",
+    },
+    commandCenter: {
+      goToDefault: "기본 프로젝트로 이동",
+      pinCurrent: "현재 프로젝트 고정",
+      unpinCurrent: "현재 프로젝트 고정 해제",
+      makeCurrentDefault: "현재 프로젝트를 기본으로 설정",
+      removeCurrentDefault: "현재 프로젝트를 기본에서 제거",
+    },
+    settings: {
+      title: "기본 프로젝트",
+      hint: "Quick launch와 New conversation이 여기에서 시작됩니다.",
+      updateHost: "기본 프로젝트를 선택하려면 이 호스트를 업데이트하세요.",
+      none: "없음",
+      accessibilityLabel: "기본 프로젝트: {{value}}",
+    },
+    toasts: {
+      failed: "프로젝트를 업데이트할 수 없습니다",
+      hostDisconnected: "호스트가 연결되어 있지 않습니다",
+    },
+  },
   sessionPins: {
     title: "고정된 세션",
     pin: "세션 고정",

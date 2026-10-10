@@ -185,6 +185,9 @@ export interface ProjectDescriptor {
   projectIconRevision?: string;
   projectRootPath: string;
   projectKind: WorkspaceDescriptorPayload["projectKind"];
+  // Pinned / Default project timestamps. Old hosts omit them; see `@/default-project`.
+  projectPinnedAt?: string | null;
+  projectDefaultAt?: string | null;
 }
 
 export function normalizeProjectDescriptor(
@@ -199,6 +202,9 @@ export function normalizeProjectDescriptor(
     projectIconRevision: payload.projectIconRevision,
     projectRootPath: payload.projectRootPath,
     projectKind: payload.projectKind,
+    // Present only when set, so unpinned descriptors keep their pre-pinning shape.
+    ...(payload.projectPinnedAt ? { projectPinnedAt: payload.projectPinnedAt } : {}),
+    ...(payload.projectDefaultAt ? { projectDefaultAt: payload.projectDefaultAt } : {}),
   };
 }
 

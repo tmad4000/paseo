@@ -43,6 +43,12 @@ const PersistedProjectRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // ISO timestamp of when the user pinned the project; absent or null means unpinned.
+  // Optional output so records written before pinning existed stay byte-identical.
+  pinnedAt: z.string().nullable().optional(),
+  // ISO timestamp of when the project became this host's Default project. At most one active
+  // project carries it; if a race ever leaves two, the newest timestamp wins on every reader.
+  defaultAt: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -648,6 +654,8 @@ export function createPersistedProjectRecord(input: {
   customName?: string | null;
   projectKey?: string | null;
   customIconRevision?: string | null;
+  pinnedAt?: string | null;
+  defaultAt?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
