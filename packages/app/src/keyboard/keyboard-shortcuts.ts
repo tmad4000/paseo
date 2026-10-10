@@ -159,6 +159,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "search-files",
     "navigation-back",
     "navigation-forward",
+    "recent-sessions",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -168,6 +169,8 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "new-workspace",
     "quick-launch",
     "workspace-jump-index",
+    "workspace-recent-next",
+    "workspace-recent-previous",
     "workspace-prev",
     "workspace-next",
     "pin-workspace",
@@ -223,6 +226,9 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
   "navigation-back": "common.actions.back",
   "navigation-forward": "common.actions.forward",
+  "recent-sessions": "shell.recentSessions.title",
+  "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
+  "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
   "workspace-next": "settings.shortcuts.help.nextWorkspace",
   "workspace-tab-prev": "settings.shortcuts.help.previousTab",
@@ -766,6 +772,60 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-next",
       section: "workspaces",
       label: "Next workspace",
+    },
+  },
+
+  // --- Recent sessions (fork) ---
+  // Opens Cmd+K on the recent-sessions list; the header's Recent button shows the same list.
+  {
+    id: "recent-sessions-cmd-alt-r-mac",
+    action: "recent-sessions.open",
+    combo: "Cmd+Alt+R",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
+    },
+  },
+  {
+    id: "recent-sessions-ctrl-alt-r-non-mac",
+    action: "recent-sessions.open",
+    combo: "Ctrl+Alt+R",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
+    },
+  },
+
+  // --- Recent workspaces (fork) ---
+  // Hold Control and tap Tab to walk most-recently-used workspaces; release to switch.
+  // Desktop only: browsers own Ctrl+Tab, and Ctrl+` already toggles the right sidebar. On
+  // web, Cmd+K lists recent workspaces first and Back/Forward offer a history menu.
+  {
+    id: "workspace-recent-ctrl-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-recent-next",
+      section: "workspaces",
+      label: "Switch to recent workspace",
+    },
+  },
+  {
+    id: "workspace-recent-ctrl-shift-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Shift+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-recent-previous",
+      section: "workspaces",
+      label: "Switch to least recent workspace",
     },
   },
 

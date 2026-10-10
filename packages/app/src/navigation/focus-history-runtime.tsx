@@ -12,6 +12,7 @@ import {
   useWorkspaceLayoutStoreHydrated,
 } from "@/stores/workspace-layout-store";
 import { usePanelStore } from "@/stores/panel-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
@@ -123,15 +124,18 @@ let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function navigateInFocusHistory(
   direction: NavigationFocusHistoryDirection,
-  input: { isCompact: boolean },
+  input: { isCompact: boolean; steps?: number },
 ): boolean {
   // A second press while the first is still landing belongs to history, not to
   // whatever fallback the caller runs when there is nowhere to go.
   if (navigationFocusHistory.getSnapshot().restoring) {
     return true;
   }
+  const steps = input.steps ?? 1;
   const location =
-    direction === "back" ? navigationFocusHistory.back() : navigationFocusHistory.forward();
+    direction === "back"
+      ? navigationFocusHistory.back(steps)
+      : navigationFocusHistory.forward(steps);
   if (!location) {
     return false;
   }
@@ -186,6 +190,16 @@ export function useCanNavigateBackInFocusHistory(): boolean {
   );
 }
 
+export function useFocusHistoryEntries(
+  direction: NavigationFocusHistoryDirection,
+): readonly NavigationFocusLocation[] {
+  return useSyncExternalStore(
+    navigationFocusHistory.subscribe,
+    () => navigationFocusHistory.getSnapshot()[`${direction}Entries`],
+    () => navigationFocusHistory.getSnapshot()[`${direction}Entries`],
+  );
+}
+
 export function useCanNavigateForwardInFocusHistory(): boolean {
   return useSyncExternalStore(
     navigationFocusHistory.subscribe,
@@ -224,14 +238,21 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
     }
     if (workspaceSelection) {
       if (!hasHydratedWorkspaceLayoutStore) {
+        useRecentVisitsStore.getState().touch({ ...workspaceSelection, agentId: null });
         return;
       }
-      latestObservedLocation = buildWorkspaceFocusLocation({
+      const location = buildWorkspaceFocusLocation({
         ...workspaceSelection,
         layout,
         view,
       });
-      navigationFocusHistory.record(latestObservedLocation);
+      latestObservedLocation = location;
+      useRecentVisitsStore.getState().touch({
+        serverId: location.serverId,
+        workspaceId: location.workspaceId,
+        agentId: location.target?.kind === "agent" ? location.target.agentId : null,
+      });
+      navigationFocusHistory.record(location);
       return;
     }
 

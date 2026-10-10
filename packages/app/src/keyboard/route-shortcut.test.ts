@@ -356,6 +356,22 @@ describe("routeKeyboardShortcut — settings.toggle", () => {
   });
 });
 
+describe("routeKeyboardShortcut — recent sessions", () => {
+  it("recent-sessions.open → command center on the recent list", () => {
+    expect(
+      routeKeyboardShortcut({ action: "recent-sessions.open", payload: null }, makeCtx()),
+    ).toEqual<ShortcutAction>({ kind: "command-center-toggle", nextOpen: true, scope: "recent" });
+  });
+});
+
+describe("routeKeyboardShortcut — recent workspaces", () => {
+  it.each([1, -1] as const)("workspace.recent.switch delta %s → switcher", (delta) => {
+    expect(
+      routeKeyboardShortcut({ action: "workspace.recent.switch", payload: { delta } }, makeCtx()),
+    ).toEqual<ShortcutAction>({ kind: "recent-workspace-switch", direction: delta });
+  });
+});
+
 describe("routeKeyboardShortcut — callbacks and pickers", () => {
   it.each([
     ["sidebar.toggle.left", "toggle-agent-list"],

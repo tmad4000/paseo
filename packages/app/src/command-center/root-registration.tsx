@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   CalendarClock,
   CircleDashed,
+  Clock,
   Folder,
   FolderPlus,
   History,
@@ -49,6 +50,9 @@ const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
 const ThemedHistory = withUnistyles(History, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
+const ThemedClock = withUnistyles(Clock, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
 const ThemedCalendarClock = withUnistyles(CalendarClock, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
@@ -87,6 +91,10 @@ function SettingsIcon({ size }: CommandCenterIconProps) {
 
 function HistoryIcon({ size }: CommandCenterIconProps) {
   return <ThemedHistory size={size} strokeWidth={2.2} />;
+}
+
+function RecentSessionsIcon({ size }: CommandCenterIconProps) {
+  return <ThemedClock size={size} strokeWidth={2.2} />;
 }
 
 function SchedulesIcon({ size }: CommandCenterIconProps) {
@@ -255,6 +263,29 @@ export function CommandCenterRootActions() {
           title: t("sidebar.sections.sessions"),
           sectionTitle: t("shell.commandCenter.actions"),
           icon: HistoryIcon,
+        },
+      },
+      {
+        id: "recent-sessions",
+        group: "actions",
+        groupRank: 0,
+        rank: 4,
+        keywords: ["recent", "sessions", "agents", "chats", "switch", "last"],
+        visibility: "always",
+        // Switch Cmd+K to the recent list in place: closing and reopening would lose the
+        // focus-restore target and race a phone's sheet dismissal.
+        keepOpen: true,
+        run: () => {
+          useKeyboardShortcutsStore.getState().setCommandCenterScope("recent");
+        },
+        presentation: {
+          kind: "action",
+          title: t("shell.recentSessions.commandTitle"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: RecentSessionsIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("recent-sessions", overrides, shortcutPlatform) ??
+            undefined,
         },
       },
       {

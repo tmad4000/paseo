@@ -26,6 +26,8 @@ export type KeyboardActionId =
   | "workspace.tab.target.files"
   | "navigation.back"
   | "navigation.forward"
+  | "workspace.recent.switch"
+  | "recent-sessions.open"
   | "workspace.tab.close.current"
   | "workspace.tab.navigate.index"
   | "workspace.tab.navigate.relative"
