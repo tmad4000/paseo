@@ -143,6 +143,24 @@ export const es: TranslationResources = {
       open: "abrir menú",
       close: "Cerrar menú",
     },
+    recentWorkspaces: {
+      title: "Espacios de trabajo recientes",
+      current: "Actual",
+      hint: "Suelta Ctrl para cambiar · ↑ ↓ para moverte · Esc para cancelar",
+      tabs: {
+        terminal: "Terminal",
+        browser: "Navegador",
+      },
+      routes: {
+        settings: "Ajustes",
+        openProject: "Abrir proyecto",
+        new: "Nuevo espacio de trabajo",
+        sessions: "Historial",
+        schedules: "Programaciones",
+        views: "Vistas",
+        pairScan: "Vincular dispositivo",
+      },
+    },
     commandCenter: {
       placeholder: "Buscar comandos, archivos, espacios de trabajo y agentes...",
       filePlaceholder: "Buscar archivos...",
@@ -2631,6 +2649,8 @@ export const es: TranslationResources = {
         closeCurrentTab: "Cerrar pestaña actual",
         jumpToWorkspace: "Saltar al espacio de trabajo",
         jumpToTab: "Saltar a la pestaña",
+        recentWorkspace: "Cambiar a un espacio de trabajo reciente",
+        leastRecentWorkspace: "Cambiar al espacio de trabajo menos reciente",
         previousWorkspace: "Espacio de trabajo anterior",
         nextWorkspace: "Siguiente espacio de trabajo",
         previousTab: "Pestaña anterior",

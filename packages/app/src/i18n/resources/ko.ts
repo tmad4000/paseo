@@ -142,6 +142,24 @@ export const ko: TranslationResources = {
       open: "메뉴 열기",
       close: "메뉴 닫기",
     },
+    recentWorkspaces: {
+      title: "최근 워크스페이스",
+      current: "현재",
+      hint: "Ctrl을 놓으면 전환 · ↑ ↓ 이동 · Esc 취소",
+      tabs: {
+        terminal: "터미널",
+        browser: "브라우저",
+      },
+      routes: {
+        settings: "설정",
+        openProject: "프로젝트 열기",
+        new: "새 워크스페이스",
+        sessions: "기록",
+        schedules: "일정",
+        views: "뷰",
+        pairScan: "기기 페어링",
+      },
+    },
     commandCenter: {
       placeholder: "명령, 파일, 워크스페이스 및 에이전트 검색...",
       filePlaceholder: "파일 검색...",
@@ -2585,6 +2603,8 @@ export const ko: TranslationResources = {
         closeCurrentTab: "현재 탭 닫기",
         jumpToWorkspace: "워크스페이스로 이동",
         jumpToTab: "탭으로 이동",
+        recentWorkspace: "최근 워크스페이스로 전환",
+        leastRecentWorkspace: "가장 오래된 워크스페이스로 전환",
         previousWorkspace: "이전 워크스페이스",
         nextWorkspace: "다음 워크스페이스",
         previousTab: "이전 탭",

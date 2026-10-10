@@ -212,4 +212,40 @@ describe("navigation focus history", () => {
     expect(history.getSnapshot()).toMatchObject({ current, restoring: false });
     expect(history.back()).toEqual(first);
   });
+
+  it("jumps several steps from the history menu and walks forward through the skipped ones", () => {
+    const history = createNavigationFocusHistory();
+    const [a, b, c, d] = ["a", "b", "c", "d"].map((id) => workspace(`workspace-${id}`, id));
+    for (const location of [a, b, c, d]) history.record(location);
+
+    expect(history.getSnapshot().backEntries).toEqual([c, b, a]);
+    expect(history.back(2)).toEqual(b);
+    history.record(b);
+
+    expect(history.getSnapshot()).toMatchObject({ backEntries: [a], forwardEntries: [c, d] });
+    expect(history.forward()).toEqual(c);
+    history.record(c);
+    expect(history.forward()).toEqual(d);
+  });
+
+  it("refuses a jump longer than the history", () => {
+    const history = createNavigationFocusHistory();
+    history.record(workspace("workspace-a", "a"));
+    history.record(workspace("workspace-b", "b"));
+
+    expect(history.back(2)).toBeNull();
+    expect(history.back(0)).toBeNull();
+    expect(history.getSnapshot()).toMatchObject({ restoring: false, canGoBack: true });
+  });
+
+  it("drops only the unreachable entry when a multi-step jump fails", () => {
+    const history = createNavigationFocusHistory();
+    const [a, gone, c, d] = ["a", "gone", "c", "d"].map((id) => workspace(`workspace-${id}`, id));
+    for (const location of [a, gone, c, d]) history.record(location);
+
+    expect(history.back(2)).toEqual(gone);
+    history.cancelRestore();
+
+    expect(history.getSnapshot()).toMatchObject({ current: d, backEntries: [c, a] });
+  });
 });

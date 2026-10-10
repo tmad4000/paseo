@@ -235,6 +235,20 @@ describe("keyboard-shortcuts", () => {
       action: "navigation.back",
     },
     {
+      name: "matches the recent-workspace switcher on desktop via Ctrl+Tab",
+      event: { key: "Tab", code: "Tab", ctrlKey: true },
+      context: { isDesktop: true },
+      action: "workspace.recent.switch",
+      payload: { delta: 1 },
+    },
+    {
+      name: "matches the reverse recent-workspace switcher on desktop via Ctrl+Shift+Tab",
+      event: { key: "Tab", code: "Tab", ctrlKey: true, shiftKey: true },
+      context: { isDesktop: true },
+      action: "workspace.recent.switch",
+      payload: { delta: -1 },
+    },
+    {
       name: "matches navigation forward via Mod+Alt+ArrowRight",
       event: { key: "ArrowRight", code: "ArrowRight", ctrlKey: true, altKey: true },
       context: { isDesktop: true },

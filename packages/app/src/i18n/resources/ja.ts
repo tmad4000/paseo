@@ -143,6 +143,24 @@ export const ja: TranslationResources = {
       open: "メニューを開く",
       close: "メニューを閉じる",
     },
+    recentWorkspaces: {
+      title: "最近のワークスペース",
+      current: "現在",
+      hint: "Ctrl を離すと切り替え · ↑ ↓ で移動 · Esc でキャンセル",
+      tabs: {
+        terminal: "ターミナル",
+        browser: "ブラウザ",
+      },
+      routes: {
+        settings: "設定",
+        openProject: "プロジェクトを開く",
+        new: "新しいワークスペース",
+        sessions: "履歴",
+        schedules: "スケジュール",
+        views: "ビュー",
+        pairScan: "デバイスをペアリング",
+      },
+    },
     commandCenter: {
       placeholder: "コマンド、ファイル、ワークスペース、エージェントを検索...",
       filePlaceholder: "ファイルを検索...",
@@ -2593,6 +2611,8 @@ export const ja: TranslationResources = {
         closeCurrentTab: "現在のタブを閉じる",
         jumpToWorkspace: "ワークスペースにジャンプ",
         jumpToTab: "タブにジャンプ",
+        recentWorkspace: "最近のワークスペースに切り替え",
+        leastRecentWorkspace: "最も古いワークスペースに切り替え",
         previousWorkspace: "前のワークスペース",
         nextWorkspace: "次のワークスペース",
         previousTab: "前のタブ",

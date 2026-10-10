@@ -142,6 +142,24 @@ export const ar: TranslationResources = {
       open: "فتح القائمة",
       close: "إغلاق القائمة",
     },
+    recentWorkspaces: {
+      title: "مساحات العمل الأخيرة",
+      current: "الحالية",
+      hint: "أفلت Ctrl للتبديل · ↑ ↓ للتنقل · Esc للإلغاء",
+      tabs: {
+        terminal: "الطرفية",
+        browser: "المتصفح",
+      },
+      routes: {
+        settings: "الإعدادات",
+        openProject: "فتح مشروع",
+        new: "مساحة عمل جديدة",
+        sessions: "السجل",
+        schedules: "الجداول",
+        views: "العروض",
+        pairScan: "إقران جهاز",
+      },
+    },
     commandCenter: {
       placeholder: "ابحث في الأوامر والملفات ومساحات العمل والوكلاء...",
       filePlaceholder: "البحث في الملفات...",
@@ -2572,6 +2590,8 @@ export const ar: TranslationResources = {
         closeCurrentTab: "إغلاق علامة التبويب الحالية",
         jumpToWorkspace: "انتقل إلى مساحة العمل",
         jumpToTab: "انتقل إلى علامة التبويب",
+        recentWorkspace: "التبديل إلى مساحة عمل حديثة",
+        leastRecentWorkspace: "التبديل إلى أقدم مساحة عمل",
         previousWorkspace: "مساحة العمل السابقة",
         nextWorkspace: "مساحة العمل التالية",
         previousTab: "علامة التبويب السابقة",

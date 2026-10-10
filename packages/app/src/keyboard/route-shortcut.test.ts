@@ -356,6 +356,14 @@ describe("routeKeyboardShortcut — settings.toggle", () => {
   });
 });
 
+describe("routeKeyboardShortcut — recent workspaces", () => {
+  it.each([1, -1] as const)("workspace.recent.switch delta %s → switcher", (delta) => {
+    expect(
+      routeKeyboardShortcut({ action: "workspace.recent.switch", payload: { delta } }, makeCtx()),
+    ).toEqual<ShortcutAction>({ kind: "recent-workspace-switch", direction: delta });
+  });
+});
+
 describe("routeKeyboardShortcut — callbacks and pickers", () => {
   it.each([
     ["sidebar.toggle.left", "toggle-agent-list"],
