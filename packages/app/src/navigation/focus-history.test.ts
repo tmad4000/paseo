@@ -162,18 +162,38 @@ describe("navigation focus history", () => {
     expect(history.back()).toEqual(first);
   });
 
-  it("settles a restore that changed nothing on screen, keeping what is focused", () => {
+  it("drops a target whose restore changed nothing on screen, without a phantom entry", () => {
     const history = createNavigationFocusHistory();
+    const first = workspace("workspace-a", "agent-a");
     const closedTab = workspace("workspace-a", "agent-closed");
     const current = workspace("workspace-a", "agent-b");
+    history.record(first);
     history.record(closedTab);
     history.record(current);
 
     expect(history.back()).toEqual(closedTab);
     history.settleRestore(current);
 
-    expect(history.getSnapshot()).toMatchObject({ current, restoring: false, canGoForward: true });
-    history.record(workspace("workspace-z", "agent-z"));
+    expect(history.getSnapshot()).toMatchObject({
+      current,
+      restoring: false,
+      canGoForward: false,
+    });
+    expect(history.back()).toEqual(first);
+  });
+
+  it("records where focus really landed when the target tab is gone", () => {
+    const history = createNavigationFocusHistory();
+    const closedTab = workspace("workspace-a", "agent-closed");
+    const current = workspace("workspace-b", "agent-b");
+    const landed = workspace("workspace-a", "agent-other");
+    history.record(closedTab);
+    history.record(current);
+
+    history.back();
+    history.settleRestore(landed);
+
+    expect(history.getSnapshot()).toMatchObject({ current: landed, canGoForward: false });
     expect(history.back()).toEqual(current);
   });
 

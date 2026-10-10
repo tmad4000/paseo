@@ -125,6 +125,11 @@ export function navigateInFocusHistory(
   direction: NavigationFocusHistoryDirection,
   input: { isCompact: boolean },
 ): boolean {
+  // A second press while the first is still landing belongs to history, not to
+  // whatever fallback the caller runs when there is nowhere to go.
+  if (navigationFocusHistory.getSnapshot().restoring) {
+    return true;
+  }
   const location =
     direction === "back" ? navigationFocusHistory.back() : navigationFocusHistory.forward();
   if (!location) {
@@ -319,7 +324,8 @@ export function useNavigationGestureHandlers({ enabled }: { enabled: boolean }):
         return;
       }
       const snapshot = navigationFocusHistory.getSnapshot();
-      const available = direction === "back" ? snapshot.canGoBack : snapshot.canGoForward;
+      const available =
+        snapshot.restoring || (direction === "back" ? snapshot.canGoBack : snapshot.canGoForward);
       if (!available) {
         return;
       }
