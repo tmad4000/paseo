@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { browserIdForUrl } from "@getpaseo/protocol/ui-browser-target";
 import {
   normalizeUiWorkspaceTabTarget,
   resolveUiTabCloseCommand,
@@ -201,5 +202,36 @@ describe("normalizeUiWorkspaceTabTarget", () => {
     expect(normalizeUiWorkspaceTabTarget({ kind: "file", path: " " })).toBeNull();
     expect(normalizeUiWorkspaceTabTarget({ kind: "setup", workspaceId: " " })).toBeNull();
     expect(normalizeUiWorkspaceTabTarget({ kind: "commit_diff", sha: " " })).toBeNull();
+  });
+
+  test("derives a stable browser id for a page and rejects non-http(s) pages", () => {
+    const url = "https://m4-mini.tailb2a35c.ts.net:8047/m4-checklist.html";
+    expect(normalizeUiWorkspaceTabTarget({ kind: "browser", url })).toEqual({
+      kind: "browser",
+      browserId: browserIdForUrl(url),
+      url,
+    });
+    expect(normalizeUiWorkspaceTabTarget({ kind: "browser", url: "file:///etc/hosts" })).toBeNull();
+    expect(normalizeUiWorkspaceTabTarget({ kind: "browser" })).toBeNull();
+    // A page target's id becomes a browser on every client, so it must be a real browser id.
+    expect(
+      normalizeUiWorkspaceTabTarget({ kind: "browser", browserId: "checklist", url }),
+    ).toBeNull();
+  });
+});
+
+describe("side placement", () => {
+  test("carries placement:side and omits the default", async () => {
+    const side = await resolveUiTabOpenCommand(
+      { workspaceId: "workspace-1", target: { kind: "draft" }, placement: "side" },
+      deps(),
+    );
+    // Side never takes focus, and says so for clients that predate placement.
+    expect(side.ok && side.command.payload).toMatchObject({ placement: "side", focus: false });
+    const main = await resolveUiTabOpenCommand(
+      { workspaceId: "workspace-1", target: { kind: "draft" }, placement: "main" },
+      deps(),
+    );
+    expect(main.ok && "placement" in main.command.payload).toBe(false);
   });
 });

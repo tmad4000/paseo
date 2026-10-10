@@ -1,3 +1,4 @@
+import { useSubthreadReplyLabel } from "@/subthreads/context";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -19,6 +20,7 @@ import {
   forwardRef,
 } from "react";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -1344,6 +1346,17 @@ function extractErrorMessage(error: unknown): string | null {
   return null;
 }
 
+/** Inside a subagents drawer the field is named for its recipient, not the generic agent. */
+function resolveInputAccessibilityLabel(
+  t: TFunction,
+  replyTargetLabel: string | null,
+  fallbackKey: string,
+): string {
+  return replyTargetLabel
+    ? t("subthreads.replyPlaceholder", { label: replyTargetLabel })
+    : t(fallbackKey);
+}
+
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
   function MessageInput(props, ref) {
     const {
@@ -1396,6 +1409,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     } = resolveMessageInputProps(props);
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
+    // In a parent's subagents drawer, the field's name says who receives it, for screen readers and voice control.
+    const replyTargetLabel = useSubthreadReplyLabel(voiceAgentId);
     const isCompact = useIsCompactFormFactor();
     const { height: windowHeight } = useWindowDimensions();
     const maxInputHeight = resolveMaxInputHeight(windowHeight);
@@ -2057,7 +2072,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               textInputStyle={textInputStyle}
               readOnlyTextStyle={readOnlyTextStyle}
               placeholder={placeholder ?? t("composer.placeholders.fallback")}
-              accessibilityLabel={t(mode.accessibilityLabelKey)}
+              accessibilityLabel={resolveInputAccessibilityLabel(
+                t,
+                replyTargetLabel,
+                mode.accessibilityLabelKey,
+              )}
               onChangeText={handleInputChange}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}

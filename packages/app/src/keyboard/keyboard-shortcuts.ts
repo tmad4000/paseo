@@ -201,6 +201,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   ],
   layout: ["toggle-left-sidebar", "toggle-right-sidebar", "toggle-both-sidebars", "toggle-focus"],
   "agent-input": [
+    "subthreads-toggle",
     "focus-message-input",
     "cycle-agent-mode",
     "voice-toggle",
@@ -214,6 +215,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "new-agent": "settings.shortcuts.help.openProject",
   "new-workspace": "settings.shortcuts.help.newWorkspace",
   "quick-launch": "quickLaunch.title",
+  "subthreads-toggle": "subthreads.shortcutHelp",
   "switch-project": "settings.shortcuts.help.switchProject",
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
@@ -345,6 +347,33 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "quick-launch",
       section: "workspaces",
       label: "Quick launch",
+    },
+  },
+
+  // --- Subthreads drawer ---
+  // J sits beside L (focus composer / Quick launch) and is free on every platform here. It fires
+  // from the composer because an orchestrator's user is usually typing when they want to check
+  // on a subthread; the handler is enabled only in the focused pane of an agent with subthreads.
+  {
+    id: "subthreads-toggle-cmd-shift-j-mac",
+    action: "agent.subthreads.toggle",
+    combo: "Cmd+Shift+J",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "subthreads-toggle",
+      section: "agent-input",
+      label: "Subthreads drawer",
+    },
+  },
+  {
+    id: "subthreads-toggle-ctrl-shift-j-non-mac",
+    action: "agent.subthreads.toggle",
+    combo: "Ctrl+Shift+J",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "subthreads-toggle",
+      section: "agent-input",
+      label: "Subthreads drawer",
     },
   },
 
