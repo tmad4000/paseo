@@ -25,6 +25,7 @@ export interface RouteFocusLocation {
 export type NavigationFocusLocation = WorkspaceFocusLocation | RouteFocusLocation;
 
 export interface NavigationFocusHistorySnapshot {
+  /** There is history that way and nothing is in flight; what the buttons show. */
   canGoBack: boolean;
   canGoForward: boolean;
   current: NavigationFocusLocation | null;
@@ -169,6 +170,16 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     return target;
   }
 
+  function visit(next: NavigationFocusLocation): boolean {
+    if (navigationFocusLocationsEqual(current, next)) {
+      return false;
+    }
+    past = push(past, current);
+    future = [];
+    current = next;
+    return true;
+  }
+
   // Put the stacks back, minus the target that could not be reached, so the next
   // Back or Forward skips it instead of failing on it again.
   function abandon(restore: PendingRestore): void {
@@ -207,13 +218,9 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
         return;
       }
 
-      if (navigationFocusLocationsEqual(current, next)) {
-        return;
+      if (visit(next)) {
+        publish();
       }
-      past = push(past, current);
-      future = [];
-      current = next;
-      publish();
     },
 
     back(steps = 1): NavigationFocusLocation | null {
@@ -237,16 +244,17 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     /**
      * Stop waiting for the restore to be observed. A restore that changes nothing on
      * screen (its tab already focused, or gone) never produces an observation, and
-     * history must not stay locked. `observed` is what is actually focused now.
+     * history must not stay locked. `observed` is what is actually focused now: if it
+     * is not the target, the target was unreachable, so it is dropped and wherever
+     * focus really is gets recorded as an ordinary visit.
      */
     settleRestore(observed: NavigationFocusLocation | null): void {
       if (!pending) {
         return;
       }
-      if (observed && navigationFocusLocationsShareRoute(observed, pending.target)) {
-        current = observed;
-      } else if (observed) {
+      if (observed && !navigationFocusLocationsEqual(observed, pending.target)) {
         abandon(pending);
+        visit(observed);
       }
       pending = null;
       publish();
