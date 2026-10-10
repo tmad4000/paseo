@@ -1,7 +1,7 @@
 # Find and route to existing chats
 
-The project sidebar combines its immediate project/title filter with deliberate intelligent Find
-and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
+The project sidebar combines its immediate [filter](sidebar-filter.md) (projects, workspaces, tab
+titles, and message text) with deliberate intelligent Find and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
 host/session, switches to Send, and restores the independent, persisted send draft. The destination
 chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Enter/Search in the
 filter field or choose Find to submit intelligent matching; typing alone keeps the ordinary filter.

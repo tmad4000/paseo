@@ -1330,6 +1330,16 @@ export const ptBR: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "Buscou em {{searched}} de {{total}} chats",
+        inMessages: "Nas mensagens",
+        searching: "Buscando nas mensagens...",
+        moreTabs: "+{{count}} a mais",
+        fewerTabs: "Mostrar menos",
+        enterHint: "Pressione Enter para a busca inteligente (Find)",
+        openTab: "Abrir {{title}}",
+        openMessage: "Abrir {{title}}: {{snippet}}",
+      },
       placeholder: "Filtrar projetos ou chats",
       clear: "Limpar filtro da barra lateral",
       sortHeading: "Ordenar chats",

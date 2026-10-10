@@ -1318,6 +1318,16 @@ export const ru: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "Просмотрено чатов: {{searched}} из {{total}}",
+        inMessages: "В сообщениях",
+        searching: "Поиск по сообщениям...",
+        moreTabs: "Ещё {{count}}",
+        fewerTabs: "Свернуть",
+        enterHint: "Нажмите Enter для умного поиска (Find)",
+        openTab: "Открыть {{title}}",
+        openMessage: "Открыть {{title}}: {{snippet}}",
+      },
       placeholder: "Фильтр проектов и чатов",
       clear: "Сбросить фильтр боковой панели",
       sortHeading: "Сортировка чатов",
