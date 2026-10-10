@@ -2545,6 +2545,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         },
       },
       async ({ target, workspaceId, focus, placement }) => {
+        // Putting a page in front of the user drives the desktop browser, so it follows the same
+        // policy as the browser tools: an agent without them cannot open URLs this way either.
+        if (target.kind === "browser" && target.url && !options.browserToolsEnabled) {
+          throw new Error(
+            "Opening a page requires browser tools for this agent. Link it with the session side panel instead (update_agent labels paseo.checklist-url and paseo.side-panel).",
+          );
+        }
         const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
         if (target.kind === "agent") {
           await updateAgentCommand(

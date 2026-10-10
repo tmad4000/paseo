@@ -55,6 +55,13 @@ Implementation notes that postdate the design:
 paseo ui open-tab --workspace <id> --url https://m4-mini.tailb2a35c.ts.net:8047/m4-checklist.html --side
 ```
 
+Guards: an agent's `open_tab` with a page URL follows the same policy as the browser tools
+(rejected when browser tools are off for that agent; the session side panel is the
+alternative). A caller-supplied `browserId` on a page target must be a real browser id. Side
+placement is also sent with `focus: false`, so clients that predate `placement` open it in the
+background instead of navigating. The host advertises all of this as `uiTabPlacement`; the CLI
+refuses `--side` and `--url` against a host without it.
+
 ## Why
 
 An orchestrator agent can call the daemon's MCP tools (`create_agent`,

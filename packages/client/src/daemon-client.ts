@@ -3946,6 +3946,11 @@ export class DaemonClient {
     return this.lastServerInfoMessage?.features?.uiCommands === true;
   }
 
+  /** Side placement, page targets, and ui.command delivery to modern clients. */
+  supportsUiTabPlacement(): boolean {
+    return this.lastServerInfoMessage?.features?.uiTabPlacement === true;
+  }
+
   /**
    * Ask the attached app clients to open a tab in a workspace view. The daemon
    * validates the workspace and broadcasts; `deliveredTo` reports how many

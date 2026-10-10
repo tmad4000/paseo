@@ -87,4 +87,24 @@ describe("showWorkspaceTargetBeside", () => {
     expect(layout().focusedPaneId).toBe(focusedBefore);
     expect(findPaneById(layout().root, focusedBefore)?.tabIds).toHaveLength(2);
   });
+
+  it("does not change the main pane's visible tab when the target already lives there", () => {
+    const store = useWorkspaceLayoutStore.getState();
+    const mainTab = store.openTab({
+      workspaceKey: WORKSPACE_KEY,
+      target: { kind: "file", path: "CHECKLIST.md" },
+      intent: "background",
+    });
+    const mainPaneId = layout().focusedPaneId;
+    const visibleBefore = findPaneById(layout().root, mainPaneId)?.focusedTabId;
+    expect(visibleBefore).not.toBe(mainTab);
+    const shown = showWorkspaceTargetBeside({
+      workspaceKey: WORKSPACE_KEY,
+      target: { kind: "file", path: "CHECKLIST.md" },
+      isCompact: false,
+    });
+    expect(shown).toBe(mainTab);
+    expect(findPaneById(layout().root, mainPaneId)?.focusedTabId).toBe(visibleBefore);
+    expect(layout().focusedPaneId).toBe(mainPaneId);
+  });
 });

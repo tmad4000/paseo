@@ -259,6 +259,13 @@ export async function runOpenTabCommand(
       } satisfies CommandError;
     }
 
+    if ((options.side || options.url) && !client.supportsUiTabPlacement()) {
+      throw {
+        code: "UNSUPPORTED_DAEMON",
+        message: "--side and --url need a newer host. Update the host to use them.",
+      } satisfies CommandError;
+    }
+
     const workspaceId = await resolveWorkspaceId(client, workspaceQuery);
     // --setup names the workspace being set up, which is the one we resolved.
     const resolvedTarget: UiWorkspaceTabTarget =

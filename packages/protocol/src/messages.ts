@@ -4299,6 +4299,9 @@ export const ServerInfoStatusPayloadSchema = z
         agentConfigApply: z.boolean().optional(),
         // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
         uiCommands: z.boolean().optional(),
+        // COMPAT(uiTabPlacement): fork 0.10.0-beta.12; side placement, page targets, and
+        // ui.command delivery to modern clients. Remove after 2027-04-10.
+        uiTabPlacement: z.boolean().optional(),
       })
       .optional(),
   })

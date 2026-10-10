@@ -213,6 +213,10 @@ describe("normalizeUiWorkspaceTabTarget", () => {
     });
     expect(normalizeUiWorkspaceTabTarget({ kind: "browser", url: "file:///etc/hosts" })).toBeNull();
     expect(normalizeUiWorkspaceTabTarget({ kind: "browser" })).toBeNull();
+    // A page target's id becomes a browser on every client, so it must be a real browser id.
+    expect(
+      normalizeUiWorkspaceTabTarget({ kind: "browser", browserId: "checklist", url }),
+    ).toBeNull();
   });
 });
 
@@ -222,7 +226,8 @@ describe("side placement", () => {
       { workspaceId: "workspace-1", target: { kind: "draft" }, placement: "side" },
       deps(),
     );
-    expect(side.ok && side.command.payload).toMatchObject({ placement: "side" });
+    // Side never takes focus, and says so for clients that predate placement.
+    expect(side.ok && side.command.payload).toMatchObject({ placement: "side", focus: false });
     const main = await resolveUiTabOpenCommand(
       { workspaceId: "workspace-1", target: { kind: "draft" }, placement: "main" },
       deps(),

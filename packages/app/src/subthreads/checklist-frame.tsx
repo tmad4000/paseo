@@ -22,7 +22,10 @@ export function ChecklistFrame({ url, title, reloadKey }: ChecklistFrameProps): 
   const source = useMemo(() => ({ uri: url }), [url]);
   const checklistHost = useMemo(() => hostOf(url), [url]);
   const handleShouldStart = useCallback(
-    (request: WebViewNavigation) => {
+    (request: WebViewNavigation & { isTopFrame?: boolean }) => {
+      // Only the page itself is contained; its own embedded frames load as they would in a
+      // browser (iOS asks about subframes too).
+      if (request.isTopFrame === false || request.url === "about:blank") return true;
       if (checklistHost !== null && hostOf(request.url) === checklistHost) return true;
       if (/^https?:/i.test(request.url)) void openExternalUrl(request.url);
       return false;

@@ -56,6 +56,7 @@ import {
   type SubthreadRow,
   type SubthreadSelection,
   type SubthreadsDrawerEvent,
+  type SubthreadsDrawerState,
   type SubthreadsFocus,
 } from "./model";
 import {
@@ -118,10 +119,8 @@ export function SubthreadsHost({
   const { rows, summary } = useSubthreadRows({ serverId, parentAgentId: agentId });
   const selected = resolveSelectedSubthread(rows, state.selection);
   const coversParent = isCompact || (paneWidth !== null && paneWidth < SIDE_BY_SIDE_MIN_WIDTH);
-  const { parentLabel, parentCwd, sidePanelLabel, checklistUrl } = useSessionSidePanelSource(
-    serverId,
-    agentId,
-  );
+  const { parentKnown, parentLabel, parentCwd, sidePanelLabel, checklistUrl } =
+    useSessionSidePanelSource(serverId, agentId);
   // COMPAT(companionStream): without a linked page the checklist is this session's Stream.
   const streamSupported = useHostFeature(serverId, "companionStream");
   const hasSubagents = rows.length > 0;
@@ -137,17 +136,7 @@ export function SubthreadsHost({
     drawerCoversParent: coversParent,
   });
 
-  // The session's stored choice wins whenever it changes: an agent asked for a checklist, the
-  // user closed the panel on another device, or the app reloaded. Absent label: no opinion.
-  // Clearing the label (MCP `update_agent` with null) closes too; it is a choice, not silence.
-  const labelPanel = parseSidePanelLabel(sidePanelLabel);
-  const previousLabelPanelRef = useRef(labelPanel);
-  useEffect(() => {
-    const previous = previousLabelPanelRef.current;
-    previousLabelPanelRef.current = labelPanel;
-    if (labelPanel !== undefined) dispatch({ type: "apply-label", panel: labelPanel });
-    else if (previous !== undefined) dispatch({ type: "apply-label", panel: null });
-  }, [labelPanel]);
+  useApplySidePanelLabel({ parentKnown, sidePanelLabel, coversParent, stateRef, dispatch });
 
   // User gestures write the label back, so the choice persists for this session. Programmatic
   // changes arrive through the label and are never echoed.
@@ -155,6 +144,8 @@ export function SubthreadsHost({
     (panel: SidePanelMode | null) => {
       const client = getHostRuntimeStore().getClient(serverId);
       if (!client) return;
+      // Best effort: offline or a failed write leaves this device's panel as the user set it and
+      // the stored choice unchanged; the next label change from anywhere reconciles them.
       void client.updateAgent(agentId, { labels: sidePanelLabelPatch(panel) }).catch(() => {});
     },
     [agentId, serverId],
@@ -189,7 +180,11 @@ export function SubthreadsHost({
     [act],
   );
   const openChecklist = useCallback(() => act({ type: "open", mode: "checklist" }), [act]);
-  const toggle = useCallback(() => act({ type: "toggle" }), [act]);
+  // Opening by shortcut stores the mode actually shown, not a mode with nothing in it.
+  const toggle = useCallback(
+    () => act(stateRef.current.open ? { type: "toggle" } : { type: "open", mode }),
+    [act, mode],
+  );
   const close = useCallback(() => act({ type: "close" }), [act]);
   const changeMode = useCallback((next: SidePanelMode) => act({ type: "mode", mode: next }), [act]);
   const back = useCallback(() => dispatch({ type: "back" }), []);
@@ -355,6 +350,39 @@ export function SubthreadsHost({
   );
 }
 
+/**
+ * The session's stored choice wins whenever it changes: an agent asked for a checklist, the
+ * user closed the panel on another device, or the app reloaded. Absent label: no opinion.
+ * Clearing the label (MCP `update_agent` with null) closes too; it is a choice, not silence.
+ * A parent record momentarily missing from the replica says nothing either way. Where the
+ * panel would cover the chat, a programmatic open waits for a press on the header button
+ * rather than taking the screen and the caret from someone typing.
+ */
+function useApplySidePanelLabel(input: {
+  parentKnown: boolean;
+  sidePanelLabel: string | undefined;
+  coversParent: boolean;
+  stateRef: RefObject<SubthreadsDrawerState>;
+  dispatch: (event: SubthreadsDrawerEvent) => void;
+}): void {
+  const { parentKnown, sidePanelLabel, coversParent, stateRef, dispatch } = input;
+  const labelPanel = parentKnown ? parseSidePanelLabel(sidePanelLabel) : undefined;
+  const previousLabelPanelRef = useRef(labelPanel);
+  const coversParentRef = useRef(coversParent);
+  coversParentRef.current = coversParent;
+  useEffect(() => {
+    if (!parentKnown) return;
+    const previous = previousLabelPanelRef.current;
+    previousLabelPanelRef.current = labelPanel;
+    if (labelPanel === undefined) {
+      if (previous !== undefined) dispatch({ type: "apply-label", panel: null });
+      return;
+    }
+    if (labelPanel !== null && coversParentRef.current && !stateRef.current.open) return;
+    dispatch({ type: "apply-label", panel: labelPanel });
+  }, [dispatch, labelPanel, parentKnown, stateRef]);
+}
+
 /** A mode with nothing to show yields to the other one, so the panel is never empty by choice. */
 function resolveAvailableMode(
   requested: SidePanelMode,
@@ -388,7 +416,11 @@ function useSessionSidePanelSource(serverId: string, agentId: string) {
     const parent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
     return parseChecklistUrl(parent?.labels?.[CHECKLIST_URL_LABEL]);
   });
-  return { parentLabel, parentCwd, sidePanelLabel, checklistUrl };
+  const parentKnown = useSessionStore((s) => {
+    const session = s.sessions[serverId];
+    return Boolean(session?.agents.has(agentId) || session?.agentDetails.has(agentId));
+  });
+  return { parentKnown, parentLabel, parentCwd, sidePanelLabel, checklistUrl };
 }
 
 /**

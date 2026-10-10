@@ -3,6 +3,7 @@ import type {
   UiTabPlacement,
   UiWorkspaceTabTarget,
 } from "@getpaseo/protocol/messages";
+import { BrowserAutomationBrowserIdSchema } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import { browserIdForUrl, normalizeUiBrowserUrl } from "@getpaseo/protocol/ui-browser-target";
 
 /**
@@ -68,7 +69,8 @@ function normalizeBrowserTarget(
     return null;
   }
   const browserId = trimNonEmpty(target.browserId) ?? (url ? browserIdForUrl(url) : null);
-  if (!browserId) {
+  // A page target creates a browser on each client under this id, so it must be a real one.
+  if (!browserId || (url && !BrowserAutomationBrowserIdSchema.safeParse(browserId).success)) {
     return null;
   }
   return url ? { kind: "browser", browserId, url } : { kind: "browser", browserId };
@@ -136,7 +138,9 @@ export async function resolveUiTabOpenCommand(
   return resolveUiTabCommand(input, deps, (context) => ({
     command: "tab.open",
     ...context,
-    ...(input.focus === false ? { focus: false } : {}),
+    // Side placement never takes focus. Saying so explicitly keeps clients that predate
+    // `placement` (and treat it as a main open) from navigating the user away.
+    ...(input.focus === false || input.placement === "side" ? { focus: false } : {}),
     ...(input.placement === "side" ? { placement: "side" as const } : {}),
   }));
 }

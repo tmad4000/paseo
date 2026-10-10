@@ -2052,6 +2052,8 @@ export class VoiceAssistantWebSocketServer {
         agentConfigApply: true,
         // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
         uiCommands: true,
+        // COMPAT(uiTabPlacement): fork 0.10.0-beta.12, remove after 2027-04-10.
+        uiTabPlacement: true,
       },
     };
   }

@@ -146,11 +146,15 @@ export function showWorkspaceTargetBeside(input: {
     placement: sidePaneId ? { mode: "prefer", paneId: sidePaneId } : undefined,
   });
   if (!tabId) return null;
+  // Only bring it forward in the side pane. A target the user already has open in the main
+  // pane stays where it is, so the tab they are looking at does not change under them.
   const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[input.workspaceKey];
   const pane = layout
     ? collectAllPanes(layout.root).find((candidate) => candidate.tabIds.includes(tabId))
     : null;
-  if (pane) store.selectTabInPane(input.workspaceKey, pane.id, tabId);
+  if (pane && sidePaneId && pane.id === sidePaneId) {
+    store.selectTabInPane(input.workspaceKey, pane.id, tabId);
+  }
   return tabId;
 }
 

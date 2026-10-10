@@ -120,6 +120,18 @@ test.describe("Subagents drawer", () => {
     });
     await openAgentRoute(page, { workspaceId: agents.workspaceId, agentId: agents.parent.id });
 
+    // An agent asking for the checklist must not cover a phone chat on its own: the header
+    // button appears and the chat stays.
+    await page.route(`${CHECKLIST_URL}**`, (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: CHECKLIST_HTML }),
+    );
+    await workspace.client.updateAgent(agents.parent.id, {
+      labels: { "paseo.checklist-url": CHECKLIST_URL, "paseo.side-panel": "checklist" },
+    });
+    await expect(page.getByTestId("session-checklist-open")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("session-checklist-panel")).toBeHidden();
+    await expect(page.getByRole("textbox", { name: PARENT_COMPOSER })).toBeVisible();
+
     await page.getByTestId("subthreads-open").click();
     const drawer = page.getByTestId("subthreads-drawer");
     await drawer.getByTestId(`subthreads-row-${agents.child.id}`).click();
