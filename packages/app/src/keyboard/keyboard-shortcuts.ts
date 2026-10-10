@@ -158,6 +158,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "toggle-command-center",
     "search-files",
     "navigation-back",
+    "navigation-forward",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -219,6 +220,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-jump-index": "settings.shortcuts.help.jumpToWorkspace",
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
   "navigation-back": "common.actions.back",
+  "navigation-forward": "common.actions.forward",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
   "workspace-next": "settings.shortcuts.help.nextWorkspace",
   "workspace-tab-prev": "settings.shortcuts.help.previousTab",
@@ -616,8 +618,9 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     },
   },
 
-  // --- Focus-history Back (fork) ---
-  // Upstream owns Cmd+[ for "Previous workspace", so Back takes the chord it leaves free.
+  // --- Focus-history Back/Forward (fork) ---
+  // Upstream owns Cmd+[ / Cmd+] for previous/next workspace, so Back and Forward take the
+  // arrow chords it leaves free.
   {
     id: "navigation-back-cmd-alt-left-mac",
     action: "navigation.back",
@@ -638,6 +641,28 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "navigation-back",
       section: "general",
       label: "Back",
+    },
+  },
+  {
+    id: "navigation-forward-cmd-alt-right-mac",
+    action: "navigation.forward",
+    combo: "Cmd+Alt+ArrowRight",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "navigation-forward",
+      section: "general",
+      label: "Forward",
+    },
+  },
+  {
+    id: "navigation-forward-ctrl-alt-right-non-mac",
+    action: "navigation.forward",
+    combo: "Ctrl+Alt+ArrowRight",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "navigation-forward",
+      section: "general",
+      label: "Forward",
     },
   },
 

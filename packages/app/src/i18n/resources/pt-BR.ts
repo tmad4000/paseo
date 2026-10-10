@@ -90,6 +90,8 @@ export const ptBR: TranslationResources = {
     actions: {
       back: "Voltar",
       navigateBack: "Voltar",
+      forward: "Avançar",
+      navigateForward: "Avançar",
       cancel: "Cancelar",
       close: "Fechar",
       copy: "Copiar",

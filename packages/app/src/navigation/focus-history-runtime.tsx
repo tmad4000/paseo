@@ -2,7 +2,8 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { BackHandler } from "react-native";
 import { router, type Href, usePathname } from "expo-router";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { isNative } from "@/constants/platform";
+import { getIsElectron, isNative, isWeb } from "@/constants/platform";
+import { listenToDesktopEvent } from "@/desktop/electron/events";
 import {
   collectAllTabs,
   findPaneById,
@@ -16,6 +17,8 @@ import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import {
   navigationFocusHistory,
+  navigationFocusLocationsShareRoute,
+  type NavigationFocusHistoryDirection,
   type NavigationFocusLocation,
   type NavigationViewState,
   type WorkspaceFocusLocation,
@@ -108,11 +111,33 @@ export function restoreNavigationFocusLocation(
   deps.restoreView(location.view);
 }
 
-export function navigateBackInFocusHistory(input: { isCompact: boolean }): boolean {
-  const location = navigationFocusHistory.back();
+// A restore normally confirms itself when the tracker observes the restored route.
+// One that changes nothing on screen (tab already focused, or since closed) never
+// does, so stop waiting: quickly within a workspace, generously across routes, which
+// may load from a remote host.
+const SAME_ROUTE_SETTLE_MS = 250;
+const CROSS_ROUTE_SETTLE_MS = 4000;
+
+let latestObservedLocation: NavigationFocusLocation | null = null;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function navigateInFocusHistory(
+  direction: NavigationFocusHistoryDirection,
+  input: { isCompact: boolean },
+): boolean {
+  // A second press while the first is still landing belongs to history, not to
+  // whatever fallback the caller runs when there is nowhere to go.
+  if (navigationFocusHistory.getSnapshot().restoring) {
+    return true;
+  }
+  const location =
+    direction === "back" ? navigationFocusHistory.back() : navigationFocusHistory.forward();
   if (!location) {
     return false;
   }
+  const sameRoute =
+    latestObservedLocation !== null &&
+    navigationFocusLocationsShareRoute(latestObservedLocation, location);
 
   try {
     const workspaceLayout = useWorkspaceLayoutStore.getState();
@@ -127,11 +152,30 @@ export function navigateBackInFocusHistory(input: { isCompact: boolean }): boole
           ...view,
         }),
     });
-    return true;
   } catch {
     navigationFocusHistory.cancelRestore();
     return false;
   }
+
+  if (settleTimer) {
+    clearTimeout(settleTimer);
+  }
+  settleTimer = setTimeout(
+    () => {
+      settleTimer = null;
+      navigationFocusHistory.settleRestore(latestObservedLocation);
+    },
+    sameRoute ? SAME_ROUTE_SETTLE_MS : CROSS_ROUTE_SETTLE_MS,
+  );
+  return true;
+}
+
+export function navigateBackInFocusHistory(input: { isCompact: boolean }): boolean {
+  return navigateInFocusHistory("back", input);
+}
+
+export function navigateForwardInFocusHistory(input: { isCompact: boolean }): boolean {
+  return navigateInFocusHistory("forward", input);
 }
 
 export function useCanNavigateBackInFocusHistory(): boolean {
@@ -139,6 +183,14 @@ export function useCanNavigateBackInFocusHistory(): boolean {
     navigationFocusHistory.subscribe,
     () => navigationFocusHistory.getSnapshot().canGoBack,
     () => navigationFocusHistory.getSnapshot().canGoBack,
+  );
+}
+
+export function useCanNavigateForwardInFocusHistory(): boolean {
+  return useSyncExternalStore(
+    navigationFocusHistory.subscribe,
+    () => navigationFocusHistory.getSnapshot().canGoForward,
+    () => navigationFocusHistory.getSnapshot().canGoForward,
   );
 }
 
@@ -174,19 +226,18 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
       if (!hasHydratedWorkspaceLayoutStore) {
         return;
       }
-      navigationFocusHistory.record(
-        buildWorkspaceFocusLocation({
-          ...workspaceSelection,
-          layout,
-          view,
-        }),
-      );
+      latestObservedLocation = buildWorkspaceFocusLocation({
+        ...workspaceSelection,
+        layout,
+        view,
+      });
+      navigationFocusHistory.record(latestObservedLocation);
       return;
     }
 
-    const routeLocation = getTrackableRouteLocation(pathname);
-    if (routeLocation) {
-      navigationFocusHistory.record(routeLocation);
+    latestObservedLocation = getTrackableRouteLocation(pathname);
+    if (latestObservedLocation) {
+      navigationFocusHistory.record(latestObservedLocation);
     }
   }, [enabled, hasHydratedWorkspaceLayoutStore, layout, pathname, view, workspaceSelection]);
 }
@@ -209,4 +260,107 @@ export function useNativeNavigationBackHandler({ enabled }: { enabled: boolean }
     });
     return () => subscription.remove();
   }, [enabled, isCompact, mobilePanel, showMobileAgent]);
+}
+
+// Mouse side buttons, as in a browser: 3 is Back, 4 is Forward.
+export function focusHistoryDirectionForMouseButton(
+  button: number,
+): NavigationFocusHistoryDirection | null {
+  if (button === 3) {
+    return "back";
+  }
+  if (button === 4) {
+    return "forward";
+  }
+  return null;
+}
+
+export function parseDesktopNavigationDirection(
+  payload: unknown,
+): NavigationFocusHistoryDirection | null {
+  const direction =
+    typeof payload === "object" && payload !== null && "direction" in payload
+      ? (payload as { direction: unknown }).direction
+      : null;
+  return direction === "back" || direction === "forward" ? direction : null;
+}
+
+// On Windows one side-button press reaches the page as a mouse event and the window
+// as an app command; act on whichever arrives first.
+const DUPLICATE_GESTURE_WINDOW_MS = 300;
+
+export function createGestureDeduper(now: () => number = Date.now) {
+  let last: { direction: NavigationFocusHistoryDirection; at: number } | null = null;
+  return (direction: NavigationFocusHistoryDirection): boolean => {
+    const at = now();
+    if (last && last.direction === direction && at - last.at < DUPLICATE_GESTURE_WINDOW_MS) {
+      return false;
+    }
+    last = { direction, at };
+    return true;
+  };
+}
+
+/**
+ * Mouse side buttons on web and desktop, plus the desktop window's swipe and
+ * app-command gestures, which the Electron main process forwards.
+ */
+export function useNavigationGestureHandlers({ enabled }: { enabled: boolean }): void {
+  const isCompact = useIsCompactFormFactor();
+
+  useEffect(() => {
+    if (!enabled || !isWeb || typeof window === "undefined") {
+      return;
+    }
+    const acceptGesture = createGestureDeduper();
+    const navigate = (direction: NavigationFocusHistoryDirection): boolean =>
+      acceptGesture(direction) && navigateInFocusHistory(direction, { isCompact });
+
+    // Browsers navigate their own history on mouseup of a side button; take it over
+    // only when there is somewhere to go, so the browser default still applies otherwise.
+    const handleMouseUp = (event: MouseEvent) => {
+      const direction = focusHistoryDirectionForMouseButton(event.button);
+      if (!direction) {
+        return;
+      }
+      const snapshot = navigationFocusHistory.getSnapshot();
+      const available =
+        snapshot.restoring || (direction === "back" ? snapshot.canGoBack : snapshot.canGoForward);
+      if (!available) {
+        return;
+      }
+      event.preventDefault();
+      navigate(direction);
+    };
+    window.addEventListener("mouseup", handleMouseUp);
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    const listenForWindowGestures = async () => {
+      try {
+        const dispose = await listenToDesktopEvent<unknown>("navigate-history", (payload) => {
+          const direction = parseDesktopNavigationDirection(payload);
+          if (direction) {
+            navigate(direction);
+          }
+        });
+        if (disposed) {
+          dispose();
+        } else {
+          unlisten = dispose;
+        }
+      } catch {
+        // No desktop bridge; mouse buttons still work.
+      }
+    };
+    if (getIsElectron()) {
+      void listenForWindowGestures();
+    }
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("mouseup", handleMouseUp);
+      unlisten?.();
+    };
+  }, [enabled, isCompact]);
 }

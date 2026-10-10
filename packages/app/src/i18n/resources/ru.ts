@@ -90,6 +90,8 @@ export const ru: TranslationResources = {
     actions: {
       back: "Назад",
       navigateBack: "Назад",
+      forward: "Вперёд",
+      navigateForward: "Вперёд",
       cancel: "Отмена",
       close: "Закрыть",
       copy: "Копировать",
