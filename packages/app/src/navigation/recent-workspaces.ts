@@ -21,27 +21,108 @@ export interface RecentWorkspaceLabels {
   subtitle: string;
 }
 
-export const MAX_RECENT_WORKSPACES = 30;
+/**
+ * One focus visit: a workspace, and the agent session focused in it when there was
+ * one. Sessions and workspaces share this single most-recent-first list; workspace
+ * recency is derived from it, so the Ctrl+Tab switcher, Cmd+K and the Recent menu
+ * cannot disagree.
+ */
+export interface RecentVisit extends RecentWorkspace {
+  agentId: string | null;
+}
+
+export interface RecentSession extends RecentWorkspace {
+  agentId: string;
+}
+
+export const MAX_RECENT_VISITS = 60;
 
 export function recentWorkspaceKey(input: RecentWorkspaceKeyInput): string {
   return `${input.serverId}:${input.workspaceId}`;
+}
+
+export function recentSessionKey(input: { serverId: string; agentId: string }): string {
+  return `${input.serverId}:${input.agentId}`;
 }
 
 function sameWorkspace(left: RecentWorkspaceKeyInput, right: RecentWorkspaceKeyInput): boolean {
   return left.serverId === right.serverId && left.workspaceId === right.workspaceId;
 }
 
-/** Move a workspace to the front. Re-visiting the front entry is a no-op, so focus churn inside one workspace does not rewrite storage. */
-export function touchRecentWorkspace(
-  recent: readonly RecentWorkspace[],
-  next: RecentWorkspace,
-  maxLength = MAX_RECENT_WORKSPACES,
-): readonly RecentWorkspace[] {
-  const front = recent[0];
-  if (front && sameWorkspace(front, next)) {
-    return recent;
+function sameVisit(left: RecentVisit, right: RecentVisit): boolean {
+  return sameWorkspace(left, right) && left.agentId === right.agentId;
+}
+
+/**
+ * Move a visit to the front. Re-visiting the front entry is a no-op, so focus churn
+ * does not rewrite storage. A session visit replaces its workspace's session-less
+ * entry: the workspace's recency is carried by the session from then on.
+ */
+export function touchRecentVisit(
+  visits: readonly RecentVisit[],
+  next: RecentVisit,
+  maxLength = MAX_RECENT_VISITS,
+): readonly RecentVisit[] {
+  const front = visits[0];
+  if (front && sameVisit(front, next)) {
+    return visits;
   }
-  return [next, ...recent.filter((entry) => !sameWorkspace(entry, next))].slice(0, maxLength);
+  const rest = visits.filter(
+    (entry) =>
+      !sameVisit(entry, next) &&
+      !(next.agentId !== null && entry.agentId === null && sameWorkspace(entry, next)),
+  );
+  return trimRecentVisits([next, ...rest], maxLength);
+}
+
+/**
+ * Over the cap, drop the oldest visit whose workspace also has a newer one, so many
+ * sessions in one workspace cannot push other workspaces out of Ctrl+Tab and Cmd+K.
+ * Only when every visit is its workspace's latest does the oldest go.
+ */
+function trimRecentVisits(visits: RecentVisit[], maxLength: number): RecentVisit[] {
+  while (visits.length > maxLength) {
+    const seen = new Set<string>();
+    let redundant = -1;
+    visits.forEach((visit, index) => {
+      const key = recentWorkspaceKey(visit);
+      if (seen.has(key)) redundant = index;
+      seen.add(key);
+    });
+    visits.splice(redundant === -1 ? visits.length - 1 : redundant, 1);
+  }
+  return visits;
+}
+
+/** Workspaces in the order any of their visits were last made. */
+export function recentWorkspacesFromVisits(visits: readonly RecentVisit[]): RecentWorkspace[] {
+  const seen = new Set<string>();
+  const workspaces: RecentWorkspace[] = [];
+  for (const visit of visits) {
+    const key = recentWorkspaceKey(visit);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    workspaces.push({
+      serverId: visit.serverId,
+      workspaceId: visit.workspaceId,
+      visitedAt: visit.visitedAt,
+    });
+  }
+  return workspaces;
+}
+
+/** Agent sessions, most recently focused first. */
+export function recentSessionsFromVisits(visits: readonly RecentVisit[]): RecentSession[] {
+  const seen = new Set<string>();
+  const sessions: RecentSession[] = [];
+  for (const visit of visits) {
+    if (visit.agentId === null) continue;
+    const key = recentSessionKey({ serverId: visit.serverId, agentId: visit.agentId });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sessions.push({ ...visit, agentId: visit.agentId });
+  }
+  return sessions;
 }
 
 /**

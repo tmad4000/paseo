@@ -12,7 +12,7 @@ import {
   useWorkspaceLayoutStoreHydrated,
 } from "@/stores/workspace-layout-store";
 import { usePanelStore } from "@/stores/panel-store";
-import { useRecentWorkspacesStore } from "@/stores/recent-workspaces-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
@@ -237,16 +237,22 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
       return;
     }
     if (workspaceSelection) {
-      useRecentWorkspacesStore.getState().touch(workspaceSelection);
       if (!hasHydratedWorkspaceLayoutStore) {
+        useRecentVisitsStore.getState().touch({ ...workspaceSelection, agentId: null });
         return;
       }
-      latestObservedLocation = buildWorkspaceFocusLocation({
+      const location = buildWorkspaceFocusLocation({
         ...workspaceSelection,
         layout,
         view,
       });
-      navigationFocusHistory.record(latestObservedLocation);
+      latestObservedLocation = location;
+      useRecentVisitsStore.getState().touch({
+        serverId: location.serverId,
+        workspaceId: location.workspaceId,
+        agentId: location.target?.kind === "agent" ? location.target.agentId : null,
+      });
+      navigationFocusHistory.record(location);
       return;
     }
 

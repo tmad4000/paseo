@@ -13,7 +13,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePathname } from "expo-router";
-import { Check, ChevronRight, Folder, X } from "lucide-react-native";
+import { Check, ChevronRight, Clock, Folder, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   BottomSheetBackdrop,
@@ -47,11 +47,16 @@ import {
   type CommandCenterScope,
 } from "@/stores/keyboard-shortcuts-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
-import { useRecentWorkspacesStore } from "@/stores/recent-workspaces-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
 import {
   createRecentWorkspaceComparator,
+  recentSessionKey,
+  recentSessionsFromVisits,
   recentWorkspaceKey,
+  recentWorkspacesFromVisits,
 } from "@/navigation/recent-workspaces";
+import { orderRowsByRecentSessions } from "@/navigation/recent-sessions";
+import { useFocusedAgent } from "@/navigation/use-recent-session-rows";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import {
@@ -89,6 +94,7 @@ const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedClock = withUnistyles(Clock, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCheck = withUnistyles(Check, (theme) => ({ color: theme.colors.foreground }));
 const ThemedChevronRight = withUnistyles(ChevronRight, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -207,9 +213,10 @@ function workspaceResultKey(result: CommandCenterWorkspaceResult): string {
 
 /** Workspaces you visited most recently come first; ties and unvisited ones fall back to title. */
 function useCompareWorkspacesByRecency() {
-  const recent = useRecentWorkspacesStore((state) => state.recent);
+  const visits = useRecentVisitsStore((state) => state.visits);
   const pathname = usePathname();
   return useMemo(() => {
+    const recent = recentWorkspacesFromVisits(visits);
     const current = parseHostWorkspaceRouteFromPathname(pathname);
     const byRecency = createRecentWorkspaceComparator(
       recent,
@@ -221,13 +228,40 @@ function useCompareWorkspacesByRecency() {
         byRecency(workspaceResultKey(left), workspaceResultKey(right)) ||
         compareWorkspacesByTitle(left, right),
     };
-  }, [pathname, recent]);
+  }, [pathname, visits]);
 }
 
-function useBuiltInSections(open: boolean, query: string): CommandCenterResultSection[] {
+/** Agent rows for sessions you focused recently, most recent first; Cmd+K's "recent" scope. */
+function useRecentSessionAgentRows(
+  agents: readonly CommandCenterAgentResult[],
+  enabled: boolean,
+): CommandCenterAgentResult[] {
+  const visits = useRecentVisitsStore((state) => state.visits);
+  const focused = useFocusedAgent();
+  return useMemo(
+    () =>
+      enabled
+        ? orderRowsByRecentSessions({
+            rows: agents,
+            sessionKeyOf: (row) =>
+              recentSessionKey({ serverId: row.agent.serverId, agentId: row.agent.id }),
+            sessions: recentSessionsFromVisits(visits),
+            currentKey: focused ? recentSessionKey(focused) : null,
+          })
+        : [],
+    [agents, enabled, focused, visits],
+  );
+}
+
+function useBuiltInSections(
+  open: boolean,
+  query: string,
+  scope: CommandCenterScope,
+): CommandCenterResultSection[] {
   const { t } = useTranslation();
   const rows = useBuiltInRows(open);
   const recency = useCompareWorkspacesByRecency();
+  const recentSessionRows = useRecentSessionAgentRows(rows.agents, open && scope === "recent");
   const hasQuery = query.trim().length > 0;
   // An empty query shows only the first few rows, so they have to arrive in recency order.
   const workspaceRows = useMemo(
@@ -237,6 +271,27 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
 
   return useMemo(() => {
     if (!open) return [];
+    if (scope === "recent") {
+      return [
+        {
+          id: "recent-sessions",
+          band: PINNED_SECTION_BAND,
+          rank: 1,
+          title: t("shell.recentSessions.title"),
+          // Every recent session, not the usual first few: this scope is the full list.
+          results: hasQuery
+            ? filterAndRankBuiltInResults(recentSessionRows, query, agentSearchFields, () => 0)
+            : recentSessionRows,
+        },
+        {
+          id: "workspaces",
+          band: PINNED_SECTION_BAND,
+          rank: 2,
+          title: t("shell.recentWorkspaces.title"),
+          results: filterAndRankWorkspaces(workspaceRows, query, recency.compare),
+        },
+      ];
+    }
     return [
       {
         id: "workspaces",
@@ -258,7 +313,7 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
         ),
       },
     ];
-  }, [hasQuery, open, query, recency, rows.agents, t, workspaceRows]);
+  }, [hasQuery, open, query, recency, recentSessionRows, rows.agents, scope, t, workspaceRows]);
 }
 
 interface CommandCenterState {
@@ -292,7 +347,7 @@ function useCommandCenterState(): CommandCenterState {
   const previousOpenRef = useRef(open);
   const [query, setQueryState] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const builtInSections = useBuiltInSections(open, query);
+  const builtInSections = useBuiltInSections(open, query, scope);
   const {
     entries: fileSearchEntries,
     loading: fileSearchLoading,
@@ -328,15 +383,11 @@ function useCommandCenterState(): CommandCenterState {
     () => buildContributionSections(snapshot.contributions, query),
     [query, snapshot.contributions],
   );
-  const projection = useMemo(
-    () =>
-      projectCommandCenterRows(
-        scope === "files"
-          ? fileSections
-          : [...contributionSections, ...fileSections, ...builtInSections],
-      ),
-    [builtInSections, contributionSections, fileSections, scope],
-  );
+  const projection = useMemo(() => {
+    if (scope === "files") return projectCommandCenterRows(fileSections);
+    if (scope === "recent") return projectCommandCenterRows(builtInSections);
+    return projectCommandCenterRows([...contributionSections, ...fileSections, ...builtInSections]);
+  }, [builtInSections, contributionSections, fileSections, scope]);
   const resolvedActiveId = preserveActiveResultId(activeId, projection.selectableResults);
 
   // Editing the query re-ranks everything, so an arrow-key selection made under the previous
@@ -350,11 +401,25 @@ function useCommandCenterState(): CommandCenterState {
   const close = useCallback(() => setOpen(false), [setOpen]);
   const select = useCallback(
     (result: CommandCenterResult) => {
-      setOpen(false);
+      if (!(result.kind === "contribution" && result.contribution.keepOpen)) {
+        setOpen(false);
+      }
       void result.run();
     },
     [setOpen],
   );
+
+  // Switching scope while open (the "Recent sessions…" action) starts the new scope from an
+  // empty query, as opening into it would.
+  const previousScopeRef = useRef(scope);
+  useEffect(() => {
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = scope;
+    if (!open || previousScope === scope || scope === null) return;
+    setQueryState("");
+    setActiveId(null);
+    inputRef.current?.reset();
+  }, [open, scope]);
   const key = useCallback(
     (pressed: string): boolean => {
       if (!open) return false;
@@ -628,6 +693,15 @@ export function CommandCenter() {
   const bottomSheetListRef = useRef<BottomSheetFlatListMethods>(null);
   const bottomSheetInputRef = useRef<EditingTextInputHandle>(null);
   const scrollMetricsRef = useRef({ offset: 0, visibleLength: 0 });
+  const previousScopeRef = useRef(state.scope);
+  useEffect(() => {
+    // The sheet's input is its own editor; clear it too when the scope switches in place.
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = state.scope;
+    if (state.open && previousScope !== state.scope && state.scope !== null) {
+      bottomSheetInputRef.current?.reset();
+    }
+  }, [state.open, state.scope]);
   const { sheetRef, handleSheetChange, handleSheetDismiss } = useIsolatedBottomSheetVisibility({
     visible: state.open,
     isEnabled: showBottomSheet,
@@ -784,8 +858,12 @@ export function CommandCenter() {
         accessible={false}
       >
         <View style={[styles.bottomSheetHeader, styles.searchRow]} testID="command-center-header">
-          {state.scope === "files" ? (
-            <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+          {state.scope ? (
+            <ScopeChip
+              scope={state.scope}
+              label={scopeLabel(state.scope, t)}
+              onRemove={state.clearScope}
+            />
           ) : null}
           <ThemedBottomSheetTextInput
             testID="command-center-input"
@@ -795,11 +873,7 @@ export function CommandCenter() {
             onChangeText={state.setQuery}
             onKeyPress={keyPress}
             onSubmitEditing={submit}
-            placeholder={
-              state.scope === "files"
-                ? t("shell.commandCenter.filePlaceholder")
-                : t("shell.commandCenter.placeholder")
-            }
+            placeholder={scopePlaceholder(state.scope, t)}
             style={[styles.input, styles.growingInput]}
             autoCapitalize="none"
             autoCorrect={false}
@@ -823,19 +897,19 @@ export function CommandCenter() {
           <Pressable style={styles.backdrop} onPress={state.close} />
           <View ref={setWebOverlayScope} testID="command-center-panel" style={styles.panel}>
             <View style={[styles.header, styles.searchRow]} testID="command-center-header">
-              {state.scope === "files" ? (
-                <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+              {state.scope ? (
+                <ScopeChip
+                  scope={state.scope}
+                  label={scopeLabel(state.scope, t)}
+                  onRemove={state.clearScope}
+                />
               ) : null}
               <ThemedTextInput
                 testID="command-center-input"
                 ref={state.inputRef}
                 initialValue={state.query}
                 onChangeText={state.setQuery}
-                placeholder={
-                  state.scope === "files"
-                    ? t("shell.commandCenter.filePlaceholder")
-                    : t("shell.commandCenter.placeholder")
-                }
+                placeholder={scopePlaceholder(state.scope, t)}
                 style={[styles.input, styles.growingInput]}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -853,6 +927,16 @@ export function CommandCenter() {
       </Modal>
     </OverlayLayerProvider>
   );
+}
+
+function scopeLabel(scope: Exclude<CommandCenterScope, null>, t: (key: string) => string): string {
+  return scope === "files" ? t("shell.commandCenter.files") : t("shell.recentSessions.title");
+}
+
+function scopePlaceholder(scope: CommandCenterScope, t: (key: string) => string): string {
+  if (scope === "files") return t("shell.commandCenter.filePlaceholder");
+  if (scope === "recent") return t("shell.recentSessions.placeholder");
+  return t("shell.commandCenter.placeholder");
 }
 
 function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; label: string }) {
@@ -874,16 +958,28 @@ function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; labe
 // The chip sits at the input's own height and type size so it reads as the scope of the field
 // rather than a badge dropped into the query. Its 28px matches the input's line box, so showing or
 // dropping the scope cannot resize the header.
-function ScopeChip({ label, onRemove }: { label: string; onRemove(): void }) {
+function ScopeChip({
+  scope,
+  label,
+  onRemove,
+}: {
+  scope: Exclude<CommandCenterScope, null>;
+  label: string;
+  onRemove(): void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onRemove}
       style={styles.scopeChip}
-      testID="command-center-files-scope"
+      testID={`command-center-${scope}-scope`}
     >
-      <ThemedFolder size={14} strokeWidth={2.2} />
+      {scope === "files" ? (
+        <ThemedFolder size={14} strokeWidth={2.2} />
+      ) : (
+        <ThemedClock size={14} strokeWidth={2.2} />
+      )}
       <Text style={styles.scopeChipLabel}>{label}</Text>
       <ThemedX size={12} strokeWidth={2.2} />
     </Pressable>

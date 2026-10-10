@@ -142,6 +142,13 @@ export const ko: TranslationResources = {
       open: "메뉴 열기",
       close: "메뉴 닫기",
     },
+    recentSessions: {
+      title: "최근 세션",
+      commandTitle: "최근 세션…",
+      empty: "아직 다른 최근 세션이 없습니다",
+      showAll: "모두 보기…",
+      placeholder: "최근 세션 검색...",
+    },
     recentWorkspaces: {
       title: "최근 워크스페이스",
       current: "현재",

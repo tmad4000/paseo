@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { joinSubtitleParts } from "@/command-center/results";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
-import { useRecentWorkspacesStore } from "@/stores/recent-workspaces-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
 import { useSessionStore } from "@/stores/session-store";
 import { selectWorkspace } from "@/stores/session-store-hooks/selectors";
 import {
   buildRecentWorkspaceEntries,
   initialRecentWorkspaceIndex,
+  recentWorkspacesFromVisits,
   stepRecentWorkspaceIndex,
   type RecentWorkspaceEntry,
   type RecentWorkspaceKeyInput,
@@ -49,7 +50,7 @@ export function getRecentWorkspaceEntries(
   current: RecentWorkspaceKeyInput | null,
 ): RecentWorkspaceEntry[] {
   return buildRecentWorkspaceEntries({
-    recent: useRecentWorkspacesStore.getState().recent,
+    recent: recentWorkspacesFromVisits(useRecentVisitsStore.getState().visits),
     current,
     labelsOf: recentWorkspaceLabelsFromSessions,
   });

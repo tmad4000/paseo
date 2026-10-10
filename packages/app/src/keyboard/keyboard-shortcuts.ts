@@ -159,6 +159,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "search-files",
     "navigation-back",
     "navigation-forward",
+    "recent-sessions",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -225,6 +226,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
   "navigation-back": "common.actions.back",
   "navigation-forward": "common.actions.forward",
+  "recent-sessions": "shell.recentSessions.title",
   "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
   "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
@@ -770,6 +772,31 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-next",
       section: "workspaces",
       label: "Next workspace",
+    },
+  },
+
+  // --- Recent sessions (fork) ---
+  // Opens Cmd+K on the recent-sessions list; the header's Recent button shows the same list.
+  {
+    id: "recent-sessions-cmd-alt-r-mac",
+    action: "recent-sessions.open",
+    combo: "Cmd+Alt+R",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
+    },
+  },
+  {
+    id: "recent-sessions-ctrl-alt-r-non-mac",
+    action: "recent-sessions.open",
+    combo: "Ctrl+Alt+R",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
     },
   },
 

@@ -2,18 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigateToWorkspace = vi.fn();
 const recentState = {
-  recent: [
-    { serverId: "s", workspaceId: "current", visitedAt: 3 },
-    { serverId: "s", workspaceId: "previous", visitedAt: 2 },
-    { serverId: "s", workspaceId: "older", visitedAt: 1 },
+  visits: [
+    { serverId: "s", workspaceId: "current", agentId: "agent-c", visitedAt: 3 },
+    { serverId: "s", workspaceId: "previous", agentId: null, visitedAt: 2 },
+    { serverId: "s", workspaceId: "older", agentId: "agent-o", visitedAt: 1 },
   ],
 };
 
 vi.mock("@/stores/navigation-active-workspace-store", () => ({
   navigateToWorkspace: (input: unknown) => navigateToWorkspace(input),
 }));
-vi.mock("@/stores/recent-workspaces-store", () => ({
-  useRecentWorkspacesStore: { getState: () => recentState },
+vi.mock("@/stores/recent-visits-store", () => ({
+  useRecentVisitsStore: { getState: () => recentState },
 }));
 vi.mock("@/stores/session-store", () => ({
   useSessionStore: { getState: () => ({ sessions: {} }) },
@@ -109,13 +109,13 @@ describe("recent workspace switcher", () => {
   });
 
   it("does nothing when there is no other workspace to go to", () => {
-    const saved = recentState.recent;
-    recentState.recent = [saved[0]!];
+    const saved = recentState.visits;
+    recentState.visits = [saved[0]!];
     try {
       expect(openRecentWorkspaceSwitcher({ direction: 1, current, hold: true })).toBe(false);
       expect(useRecentWorkspaceSwitcherStore.getState().open).toBe(false);
     } finally {
-      recentState.recent = saved;
+      recentState.visits = saved;
     }
   });
 });

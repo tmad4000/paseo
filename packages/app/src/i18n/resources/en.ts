@@ -138,6 +138,13 @@ export const en = {
       open: "Open menu",
       close: "Close menu",
     },
+    recentSessions: {
+      title: "Recent sessions",
+      commandTitle: "Recent sessions…",
+      empty: "No other recent sessions yet",
+      showAll: "Show all…",
+      placeholder: "Search recent sessions...",
+    },
     recentWorkspaces: {
       title: "Recent workspaces",
       current: "Current",

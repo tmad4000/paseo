@@ -9,6 +9,7 @@ import {
   NavigationBackButton,
   NavigationForwardButton,
 } from "@/components/headers/navigation-back-button";
+import { RecentSessionsButton } from "@/components/headers/recent-sessions-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export function ViewScreenHeader({
         <SidebarMenuToggle />
         <NavigationBackButton />
         <NavigationForwardButton />
+        <RecentSessionsButton />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("views.actions.rename")}

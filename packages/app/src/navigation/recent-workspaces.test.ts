@@ -5,7 +5,10 @@ import {
   initialRecentWorkspaceIndex,
   recentWorkspaceKey,
   stepRecentWorkspaceIndex,
-  touchRecentWorkspace,
+  recentSessionsFromVisits,
+  recentWorkspacesFromVisits,
+  touchRecentVisit,
+  type RecentVisit,
   type RecentWorkspace,
 } from "./recent-workspaces";
 
@@ -16,20 +19,68 @@ function visit(workspaceId: string, visitedAt = 1): RecentWorkspace {
 const labels = { title: "title", subtitle: "subtitle" };
 
 describe("recent workspaces", () => {
-  it("moves a revisited workspace to the front and caps the list", () => {
-    let recent: readonly RecentWorkspace[] = [];
+  it("moves a revisit to the front and caps the list", () => {
+    let visits: readonly RecentVisit[] = [];
     for (const id of ["a", "b", "c", "b"]) {
-      recent = touchRecentWorkspace(recent, visit(id), 3);
+      visits = touchRecentVisit(visits, { ...visit(id), agentId: null }, 3);
     }
-    expect(recent.map((entry) => entry.workspaceId)).toEqual(["b", "c", "a"]);
+    expect(visits.map((entry) => entry.workspaceId)).toEqual(["b", "c", "a"]);
 
-    recent = touchRecentWorkspace(recent, visit("d"), 3);
-    expect(recent.map((entry) => entry.workspaceId)).toEqual(["d", "b", "c"]);
+    visits = touchRecentVisit(visits, { ...visit("d"), agentId: null }, 3);
+    expect(visits.map((entry) => entry.workspaceId)).toEqual(["d", "b", "c"]);
   });
 
-  it("leaves the list untouched when the front workspace is visited again", () => {
-    const recent = [visit("a"), visit("b")];
-    expect(touchRecentWorkspace(recent, visit("a", 99))).toBe(recent);
+  it("leaves the list untouched when the front visit is repeated", () => {
+    const visits: RecentVisit[] = [
+      { ...visit("a"), agentId: "agent-1" },
+      { ...visit("b"), agentId: null },
+    ];
+    expect(touchRecentVisit(visits, { ...visit("a", 99), agentId: "agent-1" })).toBe(visits);
+  });
+
+  it("keeps every workspace when one workspace's sessions fill the list", () => {
+    let visits: readonly RecentVisit[] = [{ ...visit("other"), agentId: null }];
+    for (const agentId of ["s1", "s2", "s3", "s4"]) {
+      visits = touchRecentVisit(visits, { ...visit("busy"), agentId }, 3);
+    }
+
+    expect(visits.map((entry) => entry.agentId ?? entry.workspaceId)).toEqual([
+      "s4",
+      "s3",
+      "other",
+    ]);
+  });
+
+  it("lets a session visit stand in for its workspace's session-less entry", () => {
+    let visits: readonly RecentVisit[] = [{ ...visit("a"), agentId: null }];
+    visits = touchRecentVisit(visits, { ...visit("b"), agentId: null });
+    visits = touchRecentVisit(visits, { ...visit("a"), agentId: "agent-1" });
+
+    expect(visits.map((entry) => [entry.workspaceId, entry.agentId])).toEqual([
+      ["a", "agent-1"],
+      ["b", null],
+    ]);
+  });
+
+  it("derives workspace and session recency from one visit list", () => {
+    const visits: RecentVisit[] = [
+      { ...visit("a", 5), agentId: "agent-2" },
+      { ...visit("b", 4), agentId: null },
+      { ...visit("a", 3), agentId: "agent-1" },
+      { ...visit("c", 2), agentId: "agent-3" },
+    ];
+
+    expect(recentWorkspacesFromVisits(visits).map((entry) => entry.workspaceId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(recentWorkspacesFromVisits(visits)[0]?.visitedAt).toBe(5);
+    expect(recentSessionsFromVisits(visits).map((entry) => entry.agentId)).toEqual([
+      "agent-2",
+      "agent-1",
+      "agent-3",
+    ]);
   });
 
   it("skips workspaces that no longer resolve and marks the current one", () => {
