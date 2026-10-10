@@ -237,13 +237,6 @@ describe("keyboard-shortcuts", () => {
       payload: { delta: -1 },
     },
     {
-      name: "matches the recent-workspace switcher on web via Ctrl+Backquote",
-      event: { key: "`", code: "Backquote", ctrlKey: true },
-      context: { isDesktop: false },
-      action: "workspace.recent.switch",
-      payload: { delta: 1 },
-    },
-    {
       name: "matches navigation forward via Mod+Alt+ArrowRight",
       event: { key: "ArrowRight", code: "ArrowRight", ctrlKey: true, altKey: true },
       context: { isDesktop: true },

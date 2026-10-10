@@ -745,8 +745,9 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Recent workspaces (fork) ---
-  // Hold Control and tap the key to walk most-recently-used workspaces; release to switch.
-  // Browsers own Ctrl+Tab, so the web build uses Ctrl+` instead.
+  // Hold Control and tap Tab to walk most-recently-used workspaces; release to switch.
+  // Desktop only: browsers own Ctrl+Tab, and Ctrl+` already toggles the right sidebar. On
+  // web, Cmd+K lists recent workspaces first and Back/Forward offer a history menu.
   {
     id: "workspace-recent-ctrl-tab-desktop",
     action: "workspace.recent.switch",
@@ -764,30 +765,6 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     action: "workspace.recent.switch",
     combo: "Ctrl+Shift+Tab",
     when: { desktop: true, commandCenter: false },
-    payload: { type: "delta", delta: -1 },
-    help: {
-      id: "workspace-recent-previous",
-      section: "workspaces",
-      label: "Switch to least recent workspace",
-    },
-  },
-  {
-    id: "workspace-recent-ctrl-backquote-web",
-    action: "workspace.recent.switch",
-    combo: "Ctrl+`",
-    when: { desktop: false, commandCenter: false },
-    payload: { type: "delta", delta: 1 },
-    help: {
-      id: "workspace-recent-next",
-      section: "workspaces",
-      label: "Switch to recent workspace",
-    },
-  },
-  {
-    id: "workspace-recent-ctrl-shift-backquote-web",
-    action: "workspace.recent.switch",
-    combo: "Ctrl+Shift+`",
-    when: { desktop: false, commandCenter: false },
     payload: { type: "delta", delta: -1 },
     help: {
       id: "workspace-recent-previous",

@@ -346,11 +346,11 @@ export function useKeyboardShortcuts({
       return;
     }
 
-    // Ctrl+` repeats on web reach here as "`"; Tab covers desktop's Ctrl+Tab.
     if (
       handleRecentWorkspaceSwitcherKeyDown({
-        key: event.key === "`" || event.key === "~" ? "Tab" : (event.key ?? ""),
+        key: event.key ?? "",
         shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
       })
     ) {
       event.preventDefault();

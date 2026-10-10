@@ -56,11 +56,11 @@ describe("recent workspace switcher", () => {
 
   it("cycles with Tab and Shift+Tab while Control is held", () => {
     openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
-    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false });
+    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false, ctrlKey: true });
     expect(useRecentWorkspaceSwitcherStore.getState().index).toBe(2);
-    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false });
+    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false, ctrlKey: true });
     expect(useRecentWorkspaceSwitcherStore.getState().index).toBe(0);
-    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: true });
+    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: true, ctrlKey: true });
 
     handleRecentWorkspaceSwitcherKeyUp({ key: "Control" });
 
@@ -69,7 +69,7 @@ describe("recent workspace switcher", () => {
 
   it("stays put when the highlighted row is the current workspace", () => {
     openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
-    handleRecentWorkspaceSwitcherKeyDown({ key: "ArrowUp", shiftKey: false });
+    handleRecentWorkspaceSwitcherKeyDown({ key: "ArrowUp", shiftKey: false, ctrlKey: true });
 
     handleRecentWorkspaceSwitcherKeyUp({ key: "Control" });
 
@@ -78,13 +78,28 @@ describe("recent workspace switcher", () => {
 
   it("cancels on Escape and lets unrelated keys through after closing", () => {
     openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
-    expect(handleRecentWorkspaceSwitcherKeyDown({ key: "Escape", shiftKey: false })).toBe(true);
+    expect(
+      handleRecentWorkspaceSwitcherKeyDown({ key: "Escape", shiftKey: false, ctrlKey: true }),
+    ).toBe(true);
     expect(handleRecentWorkspaceSwitcherKeyUp({ key: "Control" })).toBe(false);
 
     openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
-    expect(handleRecentWorkspaceSwitcherKeyDown({ key: "a", shiftKey: false })).toBe(false);
+    expect(handleRecentWorkspaceSwitcherKeyDown({ key: "a", shiftKey: false, ctrlKey: true })).toBe(
+      false,
+    );
     expect(useRecentWorkspaceSwitcherStore.getState().open).toBe(false);
     expect(navigateToWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("finishes the switch when a key arrives after Control was released unseen", () => {
+    openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
+
+    expect(
+      handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false, ctrlKey: false }),
+    ).toBe(false);
+
+    expect(useRecentWorkspaceSwitcherStore.getState().open).toBe(false);
+    expect(navigateToWorkspace).toHaveBeenCalledWith({ serverId: "s", workspaceId: "previous" });
   });
 
   it("switches immediately when it cannot see Control being released", () => {

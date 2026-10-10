@@ -123,8 +123,15 @@ export function commitRecentWorkspaceSwitcher(index?: number): void {
 export function handleRecentWorkspaceSwitcherKeyDown(event: {
   key: string;
   shiftKey: boolean;
+  ctrlKey: boolean;
 }): boolean {
   if (!useRecentWorkspaceSwitcherStore.getState().open) {
+    return false;
+  }
+  // Control was released without a key-up reaching us (focus churn): finish the
+  // gesture as the release would have, and let this key do its normal job.
+  if (!event.ctrlKey && event.key !== "Control" && event.key !== "Escape") {
+    commitRecentWorkspaceSwitcher();
     return false;
   }
   switch (event.key) {
