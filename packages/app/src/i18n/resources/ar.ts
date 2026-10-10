@@ -1953,6 +1953,7 @@ export const ar: TranslationResources = {
   realtimeVoice: {
     muted: "الميكروفون مكتوم للوكيل",
     listening: "الميكروفون يعمل",
+    connecting: "جارٍ توصيل الصوت…",
     commandHint: "قل «mute microphone» وحدها لإيقاف الإدخال مؤقتًا.",
     mutedHint:
       "يستمع جهازك المضيف فقط إلى «unmute microphone». يُتجاهل الكلام الآخر. أوقف الجلسة الصوتية لإيقاف الميكروفون.",

@@ -2010,6 +2010,7 @@ export const fr: TranslationResources = {
   realtimeVoice: {
     muted: "Micro coupé pour l’agent",
     listening: "Micro activé",
+    connecting: "Connexion de la voix…",
     commandHint: "Dites « mute microphone » seul pour suspendre l’entrée.",
     mutedHint:
       "Votre hôte écoute uniquement « unmute microphone ». Toute autre parole est ignorée. Arrêtez la session vocale pour couper le micro.",

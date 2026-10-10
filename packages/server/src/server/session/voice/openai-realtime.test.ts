@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { OpenAiRealtime, type RealtimeSocket } from "./openai-realtime.js";
+import { OpenAiRealtime, realtimeAvailable, type RealtimeSocket } from "./openai-realtime.js";
 import { RealtimeContextStore } from "./realtime-context.js";
 
 class Socket extends EventEmitter implements RealtimeSocket {
@@ -336,5 +336,16 @@ describe("GPT Realtime attachment", () => {
     expect(f.store.read().draft.map((entry) => entry.text)).toEqual(["keep this draft"]);
     expect(f.voice.status()).toMatchObject({ mode: "listen", muted: true });
     f.voice.stop();
+  });
+});
+
+describe("realtimeAvailable", () => {
+  it("is true only when a credential resolves, without throwing", () => {
+    expect(realtimeAvailable({ OPENAI_API_KEY: "sk-test" })).toBe(true);
+    expect(realtimeAvailable({})).toBe(false);
+    expect(realtimeAvailable({ OPENAI_API_KEY: "   " })).toBe(false);
+    expect(realtimeAvailable({ PASEO_OPENAI_REALTIME_API_KEY_FILE: "/nonexistent/key" })).toBe(
+      false,
+    );
   });
 });

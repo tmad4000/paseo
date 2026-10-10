@@ -1929,6 +1929,7 @@ export const zhCN: TranslationResources = {
   realtimeVoice: {
     muted: "已静音，不向智能体输入",
     listening: "麦克风已开启",
+    connecting: "正在连接语音…",
     commandHint: "单独说出“mute microphone”即可暂停输入。",
     mutedHint: "仅在主机上监听“unmute microphone”，其他语音将被丢弃。结束语音会话可关闭麦克风。",
     commandsUnavailable: "语音静音需要更新主机并启用本地语音识别。请使用麦克风按钮。",
