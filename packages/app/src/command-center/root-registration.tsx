@@ -26,7 +26,7 @@ import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
-import { useQuickLaunchStore } from "@/quick-launch/store";
+import { openQuickLaunch } from "@/quick-launch/store";
 import {
   clearCommandCenterFocusRestoreElement,
   takeCommandCenterFocusRestoreElement,
@@ -129,7 +129,6 @@ export function CommandCenterRootActions() {
   const sessionsRoute = useMemo<Href>(() => buildSessionsRoute(), []);
   const schedulesRoute = useMemo<Href>(() => buildSchedulesRoute(), []);
   const setShortcutsDialogOpen = useKeyboardShortcutsStore((state) => state.setShortcutsDialogOpen);
-  const openQuickLaunch = useQuickLaunchStore((state) => state.open);
   // Narrow selector on purpose: a whole-store subscription would re-register every root action
   // each time host filters are reconciled.
   const groupMode = useSidebarViewStore((state) => state.groupMode);
@@ -367,7 +366,6 @@ export function CommandCenterRootActions() {
     keyboardActionDispatcher,
     openAddProject,
     openImportSession,
-    openQuickLaunch,
     overrides,
     schedulesRoute,
     sessionsRoute,

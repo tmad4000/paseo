@@ -7,7 +7,7 @@ import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { PluginSidebarItemRow } from "@/plugins/sidebar-items";
 import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
-import { useQuickLaunchStore } from "@/quick-launch/store";
+import { openQuickLaunch } from "@/quick-launch/store";
 import { useHostFeature } from "@/runtime/host-features";
 import {
   builtinSidebarNavLabelKey,
@@ -113,12 +113,11 @@ const SidebarNewWorkspaceRow = memo(function SidebarNewWorkspaceRow({
 function SidebarQuickLaunchRow({ onBeforeNavigate }: SidebarNavRowProps) {
   const { t } = useTranslation();
   const shortcutKeys = useShortcutKeys(builtinSidebarNavShortcutAction("quick-launch"));
-  const openQuickLaunch = useQuickLaunchStore((state) => state.open);
   const handlePress = useCallback(() => {
     // Closes the compact sidebar overlay; Quick launch itself never navigates.
     onBeforeNavigate?.();
     openQuickLaunch();
-  }, [onBeforeNavigate, openQuickLaunch]);
+  }, [onBeforeNavigate]);
 
   return (
     <SidebarHeaderRow

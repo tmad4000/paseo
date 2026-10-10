@@ -8,7 +8,11 @@ Code: `packages/app/src/quick-launch/`. The host (`host.tsx`) is mounted once in
 
 ## Entry points
 
-All of them open the same dialog through `useQuickLaunchStore().open()`:
+All of them open the same dialog through `openQuickLaunch({ prompt?, destination?, startAndOpen? })`
+(`quick-launch/store.ts`). Other UI that wants to start a chat calls it rather than creating
+agents itself. `destination` is a project (opens on New workspace in it) or a workspace (opens on
+New tab in it); omitted, the default destination applies. `startAndOpen` makes Start and open the
+accent action. The user always confirms in the dialog.
 
 - **Mod+Shift+L** (`quick-launch.open`, rebindable). Shift+N is the desktop New Window
   accelerator, and Mod+L already focuses the composer. The binding fires from text inputs on
@@ -21,6 +25,8 @@ All of them open the same dialog through `useQuickLaunchStore().open()`:
   hands the prompt and the chosen workspace to Quick launch as a prefill. The prompt moves; it is
   cleared from the router so it cannot also be continued there. See
   [session routing](session-routing.md#new-conversation-and-delivery-mode).
+- The sidebar find field's **Start a chat with "&lt;query&gt;"** row, which passes the query as
+  `prompt`.
 
 ## Destination
 

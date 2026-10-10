@@ -22,6 +22,7 @@ import { focusWithRetries } from "@/utils/web-focus";
 import { QuickLaunchDialog, type QuickLaunchStartRequest } from "./dialog";
 import { runQuickLaunch, type QuickLaunchPorts, type QuickLaunchStarted } from "./launch";
 import {
+  openQuickLaunch,
   takeQuickLaunchFocusRestoreElement,
   useQuickLaunchStore,
   type QuickLaunchSession,
@@ -80,7 +81,6 @@ export function QuickLaunchHost() {
   const hosts = useHosts();
   const active = useActiveWorkspaceSelection();
   const session = useQuickLaunchStore((state) => state.session);
-  const open = useQuickLaunchStore((state) => state.open);
   const close = useQuickLaunchStore((state) => state.close);
 
   // The dialog stays mounted through its exit animation; a new session remounts it fresh.
@@ -93,9 +93,9 @@ export function QuickLaunchHost() {
   }, []);
 
   const handleShortcut = useCallback(() => {
-    open();
+    openQuickLaunch();
     return true;
-  }, [open]);
+  }, []);
   useKeyboardActionHandler({
     handlerId: "quick-launch-global",
     actions: QUICK_LAUNCH_ACTIONS,
@@ -161,14 +161,14 @@ export function QuickLaunchHost() {
             <QuickLaunchToastContent
               message={t("quickLaunch.toast.failed", { error: toErrorMessage(error) })}
               actionLabel={t("quickLaunch.toast.retry")}
-              onAction={() => open({ prefill: request.retry })}
+              onAction={() => openQuickLaunch(request.retry)}
               testID="quick-launch-toast-retry"
             />,
             { variant: "error", durationMs: FAILURE_TOAST_DURATION_MS },
           );
         });
     },
-    [close, open, ports, t, toast],
+    [close, ports, t, toast],
   );
 
   if (!mountedSession) return null;

@@ -43,7 +43,7 @@ import {
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { defaultNewConversationWorkspace, prepareNewConversationDraft } from "./new-conversation";
-import { useQuickLaunchStore } from "@/quick-launch/store";
+import { openQuickLaunch } from "@/quick-launch/store";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { deliverDirectRoutedPrompt, deliverRoutedPrompt } from "./delivery";
 import {
@@ -801,7 +801,6 @@ export function SessionRoutingComposer({
     else setDraft("");
     dispatch({ type: "clear" });
   }, [cancelMatch, dispatch, setDraft, setSearchQuery]);
-  const openQuickLaunch = useQuickLaunchStore((store) => store.open);
   // Same destination as Continue, created through Quick launch instead of navigating there. The
   // prompt moves into Quick launch so it cannot also be continued from here.
   const startWithoutLeaving = useCallback(() => {
@@ -810,14 +809,15 @@ export function SessionRoutingComposer({
     if (!workspace || !current.sendDraft.trim() || isRoutingLocked(current)) return;
     if (!newWorkspaceEligible()) return;
     openQuickLaunch({
-      prefill: {
-        text: current.sendDraft,
-        workspace: { serverId: workspace.serverId, workspaceId: workspace.workspaceId },
-        where: "existing-workspace",
+      prompt: current.sendDraft,
+      destination: {
+        kind: "workspace",
+        serverId: workspace.serverId,
+        workspaceId: workspace.workspaceId,
       },
     });
     setDraft("");
-  }, [newWorkspaceEligible, openQuickLaunch, setDraft]);
+  }, [newWorkspaceEligible, setDraft]);
 
   const resultsStale =
     state.phase.status === "results" &&
