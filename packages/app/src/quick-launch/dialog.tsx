@@ -371,8 +371,7 @@ function QuickLaunchProjectPicker({
       projects.map((candidate) => ({
         id: candidate.viewKey,
         label: candidate.projectName,
-        description:
-          getHostProjectSourceDirectory(candidate, serverId) ?? candidate.iconWorkingDir,
+        description: getHostProjectSourceDirectory(candidate, serverId) ?? candidate.iconWorkingDir,
       })),
     [projects, serverId],
   );
