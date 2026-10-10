@@ -1126,7 +1126,7 @@ function StartWithoutLeavingButton({
       variant="outline"
       disabled={locked || !eligible || !state.sendDraft.trim()}
       onPress={onPress}
-      accessibilityLabel={t("quickLaunch.router.startWithoutLeavingHint")}
+      accessibilityHint={t("quickLaunch.router.startWithoutLeavingHint")}
       testID="routing-start-without-leaving"
     >
       {t("quickLaunch.router.startWithoutLeaving")}

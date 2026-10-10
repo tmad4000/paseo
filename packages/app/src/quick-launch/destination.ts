@@ -92,6 +92,7 @@ export function resolveCreatesWorktree(input: {
   isolation: "local" | "worktree";
   worktreeSupport: "supported" | "unsupported" | "unknown";
 }): boolean {
+  // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
   if (!input.supportsMultiplicity) return true;
   return input.isolation === "worktree" && input.worktreeSupport !== "unsupported";
 }

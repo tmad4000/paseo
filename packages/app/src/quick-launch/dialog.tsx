@@ -112,6 +112,7 @@ export function QuickLaunchDialog({
   );
   const projectChoice = manualProject ?? defaultDestination;
   const projectServerId = projectChoice?.serverId ?? active?.serverId ?? serverIds[0] ?? "";
+  // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
   const supportsMultiplicity = useHostFeature(projectServerId, "workspaceMultiplicity");
   const projectsOnHost = useMemo(
     () =>
