@@ -64,7 +64,13 @@ describe("startChatFromFilterQuery", () => {
   it("does nothing for a blank query and fails clearly without a destination", async () => {
     const blank = deps();
     await startChatFromFilterQuery(
-      { query: "   ", startAndOpen: false, workspaces: [scratch], serverIds: ["mini"], active: null },
+      {
+        query: "   ",
+        startAndOpen: false,
+        workspaces: [scratch],
+        serverIds: ["mini"],
+        active: null,
+      },
       blank,
     );
     expect(blank.saveDraft).not.toHaveBeenCalled();
@@ -72,7 +78,13 @@ describe("startChatFromFilterQuery", () => {
     const none = deps();
     await expect(
       startChatFromFilterQuery(
-        { query: "relay", startAndOpen: true, workspaces: [other], serverIds: ["mini"], active: null },
+        {
+          query: "relay",
+          startAndOpen: true,
+          workspaces: [other],
+          serverIds: ["mini"],
+          active: null,
+        },
         none,
       ),
     ).rejects.toBeInstanceOf(NoNewChatDestinationError);

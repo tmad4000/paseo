@@ -1269,10 +1269,10 @@ export const ar: TranslationResources = {
     },
     filterSidebar: {
       matches: {
-        startChat: "بدء محادثة بـ \"{{query}}\"",
+        startChat: 'بدء محادثة بـ "{{query}}"',
         noChatDestination: "لا توجد مساحة عمل افتراضية للمحادثات الجديدة",
         startChatFailed: "تعذّر بدء المحادثة",
-        searchMessages: "البحث في الرسائل عن \"{{query}}\"",
+        searchMessages: 'البحث في الرسائل عن "{{query}}"',
         scope: {
           trigger: "نطاق التصفية: {{value}}",
           heading: "البحث في",

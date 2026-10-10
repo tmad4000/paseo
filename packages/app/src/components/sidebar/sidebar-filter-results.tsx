@@ -30,7 +30,7 @@ import {
   useSidebarMessageSearchState,
   useSidebarWorkspaceTabMatches,
 } from "./sidebar-filter-context";
-import { useStartChatFromFilterQuery } from "./find-to-prompt";
+import { useStartChatFromFilterQuery } from "./use-start-chat-from-filter-query";
 import { useSidebarModel } from "./sidebar-model";
 
 /**

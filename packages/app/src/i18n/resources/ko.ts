@@ -1279,10 +1279,10 @@ export const ko: TranslationResources = {
     },
     filterSidebar: {
       matches: {
-        startChat: "\"{{query}}\"(으)로 채팅 시작",
+        startChat: '"{{query}}"(으)로 채팅 시작',
         noChatDestination: "새 채팅을 위한 기본 워크스페이스가 없습니다",
         startChatFailed: "채팅을 시작할 수 없습니다",
-        searchMessages: "메시지에서 \"{{query}}\" 검색",
+        searchMessages: '메시지에서 "{{query}}" 검색',
         scope: {
           trigger: "필터 범위: {{value}}",
           heading: "검색 대상",

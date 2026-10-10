@@ -44,7 +44,7 @@ import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
 import { useSidebarFilterRequestStore } from "@/components/sidebar/sidebar-filter-request";
-import { useStartChatFromFilterQuery } from "@/components/sidebar/find-to-prompt";
+import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";

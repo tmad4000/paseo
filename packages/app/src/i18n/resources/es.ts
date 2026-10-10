@@ -1309,10 +1309,10 @@ export const es: TranslationResources = {
     },
     filterSidebar: {
       matches: {
-        startChat: "Iniciar un chat con \"{{query}}\"",
+        startChat: 'Iniciar un chat con "{{query}}"',
         noChatDestination: "No hay espacio de trabajo predeterminado para chats nuevos",
         startChatFailed: "No se pudo iniciar el chat",
-        searchMessages: "Buscar \"{{query}}\" en los mensajes",
+        searchMessages: 'Buscar "{{query}}" en los mensajes',
         scope: {
           trigger: "Alcance del filtro: {{value}}",
           heading: "Buscar en",

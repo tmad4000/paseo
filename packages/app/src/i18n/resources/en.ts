@@ -1279,10 +1279,10 @@ export const en = {
     },
     filterSidebar: {
       matches: {
-        startChat: "Start a chat with \"{{query}}\"",
+        startChat: 'Start a chat with "{{query}}"',
         noChatDestination: "No default workspace for new chats",
         startChatFailed: "Unable to start chat",
-        searchMessages: "Search messages for \"{{query}}\"",
+        searchMessages: 'Search messages for "{{query}}"',
         scope: {
           trigger: "Filter scope: {{value}}",
           heading: "Search in",

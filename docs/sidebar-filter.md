@@ -18,20 +18,21 @@ nothing; it then carries Start a chat as its primary button instead of the row.
 
 ## Keys and scope
 
-| Key / control             | Does                                                                 |
-| ------------------------- | -------------------------------------------------------------------- |
-| Typing                    | Live filter (all tiers in the current scope)                         |
-| Enter                     | Intelligent Find, unchanged                                          |
-| Mod+Enter, or the row     | Start a chat from the query                                          |
-| Mod+Shift+Enter           | Start a chat and open it                                             |
-| Scope menu (filter icon)  | **Names** (tree and tab titles) or **Names + messages** (default)    |
+| Key / control            | Does                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| Typing                   | Live filter (all tiers in the current scope)                      |
+| Enter                    | Intelligent Find, unchanged                                       |
+| Mod+Enter, or the row    | Start a chat from the query                                       |
+| Mod+Shift+Enter          | Start a chat and open it                                          |
+| Scope menu (filter icon) | **Names** (tree and tab titles) or **Names + messages** (default) |
 
 The scope is per device (`filterScope` in the sidebar view store). When no host in the sidebar
 advertises `sessionTextSearch`, the Names + messages item says that messages need a host update; the
 choice is kept and takes effect once a host updates.
 
 Starting a chat goes through one function, `startChatFromFilterQuery`
-(`packages/app/src/components/sidebar/find-to-prompt.ts`). It currently uses the New conversation
+(`packages/app/src/components/sidebar/find-to-prompt.ts`, bound to the app by
+`use-start-chat-from-filter-query.ts`). It currently uses the New conversation
 handoff (a prefilled draft in the default workspace, which always opens). When Quick launch lands,
 that function becomes its opener so the filter, Send → New conversation, and Quick launch share one
 creation path. On web, Mod+Enter calls `preventDefault` on the key press so the field does not also

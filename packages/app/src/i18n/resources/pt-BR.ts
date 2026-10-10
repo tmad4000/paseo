@@ -1299,10 +1299,10 @@ export const ptBR: TranslationResources = {
     },
     filterSidebar: {
       matches: {
-        startChat: "Iniciar um chat com \"{{query}}\"",
+        startChat: 'Iniciar um chat com "{{query}}"',
         noChatDestination: "Nenhum espaço de trabalho padrão para novos chats",
         startChatFailed: "Não foi possível iniciar o chat",
-        searchMessages: "Buscar \"{{query}}\" nas mensagens",
+        searchMessages: 'Buscar "{{query}}" nas mensagens',
         scope: {
           trigger: "Escopo do filtro: {{value}}",
           heading: "Buscar em",

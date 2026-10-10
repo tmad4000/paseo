@@ -6,11 +6,7 @@ import {
   type CommandCenterResultSection,
 } from "./results";
 
-function section(
-  id: string,
-  band: number,
-  resultCount: number,
-): CommandCenterResultSection {
+function section(id: string, band: number, resultCount: number): CommandCenterResultSection {
   return {
     id,
     band,
