@@ -17,15 +17,15 @@ export function indexStreamMessages(
     // Text/ordinal is not identity: a retained window can drop an earlier identical
     // message. Only provider/client provenance may carry review across epochs.
     // Without it, preserve the old record and create an unreviewed local observation.
-    // A submitted prompt is recorded under its client ID and gains a provider ID later,
-    // so match an existing record under any provenance the row carries; new records use
-    // the client ID first because it survives that enrichment.
+    // A submitted prompt is recorded under its client ID and may gain a provider ID later,
+    // so match an existing record under any provenance the row carries. New records key on
+    // the provider ID when it is already known (provider history replays carry only that),
+    // otherwise on the client ID, which survives later enrichment.
     const clientId = item.type === "user_message" ? item.clientMessageId : undefined;
     const identities: (string | number)[][] = [];
+    if (row.providerMessageId) identities.push(["provider", row.providerMessageId]);
     if (clientId) identities.push(["client", clientId]);
-    for (const providerId of [row.providerMessageId, item.messageId]) {
-      if (providerId) identities.push(["provider", providerId]);
-    }
+    if (item.messageId) identities.push(["provider", item.messageId]);
     if (identities.length === 0) identities.push(["local", epoch, row.seqStart, row.seqEnd]);
     const candidates = identities.map((identity) => {
       const digest = createHash("sha256")
@@ -33,8 +33,13 @@ export function indexStreamMessages(
         .digest("hex");
       return `message:${digest}`;
     });
+    const existing = candidates.filter((candidate) => byId.has(`source:${candidate}`));
     const messageId =
-      candidates.find((candidate) => byId.has(`source:${candidate}`)) ?? candidates[0];
+      existing.find(
+        (candidate) => byId.get(`source:${candidate}`)?.messageReview?.state === "reviewed",
+      ) ??
+      existing[0] ??
+      candidates[0];
     const id = `source:${messageId}`;
     const previous = byId.get(id);
     const source = { role, messageId, seq: row.seqEnd, epoch } as const;

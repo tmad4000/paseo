@@ -230,6 +230,81 @@ describe("Stream message inventory", () => {
     });
   });
 
+  it("keeps a reviewed source when provider history replays the prompt without its client ID", () => {
+    // Provider echo staged at turn acceptance: the recorded row already has both IDs.
+    const accepted: ProjectedTimelineRow = {
+      ...message(1, "Ship it."),
+      providerMessageId: "provider-2",
+      item: {
+        type: "user_message",
+        text: "Ship it.",
+        messageId: "client-2",
+        clientMessageId: "client-2",
+      },
+    };
+    let entries = indexStreamMessages([], [accepted], "epoch");
+    const original = entries[0];
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "session",
+      action: "review_message",
+      entryId: original.id,
+      expectedRevision: 0,
+      review: { state: "reviewed", note: "Single ask", askIds: [] },
+    });
+    // Claude history rebuilds the user message with only the provider ID.
+    const replayed: ProjectedTimelineRow = {
+      ...message(4, "Ship it."),
+      item: { type: "user_message", text: "Ship it.", messageId: "provider-2" },
+    };
+    const next = indexStreamMessages(entries, [replayed], "restart");
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({
+      id: original.id,
+      messageReview: { state: "reviewed" },
+      source: { seq: 4, epoch: "restart" },
+    });
+  });
+
+  it("prefers the reviewed record when several provenances already have one", () => {
+    const row: ProjectedTimelineRow = {
+      ...message(1, "Repeat this"),
+      providerMessageId: "provider-3",
+      item: {
+        type: "user_message",
+        text: "Repeat this",
+        messageId: "client-3",
+        clientMessageId: "client-3",
+      },
+    };
+    const unreviewedProvider = indexStreamMessages(
+      [],
+      [{ ...row, item: { type: "user_message", text: "Repeat this", messageId: "provider-3" } }],
+      "e",
+    )[0];
+    let reviewedClient = indexStreamMessages(
+      [],
+      [{ ...row, providerMessageId: undefined }],
+      "e",
+    )[0];
+    reviewedClient = applyStreamEntryUpdate([reviewedClient], {
+      agentId: "session",
+      action: "review_message",
+      entryId: reviewedClient.id,
+      expectedRevision: 0,
+      review: { state: "reviewed", note: "Done", askIds: [] },
+    })[0];
+    const next = indexStreamMessages(
+      [unreviewedProvider, reviewedClient],
+      [{ ...row, seq: 7, seqEnd: 7 }],
+      "e2",
+    );
+    expect(next.find((entry) => entry.id === reviewedClient.id)?.source).toMatchObject({
+      seq: 7,
+      epoch: "e2",
+    });
+    expect(next.find((entry) => entry.id === unreviewedProvider.id)?.source?.seq).toBe(1);
+  });
+
   it("reports hidden counts for the installed-example shape without inventing open asks", () => {
     const entries: CompanionEntry[] = Array.from({ length: 8 }, (_, i) => ({
       id: `turn:${i}`,

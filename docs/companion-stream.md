@@ -83,10 +83,13 @@ gets an **unreviewed** record, including ambiguous prose, multiple requests, and
 messages. Assistant questions remain agent messages. Legacy manually entered questions/asks
 without a verified source remain unattributed; All sources includes them.
 
-IDs hash role, full source text, and provider message identity (or client message identity when
-available). Without stable provenance, identity is scoped to the timeline epoch and sequence
-range. Repeat indexing is idempotent, but a new epoch or ID enrichment can create another
-unreviewed observation. We deliberately prefer visible duplicate candidates over transferring
+IDs hash role, full source text, and one provenance: the provider message ID when it is already
+known, otherwise the client message ID. Indexing looks an existing record up under every provenance
+the row carries (preferring a reviewed one), so a prompt that gains its provider ID later keeps its
+record. Without stable provenance, identity is scoped to the timeline epoch and sequence range.
+Repeat indexing is idempotent, but a new epoch can still create another unreviewed observation,
+for example when the provider ID arrived after the record was created and provider history is
+later replayed without the client ID. We deliberately prefer visible duplicate candidates over transferring
 reviewed status or linked asks to a different identical message. Existing records, reviews and
 ask links are preserved; only a proven identity can refresh their source position.
 The original transcript is never rewritten. Excerpts are bounded to 4,000 characters; source links
