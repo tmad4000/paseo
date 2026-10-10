@@ -1275,18 +1275,40 @@ export class AgentManager {
   }
 
   async readSessionSearchText(id: string, query: string): Promise<SessionSearchExcerpt[]> {
+    const excerpts = (await this.readRecentConversationMessages(id)).map(
+      ({ text, role, timestamp }): SessionSearchExcerpt => ({
+        text,
+        source: role === "user" ? "user_message" : "assistant_message",
+        timestamp,
+      }),
+    );
+    return selectSessionSearchExcerpts(excerpts, query);
+  }
+
+  /**
+   * The last user and assistant messages of a session, oldest first, from the daemon's own
+   * timeline: the durable timeline store when one is configured, otherwise the in-memory store,
+   * which only holds agents loaded since the daemon started. Returns [] for an agent that is not
+   * loaded; it never loads or resumes one. Shared by intelligent Find and the sidebar's message
+   * search (`limit` projected rows, default 400). The sidebar search reads unloaded agents from
+   * their provider transcripts instead (`session-text-history.ts`).
+   */
+  async readRecentConversationMessages(
+    id: string,
+    limit = 400,
+  ): Promise<Array<{ text: string; role: "user" | "assistant"; timestamp: string; seq: number }>> {
     let sourceRows: AgentTimelineRow[];
     if (this.durableTimelineStore) {
       const pending = this.recentTimelineWriteRows.get(id)?.snapshot() ?? [];
       const committed = await this.durableTimelineStore.getCommittedRows(id, {
-        projectedLimit: 400,
+        projectedLimit: limit,
       });
       const bySeq = new Map(committed.map((row) => [row.seq, row]));
       for (const row of pending) bySeq.set(row.seq, row);
       sourceRows = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
     } else {
       sourceRows = this.timelineStore.has(id)
-        ? this.timelineStore.fetch(id, { direction: "tail", limit: 400 }).rows
+        ? this.timelineStore.fetch(id, { direction: "tail", limit }).rows
         : [];
     }
     const rows = projectTimelineRows({
@@ -1294,14 +1316,24 @@ export class AgentManager {
       mode: "projected",
     })
       .sort((a, b) => a.seqEnd - b.seqEnd)
-      .slice(-400);
-    const excerpts: SessionSearchExcerpt[] = [];
-    for (const { item, timestamp } of rows) {
+      .slice(-limit);
+    const messages: Array<{
+      text: string;
+      role: "user" | "assistant";
+      timestamp: string;
+      seq: number;
+    }> = [];
+    for (const { item, timestamp, seqEnd } of rows) {
       if (item.type === "user_message" || item.type === "assistant_message") {
-        excerpts.push({ text: item.text, source: item.type, timestamp });
+        messages.push({
+          text: item.text,
+          role: item.type === "user_message" ? "user" : "assistant",
+          timestamp,
+          seq: seqEnd,
+        });
       }
     }
-    return selectSessionSearchExcerpts(excerpts, query);
+    return messages;
   }
 
   listProviderSubagents(parentAgentId: string): ProviderSubagentDescriptor[] {

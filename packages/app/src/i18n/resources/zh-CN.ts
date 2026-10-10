@@ -1307,6 +1307,16 @@ export const zhCN: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "已搜索 {{total}} 个聊天中的 {{searched}} 个",
+        inMessages: "消息中",
+        searching: "正在搜索消息...",
+        moreTabs: "还有 {{count}} 个",
+        fewerTabs: "收起",
+        enterHint: "按 Enter 进行智能查找 (Find)",
+        openTab: "打开 {{title}}",
+        openMessage: "打开 {{title}}：{{snippet}}",
+      },
       placeholder: "筛选项目或聊天",
       clear: "清除侧边栏筛选",
       sortHeading: "聊天排序",

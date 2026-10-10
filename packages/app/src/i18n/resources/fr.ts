@@ -1358,6 +1358,16 @@ export const fr: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      matches: {
+        coverage: "{{searched}} discussions sur {{total}} parcourues",
+        inMessages: "Dans les messages",
+        searching: "Recherche dans les messages...",
+        moreTabs: "+{{count}} de plus",
+        fewerTabs: "Afficher moins",
+        enterHint: "Appuyez sur Entrée pour la recherche intelligente (Find)",
+        openTab: "Ouvrir {{title}}",
+        openMessage: "Ouvrir {{title}} : {{snippet}}",
+      },
       placeholder: "Filtrer les projets ou les discussions",
       clear: "Effacer le filtre latéral",
       sortHeading: "Trier les discussions",
