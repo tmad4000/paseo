@@ -175,7 +175,9 @@ export function SidebarMessageSearchProvider({
 }) {
   const value = useSidebarMessageSearch(rawQuery, normalizedQuery, scope);
   return (
-    <SidebarMessageSearchContext.Provider value={value}>{children}</SidebarMessageSearchContext.Provider>
+    <SidebarMessageSearchContext.Provider value={value}>
+      {children}
+    </SidebarMessageSearchContext.Provider>
   );
 }
 

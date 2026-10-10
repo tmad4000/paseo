@@ -99,7 +99,10 @@ export function matchSidebarTabTitles(
   const byWorkspace = new Map<string, SidebarTabMatch[]>();
   for (const tab of tabs) {
     if (!tab.normalizedTitle.includes(normalizedQuery)) continue;
-    const match: SidebarTabMatch = { ...tab, range: findSidebarMatchRange(tab.title, normalizedQuery) };
+    const match: SidebarTabMatch = {
+      ...tab,
+      range: findSidebarMatchRange(tab.title, normalizedQuery),
+    };
     const list = byWorkspace.get(tab.workspaceKey);
     if (list) list.push(match);
     else byWorkspace.set(tab.workspaceKey, [match]);

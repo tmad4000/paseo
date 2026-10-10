@@ -65,7 +65,10 @@ test("reads the most recently active sessions first, caps hits per session, and 
   const readMessages = reader({ older: messages("older", 2), newer: messages("newer", 5) });
   const result = await searchSessionText({
     query: "queue",
-    candidates: [candidate("older", "2026-09-01T00:00:00Z"), candidate("newer", "2026-10-01T00:00:00Z")],
+    candidates: [
+      candidate("older", "2026-09-01T00:00:00Z"),
+      candidate("newer", "2026-10-01T00:00:00Z"),
+    ],
     readMessages,
   });
   expect(readMessages.mock.calls.map(([agentId]) => agentId)).toEqual(["newer", "older"]);

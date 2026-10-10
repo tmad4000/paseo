@@ -1293,9 +1293,7 @@ export class AgentManager {
   async readRecentConversationMessages(
     id: string,
     limit = 400,
-  ): Promise<
-    Array<{ text: string; role: "user" | "assistant"; timestamp: string; seq: number }>
-  > {
+  ): Promise<Array<{ text: string; role: "user" | "assistant"; timestamp: string; seq: number }>> {
     let sourceRows: AgentTimelineRow[];
     if (this.durableTimelineStore) {
       const pending = this.recentTimelineWriteRows.get(id)?.snapshot() ?? [];

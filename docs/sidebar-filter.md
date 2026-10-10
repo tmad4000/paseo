@@ -6,11 +6,11 @@ Find instead, which is a different feature with its own contract: [session routi
 The filter answers "where is the thing I'm thinking of" in three tiers, shallowest first. Each tier
 says why a row is there, so a workspace you did not expect in the list explains itself.
 
-| Tier            | Matches                                               | Where it renders                                     | Cost                                    |
-| --------------- | ----------------------------------------------------- | ---------------------------------------------------- | --------------------------------------- |
-| Tree            | Project name, workspace title or name, any tab title  | The normal Project → Workspace tree, filtered        | Client-side, every keystroke, no network |
-| Tab titles      | Agent session titles in that workspace                | Compact rows nested under the workspace row          | Same pass as the tree                   |
-| In messages     | User and assistant message text                       | A group below the tree, newest first                 | Daemon RPC, debounced, bounded          |
+| Tier        | Matches                                              | Where it renders                              | Cost                                     |
+| ----------- | ---------------------------------------------------- | --------------------------------------------- | ---------------------------------------- |
+| Tree        | Project name, workspace title or name, any tab title | The normal Project → Workspace tree, filtered | Client-side, every keystroke, no network |
+| Tab titles  | Agent session titles in that workspace               | Compact rows nested under the workspace row   | Same pass as the tree                    |
+| In messages | User and assistant message text                      | A group below the tree, newest first          | Daemon RPC, debounced, bounded           |
 
 Then a muted "Press Enter for intelligent Find" line. The empty state appears only when the tree is
 empty and the message tier has finished with nothing.
@@ -50,14 +50,14 @@ best-effort and never shows an error.
 The daemon side (`packages/server/src/server/session-text-search.ts`) is a lexical scan, never a
 model call, because it runs on every pause in typing. Its bounds are the contract:
 
-| Bound                    | Value                                              |
-| ------------------------ | -------------------------------------------------- |
-| Sessions read            | 200 most recently active                           |
-| Window per session       | Last 400 projected timeline rows (shared with Find) |
-| Hits per session         | 3, newest first                                    |
-| Hits per response        | 50                                                 |
-| Time budget              | 1 s, then returns what it has with `truncated`     |
-| Snippet                  | ≤ 160 characters, centered on the match            |
+| Bound              | Value                                               |
+| ------------------ | --------------------------------------------------- |
+| Sessions read      | 200 most recently active                            |
+| Window per session | Last 400 projected timeline rows (shared with Find) |
+| Hits per session   | 3, newest first                                     |
+| Hits per response  | 50                                                  |
+| Time budget        | 1 s, then returns what it has with `truncated`      |
+| Snippet            | ≤ 160 characters, centered on the match             |
 
 Matching is NFKC-normalized, whitespace-collapsed, case-insensitive substring. Exclusions match
 intelligent Find: archived sessions, archived workspaces and projects, internal agents, and child

@@ -3473,12 +3473,11 @@ export class DaemonClient {
    * same connection; the superseded call rejects with the daemon's error.
    */
   async searchSessionText(input: { query: string; workspaceIds?: string[] }) {
-    const payload = await this.sendNamespacedCorrelatedSessionRequest<"session.text_search.response">(
-      {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"session.text_search.response">({
         message: { type: "session.text_search.request", ...input },
         timeout: 10000,
-      },
-    );
+      });
     if (payload.error) throw new Error(payload.error);
     return payload;
   }

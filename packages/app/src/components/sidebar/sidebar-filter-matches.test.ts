@@ -81,7 +81,9 @@ describe("tab title matching", () => {
       query,
     );
     const second = matchSidebarTabTitles(
-      collectSidebarTabTitles(hosts(agent("a", { title: "Relay", activity: "2026-10-09T00:00:00Z" }))),
+      collectSidebarTabTitles(
+        hosts(agent("a", { title: "Relay", activity: "2026-10-09T00:00:00Z" })),
+      ),
       query,
     );
     const renamed = matchSidebarTabTitles(

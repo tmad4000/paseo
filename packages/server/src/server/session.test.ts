@@ -6042,7 +6042,13 @@ test("sidebar message search scans scoped root sessions lexically and never call
     archivedAt,
   });
   const record = (id: string, workspaceId: string, extra: Partial<StoredAgentRecord> = {}) =>
-    createStoredAgentRecord({ id, cwd: project.rootPath, workspaceId, title: `${id} chat`, ...extra });
+    createStoredAgentRecord({
+      id,
+      cwd: project.rootPath,
+      workspaceId,
+      title: `${id} chat`,
+      ...extra,
+    });
   const readRecentConversationMessages = vi.fn(async (agentId: string) => [
     {
       text: `Earlier note from ${agentId}: the Relay reconnect loop`,
