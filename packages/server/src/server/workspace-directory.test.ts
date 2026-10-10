@@ -620,6 +620,30 @@ describe("WorkspaceDirectory empty projects", () => {
     ]);
   });
 
+  test("carries pin and Default project state on empty projects", async () => {
+    const directory = makeDirectory({
+      projects: [
+        project({
+          projectId: "empty",
+          pinnedAt: "2026-10-09T00:00:00.000Z",
+          defaultAt: "2026-10-10T00:00:00.000Z",
+        }),
+      ],
+      workspaces: [],
+    });
+
+    const result = await directory.listFetchEntries({
+      type: "fetch_workspaces_request",
+      requestId: "r1",
+    });
+
+    expect(result.emptyProjects[0]).toMatchObject({
+      projectId: "empty",
+      projectPinnedAt: "2026-10-09T00:00:00.000Z",
+      projectDefaultAt: "2026-10-10T00:00:00.000Z",
+    });
+  });
+
   test("excludes projects that still have an active workspace", async () => {
     const directory = makeDirectory({
       projects: [project({ projectId: "with-ws" }), project({ projectId: "empty" })],
