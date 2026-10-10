@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "プロジェクトを固定",
+      unpin: "プロジェクトの固定を解除",
+      makeDefault: "既定のプロジェクトにする",
+      removeDefault: "既定のプロジェクトから外す",
+    },
+    badges: {
+      default: "既定のプロジェクト",
+      pinned: "固定したプロジェクト",
+    },
+    commandCenter: {
+      goToDefault: "既定のプロジェクトへ移動",
+      pinCurrent: "現在のプロジェクトを固定",
+      unpinCurrent: "現在のプロジェクトの固定を解除",
+      makeCurrentDefault: "現在のプロジェクトを既定にする",
+      removeCurrentDefault: "現在のプロジェクトを既定から外す",
+    },
+    settings: {
+      title: "既定のプロジェクト",
+      hint: "Quick launch と New conversation はここから始まります。",
+      updateHost: "既定のプロジェクトを選ぶには、このホストを更新してください。",
+      none: "なし",
+      accessibilityLabel: "既定のプロジェクト: {{value}}",
+    },
+    toasts: {
+      failed: "プロジェクトを更新できませんでした",
+      hostDisconnected: "ホストに接続されていません",
+    },
+  },
   sessionPins: {
     title: "固定したセッション",
     pin: "セッションを固定",

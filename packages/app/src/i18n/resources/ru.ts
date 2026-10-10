@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "Закрепить проект",
+      unpin: "Открепить проект",
+      makeDefault: "Сделать проектом по умолчанию",
+      removeDefault: "Убрать из проектов по умолчанию",
+    },
+    badges: {
+      default: "Проект по умолчанию",
+      pinned: "Закреплённый проект",
+    },
+    commandCenter: {
+      goToDefault: "Перейти к проекту по умолчанию",
+      pinCurrent: "Закрепить текущий проект",
+      unpinCurrent: "Открепить текущий проект",
+      makeCurrentDefault: "Сделать текущий проект проектом по умолчанию",
+      removeCurrentDefault: "Убрать текущий проект из проектов по умолчанию",
+    },
+    settings: {
+      title: "Проект по умолчанию",
+      hint: "Quick launch и New conversation начинаются здесь.",
+      updateHost: "Обновите этот хост, чтобы выбрать проект по умолчанию.",
+      none: "Нет",
+      accessibilityLabel: "Проект по умолчанию: {{value}}",
+    },
+    toasts: {
+      failed: "Не удалось обновить проект",
+      hostDisconnected: "Хост не подключён",
+    },
+  },
   sessionPins: {
     title: "Закреплённые сеансы",
     pin: "Закрепить сеанс",

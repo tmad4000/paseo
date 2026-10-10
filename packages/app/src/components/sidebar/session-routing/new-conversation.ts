@@ -1,3 +1,4 @@
+import type { DefaultProjectPlacement } from "@/default-project/model";
 import type { NewConversationWorkspace } from "./model";
 
 export interface NewConversationCandidate extends NewConversationWorkspace {
@@ -10,6 +11,11 @@ export function defaultNewConversationWorkspace(input: {
   serverIds: readonly string[];
   scope: string | null;
   active: { serverId: string; workspaceId: string } | null;
+  /**
+   * Each host's Default project in the sidebar projection (`useDefaultProjectPlacements`).
+   * When the chosen host has one, it replaces the tmpworkspace basename heuristic below.
+   */
+  defaultProjects?: readonly DefaultProjectPlacement[];
 }): NewConversationWorkspace | null {
   const eligible = input.workspaces.filter(
     (workspace) =>
@@ -28,6 +34,17 @@ export function defaultNewConversationWorkspace(input: {
   let serverId = input.serverIds.length === 1 ? input.serverIds[0] : null;
   if (input.active && input.serverIds.includes(input.active.serverId))
     serverId = input.active.serverId;
+  const defaultProject = input.defaultProjects?.find((project) => project.serverId === serverId);
+  if (defaultProject) {
+    return defaultProjectWorkspace(
+      eligible.filter(
+        (workspace) =>
+          workspace.serverId === serverId &&
+          workspace.projectViewKey === defaultProject.projectViewKey,
+      ),
+      input.active,
+    );
+  }
   const scratch = eligible.filter(
     (workspace) =>
       workspace.serverId === serverId &&
@@ -43,6 +60,27 @@ export function defaultNewConversationWorkspace(input: {
   );
   if (roots.length === 1) return roots[0]!;
   return scratch.length === 1 ? scratch[0]! : null;
+}
+
+/**
+ * The user named this project as the default, so a choice inside it is not a guess: the active
+ * workspace when it is in the project, else the root checkout listed first in the sidebar, else
+ * the first workspace listed. A Default project with no workspace yet requires a selection.
+ */
+function defaultProjectWorkspace(
+  candidates: readonly NewConversationCandidate[],
+  active: { serverId: string; workspaceId: string } | null,
+): NewConversationWorkspace | null {
+  const current = candidates.find(
+    (workspace) =>
+      workspace.serverId === active?.serverId && workspace.workspaceId === active?.workspaceId,
+  );
+  return (
+    current ??
+    candidates.find((workspace) => workspace.workspaceDirectory === workspace.projectRootPath) ??
+    candidates[0] ??
+    null
+  );
 }
 
 export async function prepareNewConversationDraft(input: {

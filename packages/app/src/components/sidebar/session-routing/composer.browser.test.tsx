@@ -80,7 +80,7 @@ vi.mock("@/components/sidebar/sidebar-model", () => ({
     setSearchQuery: fixture.changeQuery,
     serverIds: fixture.serverIds,
     hostRegistryLoaded: true,
-    allProjects: [{ viewKey: "view", projectName: "Paseo" }],
+    allProjects: [{ viewKey: "view", projectName: "Paseo", hosts: [] }],
     workspacePlacements: fixture.directory ? [fixture.placement] : [],
   }),
 }));

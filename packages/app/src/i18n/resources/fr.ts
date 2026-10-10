@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "Épingler le projet",
+      unpin: "Désépingler le projet",
+      makeDefault: "Définir comme projet par défaut",
+      removeDefault: "Retirer comme projet par défaut",
+    },
+    badges: {
+      default: "Projet par défaut",
+      pinned: "Projet épinglé",
+    },
+    commandCenter: {
+      goToDefault: "Aller au projet par défaut",
+      pinCurrent: "Épingler le projet actuel",
+      unpinCurrent: "Désépingler le projet actuel",
+      makeCurrentDefault: "Définir le projet actuel par défaut",
+      removeCurrentDefault: "Retirer le projet actuel comme projet par défaut",
+    },
+    settings: {
+      title: "Projet par défaut",
+      hint: "Quick launch et New conversation démarrent ici.",
+      updateHost: "Mettez à jour cet hôte pour choisir un projet par défaut.",
+      none: "Aucun",
+      accessibilityLabel: "Projet par défaut : {{value}}",
+    },
+    toasts: {
+      failed: "Impossible de mettre à jour le projet",
+      hostDisconnected: "L’hôte n’est pas connecté",
+    },
+  },
   sessionPins: {
     title: "Sessions épinglées",
     pin: "Épingler la session",
