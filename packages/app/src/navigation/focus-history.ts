@@ -29,6 +29,10 @@ export interface NavigationFocusHistorySnapshot {
   canGoForward: boolean;
   current: NavigationFocusLocation | null;
   restoring: boolean;
+  /** Nearest first: index 0 is one press of Back. */
+  backEntries: readonly NavigationFocusLocation[];
+  /** Nearest first: index 0 is one press of Forward. */
+  forwardEntries: readonly NavigationFocusLocation[];
 }
 
 export type NavigationFocusHistoryDirection = "back" | "forward";
@@ -83,6 +87,7 @@ export function navigationFocusLocationsShareRoute(
 
 interface PendingRestore {
   direction: NavigationFocusHistoryDirection;
+  steps: number;
   target: NavigationFocusLocation;
   // The stacks as they were before the move, so a restore that never lands can be undone.
   previous: {
@@ -107,6 +112,8 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     canGoForward: false,
     current: null,
     restoring: false,
+    backEntries: [],
+    forwardEntries: [],
   };
   const listeners = new Set<() => void>();
 
@@ -116,6 +123,8 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       canGoForward: pending === null && future.length > 0,
       current,
       restoring: pending !== null,
+      backEntries: past.toReversed(),
+      forwardEntries: future.toReversed(),
     };
     for (const listener of listeners) {
       listener();
@@ -126,21 +135,36 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     return location ? [...stack, location].slice(-maxLength) : stack;
   }
 
-  function go(direction: NavigationFocusHistoryDirection): NavigationFocusLocation | null {
+  // Several steps at once (from the history menu) pass every skipped entry over to
+  // the other stack, so Forward afterwards walks back through them in order.
+  function go(
+    direction: NavigationFocusHistoryDirection,
+    steps: number,
+  ): NavigationFocusLocation | null {
     const source = direction === "back" ? past : future;
-    const target = source[source.length - 1];
-    if (pending || !target) {
+    if (pending || !Number.isInteger(steps) || steps < 1 || steps > source.length) {
       return null;
     }
-    pending = { direction, target, previous: { current, past, future } };
-    if (direction === "back") {
-      past = past.slice(0, -1);
-      future = push(future, current);
-    } else {
-      future = future.slice(0, -1);
-      past = push(past, current);
+    const previous = { current, past, future };
+    for (let step = 0; step < steps; step += 1) {
+      if (direction === "back") {
+        const target = past[past.length - 1] ?? null;
+        past = past.slice(0, -1);
+        future = push(future, current);
+        current = target;
+      } else {
+        const target = future[future.length - 1] ?? null;
+        future = future.slice(0, -1);
+        past = push(past, current);
+        current = target;
+      }
     }
-    current = target;
+    const target = current;
+    if (!target) {
+      ({ current, past, future } = previous);
+      return null;
+    }
+    pending = { direction, steps, target, previous };
     publish();
     return target;
   }
@@ -152,9 +176,11 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     past = restore.previous.past;
     future = restore.previous.future;
     if (restore.direction === "back") {
-      past = past.slice(0, -1);
+      const index = past.length - restore.steps;
+      past = past.filter((_, position) => position !== index);
     } else {
-      future = future.slice(0, -1);
+      const index = future.length - restore.steps;
+      future = future.filter((_, position) => position !== index);
     }
   }
 
@@ -190,12 +216,12 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       publish();
     },
 
-    back(): NavigationFocusLocation | null {
-      return go("back");
+    back(steps = 1): NavigationFocusLocation | null {
+      return go("back", steps);
     },
 
-    forward(): NavigationFocusLocation | null {
-      return go("forward");
+    forward(steps = 1): NavigationFocusLocation | null {
+      return go("forward", steps);
     },
 
     /** The restore failed before it could navigate. */

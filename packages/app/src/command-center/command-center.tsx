@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { usePathname } from "expo-router";
 import { Check, ChevronRight, Folder, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
@@ -46,6 +47,12 @@ import {
   type CommandCenterScope,
 } from "@/stores/keyboard-shortcuts-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { useRecentWorkspacesStore } from "@/stores/recent-workspaces-store";
+import {
+  createRecentWorkspaceComparator,
+  recentWorkspaceKey,
+} from "@/navigation/recent-workspaces";
+import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import {
   clearCommandCenterFocusRestoreElement,
@@ -194,9 +201,39 @@ function useBuiltInRows(open: boolean): {
   }, [agents, open, projects, showHost, t]);
 }
 
+function workspaceResultKey(result: CommandCenterWorkspaceResult): string {
+  return result.id.slice("workspace:".length);
+}
+
+/** Workspaces you visited most recently come first; ties and unvisited ones fall back to title. */
+function useCompareWorkspacesByRecency() {
+  const recent = useRecentWorkspacesStore((state) => state.recent);
+  const pathname = usePathname();
+  return useMemo(() => {
+    const current = parseHostWorkspaceRouteFromPathname(pathname);
+    const byRecency = createRecentWorkspaceComparator(
+      recent,
+      current ? recentWorkspaceKey(current) : null,
+    );
+    return {
+      hasRecent: recent.length > 0,
+      compare: (left: CommandCenterWorkspaceResult, right: CommandCenterWorkspaceResult) =>
+        byRecency(workspaceResultKey(left), workspaceResultKey(right)) ||
+        compareWorkspacesByTitle(left, right),
+    };
+  }, [pathname, recent]);
+}
+
 function useBuiltInSections(open: boolean, query: string): CommandCenterResultSection[] {
   const { t } = useTranslation();
   const rows = useBuiltInRows(open);
+  const recency = useCompareWorkspacesByRecency();
+  const hasQuery = query.trim().length > 0;
+  // An empty query shows only the first few rows, so they have to arrive in recency order.
+  const workspaceRows = useMemo(
+    () => (hasQuery ? rows.workspaces : [...rows.workspaces].sort(recency.compare)),
+    [hasQuery, recency, rows.workspaces],
+  );
 
   return useMemo(() => {
     if (!open) return [];
@@ -205,8 +242,11 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
         id: "workspaces",
         band: PINNED_SECTION_BAND,
         rank: 2,
-        title: t("shell.commandCenter.workspaces"),
-        results: filterAndRankWorkspaces(rows.workspaces, query, compareWorkspacesByTitle),
+        title:
+          !hasQuery && recency.hasRecent
+            ? t("shell.recentWorkspaces.title")
+            : t("shell.commandCenter.workspaces"),
+        results: filterAndRankWorkspaces(workspaceRows, query, recency.compare),
       },
       {
         id: "agents",
@@ -218,7 +258,7 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
         ),
       },
     ];
-  }, [open, query, rows, t]);
+  }, [hasQuery, open, query, recency, rows.agents, t, workspaceRows]);
 }
 
 interface CommandCenterState {

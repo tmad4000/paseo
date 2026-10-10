@@ -113,6 +113,24 @@ export const ru: TranslationResources = {
       open: "Открыть меню",
       close: "Закрыть меню",
     },
+    recentWorkspaces: {
+      title: "Недавние рабочие пространства",
+      current: "Текущее",
+      hint: "Отпустите Ctrl для перехода · ↑ ↓ для выбора · Esc для отмены",
+      tabs: {
+        terminal: "Терминал",
+        browser: "Браузер",
+      },
+      routes: {
+        settings: "Настройки",
+        openProject: "Открыть проект",
+        new: "Новое рабочее пространство",
+        sessions: "История",
+        schedules: "Расписания",
+        views: "Представления",
+        pairScan: "Подключить устройство",
+      },
+    },
     commandCenter: {
       placeholder: "Поиск команд, файлов, рабочих пространств и агентов...",
       filePlaceholder: "Поиск файлов...",
@@ -2529,6 +2547,8 @@ export const ru: TranslationResources = {
         closeCurrentTab: "Закрыть текущую вкладку",
         jumpToWorkspace: "Перейти к рабочему пространству",
         jumpToTab: "Перейти на вкладку",
+        recentWorkspace: "Переключиться на недавнее рабочее пространство",
+        leastRecentWorkspace: "Переключиться на самое давнее рабочее пространство",
         previousWorkspace: "Предыдущее рабочее пространство",
         nextWorkspace: "Следующее рабочее пространство",
         previousTab: "Предыдущая вкладка",

@@ -33,7 +33,7 @@ import { isNative } from "@/constants/platform";
 import { keyboardShortcutsAvailable } from "@/keyboard/availability";
 import { getDesktopHost, isElectronRuntime } from "@/desktop/host";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
-import { buildOpenProjectRoute } from "@/utils/host-routes";
+import { buildOpenProjectRoute, parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { hasActiveWebOverlay } from "@/lib/overlay-root";
 import {
   type ActiveWorkspaceSelection,
@@ -45,6 +45,12 @@ import {
   navigateBackInFocusHistory,
   navigateForwardInFocusHistory,
 } from "@/navigation/focus-history-runtime";
+import {
+  closeRecentWorkspaceSwitcher,
+  handleRecentWorkspaceSwitcherKeyDown,
+  handleRecentWorkspaceSwitcherKeyUp,
+  openRecentWorkspaceSwitcher,
+} from "@/navigation/recent-workspace-switcher-store";
 
 export function useKeyboardShortcuts({
   enabled,
@@ -228,6 +234,12 @@ export function useKeyboardShortcuts({
       case "shortcuts-dialog-toggle":
         useKeyboardShortcutsStore.getState().setShortcutsDialogOpen(action.nextOpen);
         return true;
+      case "recent-workspace-switch":
+        return openRecentWorkspaceSwitcher({
+          direction: action.direction,
+          current: parseHostWorkspaceRouteFromPathname(pathname),
+          hold: event !== null,
+        });
     }
   };
 
@@ -334,6 +346,18 @@ export function useKeyboardShortcuts({
       return;
     }
 
+    // Ctrl+` repeats on web reach here as "`"; Tab covers desktop's Ctrl+Tab.
+    if (
+      handleRecentWorkspaceSwitcherKeyDown({
+        key: event.key === "`" || event.key === "~" ? "Tab" : (event.key ?? ""),
+        shiftKey: event.shiftKey,
+      })
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (dispatchTopWebOverlayKeyDown(event)) {
       return;
     }
@@ -384,6 +408,9 @@ export function useKeyboardShortcuts({
     if (key === badgeModifierKey) {
       setBadgeModifierDown(false);
     }
+    if (handleRecentWorkspaceSwitcherKeyUp({ key })) {
+      event.preventDefault();
+    }
   });
 
   const handleBrowserShortcutInput = useStableEvent((payload: unknown) => {
@@ -405,6 +432,7 @@ export function useKeyboardShortcuts({
 
     const handleBlurOrHide = () => {
       resetModifiers();
+      closeRecentWorkspaceSwitcher();
     };
 
     window.addEventListener("keydown", handleKeyDown, true);

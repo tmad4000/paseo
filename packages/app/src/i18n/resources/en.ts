@@ -108,6 +108,24 @@ export const en = {
       open: "Open menu",
       close: "Close menu",
     },
+    recentWorkspaces: {
+      title: "Recent workspaces",
+      current: "Current",
+      hint: "Release Ctrl to switch · ↑ ↓ to move · Esc to cancel",
+      tabs: {
+        terminal: "Terminal",
+        browser: "Browser",
+      },
+      routes: {
+        settings: "Settings",
+        openProject: "Open project",
+        new: "New workspace",
+        sessions: "History",
+        schedules: "Schedules",
+        views: "Views",
+        pairScan: "Pair device",
+      },
+    },
     commandCenter: {
       placeholder: "Search commands, files, workspaces, and agents...",
       filePlaceholder: "Search files...",
@@ -2611,6 +2629,8 @@ export const en = {
         closeCurrentTab: "Close current tab",
         jumpToWorkspace: "Jump to workspace",
         jumpToTab: "Jump to tab",
+        recentWorkspace: "Switch to recent workspace",
+        leastRecentWorkspace: "Switch to least recent workspace",
         previousWorkspace: "Previous workspace",
         nextWorkspace: "Next workspace",
         previousTab: "Previous tab",

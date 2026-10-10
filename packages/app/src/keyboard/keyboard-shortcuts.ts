@@ -167,6 +167,8 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "new-agent",
     "new-workspace",
     "workspace-jump-index",
+    "workspace-recent-next",
+    "workspace-recent-previous",
     "workspace-prev",
     "workspace-next",
     "pin-workspace",
@@ -221,6 +223,8 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
   "navigation-back": "common.actions.back",
   "navigation-forward": "common.actions.forward",
+  "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
+  "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
   "workspace-next": "settings.shortcuts.help.nextWorkspace",
   "workspace-tab-prev": "settings.shortcuts.help.previousTab",
@@ -737,6 +741,58 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-next",
       section: "workspaces",
       label: "Next workspace",
+    },
+  },
+
+  // --- Recent workspaces (fork) ---
+  // Hold Control and tap the key to walk most-recently-used workspaces; release to switch.
+  // Browsers own Ctrl+Tab, so the web build uses Ctrl+` instead.
+  {
+    id: "workspace-recent-ctrl-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-recent-next",
+      section: "workspaces",
+      label: "Switch to recent workspace",
+    },
+  },
+  {
+    id: "workspace-recent-ctrl-shift-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Shift+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-recent-previous",
+      section: "workspaces",
+      label: "Switch to least recent workspace",
+    },
+  },
+  {
+    id: "workspace-recent-ctrl-backquote-web",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+`",
+    when: { desktop: false, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-recent-next",
+      section: "workspaces",
+      label: "Switch to recent workspace",
+    },
+  },
+  {
+    id: "workspace-recent-ctrl-shift-backquote-web",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Shift+`",
+    when: { desktop: false, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-recent-previous",
+      section: "workspaces",
+      label: "Switch to least recent workspace",
     },
   },
 

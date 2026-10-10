@@ -112,6 +112,24 @@ export const zhCN: TranslationResources = {
       open: "打开菜单",
       close: "关闭菜单",
     },
+    recentWorkspaces: {
+      title: "最近的 workspace",
+      current: "当前",
+      hint: "松开 Ctrl 切换 · ↑ ↓ 移动 · Esc 取消",
+      tabs: {
+        terminal: "终端",
+        browser: "浏览器",
+      },
+      routes: {
+        settings: "设置",
+        openProject: "打开项目",
+        new: "新建 workspace",
+        sessions: "历史",
+        schedules: "计划任务",
+        views: "视图",
+        pairScan: "配对设备",
+      },
+    },
     commandCenter: {
       placeholder: "搜索命令、文件、工作区和 Agent...",
       filePlaceholder: "搜索文件...",
@@ -2455,6 +2473,8 @@ export const zhCN: TranslationResources = {
         closeCurrentTab: "关闭当前标签",
         jumpToWorkspace: "跳转到 workspace",
         jumpToTab: "跳转到标签",
+        recentWorkspace: "切换到最近的 workspace",
+        leastRecentWorkspace: "切换到最早的 workspace",
         previousWorkspace: "上一个 workspace",
         nextWorkspace: "下一个 workspace",
         previousTab: "上一个标签",
