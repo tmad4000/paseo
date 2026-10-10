@@ -159,7 +159,10 @@ export function QuickLaunchHost() {
         return;
       }
       toast.show(
-        <QuickLaunchStartedToast message={t("quickLaunch.toast.started", names)} started={started} />,
+        <QuickLaunchStartedToast
+          message={t("quickLaunch.toast.started", names)}
+          started={started}
+        />,
         { variant: "success", durationMs: RESULT_TOAST_DURATION_MS },
       );
     },

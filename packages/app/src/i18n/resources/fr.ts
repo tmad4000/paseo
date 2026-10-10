@@ -2222,7 +2222,8 @@ export const fr: TranslationResources = {
     },
     router: {
       startWithoutLeaving: "Démarrer sans quitter",
-      startWithoutLeavingHint: "Démarre cette consigne avec le lancement rapide sans quitter la vue",
+      startWithoutLeavingHint:
+        "Démarre cette consigne avec le lancement rapide sans quitter la vue",
     },
   },
   views: {

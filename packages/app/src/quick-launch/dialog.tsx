@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
+import {
+  Text,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { createNameId } from "mnemonic-id";
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
@@ -188,17 +193,22 @@ export function QuickLaunchDialog({
   );
 
   const header = useMemo(() => ({ title: t("quickLaunch.title") }), [t]);
-  const canStart = Boolean(text.trim() && target && shownProject && composerState?.selectedProvider);
+  const canStart = Boolean(
+    text.trim() && target && shownProject && composerState?.selectedProvider,
+  );
   const agentControls = composerState?.agentControls;
   const destinationLocked = destination.where === "existing-workspace";
   const shownIcon = shownProject ? (projectIcons.get(shownProject.viewKey) ?? null) : null;
-  const footer = (
-    <QuickLaunchFooter
-      canStart={canStart}
-      opensAfterStart={opensAfterStart}
-      onStart={startInBackground}
-      onStartAndOpen={startAndOpen}
-    />
+  const footer = useMemo(
+    () => (
+      <QuickLaunchFooter
+        canStart={canStart}
+        opensAfterStart={opensAfterStart}
+        onStart={startInBackground}
+        onStartAndOpen={startAndOpen}
+      />
+    ),
+    [canStart, opensAfterStart, startAndOpen, startInBackground],
   );
 
   return (
@@ -358,10 +368,11 @@ function QuickLaunchProjectPicker({
   const [open, setOpen] = useState(false);
   const options = useMemo<ComboboxOption[]>(
     () =>
-      projects.map((project) => ({
-        id: project.viewKey,
-        label: project.projectName,
-        description: getHostProjectSourceDirectory(project, serverId) ?? project.iconWorkingDir,
+      projects.map((candidate) => ({
+        id: candidate.viewKey,
+        label: candidate.projectName,
+        description:
+          getHostProjectSourceDirectory(candidate, serverId) ?? candidate.iconWorkingDir,
       })),
     [projects, serverId],
   );

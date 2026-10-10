@@ -181,7 +181,12 @@ describe("resolveQuickLaunchTarget", () => {
 
   it("cannot start without a destination", () => {
     expect(
-      resolveQuickLaunchTarget({ ...choices, where: "new-workspace", workspace: null, project: null }),
+      resolveQuickLaunchTarget({
+        ...choices,
+        where: "new-workspace",
+        workspace: null,
+        project: null,
+      }),
     ).toBeNull();
     expect(
       resolveQuickLaunchTarget({

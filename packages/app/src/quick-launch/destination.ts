@@ -201,7 +201,10 @@ export function resolveQuickLaunchSelection(input: {
     supportsMultiplicity: input.supportsMultiplicity,
     isolation: input.isolation,
     worktreeSupport: chosenProject
-      ? getWorktreeSupportForHostProject({ project: chosenProject, serverId: input.projectServerId })
+      ? getWorktreeSupportForHostProject({
+          project: chosenProject,
+          serverId: input.projectServerId,
+        })
       : "unknown",
   });
   if (tabWorkspace) {
@@ -213,5 +216,11 @@ export function resolveQuickLaunchSelection(input: {
       target,
     };
   }
-  return { where, serverId: input.projectServerId, projectsOnHost, shownProject: chosenProject, target };
+  return {
+    where,
+    serverId: input.projectServerId,
+    projectsOnHost,
+    shownProject: chosenProject,
+    target,
+  };
 }
