@@ -6,7 +6,8 @@ import type { SubagentRow } from "./select";
 import { isFinishedSubagent } from "./archive-finished";
 import { providerSubagentLifecycleStatus } from "./provider-store";
 
-function presentationStatus(row: SubagentRow) {
+/** The lifecycle a subagent row is drawn with: an open turn reads as running. */
+export function subagentPresentationStatus(row: SubagentRow) {
   if (row.kind === "paseo") {
     if (row.turn.phase === "open") return "running";
     return row.status === "running" ? "idle" : row.status;
@@ -31,7 +32,7 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
   const label = description ?? title;
   const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
   const subtitle = providerSubtitle ?? (description ? title : null);
-  const status = presentationStatus(row);
+  const status = subagentPresentationStatus(row);
   return {
     key: `${row.kind}_subagent_${row.id}`,
     kind: "agent",

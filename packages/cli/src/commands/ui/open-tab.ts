@@ -17,6 +17,7 @@ export interface UiOpenTabOptions extends CommandOptions {
   subagent?: string;
   terminal?: string;
   browser?: string;
+  url?: string;
   file?: string;
   line?: string;
   diff?: boolean;
@@ -24,6 +25,7 @@ export interface UiOpenTabOptions extends CommandOptions {
   setup?: boolean;
   draft?: boolean;
   focus?: boolean;
+  side?: boolean;
 }
 
 export interface UiOpenTabRow {
@@ -91,8 +93,16 @@ function resolveTarget(options: UiOpenTabOptions): UiWorkspaceTabTarget {
       target: { kind: "terminal", terminalId: options.terminal },
     });
   }
-  if (options.browser) {
-    choices.push({ flag: "--browser", target: { kind: "browser", browserId: options.browser } });
+  if (options.browser || options.url) {
+    // --url alone shows a page; the daemon derives a stable browser id from it.
+    choices.push({
+      flag: options.browser ? "--browser" : "--url",
+      target: {
+        kind: "browser",
+        ...(options.browser ? { browserId: options.browser } : {}),
+        ...(options.url ? { url: options.url } : {}),
+      },
+    });
   }
   if (options.file) {
     const lineStart = parsePositiveInt(options.line, "--line");
@@ -126,7 +136,7 @@ function resolveTarget(options: UiOpenTabOptions): UiWorkspaceTabTarget {
     throw {
       code: "INVALID_ARGUMENT",
       message:
-        "Pick a tab to open: --agent, --terminal, --file, --draft, --browser, --diff, --commit, --setup, or --subagent",
+        "Pick a tab to open: --agent, --terminal, --file, --draft, --browser, --url, --diff, --commit, --setup, or --subagent",
     } satisfies CommandError;
   }
   if (choices.length > 1) {
@@ -149,7 +159,7 @@ function describeTarget(target: UiWorkspaceTabTarget): string {
     case "terminal":
       return `terminal:${target.terminalId}`;
     case "browser":
-      return `browser:${target.browserId}`;
+      return target.url ? `browser:${target.url}` : `browser:${target.browserId ?? ""}`;
     case "file":
       return target.lineStart ? `file:${target.path}:${target.lineStart}` : `file:${target.path}`;
     case "working_diff":
@@ -258,6 +268,7 @@ export async function runOpenTabCommand(
       workspaceId,
       target: resolvedTarget,
       ...(options.focus === false ? { focus: false } : {}),
+      ...(options.side ? { placement: "side" as const } : {}),
     });
 
     return {

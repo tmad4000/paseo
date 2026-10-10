@@ -1004,9 +1004,15 @@ export class VoiceAssistantWebSocketServer {
     origin: SessionConnection | null,
     message: WSOutboundMessage,
   ): number {
+    // Only the requester's own principal sees its UI commands (the owner, for MCP and CLI
+    // callers); a hub's other principals never receive another user's tab instructions.
+    const principalId = origin?.principalId ?? OWNER_SESSION_ADMISSION.principalId;
     const sockets = [...this.sessions]
       .filter(([ws, connection]) => {
         if (connection.lifecycle !== "reconnectable") {
+          return false;
+        }
+        if (connection.principalId !== principalId) {
           return false;
         }
         return !origin?.sockets.has(ws);

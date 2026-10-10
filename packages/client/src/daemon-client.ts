@@ -3956,6 +3956,7 @@ export class DaemonClient {
     workspaceId: string;
     target: UiWorkspaceTabTarget;
     focus?: boolean;
+    placement?: "main" | "side";
     serverId?: string;
     requestId?: string;
     timeout?: number;
@@ -3968,6 +3969,7 @@ export class DaemonClient {
       target: input.target,
       ...(input.serverId ? { serverId: input.serverId } : {}),
       ...(input.focus === false ? { focus: false } : {}),
+      ...(input.placement === "side" ? { placement: "side" } : {}),
     });
     const payload = await this.sendRequest({
       requestId,

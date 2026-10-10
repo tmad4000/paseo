@@ -15,6 +15,7 @@ import {
   type SubagentRow,
 } from "@/subagents";
 import { SubagentsTrack } from "@/subagents/track";
+import { useSubthreadsHost } from "@/subthreads/context";
 import type { TodoEntry } from "@/types/stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
@@ -58,6 +59,9 @@ export const AgentTracks = memo(function AgentTracks({
   const canDetachSubagents = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentDetach === true,
   );
+  const subthreadsHost = useSubthreadsHost();
+  const openSubthreadsDrawer = subthreadsHost?.open;
+  const handleOpenDrawer = useCallback(() => openSubthreadsDrawer?.(), [openSubthreadsDrawer]);
   const archiveSubagent = useArchiveSubagent({ serverId });
   const detachSubagent = useDetachSubagent({ serverId });
   const handleOpenSubagent = useCallback(
@@ -136,6 +140,7 @@ export const AgentTracks = memo(function AgentTracks({
         onArchiveFinished={onArchiveFinished}
         archiveFinishedStatus={archiveFinishedStatus}
         onDetachSubagent={canDetachSubagents ? detachSubagent : undefined}
+        onOpenDrawer={openSubthreadsDrawer ? handleOpenDrawer : undefined}
       />
       <PluginComposerPills
         serverId={serverId}

@@ -26,6 +26,35 @@ Implementation notes that postdate the design:
   nullable label values (clear a label), backed by
   `AgentManager.updateAgentMetadata`.
 
+## Side placement, page targets and delivery (fork, 2026-10-10)
+
+- **Delivery fix.** Since owned subscriptions (v0.8.0) a modern socket only accepts session
+  messages that carry an ownership proof. `ui.command` is a pass-through broadcast with no
+  proof, so every modern client dropped `open_tab`, `close_tab` and `paseo ui open-tab` while the
+  daemon still reported them delivered. `SessionDelivery.permits` now accepts `ui.command`, and
+  the broadcast is limited to connections of the requester's principal (the owner for MCP and
+  CLI callers) so a hub's other principals never receive another user's tab instructions.
+  Installed builds before this change have the bug: verify an `open_tab` visually, not by its
+  `delivered` count.
+- **`placement: "side"`** on `ui.tab.open.request`, the `ui.command` push, MCP `open_tab` and
+  `paseo ui open-tab --side`. The client shows the target in the workspace's side pane (the
+  same pane "open in side pane" uses) and selects it there, without navigating, moving the
+  focused pane, or touching the caret, on every attached client. Compact layouts have no side
+  pane; the tab opens in the background. Omitted or `"main"` keeps the old open-or-focus
+  behaviour. Older clients ignore the field and treat it as main.
+- **Page targets.** A browser target may carry `url` instead of (or with) `browserId`
+  (`paseo ui open-tab --url`). The daemon derives a stable browser id from the URL
+  (`protocol/src/ui-browser-target.ts`), so repeating an open reuses one tab and `close_tab` with
+  the same URL closes it. Each client creates that browser once and keeps the user's own
+  navigation afterwards. Only absolute http(s) URLs are accepted. Browser panes render in the
+  desktop app only; web and native show the tab with a desktop-only notice, which is why the
+  per-session side panel ([agent lifecycle](agent-lifecycle.md#the-session-side-panel-subagents-or-a-checklist))
+  embeds checklists itself on every platform.
+
+```sh
+paseo ui open-tab --workspace <id> --url https://m4-mini.tailb2a35c.ts.net:8047/m4-checklist.html --side
+```
+
 ## Why
 
 An orchestrator agent can call the daemon's MCP tools (`create_agent`,

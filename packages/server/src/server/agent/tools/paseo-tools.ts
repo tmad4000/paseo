@@ -14,6 +14,7 @@ import {
   AgentListItemPayloadSchema,
   AgentPermissionResponseSchema,
   AgentSnapshotPayloadSchema,
+  UiTabPlacementSchema,
   UiWorkspaceTabTargetSchema,
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
@@ -2533,6 +2534,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             .boolean()
             .optional()
             .describe("Default true. False opens the tab without stealing focus."),
+          placement: UiTabPlacementSchema.optional().describe(
+            'Default "main". "side" opens the tab in the workspace\'s side pane, beside what the user is looking at, without navigating or moving focus on any client (compact layouts keep it in the background). For a page such as a checklist, use target { kind: "browser", url } — repeating the same URL reuses its tab, and close_tab with that URL closes it. Browser tabs render in the desktop app.',
+          ),
         },
         outputSchema: {
           workspaceId: z.string(),
@@ -2540,7 +2544,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           guidance: z.string().optional(),
         },
       },
-      async ({ target, workspaceId, focus }) => {
+      async ({ target, workspaceId, focus, placement }) => {
         const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
         if (target.kind === "agent") {
           await updateAgentCommand(
@@ -2553,6 +2557,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             workspaceId: resolvedWorkspaceId,
             target,
             ...(focus === false ? { focus: false } : {}),
+            ...(placement === "side" ? { placement } : {}),
           },
           { serverId: uiCommands.serverId, workspaceExists },
         );

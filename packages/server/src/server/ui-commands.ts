@@ -1,4 +1,9 @@
-import type { SessionOutboundMessage, UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
+import type {
+  SessionOutboundMessage,
+  UiTabPlacement,
+  UiWorkspaceTabTarget,
+} from "@getpaseo/protocol/messages";
+import { browserIdForUrl, normalizeUiBrowserUrl } from "@getpaseo/protocol/ui-browser-target";
 
 /**
  * UI commands are pass-through. The daemon owns no tab state — the app does —
@@ -14,6 +19,7 @@ export interface UiTabOpenCommandInput {
   workspaceId: string;
   target: UiWorkspaceTabTarget;
   focus?: boolean | undefined;
+  placement?: UiTabPlacement | undefined;
 }
 
 export interface UiTabOpenCommandDeps {
@@ -48,6 +54,26 @@ function normalizeFileTarget(
   return { kind: "file", path, lineStart, lineEnd };
 }
 
+/**
+ * A browser target names an existing browser, a page, or both. A page without an id gets the
+ * id derived from its URL, so every client (and a later close) agrees on which tab it is. A
+ * URL that is not absolute http(s) is rejected rather than silently dropped.
+ */
+function normalizeBrowserTarget(
+  target: Extract<UiWorkspaceTabTarget, { kind: "browser" }>,
+): UiWorkspaceTabTarget | null {
+  const rawUrl = trimNonEmpty(target.url);
+  const url = rawUrl ? normalizeUiBrowserUrl(rawUrl) : null;
+  if (rawUrl && !url) {
+    return null;
+  }
+  const browserId = trimNonEmpty(target.browserId) ?? (url ? browserIdForUrl(url) : null);
+  if (!browserId) {
+    return null;
+  }
+  return url ? { kind: "browser", browserId, url } : { kind: "browser", browserId };
+}
+
 function normalizeEntityTarget(target: UiWorkspaceTabTarget): UiWorkspaceTabTarget | null {
   switch (target.kind) {
     case "agent": {
@@ -65,10 +91,8 @@ function normalizeEntityTarget(target: UiWorkspaceTabTarget): UiWorkspaceTabTarg
       const terminalId = trimNonEmpty(target.terminalId);
       return terminalId ? { kind: "terminal", terminalId } : null;
     }
-    case "browser": {
-      const browserId = trimNonEmpty(target.browserId);
-      return browserId ? { kind: "browser", browserId } : null;
-    }
+    case "browser":
+      return normalizeBrowserTarget(target);
     case "setup": {
       const workspaceId = trimNonEmpty(target.workspaceId);
       return workspaceId ? { kind: "setup", workspaceId } : null;
@@ -113,11 +137,12 @@ export async function resolveUiTabOpenCommand(
     command: "tab.open",
     ...context,
     ...(input.focus === false ? { focus: false } : {}),
+    ...(input.placement === "side" ? { placement: "side" as const } : {}),
   }));
 }
 
 export async function resolveUiTabCloseCommand(
-  input: Omit<UiTabOpenCommandInput, "focus">,
+  input: Omit<UiTabOpenCommandInput, "focus" | "placement">,
   deps: UiTabOpenCommandDeps,
 ): Promise<UiTabOpenCommandResult> {
   return resolveUiTabCommand(input, deps, (context) => ({
@@ -127,7 +152,7 @@ export async function resolveUiTabCloseCommand(
 }
 
 async function resolveUiTabCommand(
-  input: Omit<UiTabOpenCommandInput, "focus">,
+  input: Omit<UiTabOpenCommandInput, "focus" | "placement">,
   deps: UiTabOpenCommandDeps,
   buildPayload: (context: {
     serverId: string;

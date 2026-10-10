@@ -3595,7 +3595,15 @@ export const UiWorkspaceTabTargetSchema = z.discriminatedUnion("kind", [
     subagentId: z.string(),
   }),
   z.object({ kind: z.literal("terminal"), terminalId: z.string() }),
-  z.object({ kind: z.literal("browser"), browserId: z.string() }),
+  z.object({
+    kind: z.literal("browser"),
+    // An existing browser on the client, or omitted with `url` to show a page: the daemon
+    // derives a stable id from the URL (ui-browser-target.ts), so repeats reuse one tab.
+    browserId: z.string().optional(),
+    // COMPAT(uiBrowserUrl): added in fork 0.10.0-beta.12. Clients that predate it ignore the
+    // URL and show the browser they have (or an empty one) for the derived id.
+    url: z.string().optional(),
+  }),
   z.object({
     kind: z.literal("file"),
     path: z.string(),
@@ -3609,6 +3617,14 @@ export const UiWorkspaceTabTargetSchema = z.discriminatedUnion("kind", [
 
 export type UiWorkspaceTabTarget = z.infer<typeof UiWorkspaceTabTargetSchema>;
 
+// Where an opened tab lands. "side" opens it in the workspace's side pane, beside what the
+// user is looking at, and never navigates or moves focus on any attached client; "main" (the
+// default) is the existing open-or-focus behaviour. Compact layouts have no side pane and keep
+// the tab in the background instead.
+// COMPAT(uiTabPlacement): added in fork 0.10.0-beta.12; older clients treat it as "main".
+export const UiTabPlacementSchema = z.enum(["main", "side"]);
+export type UiTabPlacement = z.infer<typeof UiTabPlacementSchema>;
+
 export const UiTabOpenRequestMessageSchema = z.object({
   type: z.literal("ui.tab.open.request"),
   requestId: z.string(),
@@ -3619,6 +3635,7 @@ export const UiTabOpenRequestMessageSchema = z.object({
   target: UiWorkspaceTabTargetSchema,
   // Default true. False opens the tab without stealing focus.
   focus: z.boolean().optional(),
+  placement: UiTabPlacementSchema.optional(),
 });
 
 export type UiTabOpenRequestMessage = z.infer<typeof UiTabOpenRequestMessageSchema>;
@@ -7144,6 +7161,7 @@ export const UiCommandMessageSchema = z.object({
       workspaceId: z.string(),
       target: UiWorkspaceTabTargetSchema,
       focus: z.boolean().optional(),
+      placement: UiTabPlacementSchema.optional(),
     }),
     z.object({
       command: z.literal("tab.close"),

@@ -169,3 +169,31 @@ test("failed teardown still closes the delivery and rejects late work", async ()
     delivery.request(source, { type: "ping", requestId: "late" }, async () => {}),
   ).rejects.toThrow("Session delivery is closed");
 });
+
+test("modern sockets accept UI commands, which carry no subscription ownership", () => {
+  const delivery = new SessionDelivery(() => {});
+  const modern = {};
+  delivery.attach(modern, true);
+  expect(
+    delivery.permits(modern, {
+      type: "ui.command",
+      payload: { command: "tab.open", workspaceId: "w", target: { kind: "draft" } },
+    }),
+  ).toBe(true);
+  // Unowned data still needs a proof.
+  expect(
+    delivery.permits(modern, {
+      type: "ui.tab.open.response",
+      payload: { requestId: "r", serverId: "s", workspaceId: "w", deliveredTo: 0, error: null },
+    }),
+  ).toBe(false);
+  expect(
+    delivery.permits(
+      {},
+      {
+        type: "ui.command",
+        payload: { command: "tab.close", workspaceId: "w", target: { kind: "draft" } },
+      },
+    ),
+  ).toBe(false);
+});

@@ -119,6 +119,41 @@ export function openWorkspaceTargetAtLocation(
   });
 }
 
+/**
+ * Shows a target beside whatever the user is looking at, for a request that did not come from
+ * this user's own gesture (an agent, the CLI, another device). It lands in the workspace's side
+ * pane and becomes that pane's visible tab, but the focused pane, the caret and the route stay
+ * where they are. Compact layouts have no side pane, so the tab opens in the background.
+ */
+export function showWorkspaceTargetBeside(input: {
+  workspaceKey: string;
+  target: WorkspaceTabTarget;
+  isCompact: boolean;
+}): string | null {
+  const store = useWorkspaceLayoutStore.getState();
+  if (input.isCompact) {
+    return store.openTab({
+      workspaceKey: input.workspaceKey,
+      target: input.target,
+      intent: "background",
+    });
+  }
+  const sidePaneId = store.ensureSidePane(input.workspaceKey, { focus: false });
+  const tabId = store.openTab({
+    workspaceKey: input.workspaceKey,
+    target: input.target,
+    intent: "background",
+    placement: sidePaneId ? { mode: "prefer", paneId: sidePaneId } : undefined,
+  });
+  if (!tabId) return null;
+  const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[input.workspaceKey];
+  const pane = layout
+    ? collectAllPanes(layout.root).find((candidate) => candidate.tabIds.includes(tabId))
+    : null;
+  if (pane) store.selectTabInPane(input.workspaceKey, pane.id, tabId);
+  return tabId;
+}
+
 /** Opens a tree selection while reusing an unmodified preview in its destination pane. */
 export function openPreferredWorkspacePreview(
   input: OpenPreferredWorkspacePreviewInput,
