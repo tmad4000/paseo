@@ -32,6 +32,7 @@ interface CompanionFeedProps {
 }
 
 const keyExtractor = (item: CompanionFeedItem) => item.id;
+const NO_NOTICES: readonly string[] = [];
 const NoteInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
@@ -43,6 +44,7 @@ export function CompanionFeed({
   serverId,
   agentId,
   cwd,
+  entries,
   artifacts,
   isSupported,
   artifactsSupported,
@@ -60,6 +62,16 @@ export function CompanionFeed({
   const supportsDurableStream = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.durableStream === true,
   );
+  // Until server_info arrives the host is unknown, not unsupported. Older or unknown hosts get the
+  // per-chat entries carried on the agent snapshot instead of a blocking "update the host" screen.
+  const hostKnown = useSessionStore((state) => Boolean(state.sessions[serverId]?.serverInfo));
+  const hostName = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.hostname ?? serverId,
+  );
+  const hostVersion = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.version ?? "?",
+  );
+  const olderHost = hostKnown && !supportsDurableStream;
   const [saving, setSaving] = useState(false);
   const draftEntryId = useRef<string | null>(null);
   const artifactPins = useRef(new ArtifactPinOperations());
@@ -81,13 +93,17 @@ export function CompanionFeed({
     enabled: isSupported && supportsDurableStream,
   });
   const { refetch, fetchNextPage } = query;
+  // Global-Stream notices describe the durable query, which older hosts never run.
+  const notices = supportsDurableStream ? query.notices : NO_NOTICES;
   const items = useMemo(
     () =>
-      buildCompanionFeed(
-        query.rows.flatMap((row) => (row.item.kind === "entry" ? [row.item.entry] : [])),
-        query.rows.flatMap((row) => (row.item.kind === "artifact" ? [row.item.artifact] : [])),
-      ),
-    [query.rows],
+      supportsDurableStream
+        ? buildCompanionFeed(
+            query.rows.flatMap((row) => (row.item.kind === "entry" ? [row.item.entry] : [])),
+            query.rows.flatMap((row) => (row.item.kind === "artifact" ? [row.item.artifact] : [])),
+          )
+        : buildCompanionFeed(entries, artifacts),
+    [supportsDurableStream, query.rows, entries, artifacts],
   );
   const refresh = useCallback(() => {
     void refetch();
@@ -109,6 +125,8 @@ export function CompanionFeed({
         }
 
         if (viewTab !== "checklist" && filter !== "all" && item.entry.kind !== filter) return false;
+        // The durable query filters to explicit asks; legacy entries need the same rule here.
+        if (viewTab === "checklist" && !supportsDurableStream && !item.entry.ask) return false;
 
         if (onlyOpen) {
           if (item.entry.kind === "question" || item.entry.kind === "feature_request") {
@@ -123,7 +141,7 @@ export function CompanionFeed({
         return true;
       }
     });
-  }, [items, viewTab, filter, onlyOpen]);
+  }, [items, viewTab, filter, onlyOpen, supportsDurableStream]);
 
   const openArtifact = useCallback(
     (artifact: AgentArtifact) => {
@@ -240,6 +258,14 @@ export function CompanionFeed({
         <Text style={styles.title}>{t("agentPanel.stream.title")}</Text>
         <Text style={styles.description}>{t("agentPanel.stream.description")}</Text>
 
+        {olderHost ? (
+          <View style={styles.notice} testID="companion-stream-older-host">
+            <Text style={styles.description}>
+              {t("agentPanel.stream.olderHost", { host: hostName, version: hostVersion })}
+            </Text>
+          </View>
+        ) : null}
+
         {connection !== "online" ? (
           <View style={styles.notice} testID="companion-stream-connection">
             {connection === "connecting" ? <ActivityIndicator size="small" /> : null}
@@ -264,7 +290,7 @@ export function CompanionFeed({
         >
           Refresh
         </Button>
-        {query.notices.map((notice) => (
+        {notices.map((notice) => (
           <Text key={notice} accessibilityRole="alert" style={styles.description}>
             {notice}
           </Text>
@@ -350,7 +376,7 @@ export function CompanionFeed({
       connection,
       refresh,
       query.isFetching,
-      query.notices,
+      notices,
       viewTab,
       filter,
       onlyOpen,
@@ -361,6 +387,9 @@ export function CompanionFeed({
       saveError,
       saving,
       pinText,
+      olderHost,
+      hostName,
+      hostVersion,
     ],
   );
 
@@ -396,7 +425,8 @@ export function CompanionFeed({
     [query.hasNextPage, query.isFetching, query.isLoading, loadMore, connection],
   );
 
-  if (!isSupported || !supportsDurableStream) {
+  // Only a known host without the per-chat Stream at all gets the blocking notice.
+  if (hostKnown && !isSupported) {
     return (
       <View style={styles.root}>
         <View style={styles.notice} testID="companion-stream-unsupported">

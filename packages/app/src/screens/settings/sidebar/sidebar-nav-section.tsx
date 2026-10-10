@@ -9,6 +9,7 @@ import {
   History,
   Plus,
   Search,
+  Zap,
   type LucideIcon,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -38,6 +39,7 @@ const moveDownIcon = <ThemedArrowDown size={ICON_SIZE.sm} uniProps={mutedColorMa
 
 const BUILTIN_ICONS: Record<BuiltinSidebarNavId, LucideIcon> = {
   "new-workspace": Plus,
+  "quick-launch": Zap,
   history: History,
   search: Search,
   schedules: CalendarClock,

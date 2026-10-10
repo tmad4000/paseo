@@ -166,6 +166,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   workspaces: [
     "new-agent",
     "new-workspace",
+    "quick-launch",
     "workspace-jump-index",
     "workspace-recent-next",
     "workspace-recent-previous",
@@ -211,6 +212,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
 const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "new-agent": "settings.shortcuts.help.openProject",
   "new-workspace": "settings.shortcuts.help.newWorkspace",
+  "quick-launch": "quickLaunch.title",
   "switch-project": "settings.shortcuts.help.switchProject",
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
@@ -314,6 +316,33 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "new-workspace",
       section: "workspaces",
       label: "New workspace",
+    },
+  },
+
+  // --- Quick launch ---
+  // Shift+N is the desktop New Window accelerator and Cmd+L focuses the composer, so Quick launch
+  // takes Shift+L: "launch" beside the composer it leaves undisturbed. It fires from text inputs
+  // because starting work from inside another chat's composer is the point.
+  {
+    id: "quick-launch-cmd-shift-l-mac",
+    action: "quick-launch.open",
+    combo: "Cmd+Shift+L",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "quick-launch",
+      section: "workspaces",
+      label: "Quick launch",
+    },
+  },
+  {
+    id: "quick-launch-ctrl-shift-l-non-mac",
+    action: "quick-launch.open",
+    combo: "Ctrl+Shift+L",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "quick-launch",
+      section: "workspaces",
+      label: "Quick launch",
     },
   },
 

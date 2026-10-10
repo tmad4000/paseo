@@ -150,6 +150,18 @@ describe("keyboard-shortcuts", () => {
       action: "workspace.new",
     },
     {
+      name: "matches Cmd+Shift+L to open Quick launch from a chat composer on mac",
+      event: { key: "L", code: "KeyL", metaKey: true, shiftKey: true },
+      context: { isMac: true, isDesktop: true, focusScope: "message-input" },
+      action: "quick-launch.open",
+    },
+    {
+      name: "matches Ctrl+Shift+L to open Quick launch on non-mac",
+      event: { key: "L", code: "KeyL", ctrlKey: true, shiftKey: true },
+      context: { isMac: false, focusScope: "message-input" },
+      action: "quick-launch.open",
+    },
+    {
       name: "matches Cmd+P to search workspace files on mac",
       event: { key: "p", code: "KeyP", metaKey: true },
       context: { isMac: true, commandCenterOpen: false },
@@ -750,6 +762,7 @@ describe("keyboard-shortcut help sections", () => {
       expectedKeys: {
         "new-agent": ["mod", "O"],
         "new-workspace": ["mod", "N"],
+        "quick-launch": ["mod", "shift", "L"],
         "workspace-tab-new": ["mod", "T"],
         "workspace-jump-index": ["mod", "1-9"],
         "workspace-tab-jump-index": ["mod", "alt", "1-9"],

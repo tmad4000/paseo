@@ -357,6 +357,8 @@ export const ja: TranslationResources = {
       description: "質問、判断、回答、ファイルを新しい順に表示します。",
       updateHost: "ストリームを使うにはホストを更新",
       updateHostDescription: "質問と回答には新しいホストが必要です。ファイルは下に表示されます。",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "再接続中。保存済みの項目は閲覧できますが、保留状態は古い可能性があります。",
       showAll: "すべて表示",
       pending: "返信が必要（{{count}}）",
@@ -2202,6 +2204,49 @@ export const ja: TranslationResources = {
       other: "Paseoを{{count}}回呼び出し",
     },
     and: "および",
+  },
+  quickLaunch: {
+    title: "クイック起動",
+    commandCenterTitle: "エージェントをクイック起動…",
+    placeholder: "新しいエージェントに何をさせますか？",
+    promptLabel: "新しいエージェントへのプロンプト",
+    project: {
+      title: "プロジェクト",
+      label: "プロジェクト: {{project}}",
+      choose: "プロジェクトを選択",
+      search: "プロジェクトを検索",
+      empty: "利用できるプロジェクトがありません",
+    },
+    host: {
+      title: "ホスト",
+      label: "ホスト: {{host}}",
+    },
+    where: {
+      newWorkspace: "新しいワークスペース",
+      newTab: "{{workspace}} の新しいタブ",
+    },
+    actions: {
+      start: "開始",
+      startHint: "今の画面のままエージェントを開始します",
+      startAndOpen: "開始して開く",
+      startAndOpenHint: "エージェントを開始して開きます",
+    },
+    toast: {
+      starting: "{{project}} · {{workspace}} で開始中…",
+      started: "{{project}} · {{workspace}} で開始しました",
+      newWorkspace: "新しいワークスペース",
+      open: "開く",
+      retry: "再試行",
+      failed: "エージェントを開始できません: {{error}}",
+    },
+    errors: {
+      noAgent: "ワークスペースはエージェントなしで作成されました",
+      createFailed: "ワークスペースを作成できません",
+    },
+    router: {
+      startWithoutLeaving: "移動せずに開始",
+      startWithoutLeavingHint: "このプロンプトをクイック起動で開始し、この画面に留まります",
+    },
   },
   views: {
     sidebar: {

@@ -361,6 +361,8 @@ export const fr: TranslationResources = {
       updateHost: "Mettez l’hôte à jour pour utiliser le fil",
       updateHostDescription:
         "Les questions et réponses nécessitent un hôte plus récent. Vos fichiers sont ci-dessous.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "Reconnexion. Les éléments enregistrés restent disponibles ; les états peuvent être périmés.",
       showAll: "Tout afficher",
@@ -2241,6 +2243,50 @@ export const fr: TranslationResources = {
       other: "a appelé Paseo {{count}} fois",
     },
     and: "et",
+  },
+  quickLaunch: {
+    title: "Lancement rapide",
+    commandCenterTitle: "Lancement rapide d'agent…",
+    placeholder: "Que doit faire le nouvel agent ?",
+    promptLabel: "Consigne pour le nouvel agent",
+    project: {
+      title: "Projet",
+      label: "Projet : {{project}}",
+      choose: "Choisir un projet",
+      search: "Rechercher des projets",
+      empty: "Aucun projet disponible",
+    },
+    host: {
+      title: "Hôte",
+      label: "Hôte : {{host}}",
+    },
+    where: {
+      newWorkspace: "Nouvel espace de travail",
+      newTab: "Nouvel onglet dans {{workspace}}",
+    },
+    actions: {
+      start: "Démarrer",
+      startHint: "Démarre l'agent sans quitter la vue actuelle",
+      startAndOpen: "Démarrer et ouvrir",
+      startAndOpenHint: "Démarre l'agent et l'ouvre",
+    },
+    toast: {
+      starting: "Démarrage dans {{project}} · {{workspace}}…",
+      started: "Démarré dans {{project}} · {{workspace}}",
+      newWorkspace: "nouvel espace de travail",
+      open: "Ouvrir",
+      retry: "Réessayer",
+      failed: "Impossible de démarrer l'agent : {{error}}",
+    },
+    errors: {
+      noAgent: "L'espace de travail a été créé sans agent",
+      createFailed: "Impossible de créer l'espace de travail",
+    },
+    router: {
+      startWithoutLeaving: "Démarrer sans quitter",
+      startWithoutLeavingHint:
+        "Démarre cette consigne avec le lancement rapide sans quitter la vue",
+    },
   },
   views: {
     sidebar: {
