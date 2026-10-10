@@ -5,6 +5,8 @@ import {
   selectSessionSearchExcerpts,
   type SessionSearchCandidate,
 } from "./session-search.js";
+import { searchSessionText, type SessionTextSearchCandidate } from "./session-text-search.js";
+import { getSharedPersistedConversationReader } from "./session-text-history.js";
 import type { StructuredTextGeneration } from "./session/checkout/git-metadata-generator.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -830,6 +832,7 @@ export class Session {
   private readonly sessionSearchGeneration: StructuredTextGeneration;
   private readonly sessionSearchAbort = new AbortController();
   private sessionSearchActive: AbortController | null = null;
+  private sessionTextSearchActive: AbortController | null = null;
   private unsubscribeAgentQueue: (() => void) | null = null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -2796,6 +2799,8 @@ export class Session {
         return this.handleAgentTimelineAppendRequest(msg);
       case "session.search.request":
         return this.handleSessionSearchRequest(msg, source);
+      case "session.text_search.request":
+        return this.handleSessionTextSearchRequest(msg, source);
       case "agent.timeline.search.request":
         return this.handleAgentTimelineSearchRequest(msg, source);
       case "agent.timeline.list_prompts.request":
@@ -8384,6 +8389,97 @@ export class Session {
       );
     } finally {
       if (this.sessionSearchActive === active) this.sessionSearchActive = null;
+    }
+  }
+
+  /**
+   * The sidebar filter's message tier. Lexical and bounded (see `session-text-search.ts`); a newer
+   * request from this client aborts the older one, which still answers so its caller settles.
+   */
+  private async handleSessionTextSearchRequest(
+    msg: Extract<SessionInboundMessage, { type: "session.text_search.request" }>,
+    source?: object,
+  ): Promise<void> {
+    this.sessionTextSearchActive?.abort();
+    const active = new AbortController();
+    this.sessionTextSearchActive = active;
+    const signal = AbortSignal.any([active.signal, this.sessionSearchAbort.signal]);
+    try {
+      const [records, workspaces, projects] = await Promise.all([
+        this.agentStorage.list(),
+        this.workspaceRegistry.list(),
+        this.projectRegistry.list(),
+      ]);
+      const workspaceById = new Map(
+        workspaces.map((workspace) => [workspace.workspaceId, workspace]),
+      );
+      const projectById = new Map(projects.map((project) => [project.projectId, project]));
+      const allowed = msg.workspaceIds ? new Set(msg.workspaceIds) : null;
+      const candidates: SessionTextSearchCandidate[] = [];
+      const recordsById = new Map<string, (typeof records)[number]>();
+      for (const record of records) {
+        const workspace = record.workspaceId ? workspaceById.get(record.workspaceId) : undefined;
+        const project = workspace ? projectById.get(workspace.projectId) : undefined;
+        if (!workspace || !project || workspace.archivedAt || project.archivedAt) continue;
+        if (allowed && !allowed.has(workspace.workspaceId)) continue;
+        // Same exclusions as intelligent Find: archived, internal, and child sessions.
+        if (record.internal || record.archivedAt || record.labels["paseo.parent-agent-id"])
+          continue;
+        const workspaceTitle = resolveWorkspaceDisplayName(workspace);
+        recordsById.set(record.id, record);
+        candidates.push({
+          agentId: record.id,
+          workspaceId: workspace.workspaceId,
+          workspaceTitle,
+          projectName: resolveProjectDisplayName(project),
+          title: record.title || workspaceTitle,
+          provider: record.provider,
+          activityAt: record.lastActivityAt ?? record.updatedAt,
+        });
+      }
+      const result = await searchSessionText({
+        query: msg.query,
+        candidates,
+        // Loaded agents answer from the daemon's timeline. Everything else is read, never resumed,
+        // from the provider transcript its record points to (see session-text-history.ts).
+        readMessages: async (agentId) => {
+          const live = await this.agentManager.readRecentConversationMessages(agentId);
+          const record = recordsById.get(agentId);
+          if (live.length > 0 || !record) return live;
+          return getSharedPersistedConversationReader().read({
+            agentId,
+            provider: record.provider,
+            cwd: record.cwd,
+            persistence: record.persistence,
+            activityStamp: `${record.lastActivityAt ?? ""}|${record.updatedAt}`,
+          });
+        },
+        signal,
+      });
+      this.emitForSource(
+        {
+          type: "session.text_search.response",
+          payload: { requestId: msg.requestId, ...result, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "session.text_search.response",
+          payload: {
+            requestId: msg.requestId,
+            hits: [],
+            searchedCount: 0,
+            totalCount: 0,
+            truncated: false,
+            error: signal.aborted ? "Superseded by a newer search" : errorToFriendlyMessage(error),
+          },
+        },
+        source,
+      );
+    } finally {
+      if (this.sessionTextSearchActive === active) this.sessionTextSearchActive = null;
     }
   }
 
