@@ -364,6 +364,8 @@ export const ru: TranslationResources = {
       description: "Вопросы, решения, ответы и файлы. Сначала новые.",
       updateHost: "Обновите хост для работы с лентой",
       updateHostDescription: "Для вопросов и ответов нужен новый хост. Ваши файлы показаны ниже.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "Переподключение. Сохранённые записи доступны, но статусы могут устареть.",
       showAll: "Показать всё",
       pending: "Ожидают ответа ({{count}})",
@@ -2223,6 +2225,49 @@ export const ru: TranslationResources = {
       other: "выполнены вызовы Paseo ({{count}})",
     },
     and: "и",
+  },
+  quickLaunch: {
+    title: "Быстрый запуск",
+    commandCenterTitle: "Быстрый запуск агента…",
+    placeholder: "Что должен сделать новый агент?",
+    promptLabel: "Запрос для нового агента",
+    project: {
+      title: "Проект",
+      label: "Проект: {{project}}",
+      choose: "Выбрать проект",
+      search: "Поиск проектов",
+      empty: "Нет доступных проектов",
+    },
+    host: {
+      title: "Хост",
+      label: "Хост: {{host}}",
+    },
+    where: {
+      newWorkspace: "Новое рабочее пространство",
+      newTab: "Новая вкладка в {{workspace}}",
+    },
+    actions: {
+      start: "Запустить",
+      startHint: "Запускает агента, не уводя с текущего экрана",
+      startAndOpen: "Запустить и открыть",
+      startAndOpenHint: "Запускает агента и открывает его",
+    },
+    toast: {
+      starting: "Запуск в {{project}} · {{workspace}}…",
+      started: "Запущено в {{project}} · {{workspace}}",
+      newWorkspace: "новое рабочее пространство",
+      open: "Открыть",
+      retry: "Повторить",
+      failed: "Не удалось запустить агента: {{error}}",
+    },
+    errors: {
+      noAgent: "Рабочее пространство создано без агента",
+      createFailed: "Не удалось создать рабочее пространство",
+    },
+    router: {
+      startWithoutLeaving: "Запустить, не уходя",
+      startWithoutLeavingHint: "Запустить этот запрос через быстрый запуск и остаться здесь",
+    },
   },
   views: {
     sidebar: {

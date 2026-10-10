@@ -363,6 +363,8 @@ export const ko: TranslationResources = {
       updateHost: "스트림을 사용하려면 호스트를 업데이트하세요",
       updateHostDescription:
         "질문과 응답에는 최신 호스트가 필요합니다. 파일 산출물은 아래에 있습니다.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "다시 연결하는 중입니다. 저장된 항목은 계속 볼 수 있지만 대기 상태는 오래되었을 수 있습니다.",
       showAll: "모든 항목 표시",
@@ -2201,6 +2203,49 @@ export const ko: TranslationResources = {
       other: "Paseo를 {{count}}회 호출함",
     },
     and: "그리고",
+  },
+  quickLaunch: {
+    title: "빠른 실행",
+    commandCenterTitle: "에이전트 빠른 실행…",
+    placeholder: "새 에이전트가 무엇을 해야 하나요?",
+    promptLabel: "새 에이전트에게 보낼 프롬프트",
+    project: {
+      title: "프로젝트",
+      label: "프로젝트: {{project}}",
+      choose: "프로젝트 선택",
+      search: "프로젝트 검색",
+      empty: "사용할 수 있는 프로젝트가 없습니다",
+    },
+    host: {
+      title: "호스트",
+      label: "호스트: {{host}}",
+    },
+    where: {
+      newWorkspace: "새 워크스페이스",
+      newTab: "{{workspace}}의 새 탭",
+    },
+    actions: {
+      start: "시작",
+      startHint: "현재 화면에 머문 채로 에이전트를 시작합니다",
+      startAndOpen: "시작하고 열기",
+      startAndOpenHint: "에이전트를 시작하고 엽니다",
+    },
+    toast: {
+      starting: "{{project}} · {{workspace}}에서 시작하는 중…",
+      started: "{{project}} · {{workspace}}에서 시작됨",
+      newWorkspace: "새 워크스페이스",
+      open: "열기",
+      retry: "다시 시도",
+      failed: "에이전트를 시작할 수 없습니다: {{error}}",
+    },
+    errors: {
+      noAgent: "에이전트 없이 워크스페이스가 생성되었습니다",
+      createFailed: "워크스페이스를 만들 수 없습니다",
+    },
+    router: {
+      startWithoutLeaving: "이동하지 않고 시작",
+      startWithoutLeavingHint: "빠른 실행으로 이 프롬프트를 시작하고 현재 화면에 머뭅니다",
+    },
   },
   views: {
     sidebar: {

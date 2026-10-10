@@ -14,6 +14,7 @@ import {
   PanelLeft,
   Plus,
   Settings,
+  Zap,
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { getIsElectronRuntime, useIsCompactFormFactor } from "@/constants/layout";
@@ -26,7 +27,11 @@ import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
-import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
+import { openQuickLaunch } from "@/quick-launch/store";
+import {
+  clearCommandCenterFocusRestoreElement,
+  takeCommandCenterFocusRestoreElement,
+} from "@/utils/command-center-focus-restore";
 import {
   buildOpenProjectRoute,
   buildSchedulesRoute,
@@ -57,6 +62,7 @@ const ThemedKeyboard = withUnistyles(Keyboard, (theme) => ({
 const ThemedSettings = withUnistyles(Settings, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
+const ThemedZap = withUnistyles(Zap, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedHome = withUnistyles(Home, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedImport = withUnistyles(Import, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
@@ -73,6 +79,10 @@ function PlusIcon({ size }: CommandCenterIconProps) {
 
 function AddProjectIcon({ size }: CommandCenterIconProps) {
   return <ThemedFolderPlus size={size} strokeWidth={2.2} />;
+}
+
+function QuickLaunchIcon({ size }: CommandCenterIconProps) {
+  return <ThemedZap size={size} strokeWidth={2.2} />;
 }
 
 function SettingsIcon({ size }: CommandCenterIconProps) {
@@ -179,6 +189,26 @@ export function CommandCenterRootActions() {
           icon: PlusIcon,
           shortcutKeys:
             resolveShortcutKeysForAction("new-workspace", overrides, shortcutPlatform) ?? undefined,
+        },
+      },
+      {
+        id: "quick-launch",
+        group: "actions",
+        groupRank: 0,
+        rank: 1.5,
+        keywords: ["quick", "launch", "start", "agent", "background", "prompt", "new"],
+        visibility: "always",
+        run: () => {
+          // Closing Quick launch returns focus to where it was before the command center opened.
+          openQuickLaunch({ restoreFocusTo: takeCommandCenterFocusRestoreElement() });
+        },
+        presentation: {
+          kind: "action",
+          title: t("quickLaunch.commandCenterTitle"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: QuickLaunchIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("quick-launch", overrides, shortcutPlatform) ?? undefined,
         },
       },
       {
