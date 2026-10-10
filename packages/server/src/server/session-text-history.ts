@@ -63,7 +63,8 @@ const CODEX_INJECTED_PREFIXES = [
   "<permissions instructions>",
 ];
 
-const ROLLOUT_THREAD_ID = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+const ROLLOUT_THREAD_ID =
+  /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 
 interface CacheEntry {
   stamp: string;
@@ -169,7 +170,8 @@ export class PersistedConversationReader {
     const home = this.options.codexHome();
     const now = this.options.now();
     const index = this.codexIndex;
-    const fresh = index && index.home === home && now - index.builtAt < this.options.codexIndexTtlMs;
+    const fresh =
+      index && index.home === home && now - index.builtAt < this.options.codexIndexTtlMs;
     const hit = index?.home === home ? index.paths.get(threadId) : undefined;
     if (hit) return hit;
     if (fresh) return null;

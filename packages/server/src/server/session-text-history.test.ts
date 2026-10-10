@@ -117,7 +117,11 @@ test("finds Codex rollouts by thread id in dated and archived folders, skipping 
   ]);
   expect(await reader.read(source("other", "unknown-thread"))).toEqual([]);
   expect(
-    await reader.read({ ...source("gemini", live), provider: "gemini", persistence: { sessionId: live } }),
+    await reader.read({
+      ...source("gemini", live),
+      provider: "gemini",
+      persistence: { sessionId: live },
+    }),
   ).toEqual([]);
 });
 
