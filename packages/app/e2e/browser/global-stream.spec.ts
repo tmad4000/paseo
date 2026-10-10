@@ -146,6 +146,8 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       .click();
     await page.getByTestId("agent-view-artifacts").click();
     const feed = page.getByTestId("companion-stream");
+    await feed.getByRole("button", { name: "Checklist", exact: true }).click();
+    await feed.getByTestId("stream-status-filter").getByRole("button", { name: /^Open/ }).click();
     await expect(feed.getByText("Deliver request 0", { exact: true })).toBeVisible();
     await expect(feed.getByText("Blocked", { exact: true })).toBeVisible();
     await expect(
@@ -156,7 +158,7 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       path: testInfo.outputPath("durable-checklist-phone.png"),
       fullPage: true,
     });
-    await feed.getByRole("button", { name: "Show completed too" }).click();
+    await feed.getByTestId("stream-status-filter").getByRole("button", { name: /^All/ }).click();
     await expect(feed.getByRole("button", { name: "Load more" })).toBeVisible();
     await feed.getByRole("button", { name: "Load more" }).click();
     await expect(feed.getByRole("button", { name: "Load more" })).toHaveCount(0);
@@ -178,7 +180,8 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
     await completed.getByRole("button", { name: "Open", exact: true }).click();
     await expect(completed.getByText("Open", { exact: true }).first()).toBeVisible();
     await page.reload();
-    await page.getByTestId("agent-view-artifacts").click();
+    await feed.getByRole("button", { name: "Checklist", exact: true }).click();
+    await feed.getByTestId("stream-status-filter").getByRole("button", { name: /^Open/ }).click();
     await expect(page.getByTestId("companion-entry-ask:ask-1")).toBeVisible();
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.screenshot({
@@ -191,6 +194,184 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       filter: "pending",
     });
     expect(pending.rows).toHaveLength(2);
+  } finally {
+    await client.removeProject(workspace.projectId);
+    await client.close();
+    await repo.cleanup();
+  }
+});
+
+test("closed activity shows hidden counts, clear filters and a reloadable copied Stream link", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const repo = await createTempGitRepo("stream-filter-empty-");
+  const client = await connectSeedClient();
+  const created = await client.createWorkspace({ source: { kind: "directory", path: repo.path } });
+  if (!created.workspace) throw new Error(created.error ?? "Workspace missing");
+  const workspace = created.workspace;
+  try {
+    const agent = await createIdleAgent(client, {
+      cwd: repo.path,
+      workspaceId: workspace.id,
+      title: "Closed activity example",
+    });
+    for (let i = 0; i < 10; i++)
+      await client.updateStreamEntry({
+        agentId: agent.id,
+        action: "add_question",
+        entryId: `closed-${i}`,
+        text: `Reviewed item ${i}`,
+        status: "done",
+      });
+    await resetSeededPageState(page);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await gotoAppShell(page);
+    await page.goto("/stream");
+    await page
+      .getByTestId(`global-stream-row-${agent.id}`)
+      .first()
+      .getByRole("button", { name: /Closed activity example/ })
+      .click();
+    await page.getByTestId("agent-view-artifacts").click();
+    const feed = page.getByTestId("companion-stream");
+    await expect(feed.getByText(/0 open; 10 other items/)).toBeVisible();
+    await feed.getByTestId("stream-status-filter").getByRole("button", { name: /^Open/ }).click();
+    await expect(feed.getByText("No items match these filters", { exact: true })).toBeVisible();
+    await expect(feed.getByText(/0 open; 10 other items/)).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("stream-filter-empty-phone.png"),
+      fullPage: true,
+    });
+    await feed.getByRole("button", { name: "Show all items", exact: true }).click();
+    await expect(feed.getByText("Reviewed item 9", { exact: true })).toBeVisible();
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await feed.getByRole("button", { name: "Copy Stream link", exact: true }).click();
+    await expect(feed.getByText("Stream link copied", { exact: true })).toBeVisible();
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    expect(link).toContain(`/agent/${agent.id}?view=stream`);
+    await page.goto(link);
+    await expect(page.getByTestId("companion-stream")).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId("companion-stream")).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({
+      path: testInfo.outputPath("stream-activity-desktop.png"),
+      fullPage: true,
+    });
+  } finally {
+    await client.removeProject(workspace.projectId);
+    await client.close();
+    await repo.cleanup();
+  }
+});
+
+test("retained user messages expose multiple asks without confusing agent questions or completion", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const repo = await createTempGitRepo("stream-message-review-");
+  const client = await connectSeedClient();
+  const created = await client.createWorkspace({ source: { kind: "directory", path: repo.path } });
+  if (!created.workspace) throw new Error(created.error ?? "Workspace missing");
+  const workspace = created.workspace;
+  try {
+    const agent = await client.createAgent({
+      provider: "mock",
+      model: "e2e-fast-stream",
+      modeId: "load-test",
+      cwd: repo.path,
+      workspaceId: workspace.id,
+      title: "Message inventory",
+      featureValues: { mockAssistantResponse: "Should I start deployment?" },
+    });
+    await client.waitForAgentUpsert(agent.id, (snapshot) => snapshot.status === "idle");
+    await client.sendAgentMessage(agent.id, "Fix filtering and add direct links.");
+    await client.waitForFinish(agent.id);
+    const inventory = await client.listGlobalStream({
+      agentId: agent.id,
+      includeMessageInventory: true,
+      asksOnly: true,
+    });
+    const source = inventory.rows.find(
+      (row) => row.item.kind === "entry" && row.item.entry.messageReview,
+    );
+    if (!source || source.item.kind !== "entry") throw new Error("Source message not captured");
+    const sourceMessageId = source.item.entry.source!.messageId;
+    await resetSeededPageState(page);
+    await gotoAppShell(page);
+    await page.goto("/stream");
+    await page
+      .getByTestId(`global-stream-row-${agent.id}`)
+      .first()
+      .getByRole("button", { name: /Message inventory/ })
+      .click();
+    await page.getByTestId("agent-view-artifacts").click();
+    const feed = page.getByTestId("companion-stream");
+    await feed
+      .getByTestId("stream-source-filter")
+      .getByRole("button", { name: "Your messages", exact: true })
+      .click();
+    await expect(
+      feed.getByText("Fix filtering and add direct links.", { exact: true }),
+    ).toBeVisible();
+    await expect(feed.getByText("Should I start deployment?", { exact: true })).toHaveCount(0);
+    await feed
+      .getByTestId("stream-source-filter")
+      .getByRole("button", { name: "Agent messages", exact: true })
+      .click();
+    await expect(
+      feed.getByText("Fix filtering and add direct links.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      feed.getByText("Should I start deployment?", { exact: true }).first(),
+    ).toBeVisible();
+    await feed.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await feed.getByRole("button", { name: "Checklist", exact: true }).click();
+    await expect(feed.getByText("Needs ask review", { exact: true })).toBeVisible();
+    for (const id of ["filters", "links"])
+      await client.updateStreamEntry({
+        agentId: agent.id,
+        action: "set_ask",
+        entryId: id,
+        expectedRevision: 0,
+        text: id === "filters" ? "Fix filtering" : "Add direct links",
+        ask: {
+          state: id === "filters" ? "done" : "blocked",
+          remaining: id === "filters" ? "" : "Review pending",
+          evidence: id === "filters" ? "Filter regression passed" : "",
+          sourceMessageId,
+        },
+      });
+    await client.updateStreamEntry({
+      agentId: agent.id,
+      action: "review_message",
+      entryId: source.item.entry.id,
+      expectedRevision: 0,
+      review: {
+        state: "reviewed",
+        note: "Two asks recorded, links still blocked",
+        askIds: ["filters", "links"],
+      },
+    });
+    await feed.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(feed.getByText("Needs ask review", { exact: true })).toHaveCount(0);
+    await expect(feed.getByText("Blocked", { exact: true })).toBeVisible();
+    await expect(
+      feed.getByText("Completion evidence: Filter regression passed", { exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("stream-multiple-asks.png"),
+      fullPage: true,
+    });
+    await feed
+      .getByRole("button", { name: "Open source message in Chat", exact: true })
+      .first()
+      .click();
+    await expect(page.getByTestId("companion-stream")).toHaveCount(0);
+    await expect(
+      page.getByText("Fix filtering and add direct links.", { exact: true }),
+    ).toBeVisible();
   } finally {
     await client.removeProject(workspace.projectId);
     await client.close();

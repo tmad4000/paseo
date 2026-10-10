@@ -11,12 +11,17 @@ export function applyStreamEntryUpdate(
   entries: CompanionEntry[],
   input: StreamEntryUpdate,
 ): CompanionEntry[] {
+  if (input.action === "review_message") return reviewMessage(entries, input);
   if (input.action === "set_ask") return setAsk(entries, input);
   if (input.action === "update_status") {
     if (!input.status) throw new Error("Status is required");
     const target = entries.find((entry) => entry.id === input.entryId);
     if (!target || (target.kind !== "question" && target.kind !== "feature_request"))
       throw new Error("Stream item no longer exists or cannot be changed");
+    if (target.messageReview)
+      throw new Error(
+        "Review this source message and record its individual asks; message review is not task completion",
+      );
     if (target.ask) {
       if (input.status === "done" && target.ask.state !== "done")
         throw new Error("Use set_stream_ask with completion evidence to mark this ask done");
@@ -102,6 +107,7 @@ function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionE
     text: input.text.trim(),
     truncated: false,
     status: ask.state === "done" ? "done" : "open",
+    source: findAskSource(entries, ask.sourceMessageId),
     ask: {
       state: ask.state,
       remaining: ask.remaining,
@@ -137,4 +143,47 @@ function validateAskCompletion(ask: TrackedAskInput): void {
     throw new Error("Describe what blocks this ask in remaining");
   if (new Set(ask.subtasks?.map((task) => task.id)).size !== (ask.subtasks?.length ?? 0))
     throw new Error("Subtask IDs must be unique");
+}
+
+function reviewMessage(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
+  const previous = entries.find((entry) => entry.id === input.entryId);
+  if (!previous?.messageReview || !input.review)
+    throw new Error("Source message review is required");
+  const { review } = input;
+  if (review.state === "reviewed" && !review.note.trim())
+    throw new Error("Explain the review, including when this message contains no asks");
+  for (const id of review.askIds) {
+    const ask = entries.find((entry) => entry.id === `ask:${id}`);
+    if (!ask?.ask || ask.ask.sourceMessageId !== previous.source?.messageId)
+      throw new Error("Every linked ask must reference this source message");
+  }
+  const next = { ...review, revision: previous.messageReview.revision };
+  if (
+    JSON.stringify(next) ===
+    JSON.stringify({
+      state: previous.messageReview.state,
+      note: previous.messageReview.note,
+      askIds: previous.messageReview.askIds,
+      revision: previous.messageReview.revision,
+    })
+  )
+    return entries;
+  if (input.expectedRevision !== previous.messageReview.revision)
+    throw new Error("Message review revision conflict; read it before updating");
+  return entries.map((entry) =>
+    entry === previous
+      ? { ...entry, messageReview: { ...next, revision: next.revision + 1 } }
+      : entry,
+  );
+}
+
+function findAskSource(entries: CompanionEntry[], messageId: string | undefined) {
+  if (!messageId) return undefined;
+  const source = entries.find(
+    (item) => item.messageReview && item.source?.messageId === messageId,
+  )?.source;
+  if (!source) return undefined;
+  // Provenance aliases only identify the source record; asks need its position.
+  const { aliases: _aliases, ...position } = source;
+  return position;
 }

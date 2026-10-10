@@ -22,6 +22,9 @@ export const StreamListRequestSchema = z.object({
   filter: StreamFilterSchema.optional(),
   agentId: z.string().optional(),
   asksOnly: z.boolean().optional(),
+  includeMessageInventory: z.boolean().optional(),
+  sourceRole: z.enum(["all", "user", "agent"]).optional(),
+  state: z.enum(["all", "open", "done"]).optional(),
   search: z.string().max(1000).optional(),
   includeArchived: z.boolean().optional(),
   cursor: z.string().max(10000).optional(),
@@ -34,6 +37,18 @@ export const StreamListResponseSchema = z.object({
     rows: z.array(StreamRowSchema),
     nextCursor: z.string().nullable(),
     error: z.string().nullable(),
+    counts: z
+      .object({
+        total: z.number(),
+        open: z.number(),
+        done: z.number(),
+        user: z.number(),
+        agent: z.number(),
+        unknown: z.number(),
+        matching: z.number(),
+      })
+      .optional(),
+    coverage: z.enum(["loaded_history", "not_loaded"]).optional(),
   }),
 });
 export const StreamUpdateRequestSchema = z.object({
@@ -48,6 +63,7 @@ export const StreamUpdateRequestSchema = z.object({
     "add_q_and_a",
     "add_question",
     "set_ask",
+    "review_message",
   ]),
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().max(4000).optional(),
@@ -55,6 +71,13 @@ export const StreamUpdateRequestSchema = z.object({
   expectedRevision: z.number().int().min(0).optional(),
   answerText: z.string().max(4000).optional(),
   sourceId: z.string().optional(),
+  review: z
+    .object({
+      state: z.enum(["unreviewed", "reviewed"]),
+      note: z.string().max(4000),
+      askIds: z.array(z.string().max(200)).max(100),
+    })
+    .optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),
