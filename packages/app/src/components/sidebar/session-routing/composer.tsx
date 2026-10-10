@@ -43,6 +43,7 @@ import {
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { defaultNewConversationWorkspace, prepareNewConversationDraft } from "./new-conversation";
+import { useDefaultProjectPlacements } from "@/default-project/hooks";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { deliverDirectRoutedPrompt, deliverRoutedPrompt } from "./delivery";
 import {
@@ -94,6 +95,7 @@ export function SessionRoutingComposer({
     serverIds,
     hostRegistryLoaded,
   } = useSidebarModel();
+  const defaultProjects = useDefaultProjectPlacements(allProjects);
   const [state, reduce] = useReducer(routingReducer, initialRoutingState);
   const pendingItemId =
     state.phase.status === "pending" || state.phase.status === "sending"
@@ -821,9 +823,10 @@ export function SessionRoutingComposer({
           serverIds,
           scope: current.scope,
           active: selection,
+          defaultProjects,
         }),
     });
-  }, [cancelMatch, dispatch, workspacePlacements, serverIds, selection]);
+  }, [cancelMatch, dispatch, workspacePlacements, serverIds, selection, defaultProjects]);
   const selectAutomatic = useCallback(() => {
     select(null);
   }, [select]);

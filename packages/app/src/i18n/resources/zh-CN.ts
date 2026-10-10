@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "固定项目",
+      unpin: "取消固定项目",
+      makeDefault: "设为默认项目",
+      removeDefault: "取消默认项目",
+    },
+    badges: {
+      default: "默认项目",
+      pinned: "已固定的项目",
+    },
+    commandCenter: {
+      goToDefault: "前往默认项目",
+      pinCurrent: "固定当前项目",
+      unpinCurrent: "取消固定当前项目",
+      makeCurrentDefault: "将当前项目设为默认",
+      removeCurrentDefault: "取消当前项目的默认设置",
+    },
+    settings: {
+      title: "默认项目",
+      hint: "Quick launch 和 New conversation 从这里开始。",
+      updateHost: "请更新此主机以选择默认项目。",
+      none: "无",
+      accessibilityLabel: "默认项目：{{value}}",
+    },
+    toasts: {
+      failed: "无法更新项目",
+      hostDisconnected: "主机未连接",
+    },
+  },
   sessionPins: {
     title: "已固定的会话",
     pin: "固定会话",

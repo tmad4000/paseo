@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "Fixar projeto",
+      unpin: "Desafixar projeto",
+      makeDefault: "Tornar projeto padrão",
+      removeDefault: "Remover como projeto padrão",
+    },
+    badges: {
+      default: "Projeto padrão",
+      pinned: "Projeto fixado",
+    },
+    commandCenter: {
+      goToDefault: "Ir para o projeto padrão",
+      pinCurrent: "Fixar o projeto atual",
+      unpinCurrent: "Desafixar o projeto atual",
+      makeCurrentDefault: "Tornar o projeto atual padrão",
+      removeCurrentDefault: "Remover o projeto atual como padrão",
+    },
+    settings: {
+      title: "Projeto padrão",
+      hint: "Quick launch e New conversation começam aqui.",
+      updateHost: "Atualize este host para escolher um projeto padrão.",
+      none: "Nenhum",
+      accessibilityLabel: "Projeto padrão: {{value}}",
+    },
+    toasts: {
+      failed: "Não foi possível atualizar o projeto",
+      hostDisconnected: "O host não está conectado",
+    },
+  },
   sessionPins: {
     title: "Sessões fixadas",
     pin: "Fixar sessão",

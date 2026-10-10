@@ -40,6 +40,9 @@ import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
 } from "@/workspace-labels";
+import { orderProjectsWithPins } from "@/default-project/model";
+import { useProjectPinStates } from "@/default-project/hooks";
+import { usePinnedProjectOrderStore } from "@/default-project/pinned-project-order-store";
 
 interface SidebarModel extends SidebarWorkspacesListResult {
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
@@ -62,6 +65,8 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   workspaceGroups: SidebarWorkspaceGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
+  /** View keys of pinned and Default projects, which lead `projects` in every sort mode. */
+  pinnedProjectViewKeys: ReadonlySet<string>;
   collapsedProjectKeys: ReadonlySet<string>;
   toggleProjectCollapsed: (projectViewKey: string) => void;
   shortcutModel: SidebarShortcutModel;
@@ -196,10 +201,22 @@ export function SidebarModelProvider({
     list.projects,
     visibleWorkspaceKeys,
   ]);
-  const pinnedKeys = usePinnedSidebarKeys(filteredProjects);
+  const projectPinStates = useProjectPinStates(list.projects);
+  const pinnedProjectOrder = usePinnedProjectOrderStore((state) => state.pinnedProjectOrder);
+  const pinOrdered = useMemo(
+    () =>
+      orderProjectsWithPins({
+        projects: filteredProjects,
+        pinStates: projectPinStates,
+        pinnedProjectOrder,
+      }),
+    [filteredProjects, pinnedProjectOrder, projectPinStates],
+  );
+  const orderedProjects = pinOrdered.projects;
+  const pinnedKeys = usePinnedSidebarKeys(orderedProjects);
   const projectionInput = useMemo(
     () => ({
-      projects: filteredProjects,
+      projects: orderedProjects,
       pinnedKeys,
       pinnedWorkspaceOrder,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
@@ -217,7 +234,7 @@ export function SidebarModelProvider({
       groupMode,
       list.projectNamesByViewKey,
       effectiveSort,
-      filteredProjects,
+      orderedProjects,
       pinnedCollapsed,
       pinnedKeys,
       pinnedWorkspaceOrder,
@@ -228,7 +245,7 @@ export function SidebarModelProvider({
   const value = useMemo(
     () => ({
       ...list,
-      projects: filteredProjects,
+      projects: orderedProjects,
       allProjects: list.projects,
       resolvedProjectFilters,
       hasProjectsBeforeFilter: list.projects.length > 0,
@@ -242,6 +259,7 @@ export function SidebarModelProvider({
       workspaceGroups: projection.workspaceGroups,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
+      pinnedProjectViewKeys: pinOrdered.pinnedViewKeys,
       collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       toggleProjectCollapsed,
       shortcutModel: projection.shortcutModel,
@@ -256,7 +274,8 @@ export function SidebarModelProvider({
       sortAvailability,
       groupMode,
       list,
-      filteredProjects,
+      orderedProjects,
+      pinOrdered.pinnedViewKeys,
       projection,
       toggleProjectCollapsed,
       filteredWorkspaceEntriesByKey,
