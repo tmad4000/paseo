@@ -336,6 +336,8 @@ export const ar: TranslationResources = {
       description: "الأسئلة والقرارات والردود والملفات، الأحدث أولاً.",
       updateHost: "حدّث المضيف لاستخدام الموجز",
       updateHostDescription: "تتطلب الأسئلة والردود مضيفاً أحدث. ملفاتك أدناه.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "جارٍ إعادة الاتصال. تظل العناصر المحفوظة متاحة؛ قد تكون الحالات قديمة.",
       showAll: "عرض الكل",
       pending: "بحاجة إلى رد ({{count}})",

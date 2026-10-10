@@ -59,6 +59,15 @@ require fleet idle, idle voice, accounted queues, and no owned terminals. The ha
 repair (`code-nnl`, PR55) is separate offline maintenance; its explicit maintenance-order
 exception is still held. No queue bypass or restart is implied by this source preparation.
 
+**Host first.** Cut the M4 daemon over before, or together with, any client install (M5, M3,
+phone). Most chats live on the M4 host, and clients newer than that host lose host-gated
+features. Remote beta.5/6 and beta.11 clients ran days ahead of the M4 daemon this way, which
+caused the repeated "Update the host to use Stream" (`pspin-6ck`). The M4 LaunchAgent
+`sh.paseo.daemon` and the `paseo`/`paseo-fork` links point at a staged bundle under
+`code-overflow/paseo-fork-releases/<version>/`, not `/Applications`. Installing the app there
+does not upgrade the daemon. Only the cutover does. On M4, `com.jacob.paseo-stream-guard` alerts
+by Telegram when the host lacks Stream flags or a client is newer than the host.
+
 `code-tie` remains outstanding: provider and terminal ownership must survive daemon replacement,
 UI Quit must leave runtime running by default, and identities, events and pending permissions
 must reattach without duplicate prompts. This candidate does not implement those guarantees.
