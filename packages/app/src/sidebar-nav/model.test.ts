@@ -36,13 +36,14 @@ describe("resolveSidebarNavItems", () => {
 
     expect(summarize(items)).toEqual([
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: "history", visible: true },
       { key: "search", visible: true },
       { key: "schedules", visible: true },
       { key: kanbanKey, visible: true },
       { key: notesKey, visible: true },
     ]);
-    expect(items[4]).toEqual({ kind: "plugin", key: kanbanKey, group: kanban, visible: true });
+    expect(items[5]).toEqual({ kind: "plugin", key: kanbanKey, group: kanban, visible: true });
     expect(items[0]).toEqual({
       kind: "builtin",
       key: "new-workspace",
@@ -65,6 +66,7 @@ describe("resolveSidebarNavItems", () => {
       { key: kanbanKey, visible: false },
       { key: "schedules", visible: true },
       { key: "new-workspace", visible: false },
+      { key: "quick-launch", visible: true },
       { key: "history", visible: true },
       { key: "search", visible: true },
       { key: notesKey, visible: true },
@@ -84,6 +86,7 @@ describe("resolveSidebarNavItems", () => {
     expect(items.map((item) => item.key)).toEqual([
       "history",
       "new-workspace",
+      "quick-launch",
       "search",
       "schedules",
     ]);
@@ -101,8 +104,50 @@ describe("resolveSidebarNavItems", () => {
     expect(summarize(items)).toEqual([
       { key: "history", visible: false },
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: "search", visible: true },
       { key: "schedules", visible: true },
+    ]);
+  });
+
+  it("slots Quick launch in after New workspace for an order saved before it existed", () => {
+    const items = resolveSidebarNavItems({
+      pluginGroups: [kanban],
+      preferences: [
+        { key: "new-workspace", visible: true },
+        { key: "history", visible: true },
+        { key: "search", visible: false },
+        { key: "schedules", visible: true },
+        { key: kanbanKey, visible: true },
+      ],
+    });
+
+    expect(summarize(items)).toEqual([
+      { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
+      { key: "history", visible: true },
+      { key: "search", visible: false },
+      { key: "schedules", visible: true },
+      { key: kanbanKey, visible: true },
+    ]);
+  });
+
+  it("keeps a saved Quick launch position", () => {
+    const items = resolveSidebarNavItems({
+      pluginGroups: [],
+      preferences: [
+        { key: "schedules", visible: true },
+        { key: "quick-launch", visible: false },
+        { key: "new-workspace", visible: true },
+      ],
+    });
+
+    expect(summarize(items)).toEqual([
+      { key: "schedules", visible: true },
+      { key: "quick-launch", visible: false },
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "search", visible: true },
     ]);
   });
 });
@@ -115,6 +160,7 @@ describe("setSidebarNavItemVisible", () => {
 
     expect(next).toEqual([
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: "history", visible: true },
       { key: "search", visible: false },
       { key: "schedules", visible: true },
@@ -135,6 +181,7 @@ describe("setSidebarNavItemVisible", () => {
       { key: notesKey, visible: false },
       { key: "history", visible: false },
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: "search", visible: true },
       { key: "schedules", visible: true },
     ]);
@@ -143,6 +190,7 @@ describe("setSidebarNavItemVisible", () => {
   it("keeps an unavailable plugin in its configured position", () => {
     const previous: SidebarNavPreference[] = [
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: notesKey, visible: false },
       { key: "history", visible: true },
       { key: "search", visible: true },
@@ -154,6 +202,7 @@ describe("setSidebarNavItemVisible", () => {
 
     expect(next).toEqual([
       { key: "new-workspace", visible: true },
+      { key: "quick-launch", visible: true },
       { key: notesKey, visible: false },
       { key: "history", visible: false },
       { key: "search", visible: true },
@@ -181,6 +230,7 @@ describe("moveSidebarNavItem", () => {
 
     expect(next.map((preference) => preference.key)).toEqual([
       "new-workspace",
+      "quick-launch",
       "search",
       "history",
       "schedules",
@@ -193,6 +243,7 @@ describe("moveSidebarNavItem", () => {
 
     expect(next.map((preference) => preference.key)).toEqual([
       "new-workspace",
+      "quick-launch",
       "history",
       "search",
       kanbanKey,
@@ -236,6 +287,7 @@ describe("moveSidebarNavItem", () => {
 describe("builtinSidebarNavShortcutAction", () => {
   it("maps only the builtins that have a keyboard shortcut", () => {
     expect(builtinSidebarNavShortcutAction("new-workspace")).toBe("new-workspace");
+    expect(builtinSidebarNavShortcutAction("quick-launch")).toBe("quick-launch");
     expect(builtinSidebarNavShortcutAction("search")).toBe("toggle-command-center");
     expect(builtinSidebarNavShortcutAction("history")).toBeNull();
     expect(builtinSidebarNavShortcutAction("schedules")).toBeNull();
