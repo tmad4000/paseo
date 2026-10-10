@@ -113,6 +113,13 @@ export const ru: TranslationResources = {
       open: "Открыть меню",
       close: "Закрыть меню",
     },
+    recentSessions: {
+      title: "Недавние сессии",
+      commandTitle: "Недавние сессии…",
+      empty: "Других недавних сессий пока нет",
+      showAll: "Показать все…",
+      placeholder: "Искать среди недавних сессий...",
+    },
     recentWorkspaces: {
       title: "Недавние рабочие пространства",
       current: "Текущее",

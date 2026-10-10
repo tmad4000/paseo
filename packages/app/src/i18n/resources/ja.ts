@@ -113,6 +113,13 @@ export const ja: TranslationResources = {
       open: "メニューを開く",
       close: "メニューを閉じる",
     },
+    recentSessions: {
+      title: "最近のセッション",
+      commandTitle: "最近のセッション…",
+      empty: "ほかに最近のセッションはまだありません",
+      showAll: "すべて表示…",
+      placeholder: "最近のセッションを検索...",
+    },
     recentWorkspaces: {
       title: "最近のワークスペース",
       current: "現在",

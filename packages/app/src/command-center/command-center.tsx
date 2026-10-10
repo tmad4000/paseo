@@ -47,11 +47,16 @@ import {
   type CommandCenterScope,
 } from "@/stores/keyboard-shortcuts-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
-import { useRecentWorkspacesStore } from "@/stores/recent-workspaces-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
 import {
   createRecentWorkspaceComparator,
+  recentSessionKey,
+  recentSessionsFromVisits,
   recentWorkspaceKey,
+  recentWorkspacesFromVisits,
 } from "@/navigation/recent-workspaces";
+import { orderRowsByRecentSessions } from "@/navigation/recent-sessions";
+import { useFocusedAgent } from "@/navigation/use-recent-session-rows";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import {
@@ -207,9 +212,10 @@ function workspaceResultKey(result: CommandCenterWorkspaceResult): string {
 
 /** Workspaces you visited most recently come first; ties and unvisited ones fall back to title. */
 function useCompareWorkspacesByRecency() {
-  const recent = useRecentWorkspacesStore((state) => state.recent);
+  const visits = useRecentVisitsStore((state) => state.visits);
   const pathname = usePathname();
   return useMemo(() => {
+    const recent = recentWorkspacesFromVisits(visits);
     const current = parseHostWorkspaceRouteFromPathname(pathname);
     const byRecency = createRecentWorkspaceComparator(
       recent,
@@ -221,13 +227,40 @@ function useCompareWorkspacesByRecency() {
         byRecency(workspaceResultKey(left), workspaceResultKey(right)) ||
         compareWorkspacesByTitle(left, right),
     };
-  }, [pathname, recent]);
+  }, [pathname, visits]);
 }
 
-function useBuiltInSections(open: boolean, query: string): CommandCenterResultSection[] {
+/** Agent rows for sessions you focused recently, most recent first; Cmd+K's "recent" scope. */
+function useRecentSessionAgentRows(
+  agents: readonly CommandCenterAgentResult[],
+  enabled: boolean,
+): CommandCenterAgentResult[] {
+  const visits = useRecentVisitsStore((state) => state.visits);
+  const focused = useFocusedAgent();
+  return useMemo(
+    () =>
+      enabled
+        ? orderRowsByRecentSessions({
+            rows: agents,
+            sessionKeyOf: (row) =>
+              recentSessionKey({ serverId: row.agent.serverId, agentId: row.agent.id }),
+            sessions: recentSessionsFromVisits(visits),
+            currentKey: focused ? recentSessionKey(focused) : null,
+          })
+        : [],
+    [agents, enabled, focused, visits],
+  );
+}
+
+function useBuiltInSections(
+  open: boolean,
+  query: string,
+  scope: CommandCenterScope,
+): CommandCenterResultSection[] {
   const { t } = useTranslation();
   const rows = useBuiltInRows(open);
   const recency = useCompareWorkspacesByRecency();
+  const recentSessionRows = useRecentSessionAgentRows(rows.agents, open && scope === "recent");
   const hasQuery = query.trim().length > 0;
   // An empty query shows only the first few rows, so they have to arrive in recency order.
   const workspaceRows = useMemo(
@@ -237,6 +270,27 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
 
   return useMemo(() => {
     if (!open) return [];
+    if (scope === "recent") {
+      return [
+        {
+          id: "recent-sessions",
+          band: PINNED_SECTION_BAND,
+          rank: 1,
+          title: t("shell.recentSessions.title"),
+          // Every recent session, not the usual first few: this scope is the full list.
+          results: hasQuery
+            ? filterAndRankBuiltInResults(recentSessionRows, query, agentSearchFields, () => 0)
+            : recentSessionRows,
+        },
+        {
+          id: "workspaces",
+          band: PINNED_SECTION_BAND,
+          rank: 2,
+          title: t("shell.recentWorkspaces.title"),
+          results: filterAndRankWorkspaces(workspaceRows, query, recency.compare),
+        },
+      ];
+    }
     return [
       {
         id: "workspaces",
@@ -258,7 +312,7 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
         ),
       },
     ];
-  }, [hasQuery, open, query, recency, rows.agents, t, workspaceRows]);
+  }, [hasQuery, open, query, recency, recentSessionRows, rows.agents, scope, t, workspaceRows]);
 }
 
 interface CommandCenterState {
@@ -292,7 +346,7 @@ function useCommandCenterState(): CommandCenterState {
   const previousOpenRef = useRef(open);
   const [query, setQueryState] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const builtInSections = useBuiltInSections(open, query);
+  const builtInSections = useBuiltInSections(open, query, scope);
   const {
     entries: fileSearchEntries,
     loading: fileSearchLoading,
@@ -328,15 +382,11 @@ function useCommandCenterState(): CommandCenterState {
     () => buildContributionSections(snapshot.contributions, query),
     [query, snapshot.contributions],
   );
-  const projection = useMemo(
-    () =>
-      projectCommandCenterRows(
-        scope === "files"
-          ? fileSections
-          : [...contributionSections, ...fileSections, ...builtInSections],
-      ),
-    [builtInSections, contributionSections, fileSections, scope],
-  );
+  const projection = useMemo(() => {
+    if (scope === "files") return projectCommandCenterRows(fileSections);
+    if (scope === "recent") return projectCommandCenterRows(builtInSections);
+    return projectCommandCenterRows([...contributionSections, ...fileSections, ...builtInSections]);
+  }, [builtInSections, contributionSections, fileSections, scope]);
   const resolvedActiveId = preserveActiveResultId(activeId, projection.selectableResults);
 
   // Editing the query re-ranks everything, so an arrow-key selection made under the previous
@@ -784,8 +834,8 @@ export function CommandCenter() {
         accessible={false}
       >
         <View style={[styles.bottomSheetHeader, styles.searchRow]} testID="command-center-header">
-          {state.scope === "files" ? (
-            <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+          {state.scope ? (
+            <ScopeChip label={scopeLabel(state.scope, t)} onRemove={state.clearScope} />
           ) : null}
           <ThemedBottomSheetTextInput
             testID="command-center-input"
@@ -795,11 +845,7 @@ export function CommandCenter() {
             onChangeText={state.setQuery}
             onKeyPress={keyPress}
             onSubmitEditing={submit}
-            placeholder={
-              state.scope === "files"
-                ? t("shell.commandCenter.filePlaceholder")
-                : t("shell.commandCenter.placeholder")
-            }
+            placeholder={scopePlaceholder(state.scope, t)}
             style={[styles.input, styles.growingInput]}
             autoCapitalize="none"
             autoCorrect={false}
@@ -823,19 +869,15 @@ export function CommandCenter() {
           <Pressable style={styles.backdrop} onPress={state.close} />
           <View ref={setWebOverlayScope} testID="command-center-panel" style={styles.panel}>
             <View style={[styles.header, styles.searchRow]} testID="command-center-header">
-              {state.scope === "files" ? (
-                <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+              {state.scope ? (
+                <ScopeChip label={scopeLabel(state.scope, t)} onRemove={state.clearScope} />
               ) : null}
               <ThemedTextInput
                 testID="command-center-input"
                 ref={state.inputRef}
                 initialValue={state.query}
                 onChangeText={state.setQuery}
-                placeholder={
-                  state.scope === "files"
-                    ? t("shell.commandCenter.filePlaceholder")
-                    : t("shell.commandCenter.placeholder")
-                }
+                placeholder={scopePlaceholder(state.scope, t)}
                 style={[styles.input, styles.growingInput]}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -853,6 +895,16 @@ export function CommandCenter() {
       </Modal>
     </OverlayLayerProvider>
   );
+}
+
+function scopeLabel(scope: Exclude<CommandCenterScope, null>, t: (key: string) => string): string {
+  return scope === "files" ? t("shell.commandCenter.files") : t("shell.recentSessions.title");
+}
+
+function scopePlaceholder(scope: CommandCenterScope, t: (key: string) => string): string {
+  if (scope === "files") return t("shell.commandCenter.filePlaceholder");
+  if (scope === "recent") return t("shell.recentSessions.placeholder");
+  return t("shell.commandCenter.placeholder");
 }
 
 function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; label: string }) {

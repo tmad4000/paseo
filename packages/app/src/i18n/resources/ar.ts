@@ -112,6 +112,13 @@ export const ar: TranslationResources = {
       open: "فتح القائمة",
       close: "إغلاق القائمة",
     },
+    recentSessions: {
+      title: "الجلسات الأخيرة",
+      commandTitle: "الجلسات الأخيرة…",
+      empty: "لا توجد جلسات أخرى حديثة بعد",
+      showAll: "عرض الكل…",
+      placeholder: "ابحث في الجلسات الأخيرة...",
+    },
     recentWorkspaces: {
       title: "مساحات العمل الأخيرة",
       current: "الحالية",

@@ -112,6 +112,13 @@ export const zhCN: TranslationResources = {
       open: "打开菜单",
       close: "关闭菜单",
     },
+    recentSessions: {
+      title: "最近的会话",
+      commandTitle: "最近的会话…",
+      empty: "暂无其他最近的会话",
+      showAll: "显示全部…",
+      placeholder: "搜索最近的会话...",
+    },
     recentWorkspaces: {
       title: "最近的 workspace",
       current: "当前",

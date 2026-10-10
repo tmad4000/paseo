@@ -114,6 +114,13 @@ export const fr: TranslationResources = {
       open: "Ouvrir le menu",
       close: "Fermer le menu",
     },
+    recentSessions: {
+      title: "Sessions récentes",
+      commandTitle: "Sessions récentes…",
+      empty: "Aucune autre session récente pour l’instant",
+      showAll: "Tout afficher…",
+      placeholder: "Rechercher dans les sessions récentes...",
+    },
     recentWorkspaces: {
       title: "Espaces de travail récents",
       current: "Actuel",

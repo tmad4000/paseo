@@ -37,7 +37,7 @@ export type ShortcutAction =
   | { kind: "router-push"; route: string }
   | { kind: "open-project-picker" }
   | { kind: "callback"; name: ShortcutCallbackName }
-  | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" }
+  | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" | "recent" }
   | { kind: "shortcuts-dialog-toggle"; nextOpen: boolean }
   | { kind: "recent-workspace-switch"; direction: 1 | -1 };
 
@@ -221,6 +221,8 @@ export function routeKeyboardShortcut(
       return routeSettingsToggle(ctx);
     case "command-center.toggle":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen };
+    case "recent-sessions.open":
+      return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen, scope: "recent" };
     case "command-center.files":
       if (parseHostWorkspaceRouteFromPathname(ctx.pathname)) {
         return { kind: "command-center-toggle", nextOpen: true, scope: "files" };

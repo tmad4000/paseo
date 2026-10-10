@@ -29,6 +29,7 @@ import {
   NavigationBackButton,
   NavigationForwardButton,
 } from "@/components/headers/navigation-back-button";
+import { RecentSessionsButton } from "@/components/headers/recent-sessions-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HostBadge } from "@/hosts/host-badge";
@@ -266,6 +267,7 @@ const GATED_WORKSPACE_HEADER_LEFT = (
     <SidebarMenuToggle />
     <NavigationBackButton />
     <NavigationForwardButton />
+    <RecentSessionsButton />
   </>
 );
 
@@ -4020,6 +4022,7 @@ function WorkspaceScreenContent({
               <SidebarMenuToggle />
               <NavigationBackButton />
               <NavigationForwardButton />
+              <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}

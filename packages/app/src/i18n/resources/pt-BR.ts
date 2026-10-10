@@ -113,6 +113,13 @@ export const ptBR: TranslationResources = {
       open: "Abrir menu",
       close: "Fechar menu",
     },
+    recentSessions: {
+      title: "Sessões recentes",
+      commandTitle: "Sessões recentes…",
+      empty: "Ainda não há outras sessões recentes",
+      showAll: "Mostrar tudo…",
+      placeholder: "Buscar sessões recentes...",
+    },
     recentWorkspaces: {
       title: "Workspaces recentes",
       current: "Atual",

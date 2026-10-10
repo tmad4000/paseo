@@ -237,6 +237,12 @@ describe("keyboard-shortcuts", () => {
       payload: { delta: -1 },
     },
     {
+      name: "matches recent sessions via Mod+Alt+R",
+      event: { key: "r", code: "KeyR", ctrlKey: true, altKey: true },
+      context: { isDesktop: true },
+      action: "recent-sessions.open",
+    },
+    {
       name: "matches navigation forward via Mod+Alt+ArrowRight",
       event: { key: "ArrowRight", code: "ArrowRight", ctrlKey: true, altKey: true },
       context: { isDesktop: true },

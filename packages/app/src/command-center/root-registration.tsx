@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   CalendarClock,
   CircleDashed,
+  Clock,
   Folder,
   FolderPlus,
   History,
@@ -22,6 +23,7 @@ import { useImportSession } from "@/hooks/use-import-session";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
 import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
+import { openRecentSessionsInCommandCenter } from "@/components/headers/recent-sessions-button";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
@@ -42,6 +44,9 @@ const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedHistory = withUnistyles(History, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedClock = withUnistyles(Clock, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedCalendarClock = withUnistyles(CalendarClock, (theme) => ({
@@ -77,6 +82,10 @@ function SettingsIcon({ size }: CommandCenterIconProps) {
 
 function HistoryIcon({ size }: CommandCenterIconProps) {
   return <ThemedHistory size={size} strokeWidth={2.2} />;
+}
+
+function RecentSessionsIcon({ size }: CommandCenterIconProps) {
+  return <ThemedClock size={size} strokeWidth={2.2} />;
 }
 
 function SchedulesIcon({ size }: CommandCenterIconProps) {
@@ -225,6 +234,28 @@ export function CommandCenterRootActions() {
           title: t("sidebar.sections.sessions"),
           sectionTitle: t("shell.commandCenter.actions"),
           icon: HistoryIcon,
+        },
+      },
+      {
+        id: "recent-sessions",
+        group: "actions",
+        groupRank: 0,
+        rank: 4,
+        keywords: ["recent", "sessions", "agents", "chats", "switch", "last"],
+        visibility: "always",
+        run: () => {
+          // Selecting closes Cmd+K first; reopen on the next tick so it starts with an
+          // empty query on the recent list rather than keeping what was typed to find this.
+          setTimeout(openRecentSessionsInCommandCenter, 0);
+        },
+        presentation: {
+          kind: "action",
+          title: t("shell.recentSessions.commandTitle"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: RecentSessionsIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("recent-sessions", overrides, shortcutPlatform) ??
+            undefined,
         },
       },
       {
