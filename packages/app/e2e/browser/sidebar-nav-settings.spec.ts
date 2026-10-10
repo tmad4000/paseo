@@ -50,15 +50,18 @@ test.describe("Sidebar items in Appearance settings", () => {
         label: "Quick launch",
         visible: true,
       });
-      // Items with a keyboard shortcut badge it next to their name. Chords render
-      // with Ctrl off macOS, which is what the browser project runs on.
+      // Items with a keyboard shortcut badge it next to their name. Chords follow the
+      // browser's platform: Ctrl off macOS (CI), symbols on a Mac.
+      const isMac = process.platform === "darwin";
       await expect(
-        page.getByTestId("sidebar-nav-item-new-workspace").getByText("Ctrl+N", { exact: true }),
+        page
+          .getByTestId("sidebar-nav-item-new-workspace")
+          .getByText(isMac ? "⌘N" : "Ctrl+N", { exact: true }),
       ).toBeVisible();
       await expect(
         page
           .getByTestId("sidebar-nav-item-quick-launch")
-          .getByText("Ctrl+Shift+L", { exact: true }),
+          .getByText(isMac ? "⇧⌘L" : "Ctrl+Shift+L", { exact: true }),
       ).toBeVisible();
     });
 
