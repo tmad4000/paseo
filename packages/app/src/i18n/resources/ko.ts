@@ -306,6 +306,8 @@ export const ko: TranslationResources = {
       updateHost: "스트림을 사용하려면 호스트를 업데이트하세요",
       updateHostDescription:
         "질문과 응답에는 최신 호스트가 필요합니다. 파일 산출물은 아래에 있습니다.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "다시 연결하는 중입니다. 저장된 항목은 계속 볼 수 있지만 대기 상태는 오래되었을 수 있습니다.",
       showAll: "모든 항목 표시",

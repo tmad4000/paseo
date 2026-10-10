@@ -302,6 +302,8 @@ export const zhCN: TranslationResources = {
       description: "问题、决策、回复和文件，最新内容在前。",
       updateHost: "更新主机以使用动态",
       updateHostDescription: "问题和回复需要更新的主机。文件产物仍在下方。",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "正在重连。已保存的内容仍可查看；待处理状态可能已过时。",
       showAll: "显示全部",
       pending: "需要回复（{{count}}）",

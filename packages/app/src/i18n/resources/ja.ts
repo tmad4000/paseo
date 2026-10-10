@@ -307,6 +307,8 @@ export const ja: TranslationResources = {
       description: "質問、判断、回答、ファイルを新しい順に表示します。",
       updateHost: "ストリームを使うにはホストを更新",
       updateHostDescription: "質問と回答には新しいホストが必要です。ファイルは下に表示されます。",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "再接続中。保存済みの項目は閲覧できますが、保留状態は古い可能性があります。",
       showAll: "すべて表示",
       pending: "返信が必要（{{count}}）",

@@ -307,6 +307,8 @@ export const ru: TranslationResources = {
       description: "Вопросы, решения, ответы и файлы. Сначала новые.",
       updateHost: "Обновите хост для работы с лентой",
       updateHostDescription: "Для вопросов и ответов нужен новый хост. Ваши файлы показаны ниже.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "Переподключение. Сохранённые записи доступны, но статусы могут устареть.",
       showAll: "Показать всё",
       pending: "Ожидают ответа ({{count}})",

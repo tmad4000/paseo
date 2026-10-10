@@ -311,6 +311,8 @@ export const fr: TranslationResources = {
       updateHost: "Mettez l’hôte à jour pour utiliser le fil",
       updateHostDescription:
         "Les questions et réponses nécessitent un hôte plus récent. Vos fichiers sont ci-dessous.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "Reconnexion. Les éléments enregistrés restent disponibles ; les états peuvent être périmés.",
       showAll: "Tout afficher",

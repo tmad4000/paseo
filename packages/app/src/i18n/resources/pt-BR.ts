@@ -307,6 +307,8 @@ export const ptBR: TranslationResources = {
       updateHost: "Atualize o host para usar o Fluxo",
       updateHostDescription:
         "Perguntas e respostas exigem um host mais recente. Seus arquivos estão abaixo.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "Reconectando. Os itens salvos continuam disponíveis; os estados podem estar desatualizados.",
       showAll: "Mostrar tudo",

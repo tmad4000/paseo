@@ -43,6 +43,7 @@ export function CompanionFeed({
   serverId,
   agentId,
   cwd,
+  entries,
   artifacts,
   isSupported,
   artifactsSupported,
@@ -60,6 +61,16 @@ export function CompanionFeed({
   const supportsDurableStream = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.durableStream === true,
   );
+  // Until server_info arrives the host is unknown, not unsupported. Older or unknown hosts get the
+  // per-chat entries carried on the agent snapshot instead of a blocking "update the host" screen.
+  const hostKnown = useSessionStore((state) => Boolean(state.sessions[serverId]?.serverInfo));
+  const hostName = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.hostname ?? serverId,
+  );
+  const hostVersion = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.version ?? "?",
+  );
+  const olderHost = hostKnown && !supportsDurableStream;
   const [saving, setSaving] = useState(false);
   const draftEntryId = useRef<string | null>(null);
   const artifactPins = useRef(new ArtifactPinOperations());
@@ -83,11 +94,13 @@ export function CompanionFeed({
   const { refetch, fetchNextPage } = query;
   const items = useMemo(
     () =>
-      buildCompanionFeed(
-        query.rows.flatMap((row) => (row.item.kind === "entry" ? [row.item.entry] : [])),
-        query.rows.flatMap((row) => (row.item.kind === "artifact" ? [row.item.artifact] : [])),
-      ),
-    [query.rows],
+      supportsDurableStream
+        ? buildCompanionFeed(
+            query.rows.flatMap((row) => (row.item.kind === "entry" ? [row.item.entry] : [])),
+            query.rows.flatMap((row) => (row.item.kind === "artifact" ? [row.item.artifact] : [])),
+          )
+        : buildCompanionFeed(entries, artifacts),
+    [supportsDurableStream, query.rows, entries, artifacts],
   );
   const refresh = useCallback(() => {
     void refetch();
@@ -240,6 +253,14 @@ export function CompanionFeed({
         <Text style={styles.title}>{t("agentPanel.stream.title")}</Text>
         <Text style={styles.description}>{t("agentPanel.stream.description")}</Text>
 
+        {olderHost ? (
+          <View style={styles.notice} testID="companion-stream-older-host">
+            <Text style={styles.description}>
+              {t("agentPanel.stream.olderHost", { host: hostName, version: hostVersion })}
+            </Text>
+          </View>
+        ) : null}
+
         {connection !== "online" ? (
           <View style={styles.notice} testID="companion-stream-connection">
             {connection === "connecting" ? <ActivityIndicator size="small" /> : null}
@@ -361,6 +382,9 @@ export function CompanionFeed({
       saveError,
       saving,
       pinText,
+      olderHost,
+      hostName,
+      hostVersion,
     ],
   );
 
@@ -396,7 +420,8 @@ export function CompanionFeed({
     [query.hasNextPage, query.isFetching, query.isLoading, loadMore, connection],
   );
 
-  if (!isSupported || !supportsDurableStream) {
+  // Only a known host without the per-chat Stream at all gets the blocking notice.
+  if (hostKnown && !isSupported) {
     return (
       <View style={styles.root}>
         <View style={styles.notice} testID="companion-stream-unsupported">

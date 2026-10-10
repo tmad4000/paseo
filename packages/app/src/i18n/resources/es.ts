@@ -308,6 +308,8 @@ export const es: TranslationResources = {
       updateHost: "Actualiza el host para usar Flujo",
       updateHostDescription:
         "Las preguntas y respuestas requieren un host más reciente. Tus archivos están abajo.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline:
         "Reconectando. Los elementos guardados siguen disponibles; el estado puede estar desactualizado.",
       showAll: "Mostrar todo",

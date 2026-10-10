@@ -301,6 +301,8 @@ export const en = {
       updateHost: "Update the host to use Stream",
       updateHostDescription:
         "Questions and responses need a newer host. Your file artifacts are below.",
+      olderHost:
+        "{{host}} runs Paseo {{version}}. Showing this chat's recent Stream; update that host for full history and tracked asks.",
       offline: "Reconnecting. Saved items remain available; pending status may be out of date.",
       showAll: "Show all items",
       pending: "Needs a reply ({{count}})",
