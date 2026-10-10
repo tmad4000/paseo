@@ -886,11 +886,10 @@ function SidebarSearchControls() {
   }, [searchQuery]);
   // A command center "Search messages for …" request: show its text and take focus, once.
   useSidebarFilterRequestFocus(searchInputRef);
-  const isCompact = useIsCompactFormFactor();
-  const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
-  const startChat = useStartChatFromFilterQuery(isCompact ? showMobileAgent : undefined);
-  // Enter stays intelligent Find. Mod+Enter starts a chat from the query and Mod+Shift+Enter
-  // starts and opens it; preventing the default keeps the web input from also submitting Find.
+  const startChat = useStartChatFromFilterQuery();
+  // Enter stays intelligent Find. Mod+Enter opens Quick launch with the query, and Mod+Shift+Enter
+  // opens it with Start and open preselected; preventing the default keeps the web input from also
+  // submitting Find.
   const handleFindKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       const native = event.nativeEvent as TextInputKeyPressEventData & {
@@ -901,7 +900,7 @@ function SidebarSearchControls() {
       };
       if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
       event.preventDefault();
-      // A held Mod+Enter auto-repeats; only the first press starts a chat.
+      // A held Mod+Enter auto-repeats; only the first press opens Quick launch.
       if (native.repeat) return;
       startChat(native.shiftKey === true);
     },

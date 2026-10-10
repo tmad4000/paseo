@@ -1,93 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  NoNewChatDestinationError,
-  startChatFromFilterQuery,
-  type StartChatFromFilterQueryDeps,
-} from "./find-to-prompt";
-
-function deps(overrides: Partial<StartChatFromFilterQueryDeps> = {}) {
-  return {
-    saveDraft: vi.fn(),
-    flush: vi.fn(async () => {}),
-    hasWorkspace: vi.fn(() => true),
-    navigate: vi.fn(),
-    createDraftId: () => "draft-1",
-    ...overrides,
-  } satisfies StartChatFromFilterQueryDeps;
-}
-
-const scratch = {
-  serverId: "mini",
-  workspaceId: "tmp-root",
-  projectViewKey: "tmpworkspace",
-  projectName: "tmpworkspace",
-  name: "tmpworkspace",
-  workspaceDirectory: "/Volumes/External_SSD/code/tmpworkspace",
-  projectRootPath: "/Volumes/External_SSD/code/tmpworkspace",
-};
-const other = {
-  ...scratch,
-  workspaceId: "paseo",
-  projectViewKey: "paseo",
-  projectName: "paseo",
-  name: "paseo",
-  workspaceDirectory: "/code/paseo",
-  projectRootPath: "/code/paseo",
-};
+import type { QuickLaunchRequest } from "@/quick-launch/store";
+import { startChatFromFilterQuery } from "./find-to-prompt";
 
 describe("startChatFromFilterQuery", () => {
-  it("drafts the trimmed query in the default workspace and opens it", async () => {
-    const d = deps();
-    await startChatFromFilterQuery(
-      {
-        query: "  relay reconnect  ",
-        startAndOpen: false,
-        workspaces: [other, scratch],
-        serverIds: ["mini"],
-        active: { serverId: "mini", workspaceId: "paseo" },
-      },
-      d,
+  it("opens Quick launch with the trimmed query and no destination", () => {
+    const open = vi.fn<(request: QuickLaunchRequest) => void>();
+    expect(startChatFromFilterQuery({ query: "  relay reconnect  ", startAndOpen: false }, open)).toBe(
+      true,
     );
-    expect(d.saveDraft).toHaveBeenCalledWith({
-      serverId: "mini",
-      draftId: "draft-1",
-      text: "relay reconnect",
-    });
-    expect(d.flush).toHaveBeenCalledOnce();
-    expect(d.navigate).toHaveBeenCalledWith({
-      serverId: "mini",
-      workspaceId: "tmp-root",
-      target: { kind: "draft", draftId: "draft-1" },
-    });
+    expect(open).toHaveBeenCalledWith({ prompt: "relay reconnect", startAndOpen: false });
+    expect(open.mock.calls[0]![0]).not.toHaveProperty("destination");
   });
 
-  it("does nothing for a blank query and fails clearly without a destination", async () => {
-    const blank = deps();
-    await startChatFromFilterQuery(
-      {
-        query: "   ",
-        startAndOpen: false,
-        workspaces: [scratch],
-        serverIds: ["mini"],
-        active: null,
-      },
-      blank,
-    );
-    expect(blank.saveDraft).not.toHaveBeenCalled();
+  it("preselects Start and open for Mod+Shift+Enter", () => {
+    const open = vi.fn<(request: QuickLaunchRequest) => void>();
+    startChatFromFilterQuery({ query: "relay", startAndOpen: true }, open);
+    expect(open).toHaveBeenCalledWith({ prompt: "relay", startAndOpen: true });
+  });
 
-    const none = deps();
-    await expect(
-      startChatFromFilterQuery(
-        {
-          query: "relay",
-          startAndOpen: true,
-          workspaces: [other],
-          serverIds: ["mini"],
-          active: null,
-        },
-        none,
-      ),
-    ).rejects.toBeInstanceOf(NoNewChatDestinationError);
-    expect(none.navigate).not.toHaveBeenCalled();
+  it("does nothing for a blank query", () => {
+    const open = vi.fn<(request: QuickLaunchRequest) => void>();
+    expect(startChatFromFilterQuery({ query: "   ", startAndOpen: false }, open)).toBe(false);
+    expect(open).not.toHaveBeenCalled();
   });
 });

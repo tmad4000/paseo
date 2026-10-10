@@ -1322,8 +1322,6 @@ export const ru: TranslationResources = {
     filterSidebar: {
       matches: {
         startChat: "Начать чат с «{{query}}»",
-        noChatDestination: "Нет рабочего пространства по умолчанию для новых чатов",
-        startChatFailed: "Не удалось начать чат",
         searchMessages: "Искать «{{query}}» в сообщениях",
         scope: {
           trigger: "Область фильтра: {{value}}",

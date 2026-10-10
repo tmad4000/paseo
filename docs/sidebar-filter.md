@@ -22,8 +22,8 @@ nothing; it then carries Start a chat as its primary button instead of the row.
 | ------------------------ | ----------------------------------------------------------------- |
 | Typing                   | Live filter (all tiers in the current scope)                      |
 | Enter                    | Intelligent Find, unchanged                                       |
-| Mod+Enter, or the row    | Start a chat from the query                                       |
-| Mod+Shift+Enter          | Start a chat and open it                                          |
+| Mod+Enter, or the row    | Open Quick launch with the query as the prompt                    |
+| Mod+Shift+Enter          | Same, with Start and open preselected                             |
 | Scope menu (filter icon) | **Names** (tree and tab titles) or **Names + messages** (default) |
 
 The scope is per device (`filterScope` in the sidebar view store). When no host in the sidebar
@@ -32,10 +32,10 @@ choice is kept and takes effect once a host updates.
 
 Starting a chat goes through one function, `startChatFromFilterQuery`
 (`packages/app/src/components/sidebar/find-to-prompt.ts`, bound to the app by
-`use-start-chat-from-filter-query.ts`). It currently uses the New conversation
-handoff (a prefilled draft in the default workspace, which always opens). When Quick launch lands,
-that function becomes its opener so the filter, Send → New conversation, and Quick launch share one
-creation path. On web, Mod+Enter calls `preventDefault` on the key press so the field does not also
+`use-start-chat-from-filter-query.ts`). It opens [Quick launch](quick-launch.md) with the query as
+the prompt and no destination, so Quick launch's Default-project resolver picks where it goes and
+the person confirms in the dialog. The filter, Send → New conversation, and Quick launch share that
+one creation path. On web, Mod+Enter calls `preventDefault` on the key press so the field does not also
 submit Find.
 
 The command center offers **Search messages for "<q>"** when a query of three or more characters

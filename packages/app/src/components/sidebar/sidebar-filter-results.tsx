@@ -281,7 +281,7 @@ export function SidebarFilterResultsTail({
   const { t } = useTranslation();
   const search = useSidebarMessageSearchState();
   const { searchQuery } = useSidebarModel();
-  const startChat = useStartChatFromFilterQuery(onNavigate);
+  const startChat = useStartChatFromFilterQuery();
   const startChatLabel = t("sidebar.filterSidebar.matches.startChat", {
     query: searchQuery.trim(),
   });

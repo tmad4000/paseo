@@ -1344,8 +1344,6 @@ export const fr: TranslationResources = {
     filterSidebar: {
       matches: {
         startChat: "Démarrer une discussion avec « {{query}} »",
-        noChatDestination: "Aucun espace de travail par défaut pour les nouvelles discussions",
-        startChatFailed: "Impossible de démarrer la discussion",
         searchMessages: "Rechercher « {{query}} » dans les messages",
         scope: {
           trigger: "Portée du filtre : {{value}}",

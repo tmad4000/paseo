@@ -1293,8 +1293,6 @@ export const zhCN: TranslationResources = {
     filterSidebar: {
       matches: {
         startChat: "以“{{query}}”开始聊天",
-        noChatDestination: "没有用于新聊天的默认工作区",
-        startChatFailed: "无法开始聊天",
         searchMessages: "在消息中搜索“{{query}}”",
         scope: {
           trigger: "筛选范围：{{value}}",

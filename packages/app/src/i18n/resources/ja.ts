@@ -1318,8 +1318,6 @@ export const ja: TranslationResources = {
     filterSidebar: {
       matches: {
         startChat: "「{{query}}」でチャットを開始",
-        noChatDestination: "新しいチャット用の既定のワークスペースがありません",
-        startChatFailed: "チャットを開始できません",
         searchMessages: "メッセージで「{{query}}」を検索",
         scope: {
           trigger: "絞り込み範囲: {{value}}",
