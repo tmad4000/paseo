@@ -67,11 +67,15 @@ chosen scope is respected exactly like any other lookup.
 
 Send mode offers **New conversation** directly, independently of intelligent matching.
 Its visible workspace picker identifies the project, workspace, and host. Under All projects,
-the default is the selected host's uniquely identified `tmpworkspace` root. An explicit project
-scope uses the active workspace within that project, or its sole workspace. Missing scratch
-workspaces, ambiguous choices, or multiple hosts without host context require a selection; the
-UI never guesses an unrelated workspace. Manual choice survives toggling destinations until
-scope or host selection excludes it.
+the default is a workspace in the selected host's [Default project](glossary.md): the active
+workspace when it is in that project, else its first root checkout in sidebar order, else its
+first workspace. A Default project often holds many workspaces on one root (tmpworkspace does),
+so picking inside the project the user named is not a guess. Without a Default project, the
+default is that host's uniquely identified `tmpworkspace` root. An explicit project scope uses
+the active workspace within that project, or its sole workspace. A Default project without
+workspaces, missing or ambiguous scratch workspaces, or multiple hosts without host context
+require a selection; the UI never guesses an unrelated workspace. Manual choice survives
+toggling destinations until scope or host selection excludes it.
 
 **Continue in new conversation** saves an independent draft, waits for durable persistence,
 then opens the chosen workspace's ordinary new-chat composer. The user chooses the provider/model

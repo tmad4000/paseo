@@ -2,6 +2,36 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  defaultProject: {
+    actions: {
+      pin: "تثبيت المشروع",
+      unpin: "إلغاء تثبيت المشروع",
+      makeDefault: "تعيين كمشروع افتراضي",
+      removeDefault: "إزالة كمشروع افتراضي",
+    },
+    badges: {
+      default: "المشروع الافتراضي",
+      pinned: "مشروع مثبّت",
+    },
+    commandCenter: {
+      goToDefault: "الانتقال إلى المشروع الافتراضي",
+      pinCurrent: "تثبيت المشروع الحالي",
+      unpinCurrent: "إلغاء تثبيت المشروع الحالي",
+      makeCurrentDefault: "تعيين المشروع الحالي كافتراضي",
+      removeCurrentDefault: "إزالة المشروع الحالي كافتراضي",
+    },
+    settings: {
+      title: "المشروع الافتراضي",
+      hint: "يبدأ Quick launch وNew conversation من هنا.",
+      updateHost: "حدّث هذا المضيف لاختيار مشروع افتراضي.",
+      none: "لا شيء",
+      accessibilityLabel: "المشروع الافتراضي: {{value}}",
+    },
+    toasts: {
+      failed: "تعذّر تحديث المشروع",
+      hostDisconnected: "المضيف غير متصل",
+    },
+  },
   sessionPins: {
     title: "الجلسات المثبتة",
     pin: "تثبيت الجلسة",

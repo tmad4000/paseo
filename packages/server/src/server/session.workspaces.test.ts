@@ -8091,6 +8091,107 @@ test("project.rename.request updates a project with no workspaces", async () => 
   });
 });
 
+test("project.pin.set.request and project.default.set.request publish pin fields", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "session-project-pins-"));
+  try {
+    const projectRegistry = new FileBackedProjectRegistry(
+      path.join(workdir, "projects.json"),
+      createTestLogger(),
+    );
+    const scratch = createPersistedProjectRecord({
+      projectId: "prj_scratch",
+      rootPath: path.join(workdir, "tmpworkspace"),
+      kind: "non_git",
+      displayName: "tmpworkspace",
+      createdAt: "2026-07-20T12:00:00.000Z",
+      updatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    const previous = createPersistedProjectRecord({
+      projectId: "prj_previous",
+      rootPath: path.join(workdir, "previous"),
+      kind: "non_git",
+      displayName: "previous",
+      defaultAt: "2026-07-21T12:00:00.000Z",
+      createdAt: "2026-07-20T12:00:00.000Z",
+      updatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    mkdirSync(scratch.rootPath, { recursive: true });
+    mkdirSync(previous.rootPath, { recursive: true });
+    await projectRegistry.upsert(scratch);
+    await projectRegistry.upsert(previous);
+    const emitted: SessionOutboundMessage[] = [];
+    const session = asTestSession(
+      createSessionForWorkspaceTests({
+        onMessage: (message) => emitted.push(message),
+        projectRegistry,
+      }),
+    );
+    session.updateClientCapabilities({ [CLIENT_CAPS.projectUpdates]: true });
+    session.workspaceRegistry.list = async () => [];
+
+    await session.handleMessage({
+      type: "project.pin.set.request",
+      projectId: scratch.projectId,
+      pinned: true,
+      requestId: "req-project-pin",
+    });
+    const pinResponse = findByType(emitted, "project.pin.set.response");
+    expect(pinResponse?.payload).toMatchObject({
+      requestId: "req-project-pin",
+      projectId: scratch.projectId,
+      accepted: true,
+      error: null,
+    });
+    expect(pinResponse?.payload.pinnedAt).toEqual(expect.any(String));
+
+    emitted.length = 0;
+    await session.handleMessage({
+      type: "project.default.set.request",
+      projectId: scratch.projectId,
+      isDefault: true,
+      requestId: "req-project-default",
+    });
+    const defaultResponse = findByType(emitted, "project.default.set.response");
+    expect(defaultResponse?.payload).toMatchObject({
+      requestId: "req-project-default",
+      projectId: scratch.projectId,
+      accepted: true,
+      error: null,
+    });
+    const updates = filterByType(emitted, "project.update").map((message) => message.payload);
+    expect(updates).toEqual([
+      expect.objectContaining({
+        kind: "upsert",
+        project: expect.objectContaining({
+          projectId: scratch.projectId,
+          projectPinnedAt: pinResponse?.payload.pinnedAt,
+          projectDefaultAt: defaultResponse?.payload.defaultAt,
+        }),
+      }),
+      expect.objectContaining({
+        kind: "upsert",
+        project: expect.not.objectContaining({ projectDefaultAt: expect.anything() }),
+      }),
+    ]);
+    expect((await projectRegistry.get(previous.projectId))?.defaultAt).toBeNull();
+
+    emitted.length = 0;
+    await session.handleMessage({
+      type: "project.default.set.request",
+      projectId: "prj_missing",
+      isDefault: true,
+      requestId: "req-project-default-missing",
+    });
+    expect(findByType(emitted, "project.default.set.response")?.payload).toMatchObject({
+      accepted: false,
+      defaultAt: null,
+      error: "Project not found",
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("project.rename.request with whitespace-only customName clears the override", async () => {
   const emitted: SessionOutboundMessage[] = [];
   const session = asTestSession(

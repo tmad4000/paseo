@@ -3239,6 +3239,47 @@ export class DaemonClient {
     return { removedWorkspaceIds: payload.removedWorkspaceIds };
   }
 
+  // COMPAT(projectPinning): callers gate on server_info.features.projectPinning.
+  async setProjectPinned(
+    projectId: string,
+    pinned: boolean,
+    requestId?: string,
+  ): Promise<{ pinnedAt: string | null }> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"project.pin.set.response">({
+      requestId,
+      message: {
+        type: "project.pin.set.request",
+        projectId,
+        pinned,
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setProjectPinned rejected");
+    }
+    return { pinnedAt: payload.pinnedAt };
+  }
+
+  // COMPAT(projectPinning): callers gate on server_info.features.projectPinning.
+  async setProjectDefault(
+    projectId: string,
+    isDefault: boolean,
+    requestId?: string,
+  ): Promise<{ defaultAt: string | null }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"project.default.set.response">({
+        requestId,
+        message: {
+          type: "project.default.set.request",
+          projectId,
+          isDefault,
+        },
+      });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setProjectDefault rejected");
+    }
+    return { defaultAt: payload.defaultAt };
+  }
+
   async setWorkspaceTitle(
     workspaceId: string,
     title: string | null,
