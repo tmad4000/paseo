@@ -70,8 +70,10 @@ test.describe("Threaded replies", () => {
     await page.screenshot({ path: test.info().outputPath("threaded-replies-open.png") });
 
     // Send to main queues the thread's answer in the parent, quoted, without interrupting it.
+    await page.getByTestId("thread-origin-menu").click();
     const sendBack = page.getByTestId("thread-send-to-main");
-    await expect(sendBack).toBeEnabled({ timeout: 30_000 });
+    await expect(sendBack).toBeVisible({ timeout: 30_000 });
+    await expect(sendBack).not.toHaveAttribute("aria-disabled", "true");
     await sendBack.click();
     await expect(
       page.getByTestId("user-message").filter({ hasText: "From the side thread" }).first(),

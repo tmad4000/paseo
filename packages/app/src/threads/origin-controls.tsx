@@ -1,11 +1,17 @@
 import { useCallback, useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
-import { CornerUpLeft, SendHorizontal } from "lucide-react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { CornerUpLeft, MessageSquareReply, SendHorizontal } from "lucide-react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { v4 as uuid } from "uuid";
 import { useStoreWithEqualityFn } from "zustand/traditional";
-import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
@@ -101,37 +107,53 @@ export function ThreadOriginControls({
   }, [canQueue, hasReply, t, threadBusy]);
 
   if (!origin) return null;
+  // One icon-sized control: the chat header beside Pin is narrow in a split thread pane.
   return (
-    <>
-      <Button
-        variant="ghost"
-        size={compact ? "md" : "sm"}
-        style={compact ? styles.compactButton : undefined}
-        leftIcon={CornerUpLeft}
-        disabled={!parent}
-        accessibilityLabel={t("threads.backToMain", { title: parentTitle })}
-        testID="thread-back-to-main"
-        onPress={openMain}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        accessibilityRole="button"
+        accessibilityLabel={t("threads.menuLabel", { title: parentTitle })}
+        style={compact ? styles.compactTrigger : styles.trigger}
+        testID="thread-origin-menu"
       >
-        {t("threads.mainThread")}
-      </Button>
-      <Button
-        variant="ghost"
-        size={compact ? "md" : "sm"}
-        style={compact ? styles.compactButton : undefined}
-        leftIcon={SendHorizontal}
-        disabled={sendDisabled}
-        loading={sendBack.isPending}
-        accessibilityLabel={t("threads.sendToMainLabel", { title: parentTitle })}
-        accessibilityHint={sendHint}
-        testID="thread-send-to-main"
-        onPress={handleSendBack}
-      >
-        {t("threads.sendToMain")}
-      </Button>
-    </>
+        {({ hovered, open }) => (
+          <ThemedReplyIcon
+            size={ICON_SIZE.sm}
+            uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
+          />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" minWidth={240} side="bottom">
+        <DropdownMenuItem
+          leading={backIcon}
+          disabled={!parent}
+          onSelect={openMain}
+          testID="thread-back-to-main"
+        >
+          {t("threads.backToMain", { title: parentTitle })}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          leading={sendIcon}
+          disabled={sendDisabled}
+          description={sendHint}
+          status={sendBack.isPending ? "pending" : undefined}
+          onSelect={handleSendBack}
+          testID="thread-send-to-main"
+        >
+          {t("threads.sendToMainLabel", { title: parentTitle })}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
+
+const ThemedReplyIcon = withUnistyles(MessageSquareReply);
+const ThemedBackIcon = withUnistyles(CornerUpLeft);
+const ThemedSendIcon = withUnistyles(SendHorizontal);
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const backIcon = <ThemedBackIcon size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
+const sendIcon = <ThemedSendIcon size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
 
 function threadOriginsEqual(
   left: ReturnType<typeof threadOriginOf>,
@@ -146,6 +168,12 @@ function threadOriginsEqual(
   );
 }
 
-const styles = StyleSheet.create({
-  compactButton: { minHeight: 44 },
-});
+const styles = StyleSheet.create((theme) => ({
+  trigger: { padding: theme.spacing[2], borderRadius: theme.borderRadius.md },
+  compactTrigger: {
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+}));
