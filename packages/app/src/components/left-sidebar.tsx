@@ -1040,11 +1040,7 @@ function SidebarSortItem({
   const { t } = useTranslation();
   const selectMode = useCallback(() => onSelectMode(mode), [mode, onSelectMode]);
   return (
-    <DropdownMenuItem
-      selected={selected}
-      onSelect={selectMode}
-      testID={`sidebar-sort-${mode}`}
-    >
+    <DropdownMenuItem selected={selected} onSelect={selectMode} testID={`sidebar-sort-${mode}`}>
       {t(`sidebar.filterSidebar.sort.${mode}`)}
     </DropdownMenuItem>
   );

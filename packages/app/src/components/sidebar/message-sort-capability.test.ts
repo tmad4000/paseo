@@ -13,7 +13,11 @@ it("names a connected host without message activity, with its version", () => {
   expect(
     olderMessageSortHostLabel(
       "srv",
-      serverInfo({ hostname: null, version: null, features: { conversationMessageActivity: false } }),
+      serverInfo({
+        hostname: null,
+        version: null,
+        features: { conversationMessageActivity: false },
+      }),
     ),
   ).toBe("srv");
 });
@@ -25,6 +29,9 @@ it("treats a host whose server info has not arrived as unknown, not older", () =
 
 it("lists no supporting host", () => {
   expect(
-    olderMessageSortHostLabel("srv", serverInfo({ features: { conversationMessageActivity: true } })),
+    olderMessageSortHostLabel(
+      "srv",
+      serverInfo({ features: { conversationMessageActivity: true } }),
+    ),
   ).toBeNull();
 });

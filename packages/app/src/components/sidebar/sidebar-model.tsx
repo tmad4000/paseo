@@ -244,13 +244,7 @@ export function SidebarModelProvider({
     );
     const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, sortMode);
     return new Map(sorted.map((workspace) => [workspace.workspaceKey, workspace]));
-  }, [
-    normalizedQuery,
-    sortMode,
-    scopedWorkspaces,
-    tabMatchedWorkspaceKeys,
-    workspaceEntriesByKey,
-  ]);
+  }, [normalizedQuery, sortMode, scopedWorkspaces, tabMatchedWorkspaceKeys, workspaceEntriesByKey]);
   const messageSearchScopeRef = useRef<SidebarMessageSearchScope>(
     EMPTY_SIDEBAR_MESSAGE_SEARCH_SCOPE,
   );

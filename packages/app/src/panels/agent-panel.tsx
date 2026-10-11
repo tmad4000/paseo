@@ -1376,7 +1376,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     [t],
   );
   // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
-  const showViewSwitcher = companionStreamAvailability !== false || artifactFeedAvailability !== false;
+  const showViewSwitcher =
+    companionStreamAvailability !== false || artifactFeedAvailability !== false;
   const viewSwitcherStyle = useMemo(
     () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
     [isChatVisible],
