@@ -788,7 +788,6 @@ export const ar: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Host غير متصل",
-      updateHost: "حدّث المضيف لاستخدام عارض الطرفية الأصلي.",
       unableToSubscribe: "غير قادر على الاشتراك في المحطة",
     },
     tabs: {
@@ -1375,8 +1374,7 @@ export const ar: TranslationResources = {
       clear: "مسح تصفية الشريط الجانبي",
       sortHeading: "ترتيب المحادثات",
       sortBy: "ترتيب المحادثات: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "الترتيب اليدوي",
         recent: "Latest conversation activity",

@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { resolveTerminalRendererSelection } from "./terminal-renderer-capability";
 
 describe("terminal renderer capability", () => {
-  it("requires input mode replay before attaching the native renderer", () => {
+  it("keeps an older daemon's terminal on the WebView renderer instead of blocking it", () => {
     expect(
       resolveTerminalRendererSelection({
         useLegacyTerminalRenderer: false,
         supportsTerminalInputModeReplay: false,
       }),
-    ).toBe("update-host");
+    ).toBe("webview");
   });
 
   it("allows the native renderer when the daemon advertises input mode replay", () => {
@@ -28,5 +28,14 @@ describe("terminal renderer capability", () => {
         supportsTerminalInputModeReplay: false,
       }),
     ).toBe("webview");
+  });
+
+  it("waits for the host's server info before attaching either renderer", () => {
+    expect(
+      resolveTerminalRendererSelection({
+        useLegacyTerminalRenderer: false,
+        supportsTerminalInputModeReplay: null,
+      }),
+    ).toBe("pending");
   });
 });

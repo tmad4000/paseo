@@ -33,7 +33,7 @@ import {
 } from "@/panels/pane-context";
 import { ProviderSubagentPanel } from "@/panels/provider-subagent-panel";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { resolveRowLabel } from "@/subagents/track-presentation";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -122,9 +122,9 @@ export function SubthreadsHost({
   const { parentKnown, parentLabel, parentCwd, sidePanelLabel, checklistUrl } =
     useSessionSidePanelSource(serverId, agentId);
   // COMPAT(companionStream): without a linked page the checklist is this session's Stream.
-  const streamSupported = useHostFeature(serverId, "companionStream");
+  const streamAvailability = useHostFeatureAvailability(serverId, "companionStream");
   const hasSubagents = rows.length > 0;
-  const checklistAvailable = checklistUrl !== null || streamSupported;
+  const checklistAvailable = checklistUrl !== null || streamAvailability !== false;
   const mode = resolveAvailableMode(state.mode, hasSubagents, checklistAvailable);
   const effectiveState = useMemo(
     () => ({ ...state, mode, selection: selected ? state.selection : null }),

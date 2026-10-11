@@ -795,7 +795,6 @@ export const ja: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "ホストが接続されていません",
-      updateHost: "ネイティブターミナルを使用するにはホストを更新してください。",
       unableToSubscribe: "ターミナルに接続できません",
     },
     tabs: {
@@ -1389,8 +1388,7 @@ export const ja: TranslationResources = {
       clear: "サイドバーの絞り込みを解除",
       sortHeading: "チャットの並び替え",
       sortBy: "チャットの並び替え: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "手動の順序",
         recent: "Latest conversation activity",

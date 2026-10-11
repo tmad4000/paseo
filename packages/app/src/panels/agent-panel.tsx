@@ -77,7 +77,7 @@ import {
   useHostRuntimeLastError,
   useHosts,
 } from "@/runtime/host-runtime";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import {
   deriveRouteBottomAnchorIntent,
   deriveRouteBottomAnchorRequest,
@@ -1206,7 +1206,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     handleReturnToChat();
     streamViewRef.current?.scrollToBottom("jump-to-bottom");
   }, [handleReturnToChat, streamViewRef]);
-  const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
+  const artifactFeedAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
@@ -1225,7 +1225,12 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     hasPluginComposerPills,
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
-  const companionStreamSupported = useHostFeature(serverId, "companionStream");
+  const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
+  // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
+  const showViewSwitcher =
+    companionStreamAvailability !== false || artifactFeedAvailability !== false;
+  // A host that turns out to offer neither view returns the pane to the chat.
+  const visibleView = showViewSwitcher ? selectedView : "chat";
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1277,7 +1282,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       <AgentComposerSection
         agentId={agentId}
         serverId={serverId}
-        isPaneFocused={isPaneFocused && selectedView !== "artifacts"}
+        isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
         isArchivingCurrentAgent={isArchivingCurrentAgent}
         archivedAt={agentState.archivedAt}
         cwd={cwd}
@@ -1347,7 +1352,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
 
   // The chat stays mounted behind the Stream so the draft, scroll position and
   // expanded state survive Back to chat and Reply in chat.
-  const isChatVisible = selectedView === "chat";
+  const isChatVisible = visibleView === "chat";
   const dock = (
     <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
@@ -1377,7 +1382,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     ],
     [t],
   );
-  const showViewSwitcher = companionStreamSupported || artifactFeedSupported;
   // Threads open and live in the layout that shows this chat (a split session's may differ).
   const threadsLayoutWorkspaceId = usePaneContext().layoutWorkspaceId ?? workspaceId;
   const viewSwitcherStyle = useMemo(
@@ -1404,7 +1408,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             {showViewSwitcher ? (
               <SegmentedControl
                 options={viewOptions}
-                value={selectedView}
+                value={visibleView}
                 onValueChange={handleSetSelectedView}
                 size={isCompact ? "sm" : "xs"}
                 testID="agent-view-switcher"
@@ -1428,8 +1432,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
               cwd={cwd}
               entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
               artifacts={artifacts}
-              isSupported={companionStreamSupported}
-              artifactsSupported={artifactFeedSupported}
+              isSupported={companionStreamAvailability === true}
+              artifactsSupported={artifactFeedAvailability === true}
               onOpenWorkspaceFile={onOpenWorkspaceFile}
               onReturnToChat={handleReturnToChat}
               onReplyInChat={handleReplyInChat}

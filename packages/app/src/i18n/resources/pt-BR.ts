@@ -797,7 +797,6 @@ export const ptBR: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Host não está conectado",
-      updateHost: "Atualize o host para usar o renderizador de terminal nativo.",
       unableToSubscribe: "Não foi possível assinar o terminal",
     },
     tabs: {
@@ -1405,8 +1404,7 @@ export const ptBR: TranslationResources = {
       clear: "Limpar filtro da barra lateral",
       sortHeading: "Ordenar chats",
       sortBy: "Ordenar chats: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "Ordem manual",
         recent: "Latest conversation activity",

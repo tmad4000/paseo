@@ -1,7 +1,5 @@
 import { useEffect } from "react";
-import { Text, View } from "react-native";
-import { useTranslation } from "react-i18next";
-import { StyleSheet } from "react-native-unistyles";
+import { View } from "react-native";
 import { useAppSettings } from "../hooks/use-settings";
 import { resolveTerminalRendererSelection } from "../terminal/native-renderer/terminal-renderer-capability";
 import NativeGridTerminalEmulator from "./terminal-emulator-native-grid.native";
@@ -10,18 +8,14 @@ import type { TerminalEmulatorProps } from "./terminal-emulator-contract";
 
 export type { TerminalEmulatorHandle } from "./terminal-emulator-contract";
 
-function UnsupportedNativeTerminal({ streamKey, onRendererReadyChange }: TerminalEmulatorProps) {
-  const { t } = useTranslation();
+const PENDING_STYLE = { flex: 1 } as const;
 
+function PendingTerminal({ streamKey, onRendererReadyChange }: TerminalEmulatorProps) {
   useEffect(() => {
     onRendererReadyChange?.({ streamKey, isReady: false });
   }, [onRendererReadyChange, streamKey]);
 
-  return (
-    <View style={styles.unsupportedContainer}>
-      <Text style={styles.unsupportedText}>{t("workspace.terminal.updateHost")}</Text>
-    </View>
-  );
+  return <View style={PENDING_STYLE} />;
 }
 
 export default function TerminalEmulator(props: TerminalEmulatorProps) {
@@ -32,8 +26,8 @@ export default function TerminalEmulator(props: TerminalEmulatorProps) {
     supportsTerminalInputModeReplay: props.supportsTerminalInputModeReplay,
   });
 
-  if (rendererSelection === "update-host") {
-    return <UnsupportedNativeTerminal {...props} />;
+  if (rendererSelection === "pending") {
+    return <PendingTerminal {...props} />;
   }
 
   const Renderer =
@@ -41,16 +35,3 @@ export default function TerminalEmulator(props: TerminalEmulatorProps) {
 
   return <Renderer key={rendererSelection} {...props} />;
 }
-
-const styles = StyleSheet.create((theme) => ({
-  unsupportedContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  unsupportedText: {
-    color: theme.colors.foregroundMuted,
-    textAlign: "center",
-  },
-}));

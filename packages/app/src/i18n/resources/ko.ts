@@ -792,7 +792,6 @@ export const ko: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
-      updateHost: "기본 터미널 렌더러를 사용하도록 호스트를 업데이트합니다.",
       unableToSubscribe: "터미널을 구독할 수 없습니다",
     },
     tabs: {
@@ -1385,8 +1384,7 @@ export const ko: TranslationResources = {
       clear: "사이드바 필터 지우기",
       sortHeading: "채팅 정렬",
       sortBy: "채팅 정렬: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "수동 순서",
         recent: "Latest conversation activity",
