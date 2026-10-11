@@ -1,7 +1,8 @@
 # Sidebar filter
 
-The find field at the top of the left sidebar filters live as you type. Enter runs intelligent
-Find instead, which is a different feature with its own contract: [session routing](session-routing.md).
+The find field at the top of the left sidebar is the one field for finding a chat or starting one.
+It filters live as you type, and Enter starts a new chat with the text. Find with AI (Mod+Enter) is
+the intelligent Find, a different feature with its own contract: [session routing](session-routing.md).
 
 The filter answers "where is the thing I'm thinking of" in three tiers, shallowest first. Each tier
 says why a row is there, so a workspace you did not expect in the list explains itself.
@@ -12,19 +13,63 @@ says why a row is there, so a workspace you did not expect in the list explains 
 | Tab titles  | Agent session titles in that workspace               | Compact rows nested under the workspace row   | Same pass as the tree                    |
 | In messages | User and assistant message text                      | A group below the tree, newest first          | Daemon RPC, debounced, bounded           |
 
-Below them sit a **Start a chat with "<query>"** row and a muted "Press Enter for intelligent Find"
-line. The empty state appears only when the tree is empty and the message tier has finished with
-nothing; it then carries Start a chat as its primary button instead of the row.
+The empty state appears only when the tree is empty and the message tier has finished with
+nothing; it then carries Start a chat as its primary button.
+
+## One field (2026-10-11)
+
+The field used to have two modes with their own text fields: Find (search only) and Send prompt (a
+second prompt field plus a picker with a third search field). Both start from the same sentence,
+and whether to find or to act depends on whether a matching chat already exists, which the live
+filter already answers. So there is one field, and a few compact rows directly under it say what
+each key does with the text:
+
+```
+[🔍 relay reconnect           ✕] [➤] [⚲] [⇅]
+  New chat "relay reconnect"           ↵
+  Find with AI                ⌘↵  All projects ▾
+  Send to best match
+  …live results: workspaces, tab titles (each with Send), messages
+```
+
+- **Enter starts a new chat** with the text, through Quick launch (prefill only; nothing is created
+  until Quick launch starts it).
+- **A pasted session id** that names exactly one chat adds **Open <title>** above it and takes
+  Enter, so Enter never surprises: the row that owns Enter shows the ↵. "Exactly one" counts only
+  the tab rows the filter is showing (same hosts, project and label filters, and tab rules), so
+  Open never names a chat the list hides (`pickUniqueSessionIdMatch` in `find-or-start.ts`).
+- **Send** on a matched tab row, or the ➤ button beside the field, enters the send state with the
+  text carried into an empty prompt (a saved prompt is kept, never overwritten). Send appears only
+  on chats that can be destinations (not child chats), and choosing one widens a Find-with-AI
+  project scope to All projects rather than refusing it. It is the old Send prompt mode (recipient, Queue/Steer/Interrupt,
+  New conversation, Route to best match) with a single text field; its picker lists recent chats
+  without a search field of its own. **Back to search** returns to the field.
+- **Find with AI** keeps the scope menu (All projects / a project) in its row, the only place scope
+  changes results. "Use this chat" on its results carries the text like Send does. **Send to best
+  match** appears when a host supports routing; if a different prompt is already saved, it shows
+  that prompt instead of routing it, so the row never sends text other than what it sits under.
+
+Before and after screenshots: [`find-or-start/`](find-or-start/) (`before-find.png`,
+`before-send.png`, `after-typing.png`, `after-session-id.png`, `after-send.png`).
+
+While the routing draft loads or a delivery is pending, Find with AI, Send to best match, ➤ and
+the tab rows' Send stay visible but disabled, so the field does not jump; Enter, Open and New chat
+never touch the routing draft and stay available. The composer exposes `findWithAi`, `clear`,
+`enterSend` and `locked` to the field through its render function (`FindFieldActions` in
+`session-routing/composer.tsx`). The tab rows and the Mod+Enter handler reach it through
+`useRoutingBridge` (`find-or-start.ts`), which also lists routable chats and clears only its own
+registration.
 
 ## Keys and scope
 
-| Key / control            | Does                                                              |
-| ------------------------ | ----------------------------------------------------------------- |
-| Typing                   | Live filter (all tiers in the current scope)                      |
-| Enter                    | Intelligent Find, unchanged                                       |
-| Mod+Enter, or the row    | Open Quick launch with the query as the prompt                    |
-| Mod+Shift+Enter          | Same, with Start and open preselected                             |
-| Scope menu (filter icon) | **Names** (tree and tab titles) or **Names + messages** (default) |
+| Key / control              | Does                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Typing                     | Live filter (all tiers in the current scope)                                                                                   |
+| Enter, or the New chat row | Open Quick launch with the query as the prompt; opens the chat instead when the text is a session id matching exactly one chat |
+| Mod+Enter, or the row      | Find with AI (intelligent Find)                                                                                                |
+| Mod+Shift+Enter            | Quick launch with Start and open preselected                                                                                   |
+| Send (row or ➤)            | Send state: the text becomes the prompt for a chosen chat                                                                      |
+| Scope menu (filter icon)   | **Names** (tree and tab titles) or **Names + messages** (default)                                                              |
 
 The scope is per device (`filterScope` in the sidebar view store). When no host in the sidebar
 advertises `sessionTextSearch`, the Names + messages item says that messages need a host update; the
@@ -35,8 +80,7 @@ Starting a chat goes through one function, `startChatFromFilterQuery`
 `use-start-chat-from-filter-query.ts`). It opens [Quick launch](quick-launch.md) with the query as
 the prompt and no destination, so Quick launch's Default-project resolver picks where it goes and
 the person confirms in the dialog. The filter, Send → New conversation, and Quick launch share that
-one creation path. On web, Mod+Enter calls `preventDefault` on the key press so the field does not also
-submit Find.
+one creation path.
 
 The command center offers **Search messages for "<q>"** when a query of three or more characters
 matches no command and no workspace. It opens the sidebar (if collapsed), switches the scope to
@@ -68,8 +112,9 @@ Model: `packages/app/src/components/sidebar/sidebar-filter-matches.ts`. Rows:
 
 A query shaped like a session id (hex with dashes, containing a digit, at least six characters)
 also matches tabs by id prefix, so pasting `9b8394eb` or a full id shows that session's tab. The
-same rule (`protocol/src/search/session-id.ts`) answers Cmd+K and Find a chat on Enter, where the
-daemon returns the id match directly instead of asking the ranking model.
+same rule (`protocol/src/search/session-id.ts`) answers Cmd+K, the field's Open row (exactly one
+match), and Find with AI, where the daemon returns the id match directly instead of asking the
+ranking model.
 
 ## In messages
 

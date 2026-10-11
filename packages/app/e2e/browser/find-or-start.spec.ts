@@ -1,0 +1,102 @@
+import { expect, test } from "../support/fixtures";
+import { openAgentRoute } from "../support/helpers/mock-agent";
+import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-client";
+import { getServerId } from "../support/helpers/server-id";
+import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+
+// The sidebar's one field (docs/sidebar-filter.md, "One field"): typing finds chats live, Enter
+// starts a new chat with the text through Quick launch, a pasted session id opens that chat, and
+// "Send" on a match makes it the destination of the typed text.
+test.describe("Find or start", () => {
+  let workspace: SeededWorkspace;
+  let home: { id: string };
+  let target: { id: string };
+
+  test.beforeAll(async () => {
+    workspace = await seedWorkspace({ repoPrefix: "find-or-start-" });
+    home = await workspace.client.createAgent({
+      provider: "mock",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Find home",
+      modeId: "load-test",
+      model: "ten-second-stream",
+    });
+    target = await workspace.client.createAgent({
+      provider: "mock",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Relay reconnect investigation",
+      modeId: "load-test",
+      model: "ten-second-stream",
+    });
+    for (const id of [home.id, target.id]) {
+      await workspace.client.waitForAgentUpsert(id, (s) => s.status === "idle");
+    }
+  });
+
+  test.afterAll(async () => {
+    await workspace?.cleanup();
+  });
+
+  test("Enter starts a new chat with the text; nothing is created until Quick launch starts it", async ({
+    page,
+  }) => {
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: home.id });
+    await waitForSidebarHydration(page);
+    const before = (await workspace.client.fetchAgents()).entries.length;
+    const composer = page.getByTestId("session-routing-composer");
+    const field = composer.getByTestId("sidebar-title-project-filter");
+
+    await field.fill("relay reconnect");
+    const actions = composer.getByTestId("routing-query-actions");
+    await expect(actions.getByTestId("routing-new-chat")).toContainText("relay reconnect");
+    await expect(actions.getByTestId("routing-find-ai")).toBeVisible();
+    // The live match is on screen before Enter, one click away.
+    await expect(
+      page.getByTestId(`sidebar-filter-send-here-${getServerId()}-${target.id}`),
+    ).toBeVisible({ timeout: 30_000 });
+    await page.screenshot({ path: test.info().outputPath("find-or-start-typing.png") });
+
+    await field.press("Enter");
+    const dialog = page.getByTestId("quick-launch-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId("quick-launch-prompt")).toHaveValue("relay reconnect");
+    expect((await workspace.client.fetchAgents()).entries.length).toBe(before);
+  });
+
+  test("a pasted session id opens that chat on Enter", async ({ page }) => {
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: home.id });
+    await waitForSidebarHydration(page);
+    const composer = page.getByTestId("session-routing-composer");
+    const field = composer.getByTestId("sidebar-title-project-filter");
+
+    await field.fill(target.id.slice(0, 8));
+    const open = composer.getByTestId("routing-open-session");
+    await expect(open).toContainText("Relay reconnect investigation");
+    await page.screenshot({ path: test.info().outputPath("find-or-start-session-id.png") });
+    await field.press("Enter");
+    await expect(
+      page.getByTestId(`workspace-tab-agent_${target.id}`).filter({ visible: true }).first(),
+    ).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+    await expect(page.getByTestId("quick-launch-dialog")).toHaveCount(0);
+  });
+
+  test("Send on a match makes it the destination of the typed text", async ({ page }) => {
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: home.id });
+    await waitForSidebarHydration(page);
+    const composer = page.getByTestId("session-routing-composer");
+    const field = composer.getByTestId("sidebar-title-project-filter");
+
+    await field.fill("Relay reconnect");
+    await page.getByTestId(`sidebar-filter-send-here-${getServerId()}-${target.id}`).click();
+    await expect(composer.getByTestId("routing-recipient")).toContainText(
+      "Relay reconnect investigation",
+    );
+    await expect(composer.getByTestId("routing-send-draft")).toHaveValue("Relay reconnect");
+    await page.screenshot({ path: test.info().outputPath("find-or-start-send-here.png") });
+    // Back returns to the one field without sending anything.
+    await composer.getByTestId("routing-find-mode").click();
+    await expect(field).toBeVisible();
+  });
+});

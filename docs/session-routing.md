@@ -2,9 +2,15 @@
 
 The project sidebar combines its immediate [filter](sidebar-filter.md) (projects, workspaces, tab
 titles, and message text) with deliberate intelligent Find and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
-host/session, switches to Send, and restores the independent, persisted send draft. The destination
-chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Enter/Search in the
-filter field or choose Find to submit intelligent matching; typing alone keeps the ordinary filter.
+host/session and switches to Send with the persisted send draft (the field's text fills it only
+when it is empty). The destination
+chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Mod+Enter in the
+filter field or choose **Find with AI** to submit intelligent matching; typing alone keeps the ordinary filter,
+and Enter starts a new chat (see [One field](sidebar-filter.md#one-field-2026-10-11)). Entering Send
+from the field (➤, or Send on a matched tab row) carries the field's text into an empty send draft;
+a saved draft is never overwritten. **Send to best match** under the field is Route to best match
+with the field's text as the prompt; when a different draft is saved it opens Send on that draft
+instead of routing it.
 
 Choose All projects, Current project, or a named project in the scope menu. A project scope is a
 sidebar project view identity, including its host/clone grouping. Search sends only that scope's
@@ -13,8 +19,8 @@ host changes invalidate matching successes and failures in either mode. Editing 
 Send draft keeps the previous results visible until an explicit new lookup replaces them. Those
 results describe the submitted lookup, not a live search of the edited text. A new lookup captures
 its query or durable draft revision; later edits cancel that request's ownership so its late response
-cannot replace a newer lookup. Explicit Clear removes the active input and its results, while leaving
-the other mode's independent input intact. Cancellation releases only the canceled request's loading
+cannot replace a newer lookup. The field's ✕ clears the find text and its results; Clear in the send state clears the
+prompt and its results. Each leaves the other text intact. Cancellation releases only the canceled request's loading
 state, even if a newer lookup has started. Host changes
 also clear excluded results and editable recipients; a pending delivery keeps its original destination
 and item ID until acknowledgement or rejection. Explicit recipient selection

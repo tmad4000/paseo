@@ -12,7 +12,8 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
-import { Shortcut } from "@/components/ui/shortcut";
+import { Button } from "@/components/ui/button";
+import { sessionRouteKey, useRoutingBridge } from "@/components/sidebar/find-or-start";
 import { isWeb } from "@/constants/platform";
 import { useSessionStore } from "@/stores/session-store";
 import type { Theme } from "@/styles/theme";
@@ -39,7 +40,6 @@ import { useSidebarModel } from "./sidebar-model";
  */
 
 const NESTED_TAB_LIMIT = 3;
-const START_CHAT_KEYS = [["mod", "Enter"]];
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -87,6 +87,10 @@ function rowStyle({
   return [styles.row, hovered && !pressed && styles.rowHovered, pressed && styles.rowPressed];
 }
 
+function tabRowStyle(state: PressableStateCallbackType & { hovered?: boolean }) {
+  return [...rowStyle(state), styles.tabRowFill];
+}
+
 const NestedTabRow = memo(function NestedTabRow({
   match,
   onNavigate,
@@ -103,28 +107,53 @@ const NestedTabRow = memo(function NestedTabRow({
       workspaceId: match.workspaceId,
     });
   }, [match.agentId, match.serverId, match.workspaceId, onNavigate]);
+  // Send the typed text to this chat instead (the composer becomes its destination). Only chats
+  // the composer can deliver to offer it: auto-opened child chats, for one, are not destinations.
+  const routable = useRoutingBridge(
+    (bridge) => bridge.entry?.routableKeys.has(sessionRouteKey(match)) === true,
+  );
+  const routingLocked = useRoutingBridge((bridge) => bridge.entry?.locked !== false);
+  const handleSendHere = useCallback(() => {
+    useRoutingBridge
+      .getState()
+      .entry?.sendHere({ serverId: match.serverId, agentId: match.agentId });
+  }, [match.agentId, match.serverId]);
   return (
-    <Pressable
-      accessibilityRole={isWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.filterSidebar.matches.openTab", { title: match.title })}
-      onPress={handlePress}
-      style={rowStyle}
-      testID={`sidebar-filter-tab-match-${match.serverId}-${match.agentId}`}
-    >
-      <View style={styles.iconSlot}>
-        <ThemedProviderGlyph
-          provider={match.provider}
-          serverId={match.serverId}
-          uniProps={foregroundMutedColorMapping}
+    <View style={styles.tabRowLine}>
+      <Pressable
+        accessibilityRole={isWeb ? undefined : "button"}
+        accessibilityLabel={t("sidebar.filterSidebar.matches.openTab", { title: match.title })}
+        onPress={handlePress}
+        style={tabRowStyle}
+        testID={`sidebar-filter-tab-match-${match.serverId}-${match.agentId}`}
+      >
+        <View style={styles.iconSlot}>
+          <ThemedProviderGlyph
+            provider={match.provider}
+            serverId={match.serverId}
+            uniProps={foregroundMutedColorMapping}
+          />
+        </View>
+        <HighlightedText
+          text={match.title}
+          range={match.range}
+          style={styles.tabTitle}
+          matchStyle={styles.match}
         />
-      </View>
-      <HighlightedText
-        text={match.title}
-        range={match.range}
-        style={styles.tabTitle}
-        matchStyle={styles.match}
-      />
-    </Pressable>
+      </Pressable>
+      {routable ? (
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={routingLocked}
+          accessibilityLabel={t("sidebar.routing.sendToTitle", { title: match.title })}
+          onPress={handleSendHere}
+          testID={`sidebar-filter-send-here-${match.serverId}-${match.agentId}`}
+        >
+          {t("sidebar.routing.send")}
+        </Button>
+      ) : null}
+    </View>
   );
 });
 
@@ -331,36 +360,9 @@ export function SidebarFilterResultsTail({
           ) : null}
         </View>
       ) : null}
-      {nothingMatched ? null : (
-        <Pressable
-          accessibilityRole={isWeb ? undefined : "button"}
-          accessibilityLabel={startChatLabel}
-          onPress={startChatAndStay}
-          style={startChatRowStyle}
-          testID="sidebar-filter-start-chat"
-        >
-          <Text style={styles.startChatText} numberOfLines={1}>
-            {startChatLabel}
-          </Text>
-          <Shortcut chord={START_CHAT_KEYS} />
-        </Pressable>
-      )}
-      <Text style={styles.enterHint} testID="sidebar-filter-enter-hint">
-        {t("sidebar.filterSidebar.matches.enterHint")}
-      </Text>
+      {/* New chat, Find with AI and Send to best match sit under the field itself. */}
     </>
   );
-}
-
-function startChatRowStyle({
-  hovered = false,
-  pressed,
-}: PressableStateCallbackType & { hovered?: boolean }) {
-  return [
-    styles.startChatRow,
-    hovered && !pressed && styles.rowHovered,
-    pressed && styles.rowPressed,
-  ];
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -457,37 +459,16 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
+  tabRowLine: { flexDirection: "row", alignItems: "center" },
+  tabRowFill: { flex: 1, minWidth: 0 },
   snippet: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-  },
-  startChatRow: {
-    minHeight: 36,
-    marginTop: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    userSelect: "none",
-  },
-  startChatText: {
-    flex: 1,
-    minWidth: 0,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
   },
   coverage: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     paddingHorizontal: theme.spacing[2],
     paddingTop: theme.spacing[1],
-  },
-  enterHint: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    paddingHorizontal: theme.spacing[2],
-    paddingTop: theme.spacing[3],
   },
 }));

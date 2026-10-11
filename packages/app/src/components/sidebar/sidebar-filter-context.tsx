@@ -18,6 +18,7 @@ import {
   type SidebarTabMatch,
   type SidebarTabMatches,
 } from "./sidebar-filter-matches";
+import type { SessionTarget } from "./find-or-start";
 
 /**
  * The sidebar filter's deeper tiers live in their own contexts rather than on the sidebar model:
@@ -27,25 +28,34 @@ import {
 
 interface SidebarTabMatchesValue {
   tabMatches: SidebarTabMatches;
+  /** The one visible chat a pasted session id names, if exactly one (find-or-start.ts). */
+  uniqueSession: SessionTarget | null;
 }
 
 const SidebarTabMatchesContext = createContext<SidebarTabMatchesValue>({
   tabMatches: EMPTY_SIDEBAR_TAB_MATCHES,
+  uniqueSession: null,
 });
 
 const NO_TAB_MATCHES: readonly SidebarTabMatch[] = [];
 
 export function SidebarTabMatchesProvider({
   tabMatches,
+  uniqueSession,
   children,
 }: {
   tabMatches: SidebarTabMatches;
+  uniqueSession: SessionTarget | null;
   children: ReactNode;
 }) {
-  const value = useMemo(() => ({ tabMatches }), [tabMatches]);
+  const value = useMemo(() => ({ tabMatches, uniqueSession }), [tabMatches, uniqueSession]);
   return (
     <SidebarTabMatchesContext.Provider value={value}>{children}</SidebarTabMatchesContext.Provider>
   );
+}
+
+export function useUniqueSessionForQuery(): SessionTarget | null {
+  return useContext(SidebarTabMatchesContext).uniqueSession;
 }
 
 export function useSidebarWorkspaceTabMatches(workspaceKey: string): readonly SidebarTabMatch[] {
