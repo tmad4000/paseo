@@ -100,6 +100,9 @@ import type { PendingPermission } from "@/types/shared";
 import type { StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
+import { useSubthreadReplyTarget } from "@/subthreads/context";
+import { SubthreadsHost, type RenderSubthreadAgentInput } from "@/subthreads/host";
+import { SessionChecklistButton, SubthreadsOpenButton } from "@/subthreads/open-button";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
@@ -383,15 +386,29 @@ function AgentPanel() {
 
   return (
     <RetainedChatContent>
-      <AgentPanelContent
+      <SubthreadsHost
         serverId={serverId}
         workspaceId={workspaceId}
         agentId={target.agentId}
-        isPaneFocused={isInteractive}
-        onOpenWorkspaceFile={openFileInWorkspace}
-      />
+        renderAgent={renderSubthreadAgent}
+      >
+        {(parentActive) => (
+          <AgentPanelContent
+            serverId={serverId}
+            workspaceId={workspaceId}
+            agentId={target.agentId}
+            isPaneFocused={isInteractive && parentActive}
+            onOpenWorkspaceFile={openFileInWorkspace}
+          />
+        )}
+      </SubthreadsHost>
     </RetainedChatContent>
   );
+}
+
+/** A subagent opened in its parent's drawer gets the same pane a tab would show. */
+function renderSubthreadAgent(input: RenderSubthreadAgentInput) {
+  return <AgentPanelContent {...input} />;
 }
 
 function DraftPanel() {
@@ -1386,6 +1403,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             />
           ) : null}
           <SessionPinButton serverId={serverId} agentId={agentId} />
+          <SubthreadsOpenButton />
+          <SessionChecklistButton />
         </View>
         {dock}
         {!isChatVisible ? (
@@ -1648,6 +1667,12 @@ function ActiveAgentComposer({
   const paneContext = usePaneContext();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const { workspaceId, tabId, retargetCurrentTab } = paneContext;
+  const { t } = useTranslation();
+  // Inside a parent's subagents drawer, the field itself names who receives the message.
+  const replyTarget = useSubthreadReplyTarget(agentId);
+  const replyPlaceholder = replyTarget
+    ? t("subthreads.replyPlaceholder", { label: replyTarget.label })
+    : undefined;
   const { archiveAgent } = useArchiveAgent();
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const hideWorkspaceAgent = useWorkspaceLayoutStore((state) => state.hideAgent);
@@ -1740,6 +1765,7 @@ function ActiveAgentComposer({
         onMessageSent={onMessageSent}
         onClientSlashCommand={handleClientSlashCommand}
         isCompactLayout={isCompactComposerLayout}
+        placeholder={replyPlaceholder}
       />
     </View>
   );

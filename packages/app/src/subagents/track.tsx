@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Archive, Unlink } from "lucide-react-native";
+import { Archive, ListTree, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
@@ -22,6 +22,7 @@ import {
 } from "./track-presentation";
 
 const ThemedArchive = withUnistyles(Archive);
+const ThemedListTree = withUnistyles(ListTree);
 const ThemedUnlink = withUnistyles(Unlink);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -38,6 +39,8 @@ export interface SubagentsTrackProps {
   onArchiveFinished?: () => void;
   archiveFinishedStatus?: ArchiveFinishedStatus;
   onDetachSubagent?: (id: string) => void;
+  /** Present when the pane hosts a subagents drawer: read and reply without leaving the parent. */
+  onOpenDrawer?: () => void;
 }
 
 const IDLE_ARCHIVE_FINISHED_STATUS: ArchiveFinishedStatus = { kind: "idle" };
@@ -64,6 +67,7 @@ export function SubagentsTrack({
   onArchiveFinished,
   archiveFinishedStatus = IDLE_ARCHIVE_FINISHED_STATUS,
   onDetachSubagent,
+  onOpenDrawer,
 }: SubagentsTrackProps): ReactElement | null {
   const { t } = useTranslation();
 
@@ -84,13 +88,16 @@ export function SubagentsTrack({
       accessibilityLabel={pill.accessibilityLabel}
       panelTitle={t("subagents.title")}
     >
-      {showArchiveFinished && onArchiveFinished ? (
+      {(showArchiveFinished && onArchiveFinished) || (onOpenDrawer && rows.length > 0) ? (
         <ComposerTrackActions divided={rows.length > 0}>
-          <ArchiveFinishedRow
-            status={archiveFinishedStatus}
-            disabled={isArchivingFinished}
-            onPress={onArchiveFinished}
-          />
+          {onOpenDrawer && rows.length > 0 ? <OpenDrawerRow onPress={onOpenDrawer} /> : null}
+          {showArchiveFinished && onArchiveFinished ? (
+            <ArchiveFinishedRow
+              status={archiveFinishedStatus}
+              disabled={isArchivingFinished}
+              onPress={onArchiveFinished}
+            />
+          ) : null}
         </ComposerTrackActions>
       ) : null}
       {rows.map((row) => (
@@ -105,6 +112,34 @@ export function SubagentsTrack({
         />
       ))}
     </ComposerTrackPill>
+  );
+}
+
+/** Opens every row of this panel in the pane's drawer, beside the parent's chat. */
+function OpenDrawerRow({ onPress }: { onPress: () => void }): ReactElement {
+  const { t } = useTranslation();
+  const renderRow = useCallback(
+    ({ active }: { active: boolean }) => (
+      <>
+        <ThemedListTree
+          size={ROW_ICON_SIZE}
+          uniProps={active ? foregroundColorMapping : foregroundMutedColorMapping}
+        />
+        <Text style={styles.rowLabel} numberOfLines={1}>
+          {t("subthreads.trackOpenDrawer")}
+        </Text>
+      </>
+    ),
+    [t],
+  );
+  return (
+    <ComposerTrackRow
+      accessibilityLabel={t("subthreads.trackOpenDrawer")}
+      testID="subagents-track-open-drawer"
+      onPress={onPress}
+    >
+      {renderRow}
+    </ComposerTrackRow>
   );
 }
 

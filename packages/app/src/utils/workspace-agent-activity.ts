@@ -117,7 +117,11 @@ function messageTimestamp(value: string | null | undefined): Date | undefined {
 }
 
 function agentMessageTimestamps(agent: Agent): { user: Date; assistant: Date; conversation: Date } {
-  const user = messageTimestamp(agent.messageActivity?.lastUserMessageAt);
+  // Daemons older than conversationMessageActivity send no messageActivity at all; their legacy
+  // lastUserMessageAt keeps those chats in a sensible place under the message sorts.
+  const user = agent.messageActivity
+    ? messageTimestamp(agent.messageActivity.lastUserMessageAt)
+    : (agent.lastUserMessageAt ?? undefined);
   const assistant = messageTimestamp(agent.messageActivity?.lastAssistantMessageAt);
   let conversation = user ?? assistant ?? agent.createdAt;
   if (user && assistant && assistant > user) conversation = assistant;

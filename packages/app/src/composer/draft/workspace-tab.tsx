@@ -12,6 +12,7 @@ import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
+import type { MessagePayload } from "@/composer/types";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
@@ -455,9 +456,9 @@ export function WorkspaceDraftAgentTab({
     getPendingServerId: () => serverId,
     initialAttempt: initialCreateAttempt,
     allowEmptyText: allowsEmptyAutoSubmit,
-    validateBeforeSubmit: ({ text, attachments }) => {
+    validateBeforeSubmit: ({ text, attachments, allowEmptyText }) => {
       const allowsEmptyDraftText = shouldAllowEmptyDraftText({
-        allowsEmptyAutoSubmit,
+        allowsEmptyAutoSubmit: allowsEmptyAutoSubmit || allowEmptyText === true,
         attachments,
       });
       return validateDraftSubmission({
@@ -603,6 +604,27 @@ export function WorkspaceDraftAgentTab({
     workspaceId,
   ]);
 
+  // Voice attaches to an agent; a new chat creates its agent (no prompt, so no
+  // turn starts) with the draft's provider, model, mode and directory.
+  const draftWorkingDir = composerState.workingDir;
+  const createAgentForVoice = useCallback(
+    () =>
+      handleCreateFromInput({
+        text: "",
+        attachments: [],
+        cwd: draftWorkingDir,
+        allowEmptyText: true,
+      }),
+    [draftWorkingDir, handleCreateFromInput],
+  );
+
+  const handleSubmitMessage = useCallback(
+    async (payload: MessagePayload) => {
+      await handleCreateFromInput(payload);
+    },
+    [handleCreateFromInput],
+  );
+
   const focusInputRef = useRef<(() => void) | null>(null);
 
   const handleFocusInputCallback = useCallback((focus: () => void) => {
@@ -667,7 +689,7 @@ export function WorkspaceDraftAgentTab({
             serverId={serverId}
             workspaceId={workspaceId}
             isPaneFocused={isPaneFocused}
-            onSubmitMessage={handleCreateFromInput}
+            onSubmitMessage={handleSubmitMessage}
             isSubmitLoading={isSubmitting}
             blurOnSubmit={true}
             textSource={draftInput.textSource}
@@ -684,6 +706,7 @@ export function WorkspaceDraftAgentTab({
             onFocusInput={handleFocusInputCallback}
             commandDraftConfig={composerState.commandDraftConfig}
             agentControls={composerAgentControls}
+            createAgentForVoice={createAgentForVoice}
             isCompactLayout={isCompactComposerLayout}
           />
         </View>

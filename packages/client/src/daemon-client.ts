@@ -3946,6 +3946,11 @@ export class DaemonClient {
     return this.lastServerInfoMessage?.features?.uiCommands === true;
   }
 
+  /** Side placement, page targets, and ui.command delivery to modern clients. */
+  supportsUiTabPlacement(): boolean {
+    return this.lastServerInfoMessage?.features?.uiTabPlacement === true;
+  }
+
   /**
    * Ask the attached app clients to open a tab in a workspace view. The daemon
    * validates the workspace and broadcasts; `deliveredTo` reports how many
@@ -3956,6 +3961,7 @@ export class DaemonClient {
     workspaceId: string;
     target: UiWorkspaceTabTarget;
     focus?: boolean;
+    placement?: "main" | "side";
     serverId?: string;
     requestId?: string;
     timeout?: number;
@@ -3968,6 +3974,7 @@ export class DaemonClient {
       target: input.target,
       ...(input.serverId ? { serverId: input.serverId } : {}),
       ...(input.focus === false ? { focus: false } : {}),
+      ...(input.placement === "side" ? { placement: "side" } : {}),
     });
     const payload = await this.sendRequest({
       requestId,

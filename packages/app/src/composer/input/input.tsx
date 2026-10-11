@@ -1,3 +1,4 @@
+import { useSubthreadReplyLabel } from "@/subthreads/context";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -19,6 +20,7 @@ import {
   forwardRef,
 } from "react";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -165,6 +167,8 @@ export interface MessageInputProps {
   supportsVoiceConcurrentInput?: boolean;
   /** Host advertises GPT realtime voice (credential configured); the voice toggle prefers it. */
   preferRealtimeGpt?: boolean;
+  /** Draft chats (no agent yet): the voice toggle calls this to create the agent and start voice. */
+  onStartVoiceWithoutAgent?: () => void;
   isCancellingAgent?: boolean;
   onCancelAgent?: () => void;
   /** Controls what the default send action (Enter, send button, dictation) does when the agent is
@@ -1015,6 +1019,7 @@ interface ToggleRealtimeVoiceContext {
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
   preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   handleStopRealtimeVoice: () => Promise<unknown> | void;
   toast: { error: (msg: string) => void };
   interruptBeforeVoiceMessage: string;
@@ -1025,6 +1030,10 @@ function toggleRealtimeVoiceImpl(ctx: ToggleRealtimeVoiceContext): void {
     return;
   }
   if (ctx.voice.isVoiceSwitching) return;
+  if (ctx.onStartVoiceWithoutAgent) {
+    ctx.onStartVoiceWithoutAgent();
+    return;
+  }
   if (ctx.voice.isVoiceModeForAgent(ctx.voiceServerId, ctx.voiceAgentId)) {
     void ctx.handleStopRealtimeVoice();
     return;
@@ -1264,6 +1273,7 @@ interface ResolvedMessageInputProps {
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
   preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   defaultSendBehavior: "interrupt" | "steer" | "queue";
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmitLoadingPress: (() => void) | undefined;
@@ -1313,6 +1323,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     isAgentRunning: props.isAgentRunning ?? false,
     supportsVoiceConcurrentInput: props.supportsVoiceConcurrentInput ?? false,
     preferRealtimeGpt: props.preferRealtimeGpt ?? false,
+    onStartVoiceWithoutAgent: props.onStartVoiceWithoutAgent,
     defaultSendBehavior: props.defaultSendBehavior,
     onQueue: props.onQueue,
     onSubmitLoadingPress: props.onSubmitLoadingPress,
@@ -1333,6 +1344,17 @@ function extractErrorMessage(error: unknown): string | null {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return null;
+}
+
+/** Inside a subagents drawer the field is named for its recipient, not the generic agent. */
+function resolveInputAccessibilityLabel(
+  t: TFunction,
+  replyTargetLabel: string | null,
+  fallbackKey: string,
+): string {
+  return replyTargetLabel
+    ? t("subthreads.replyPlaceholder", { label: replyTargetLabel })
+    : t(fallbackKey);
 }
 
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
@@ -1370,6 +1392,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isAgentRunning,
       supportsVoiceConcurrentInput,
       preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       defaultSendBehavior,
       onQueue,
       onSubmitLoadingPress,
@@ -1386,6 +1409,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     } = resolveMessageInputProps(props);
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
+    // In a parent's subagents drawer, the field's name says who receives it, for screen readers and voice control.
+    const replyTargetLabel = useSubthreadReplyLabel(voiceAgentId);
     const isCompact = useIsCompactFormFactor();
     const { height: windowHeight } = useWindowDimensions();
     const maxInputHeight = resolveMaxInputHeight(windowHeight);
@@ -1683,6 +1708,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isAgentRunning,
         supportsVoiceConcurrentInput,
         preferRealtimeGpt,
+        onStartVoiceWithoutAgent,
         handleStopRealtimeVoice,
         toast,
         interruptBeforeVoiceMessage: t("composer.voice.interruptBeforeVoice"),
@@ -1693,6 +1719,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isAgentRunning,
       supportsVoiceConcurrentInput,
       preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       isConnected,
       t,
       toast,
@@ -2045,7 +2072,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               textInputStyle={textInputStyle}
               readOnlyTextStyle={readOnlyTextStyle}
               placeholder={placeholder ?? t("composer.placeholders.fallback")}
-              accessibilityLabel={t(mode.accessibilityLabelKey)}
+              accessibilityLabel={resolveInputAccessibilityLabel(
+                t,
+                replyTargetLabel,
+                mode.accessibilityLabelKey,
+              )}
               onChangeText={handleInputChange}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}

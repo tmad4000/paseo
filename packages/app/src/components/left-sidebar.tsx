@@ -64,6 +64,7 @@ import {
   type SidebarWorkspaceEntry,
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
+import { canUseMessageSort, isMessageSortMode } from "@/components/sidebar/message-sort-capability";
 import type { PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
@@ -878,7 +879,7 @@ const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = [
 function SidebarSearchControls() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const { searchQuery, setSearchQuery, sortMode, setSortMode, messageSortAvailability } =
+  const { searchQuery, setSearchQuery, effectiveSortMode, setSortMode, messageSortAvailability } =
     useSidebarModel();
   const searchInputRef = useRef<EditingTextInputHandle>(null);
   useEffect(() => {
@@ -943,7 +944,7 @@ function SidebarSearchControls() {
             style={styles.sidebarSortTrigger}
             accessibilityRole="button"
             accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
-              value: t(`sidebar.filterSidebar.sort.${sortMode}`),
+              value: t(`sidebar.filterSidebar.sort.${effectiveSortMode}`),
             })}
             testID="sidebar-sort-trigger"
           >
@@ -959,15 +960,17 @@ function SidebarSearchControls() {
                 {t("sidebar.filterSidebar.sortUpdateHost")}
               </DropdownMenuItem>
             ) : null}
+            {messageSortAvailability === "partial" ? (
+              <DropdownMenuItem disabled testID="sidebar-sort-partial-hosts">
+                {t("sidebar.filterSidebar.sortUpdateHostPartial")}
+              </DropdownMenuItem>
+            ) : null}
             {SIDEBAR_SORT_MODES.map((mode) => (
               <SidebarSortItem
                 key={mode}
                 mode={mode}
-                selected={sortMode === mode}
-                disabled={
-                  (mode === "recent" || mode === "user" || mode === "assistant") &&
-                  messageSortAvailability !== "ready"
-                }
+                selected={effectiveSortMode === mode}
+                disabled={isMessageSortMode(mode) && !canUseMessageSort(messageSortAvailability)}
                 onSelectMode={setSortMode}
               />
             ))}
@@ -979,7 +982,7 @@ function SidebarSearchControls() {
       theme,
       searchQuery,
       setSearchQuery,
-      sortMode,
+      effectiveSortMode,
       setSortMode,
       messageSortAvailability,
       handleFindKeyPress,

@@ -49,6 +49,7 @@ export type KeyboardActionId =
   | "sidebar.toggle.both"
   | "workspace.new"
   | "quick-launch.open"
+  | "agent.subthreads.toggle"
   | "workspace.project.pick"
   | "worktree.new"
   | "workspace.archive"
@@ -108,6 +109,7 @@ export type KeyboardActionDefinition =
   | { id: "sidebar.toggle.both"; scope: KeyboardActionScope }
   | { id: "workspace.new"; scope: KeyboardActionScope }
   | { id: "quick-launch.open"; scope: KeyboardActionScope }
+  | { id: "agent.subthreads.toggle"; scope: KeyboardActionScope }
   | { id: "workspace.project.pick"; scope: KeyboardActionScope }
   | { id: "worktree.new"; scope: KeyboardActionScope }
   | { id: "workspace.archive"; scope: KeyboardActionScope }

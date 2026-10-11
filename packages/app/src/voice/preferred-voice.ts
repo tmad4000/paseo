@@ -39,3 +39,46 @@ export async function startPreferredVoice(
   await input.startVoice(input.serverId, input.agentId, "paseo");
   return { provider: "paseo", realtimeError: null };
 }
+
+export interface StartPreferredVoiceForNewAgentInput extends Omit<
+  StartPreferredVoiceInput,
+  "agentId"
+> {
+  /** Creates the chat's agent; resolves to its id, or null when none was created. */
+  createAgent: () => Promise<string | null>;
+}
+
+/**
+ * Voice attaches to an agent, and a brand-new chat has none until its first
+ * message. Pressing voice there creates the agent first (no prompt, so no turn
+ * starts) and then starts voice on it, so a new chat can begin by talking.
+ */
+export async function startPreferredVoiceForNewAgent(
+  input: StartPreferredVoiceForNewAgentInput,
+): Promise<(PreferredVoiceResult & { agentId: string }) | null> {
+  const agentId = await input.createAgent();
+  if (!agentId) return null;
+  const result = await startPreferredVoice({
+    startVoice: input.startVoice,
+    serverId: input.serverId,
+    agentId,
+    preferRealtimeGpt: input.preferRealtimeGpt,
+  });
+  return { ...result, agentId };
+}
+
+/**
+ * A draft chat offers voice only while its composer is empty and idle: the
+ * voice start creates the agent with no prompt, so typed content keeps the
+ * normal send path instead of being dropped.
+ */
+export function resolveCanCreateAgentForVoice(input: {
+  hasAgent: boolean;
+  canCreateAgent: boolean;
+  isSubmitLoading: boolean;
+  hasSendableContent: boolean;
+}): boolean {
+  return (
+    !input.hasAgent && input.canCreateAgent && !input.isSubmitLoading && !input.hasSendableContent
+  );
+}

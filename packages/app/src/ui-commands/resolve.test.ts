@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { browserIdForUrl } from "@getpaseo/protocol/ui-browser-target";
 import { resolveUiCommand, type ResolvedUiTabOpenCommand } from "./resolve";
 
 function tabOpen(payload: Record<string, unknown>) {
@@ -102,6 +103,36 @@ describe("resolveUiCommand", () => {
     expect(tabOpen({ workspaceId: "   ", target: { kind: "draft" } })).toBeNull();
     expect(
       tabOpen({ workspaceId: "workspace-1", target: { kind: "agent", agentId: " " } }),
+    ).toBeNull();
+  });
+
+  it("carries side placement and resolves a page to its stable browser", () => {
+    const resolved = tabOpen({
+      workspaceId: "workspace-1",
+      target: {
+        kind: "browser",
+        url: "https://m4-mini.tailb2a35c.ts.net:8047/general-checklist.html",
+      },
+      placement: "side",
+      focus: false,
+    });
+    expect(resolved).toMatchObject({
+      placement: "side",
+      focus: false,
+      browserUrl: "https://m4-mini.tailb2a35c.ts.net:8047/general-checklist.html",
+      target: { kind: "browser" },
+    });
+    expect(resolved?.target.kind === "browser" && resolved.target.browserId).toBe(
+      browserIdForUrl("https://m4-mini.tailb2a35c.ts.net:8047/general-checklist.html"),
+    );
+  });
+
+  it("ignores a page URL that is not http(s)", () => {
+    expect(
+      tabOpen({
+        workspaceId: "workspace-1",
+        target: { kind: "browser", url: "javascript:alert(1)" },
+      }),
     ).toBeNull();
   });
 });

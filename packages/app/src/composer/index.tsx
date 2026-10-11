@@ -95,7 +95,11 @@ import {
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { appendPendingQueueRows, getPendingQueueMessageIds } from "@/composer/queue-sync";
 import { useVoiceOptional } from "@/contexts/voice-context";
-import { startPreferredVoice } from "@/voice/preferred-voice";
+import {
+  resolveCanCreateAgentForVoice,
+  startPreferredVoice,
+  startPreferredVoiceForNewAgent,
+} from "@/voice/preferred-voice";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -636,21 +640,43 @@ interface AttemptStartRealtimeVoiceArgs {
   serverId: string;
   agentId: string;
   preferRealtimeGpt: boolean;
+  /** Draft composers only: creates the agent so voice can attach to it. */
+  createAgentForVoice: (() => Promise<string | null>) | undefined;
+  canCreateAgentForVoice: boolean;
   toastErrorRef: { current: (message: string) => void };
 }
 
 function attemptStartRealtimeVoice(args: AttemptStartRealtimeVoiceArgs): void {
-  const { voice, isConnected, hasAgent, serverId, agentId, preferRealtimeGpt, toastErrorRef } =
-    args;
-  if (!voice || !isConnected || !hasAgent) return;
-  if (voice.isVoiceSwitching) return;
-  if (voice.isVoiceModeForAgent(serverId, agentId)) return;
-  void startPreferredVoice({
-    startVoice: voice.startVoice,
+  const {
+    voice,
+    isConnected,
+    hasAgent,
     serverId,
     agentId,
     preferRealtimeGpt,
-  }).catch((error) => {
+    createAgentForVoice,
+    canCreateAgentForVoice,
+    toastErrorRef,
+  } = args;
+  if (!voice || !isConnected) return;
+  const createAgent = !hasAgent && canCreateAgentForVoice ? createAgentForVoice : undefined;
+  if (!hasAgent && !createAgent) return;
+  if (voice.isVoiceSwitching) return;
+  if (hasAgent && voice.isVoiceModeForAgent(serverId, agentId)) return;
+  const started = !createAgent
+    ? startPreferredVoice({
+        startVoice: voice.startVoice,
+        serverId,
+        agentId,
+        preferRealtimeGpt,
+      })
+    : startPreferredVoiceForNewAgent({
+        createAgent,
+        startVoice: voice.startVoice,
+        serverId,
+        preferRealtimeGpt,
+      });
+  void started.catch((error) => {
     console.error("[Composer] Failed to start voice mode", error);
     const message = resolveErrorMessage(error);
     if (message && message.trim().length > 0) {
@@ -1314,6 +1340,11 @@ interface ComposerProps {
   onAttentionPromptSend?: () => void;
   /** Controlled agent controls rendered in input area (draft flows). */
   agentControls?: DraftAgentControlsProps;
+  /**
+   * Draft chats: creates the agent (no prompt) and resolves to its id, so the
+   * voice button can start a voice session before the first message is sent.
+   */
+  createAgentForVoice?: () => Promise<string | null>;
   /** Extra styles merged onto the message input wrapper (e.g. elevated background). */
   inputWrapperStyle?: import("react-native").ViewStyle;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
@@ -1485,6 +1516,7 @@ interface ComposerVoiceModeButtonProps {
 interface ComposerRightControlsSlotProps extends ComposerVoiceModeButtonProps {
   isVoiceModeForAgent: boolean;
   hasAgent: boolean;
+  canCreateAgentForVoice: boolean;
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
   preferRealtimeGpt: boolean;
@@ -1496,6 +1528,7 @@ interface ComposerRightControlsSlotProps extends ComposerVoiceModeButtonProps {
 function ComposerRightControlsSlot({
   isVoiceModeForAgent,
   hasAgent,
+  canCreateAgentForVoice,
   isAgentRunning,
   supportsVoiceConcurrentInput,
   preferRealtimeGpt,
@@ -1510,7 +1543,7 @@ function ComposerRightControlsSlot({
   const showVoiceModeButton =
     showVoice &&
     !isVoiceModeForAgent &&
-    hasAgent &&
+    (hasAgent || canCreateAgentForVoice) &&
     (!isAgentRunning || supportsVoiceConcurrentInput || preferRealtimeGpt) &&
     !hideVoiceForCompactInput;
   if (!showVoiceModeButton) return null;
@@ -1589,6 +1622,7 @@ function ComposerContentImpl({
   submitButtonTestID,
   submitIcon = "arrow",
   isSubmitLoading = false,
+  createAgentForVoice,
   waitForForgeAutoAttachOnSubmit = false,
   submitBehavior = "clear",
   blurOnSubmit = false,
@@ -2421,6 +2455,13 @@ function ComposerContentImpl({
   }, []);
 
   const isVoiceModeForAgent = resolveIsVoiceModeForAgent(voice, serverId, agentId);
+  const hasSendableContent = hasText || selectedAttachments.length > 0;
+  const canCreateAgentForVoice = resolveCanCreateAgentForVoice({
+    hasAgent,
+    canCreateAgent: createAgentForVoice !== undefined,
+    isSubmitLoading,
+    hasSendableContent,
+  });
 
   const handleToggleRealtimeVoice = useCallback(() => {
     attemptStartRealtimeVoice({
@@ -2430,9 +2471,20 @@ function ComposerContentImpl({
       serverId,
       agentId,
       preferRealtimeGpt,
+      createAgentForVoice,
+      canCreateAgentForVoice,
       toastErrorRef,
     });
-  }, [agentId, hasAgent, isConnected, preferRealtimeGpt, serverId, voice]);
+  }, [
+    agentId,
+    canCreateAgentForVoice,
+    createAgentForVoice,
+    hasAgent,
+    isConnected,
+    preferRealtimeGpt,
+    serverId,
+    voice,
+  ]);
 
   const handleSaveQueuedMessage = useCallback(
     async (id: string, expectedText: string, text: string): Promise<boolean> => {
@@ -2605,8 +2657,6 @@ function ComposerContentImpl({
     ],
   );
 
-  const hasSendableContent = hasText || selectedAttachments.length > 0;
-
   // Handle keyboard navigation for command autocomplete.
   const handleCommandKeyPress = useCallback(
     (event: ComposerKeyPressEvent) => autocompleteRef.current?.onKeyPress(event) ?? false,
@@ -2654,6 +2704,7 @@ function ComposerContentImpl({
       <ComposerRightControlsSlot
         isVoiceModeForAgent={isVoiceModeForAgent}
         hasAgent={hasAgent}
+        canCreateAgentForVoice={canCreateAgentForVoice}
         isAgentRunning={isAgentRunning}
         supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
         preferRealtimeGpt={preferRealtimeGpt}
@@ -2673,6 +2724,7 @@ function ComposerContentImpl({
       buttonIconSize,
       handleToggleRealtimeVoice,
       hasAgent,
+      canCreateAgentForVoice,
       hasSendableContent,
       isAgentRunning,
       supportsVoiceConcurrentInput,
@@ -3145,6 +3197,10 @@ function ComposerContentImpl({
                   isAgentRunning={isAgentRunning}
                   supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
                   preferRealtimeGpt={preferRealtimeGpt}
+                  onStartVoiceWithoutAgent={
+                    // A draft's tab id is not an agent; never start voice on it.
+                    !hasAgent && createAgentForVoice ? handleToggleRealtimeVoice : undefined
+                  }
                   isCancellingAgent={isCancellingAgent}
                   onCancelAgent={handleCancelAgent}
                   defaultSendBehavior={activeSendBehavior}

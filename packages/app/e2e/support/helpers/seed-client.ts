@@ -1,3 +1,4 @@
+import type { UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
@@ -157,7 +158,10 @@ export interface SeedDaemonClient {
       firstPromptPreview?: string | null;
     }>;
   }>;
-  updateAgent(agentId: string, updates: { name?: string }): Promise<void>;
+  updateAgent(
+    agentId: string,
+    updates: { name?: string; labels?: Record<string, string> },
+  ): Promise<void>;
   setAgentMode(agentId: string, modeId: string): Promise<unknown>;
   waitForAgentUpsert(
     agentId: string,
@@ -201,6 +205,12 @@ export interface SeedDaemonClient {
     handler: (event: { terminalId: string; type: string; data?: Uint8Array }) => void,
   ): () => void;
   killTerminal(terminalId: string): Promise<{ error: string | null }>;
+  openWorkspaceTab(input: {
+    workspaceId: string;
+    target: UiWorkspaceTabTarget;
+    focus?: boolean;
+    placement?: "main" | "side";
+  }): Promise<{ deliveredTo: number; error: string | null }>;
 }
 
 export async function connectSeedClient(options?: {
