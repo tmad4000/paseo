@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { parseSessionIdQuery } from "@getpaseo/protocol/search/session-id";
 import { usePathname } from "expo-router";
 import { Check, ChevronRight, Clock, Folder, MessageSquare, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -138,6 +139,23 @@ function compareWorkspacesByTitle(
 /** `cwd` is not rendered, so a path match must never outrank a match on text the user can see. */
 function agentSearchFields(result: CommandCenterAgentResult): CommandCenterSearchFields {
   return { visible: [result.title, result.subtitle], hidden: [result.agent.cwd] };
+}
+
+/**
+ * A pasted session id (full or its short prefix) is a match on the session itself, as strong as
+ * its title. Only id-shaped queries look at ids, so ordinary words never fuzzy-match hex.
+ */
+function agentSearchFieldsFor(
+  query: string,
+): (result: CommandCenterAgentResult) => CommandCenterSearchFields {
+  const idPrefix = parseSessionIdQuery(query);
+  if (!idPrefix) return agentSearchFields;
+  return (result) => {
+    const fields = agentSearchFields(result);
+    return result.agent.id.toLowerCase().startsWith(idPrefix)
+      ? { visible: [...fields.visible, idPrefix], hidden: fields.hidden }
+      : fields;
+  };
 }
 
 /**
@@ -285,7 +303,12 @@ function useBuiltInSections(
           title: t("shell.recentSessions.title"),
           // Every recent session, not the usual first few: this scope is the full list.
           results: hasQuery
-            ? filterAndRankBuiltInResults(recentSessionRows, query, agentSearchFields, () => 0)
+            ? filterAndRankBuiltInResults(
+                recentSessionRows,
+                query,
+                agentSearchFieldsFor(query),
+                () => 0,
+              )
             : recentSessionRows,
         },
         {
@@ -313,8 +336,11 @@ function useBuiltInSections(
         band: PINNED_SECTION_BAND,
         rank: 3,
         title: t("shell.commandCenter.agents"),
-        results: filterAndRankBuiltInResults(rows.agents, query, agentSearchFields, (left, right) =>
-          sortAgents(left.agent, right.agent),
+        results: filterAndRankBuiltInResults(
+          rows.agents,
+          query,
+          agentSearchFieldsFor(query),
+          (left, right) => sortAgents(left.agent, right.agent),
         ),
       },
     ];

@@ -1,5 +1,6 @@
 import type { SessionTextSearchHit } from "@getpaseo/protocol/messages";
 import { shouldAutoOpenAgentTab } from "@getpaseo/protocol/agent-labels";
+import { matchesSessionIdQuery } from "@getpaseo/protocol/search/session-id";
 import type { Agent } from "@/stores/session-store";
 import { isWorkspaceRootAgent } from "@/subagents/policies";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
@@ -98,10 +99,12 @@ export function matchSidebarTabTitles(
   if (!normalizedQuery) return EMPTY_SIDEBAR_TAB_MATCHES;
   const byWorkspace = new Map<string, SidebarTabMatch[]>();
   for (const tab of tabs) {
-    if (!tab.normalizedTitle.includes(normalizedQuery)) continue;
+    const titleMatch = tab.normalizedTitle.includes(normalizedQuery);
+    // A pasted session id finds its tab even though the id is never shown in the title.
+    if (!titleMatch && !matchesSessionIdQuery(tab.agentId, normalizedQuery)) continue;
     const match: SidebarTabMatch = {
       ...tab,
-      range: findSidebarMatchRange(tab.title, normalizedQuery),
+      range: titleMatch ? findSidebarMatchRange(tab.title, normalizedQuery) : null,
     };
     const list = byWorkspace.get(tab.workspaceKey);
     if (list) list.push(match);

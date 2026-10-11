@@ -841,6 +841,8 @@ export const es: TranslationResources = {
         exitFocusMode: "Salir del modo de concentración",
         splitRight: "Panel dividido a la derecha",
         splitDown: "Dividir panel hacia abajo",
+        splitRightWithSession: "Dividir a la derecha con sesión…",
+        splitDownWithSession: "Dividir hacia abajo con sesión…",
         changes: "Cambios",
         files: "Archivos",
         pullRequest: "Solicitud de extracción",

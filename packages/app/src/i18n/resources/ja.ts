@@ -838,6 +838,8 @@ export const ja: TranslationResources = {
         exitFocusMode: "フォーカスモードを終了",
         splitRight: "右にペインを分割",
         splitDown: "下にペインを分割",
+        splitRightWithSession: "セッションを右に分割表示…",
+        splitDownWithSession: "セッションを下に分割表示…",
         changes: "変更",
         files: "ファイル",
         pullRequest: "プルリクエスト",

@@ -827,6 +827,8 @@ export const zhCN: TranslationResources = {
         exitFocusMode: "退出专注模式",
         splitRight: "向右拆分窗格",
         splitDown: "向下拆分窗格",
+        splitRightWithSession: "向右拆分并放入会话…",
+        splitDownWithSession: "向下拆分并放入会话…",
         changes: "更改",
         files: "文件",
         pullRequest: "拉取请求",

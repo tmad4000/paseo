@@ -830,6 +830,8 @@ export const ar: TranslationResources = {
         exitFocusMode: "إنهاء وضع التركيز",
         splitRight: "تقسيم الجزء الأيمن",
         splitDown: "تقسيم الجزء لأسفل",
+        splitRightWithSession: "تقسيم لليمين مع جلسة…",
+        splitDownWithSession: "تقسيم للأسفل مع جلسة…",
         changes: "التغييرات",
         files: "الملفات",
         pullRequest: "طلب السحب",

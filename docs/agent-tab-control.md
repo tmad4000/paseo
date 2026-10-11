@@ -62,6 +62,13 @@ placement is also sent with `focus: false`, so clients that predate `placement` 
 background instead of navigating. The host advertises all of this as `uiTabPlacement`; the CLI
 refuses `--side` and `--url` against a host without it.
 
+**Drop a session beside the caller (2026-10-10).** With `placement: "side"`, an agent target may
+live in any workspace on the host: the tab opens in the caller's workspace (the default for side
+placement) as a foreign session that keeps its own home, and the daemon does not stamp the
+auto-open label on it. `close_tab` with that workspace closes it there and leaves the session's
+own tab labels alone. Main placement keeps its rule that an agent tab lives in the agent's
+workspace.
+
 ## Why
 
 An orchestrator agent can call the daemon's MCP tools (`create_agent`,

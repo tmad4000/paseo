@@ -51,6 +51,7 @@ import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/con
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { Shortcut } from "@/components/ui/shortcut";
+import { useSplitWithSession } from "@/workspace-tabs/split-with-session";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
 import { retainWorkspaceTabMeasuredWidth } from "@/screens/workspace/workspace-tab-layout";
 import {
@@ -326,6 +327,15 @@ function WorkspacePaneToolbarActions({
     [splitDownKeys],
   );
   const maximizeActionVisible = showMaximizeAction && Boolean(onTogglePaneMaximized);
+  const splitWithSession = useSplitWithSession();
+  const requestSplitWithSession = splitWithSession?.request;
+  const handleSplitRightWithSession = useCallback(() => {
+    if (paneId) requestSplitWithSession?.(paneId, "right");
+  }, [paneId, requestSplitWithSession]);
+  const handleSplitDownWithSession = useCallback(() => {
+    if (paneId) requestSplitWithSession?.(paneId, "bottom");
+  }, [paneId, requestSplitWithSession]);
+  const showSplitWithSession = Boolean(requestSplitWithSession && paneId);
   if (!showNewTabButton && !splitActionsVisible && !maximizeActionVisible) return null;
 
   return (
@@ -388,6 +398,24 @@ function WorkspacePaneToolbarActions({
             >
               {t("workspace.tabs.actions.splitDown")}
             </DropdownMenuItem>
+            {showSplitWithSession ? (
+              <>
+                <DropdownMenuItem
+                  leading={splitRightLeading}
+                  testID="workspace-split-pane-right-with-session"
+                  onSelect={handleSplitRightWithSession}
+                >
+                  {t("workspace.tabs.actions.splitRightWithSession")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  leading={splitDownLeading}
+                  testID="workspace-split-pane-down-with-session"
+                  onSelect={handleSplitDownWithSession}
+                >
+                  {t("workspace.tabs.actions.splitDownWithSession")}
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

@@ -6385,8 +6385,16 @@ describe("tab MCP tools", () => {
       },
     });
 
+    private readonly otherAgent = createManagedAgent({
+      id: "agent-other",
+      cwd: REPO_CWD,
+      workspaceId: "wks_other",
+      labels: { "paseo.open-agent-tab.client-1": "true" },
+    });
+
     public getAgent(agentId: string): ManagedAgent | null {
-      return agentId === this.agent.id ? this.agent : null;
+      if (agentId === this.agent.id) return this.agent;
+      return agentId === this.otherAgent.id ? this.otherAgent : null;
     }
 
     public listAgents(): ManagedAgent[] {
@@ -6497,6 +6505,80 @@ describe("tab MCP tools", () => {
 
       expect(result.isError).toBe(true);
       expect(broadcasts).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("open_tab with side placement drops a session from another workspace beside the caller", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const result = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "agent-other" }, placement: "side" },
+      });
+
+      expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+      expect(result.structuredContent).toEqual({ workspaceId: TAB_WORKSPACE_ID, delivered: 1 });
+      // Its home workspace is untouched: no auto-open label.
+      expect(agentManager.labelUpdates).toEqual([]);
+      expect(broadcasts).toEqual([
+        {
+          type: "ui.command",
+          payload: {
+            command: "tab.open",
+            serverId: "daemon-server",
+            workspaceId: TAB_WORKSPACE_ID,
+            target: { kind: "agent", agentId: "agent-other" },
+            focus: false,
+            placement: "side",
+          },
+        },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("open_tab side placement rejects an unknown agent and keeps the label for a home-workspace agent", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const unknown = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "nope" }, placement: "side" },
+      });
+      expect(unknown.isError).toBe(true);
+      expect(broadcasts).toEqual([]);
+
+      const home = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "agent-1" }, placement: "side" },
+      });
+      expect(home.isError, JSON.stringify(home.content)).not.toBe(true);
+      expect(agentManager.labelUpdates).toEqual([
+        { agentId: "agent-1", updates: { labels: { "paseo.auto-open-agent-tab": "true" } } },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("close_tab in the caller's workspace leaves a dropped-in session's own labels alone", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const result = await client.callTool({
+        name: "close_tab",
+        arguments: {
+          target: { kind: "agent", agentId: "agent-other" },
+          workspaceId: TAB_WORKSPACE_ID,
+        },
+      });
+
+      expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+      expect(agentManager.labelUpdates).toEqual([]);
+      expect(broadcasts).toMatchObject([
+        { type: "ui.command", payload: { command: "tab.close", workspaceId: TAB_WORKSPACE_ID } },
+      ]);
     } finally {
       await client.close();
     }

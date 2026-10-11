@@ -136,6 +136,7 @@ export function showWorkspaceTargetBeside(input: {
       workspaceKey: input.workspaceKey,
       target: input.target,
       intent: "background",
+      pin: input.target.kind === "agent",
     });
   }
   const sidePaneId = store.ensureSidePane(input.workspaceKey, { focus: false });
@@ -144,6 +145,9 @@ export function showWorkspaceTargetBeside(input: {
     target: input.target,
     intent: "background",
     placement: sidePaneId ? { mode: "prefer", paneId: sidePaneId } : undefined,
+    // An agent dropped here may live in another workspace; the explicit open keeps its tab
+    // through reconciliation (see screens/workspace/foreign-sessions.ts).
+    pin: input.target.kind === "agent",
   });
   if (!tabId) return null;
   // Only bring it forward in the side pane. A target the user already has open in the main

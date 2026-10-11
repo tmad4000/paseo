@@ -829,6 +829,8 @@ export const en = {
         exitFocusMode: "Exit focus mode",
         splitRight: "Split pane right",
         splitDown: "Split pane down",
+        splitRightWithSession: "Split right with session…",
+        splitDownWithSession: "Split down with session…",
         changes: "Changes",
         files: "Files",
         pullRequest: "Pull request",

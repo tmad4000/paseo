@@ -839,6 +839,8 @@ export const ptBR: TranslationResources = {
         exitFocusMode: "Sair do modo de foco",
         splitRight: "Dividir painel à direita",
         splitDown: "Dividir painel abaixo",
+        splitRightWithSession: "Dividir à direita com sessão…",
+        splitDownWithSession: "Dividir para baixo com sessão…",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",

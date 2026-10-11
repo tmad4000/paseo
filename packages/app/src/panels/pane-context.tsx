@@ -9,6 +9,11 @@ import type { PaneHost } from "@/panels/panel-manifest";
 export interface PaneContextValue {
   serverId: string;
   workspaceId: string;
+  /**
+   * The workspace whose tab layout holds this pane's tab, when it differs from `workspaceId`
+   * (a session from another workspace shown in a split). Layout operations use it.
+   */
+  layoutWorkspaceId?: string;
   host: PaneHost;
   tabId: string;
   target: WorkspaceTabTarget;

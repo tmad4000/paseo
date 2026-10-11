@@ -1708,7 +1708,11 @@ function ActiveAgentComposer({
         throw new Error("Agent not found");
       }
 
-      const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+      // The layout holding this tab: the session's own workspace, or the one it was dropped into.
+      const workspaceKey = buildWorkspaceTabPersistenceKey({
+        serverId,
+        workspaceId: paneContext.layoutWorkspaceId ?? workspaceId,
+      });
       if (workspaceKey) {
         unpinWorkspaceAgent(workspaceKey, agentId);
         hideWorkspaceAgent(workspaceKey, agentId);
@@ -1731,6 +1735,7 @@ function ActiveAgentComposer({
       archiveAgent,
       closeWorkspaceTab,
       hideWorkspaceAgent,
+      paneContext.layoutWorkspaceId,
       retargetCurrentTab,
       serverId,
       tabId,

@@ -842,6 +842,8 @@ export const fr: TranslationResources = {
         exitFocusMode: "Quitter le mode concentration",
         splitRight: "Volet divisé à droite",
         splitDown: "Diviser le volet vers le bas",
+        splitRightWithSession: "Diviser à droite avec une session…",
+        splitDownWithSession: "Diviser en bas avec une session…",
         changes: "Modifications",
         files: "Fichiers",
         pullRequest: "Demande de fusion",
