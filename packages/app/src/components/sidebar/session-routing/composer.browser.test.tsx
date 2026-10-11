@@ -12,7 +12,7 @@ import { useDraftStore } from "@/stores/draft-store";
 import { AgentQueueDestinationChangedError } from "@getpaseo/client/internal/daemon-client";
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
-import { SessionRoutingComposer } from "./composer";
+import { SessionRoutingComposer, type FindFieldActions } from "./composer";
 import { searchExistingSessions } from "../../../../../server/src/server/session-search";
 void i18n;
 vi.mock("expo-router", () => ({
@@ -229,16 +229,26 @@ function Fixture() {
   useEffect(() => {
     if (!query && inputRef.current?.getText()) inputRef.current.reset();
   }, [query]);
+  // The sidebar field: Find with AI is the fixture's submit, and its send control enters the
+  // send state, as in left-sidebar.tsx.
   const renderInput = useCallback(
-    (submit: () => void) => (
-      <EditingTextInput
-        ref={inputRef}
-        style={fixtureFindStyle}
-        accessibilityLabel="Find query"
-        initialValue={query}
-        onChangeText={setQuery}
-        onSubmitEditing={submit}
-      />
+    ({ findWithAi, clear, enterSend }: FindFieldActions) => (
+      <>
+        <EditingTextInput
+          ref={inputRef}
+          style={fixtureFindStyle}
+          accessibilityLabel="Find query"
+          initialValue={query}
+          onChangeText={setQuery}
+          onSubmitEditing={findWithAi}
+        />
+        <button type="button" aria-label="Clear search" onClick={clear}>
+          ✕
+        </button>
+        <button type="button" data-testid="routing-send-mode" onClick={enterSend}>
+          Send to an existing chat
+        </button>
+      </>
     ),
     [query],
   );
@@ -254,10 +264,15 @@ async function render() {
   );
   return within(container);
 }
+/** The submit control the current state shows: Send in the send state, Find with AI in search. */
+function submitControl(view: ReturnType<typeof within>): HTMLElement {
+  return view.queryByTestId("routing-submit") ?? view.getByTestId("routing-find-ai");
+}
 async function mount() {
   await render();
+  // The field's actions are enabled once the durable draft has loaded and the composer unlocks.
   await waitFor(() =>
-    expect(within(container).getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe(
+    expect(within(container).getByTestId("routing-find-ai").getAttribute("aria-disabled")).not.toBe(
       "true",
     ),
   );
@@ -280,7 +295,7 @@ test("Find and Open never deliver; Use restores independent draft and explicit s
     .getState()
     .editDraftText({ draftKey: SESSION_ROUTING_DRAFT_KEY, text: "  fix the relay\n" });
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
   expect(fixture.enqueue).not.toHaveBeenCalled();
   act(() => view.getByRole("button", { name: "Open chat" }).click());
@@ -297,8 +312,8 @@ test("Find and Open never deliver; Use restores independent draft and explicit s
       }),
   );
   act(() => {
-    view.getByTestId("routing-submit").click();
-    view.getByTestId("routing-submit").click();
+    submitControl(view).click();
+    submitControl(view).click();
   });
   await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
   expect(fixture.search).toHaveBeenCalledTimes(1);
@@ -313,7 +328,7 @@ test("Find and Open never deliver; Use restores independent draft and explicit s
 });
 test("ambiguous send asks first and query edits retain previous Find results", async () => {
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
   type(view.getByRole<HTMLInputElement>("textbox", { name: "Find query" }), "different query");
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
@@ -328,7 +343,7 @@ test("ambiguous send asks first and query edits retain previous Find results", a
   });
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getAllByRole("button", { name: "Queue here" })).toHaveLength(2));
   expect(fixture.enqueue).not.toHaveBeenCalled();
   act(() => view.getAllByRole("button", { name: "Queue here" })[0]?.click());
@@ -428,7 +443,7 @@ test("Find renders queued recording evidence with local dates without sending", 
     }),
   );
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText(text).textContent).toBe(text));
   const localTime = new Intl.DateTimeFormat(undefined, {
     year: "numeric",
@@ -456,7 +471,7 @@ test("Find renders queued recording evidence with local dates without sending", 
 test("rendered desktop and compact fixture evidence", async () => {
   const view = await mount();
   await page.viewport(900, 640);
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
   await page.screenshot({
     element: container,
@@ -479,14 +494,14 @@ test("no match and incomplete coverage preserve the prompt and require manual ch
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "do the task");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() =>
     expect(view.getByRole("button", { name: "Choose an existing chat" })).toBeTruthy(),
   );
   expect(fixture.enqueue).not.toHaveBeenCalled();
   expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("do the task");
   fixture.search.mockResolvedValue({ results: [result], searchedCount: 100, totalCount: 150 });
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
   expect(fixture.enqueue).not.toHaveBeenCalled();
 });
@@ -499,10 +514,10 @@ test("an old failed Find cannot override a newer lookup", async () => {
       }),
   );
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
   type(view.getByRole<HTMLInputElement>("textbox", { name: "Find query" }), "new lookup");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
   await act(async () => fail(new Error("stale failure")));
   expect(view.queryByText("stale failure")).toBeNull();
@@ -512,7 +527,7 @@ test("an old failed Find cannot override a newer lookup", async () => {
 test("complete Find displays searched and total chat counts", async () => {
   fixture.search.mockResolvedValue({ results: [result], searchedCount: 12, totalCount: 12 });
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() =>
     expect(view.getByText("Searched 12 of 12 chats.").textContent).toBe("Searched 12 of 12 chats."),
   );
@@ -524,7 +539,7 @@ test("a selected host without a directory prevents automatic delivery", async ()
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getAllByRole("button", { name: "Queue here" })).toHaveLength(1));
   expect(view.getByText(/Host directories are still loading/).textContent).toContain(
     "Choose a chat manually.",
@@ -548,7 +563,7 @@ test("a pushed acknowledgement survives a lost enqueue response", async () => {
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Queue here" }).click());
   await waitFor(() =>
@@ -560,7 +575,7 @@ test("a pushed acknowledgement survives a lost enqueue response", async () => {
   await waitFor(() =>
     expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(""),
   );
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   expect(fixture.enqueue).toHaveBeenCalledTimes(1);
 });
 
@@ -579,7 +594,7 @@ test("changing selected hosts ignores an in-flight automatic send and clears edi
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
   fixture.serverIds = ["cold-host"];
   await render();
@@ -590,7 +605,7 @@ test("changing selected hosts ignores an in-flight automatic send and clears edi
   fixture.serverIds = ["host"];
   await render();
   act(() => view.getByTestId("routing-find-mode").click());
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Use this chat" }).click());
   fixture.serverIds = ["cold-host"];
@@ -607,7 +622,7 @@ test("host changes ignore stale Find failure and success", async () => {
       }),
   );
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
   fixture.serverIds = ["cold-host"];
   await render();
@@ -621,14 +636,14 @@ test("filtering out an uncertain destination preserves its lock and original ret
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Queue here" }).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
   const itemId = fixture.enqueue.mock.calls[0]?.[0].itemId;
   fixture.serverIds = ["cold-host"];
   await render();
-  expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+  expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
   act(() => view.getByRole("button", { name: "Retry delivery" }).click());
   expect(fixture.enqueue).toHaveBeenCalledTimes(1);
   fixture.serverIds = ["host"];
@@ -688,14 +703,14 @@ test("both persisted reads gate sending and restore an owned pending item with n
   fixture.directory = false;
   try {
     const view = await render();
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     await act(async () => releaseDraft());
     await loadingDraft;
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     await act(async () => releaseOutbox());
     await loadingOutbox;
     await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
     expect(fixture.search).not.toHaveBeenCalled();
     act(() => view.getByRole("button", { name: "Retry delivery" }).click());
@@ -761,7 +776,7 @@ for (const newer of [false, true]) {
       await waitFor(() =>
         expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy(),
       );
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+      expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
       expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
       act(() => view.getByRole("button", { name: "Retry delivery" }).click());
       await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
@@ -772,7 +787,7 @@ for (const newer of [false, true]) {
         expectedWorkspaceId: "original-workspace",
         expectedProjectId: "original-project",
       });
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+      expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     }
     expect(fixture.search).not.toHaveBeenCalled();
   });
@@ -816,15 +831,16 @@ test("an acknowledgement during draft loading cannot pair stale text with new ow
     expect(view.getByTestId("routing-send-mode").getAttribute("aria-disabled")).not.toBe("true"),
   );
   act(() => view.getByTestId("routing-send-mode").click());
-  expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("");
-  act(() => view.getByTestId("routing-submit").click());
+  // The stale "continue" never comes back; Send carries the field's text instead.
+  expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(fixture.query);
+  act(() => submitControl(view).click());
   expect(fixture.enqueue).not.toHaveBeenCalled();
 });
 
 test("visible Find and Send actions have matching voice-accessible names", async () => {
   const view = await mount();
-  expect(view.getByRole("button", { name: "Find existing chats" }).textContent).toContain("Find");
-  act(() => view.getByRole("button", { name: "Send prompt mode" }).click());
+  expect(view.getByRole("button", { name: "Find with AI" }).textContent).toContain("Find with AI");
+  act(() => view.getByTestId("routing-send-mode").click());
   expect(view.getByRole("button", { name: "Find first" }).textContent).toBe("Find first");
   for (const mode of ["queue", "steer", "interrupt"])
     expect(view.getByTestId(`routing-delivery-${mode}`)).toBeTruthy();
@@ -833,12 +849,12 @@ test("visible Find and Send actions have matching voice-accessible names", async
 for (const outcome of ["acknowledged", "rejected"] as const) {
   test(`host exclusion clears the editable pin after pending delivery is ${outcome}`, async () => {
     const view = await mount();
-    act(() => view.getByTestId("routing-submit").click());
+    act(() => submitControl(view).click());
     await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
     act(() => view.getByRole("button", { name: "Use this chat" }).click());
     type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
     fixture.enqueue.mockRejectedValueOnce(new Error("lost response"));
-    act(() => view.getByTestId("routing-submit").click());
+    act(() => submitControl(view).click());
     await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
     const itemId = fixture.enqueue.mock.calls[0]?.[0].itemId;
     fixture.serverIds = ["cold-host"];
@@ -873,7 +889,7 @@ for (const outcome of ["acknowledged", "rejected"] as const) {
     act(() => view.getByTestId("routing-recipient").click());
     act(() => view.getByRole("button", { name: /Paseo.*Offline indicator/ }).click());
     type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "next prompt");
-    act(() => view.getByTestId("routing-submit").click());
+    act(() => submitControl(view).click());
     await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(2));
     expect(fixture.enqueue.mock.calls[1]?.[0].text).toBe("next prompt");
   });
@@ -940,14 +956,14 @@ for (const capability of [false, null] as const) {
       return setItem(key, value);
     });
     try {
-      act(() => view.getByTestId("routing-submit").click());
+      act(() => submitControl(view).click());
       await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
       act(() => view.getByRole("button", { name: "Queue here" }).click());
       await waitFor(() => expect(saving).toBe(true));
       fixture.routingSupported = capability;
       await act(async () => release());
       await waitFor(() =>
-        expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true"),
+        expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true"),
       );
       expect(fixture.enqueue).not.toHaveBeenCalled();
       expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
@@ -978,13 +994,13 @@ test("host exclusion during durable outbox acceptance releases an unsent draft s
     return setItem(key, value);
   });
   try {
-    act(() => view.getByTestId("routing-submit").click());
+    act(() => submitControl(view).click());
     await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
     act(() => view.getByRole("button", { name: "Queue here" }).click());
     await waitFor(() => expect(saving).toBe(true));
     fixture.serverIds = ["cold-host"];
     await render();
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     await flushQueueOutboxForServer({
       serverId: "host",
       client: {
@@ -997,9 +1013,7 @@ test("host exclusion during durable outbox acceptance releases an unsent draft s
     });
     expect(fixture.enqueue).not.toHaveBeenCalled();
     await act(async () => release());
-    await waitFor(() =>
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true"),
-    );
+    await waitFor(() => expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true"));
     expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
     expect(Object.values(useQueueOutboxStore.getState().entries)).toEqual([]);
     await flushQueueOutboxForServer({
@@ -1038,7 +1052,7 @@ for (const rejection of ["direct", "reconnect"] as const) {
       return setItem(key, value);
     });
     try {
-      act(() => view.getByTestId("routing-submit").click());
+      act(() => submitControl(view).click());
       await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
       act(() => view.getByRole("button", { name: "Queue here" }).click());
       await waitFor(() =>
@@ -1063,7 +1077,7 @@ for (const rejection of ["direct", "reconnect"] as const) {
       }
       expect(useQueueOutboxStore.getState().entries[ownedId]).toBeTruthy();
       expect(useQueueOutboxStore.getState().rejections[ownedId]).toBeUndefined();
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+      expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
       expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
       await act(async () => {
         await useQueueOutboxStore.persist.rehydrate();
@@ -1075,7 +1089,7 @@ for (const rejection of ["direct", "reconnect"] as const) {
       await waitFor(() =>
         expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy(),
       );
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+      expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
       expect(useQueueOutboxStore.getState().entries[ownedId]).toMatchObject({
         itemId: ownedId,
         text: "continue",
@@ -1085,7 +1099,7 @@ for (const rejection of ["direct", "reconnect"] as const) {
       act(() => view.getByRole("button", { name: "Retry delivery" }).click());
       await waitFor(() => expect(useQueueOutboxStore.getState().entries[ownedId]).toBeUndefined());
       await waitFor(() =>
-        expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true"),
+        expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true"),
       );
       expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe("continue");
       expect(fixture.enqueue.mock.calls.every(([entry]) => entry.itemId === ownedId)).toBe(true);
@@ -1108,7 +1122,7 @@ test("Find remains independent of an externally revised Send draft", async () =>
       }),
   );
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
   act(() => {
     useDraftStore
@@ -1123,7 +1137,7 @@ test("Find remains independent of an externally revised Send draft", async () =>
     }),
   );
   await waitFor(() => expect(view.getByText("current Find evidence")).toBeTruthy());
-  expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true");
+  expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true");
   expect(fixture.enqueue).not.toHaveBeenCalled();
 });
 
@@ -1142,7 +1156,7 @@ test("automatic Send remains independent of the Find query", async () => {
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "  continue\n");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
   act(() => {
     fixture.changeQuery("unrelated Find query");
@@ -1172,14 +1186,12 @@ for (const outcome of ["success", "failure"] as const) {
         }),
     );
     const view = await mount();
-    act(() => view.getByTestId("routing-submit").click());
+    act(() => submitControl(view).click());
     await waitFor(() => expect(lookups).toHaveLength(1));
     fixture.pauseEffects = true;
     type(view.getByRole<HTMLTextAreaElement>("textbox", { name: "Find query" }), "new Find query");
-    await waitFor(() =>
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true"),
-    );
-    act(() => view.getByTestId("routing-submit").click());
+    await waitFor(() => expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true"));
+    act(() => submitControl(view).click());
     await waitFor(() => expect(lookups).toHaveLength(2));
     fixture.pauseEffects = false;
     act(() => {
@@ -1195,7 +1207,7 @@ for (const outcome of ["success", "failure"] as const) {
         });
       else lookups[0].reject(new Error("old error"));
     });
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
     expect(view.queryByText("old evidence")).toBeNull();
     expect(view.queryByText(/old error/)).toBeNull();
     await act(async () =>
@@ -1206,7 +1218,7 @@ for (const outcome of ["success", "failure"] as const) {
       }),
     );
     await waitFor(() => expect(view.getByText("new evidence")).toBeTruthy());
-    expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true");
+    expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true");
     expect(fixture.enqueue).not.toHaveBeenCalled();
   });
 }
@@ -1233,7 +1245,7 @@ for (const change of ["mode", "query", "scope", "draft", "revision"] as const) {
         act(() => view.getByTestId("routing-send-mode").click());
         type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
       }
-      act(() => view.getByTestId("routing-submit").click());
+      act(() => submitControl(view).click());
       await waitFor(() => expect(fixture.search).toHaveBeenCalledTimes(1));
       if (change === "scope") {
         act(() => view.getByTestId("routing-scope").click());
@@ -1274,7 +1286,7 @@ for (const change of ["mode", "query", "scope", "draft", "revision"] as const) {
       expect(view.queryByText("stale match evidence")).toBeNull();
       expect(view.queryByText(/stale matching failure/)).toBeNull();
       expect(view.queryByText(/The submitted draft changed/)).toBeNull();
-      expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).not.toBe("true");
+      expect(submitControl(view).getAttribute("aria-disabled")).not.toBe("true");
       if (sending)
         expect(useDraftStore.getState().getDraftInput(SESSION_ROUTING_DRAFT_KEY)?.text).toBe(
           change === "draft" ? "new draft" : "continue",
@@ -1285,12 +1297,12 @@ for (const change of ["mode", "query", "scope", "draft", "revision"] as const) {
 
 test("ordinary queue cancellation resolves routing pending without a success receipt", async () => {
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Use this chat" }).click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
   fixture.enqueue.mockRejectedValueOnce(new Error("lost response"));
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
   const itemId = fixture.enqueue.mock.calls[0]![0].itemId;
   await act(async () => {
@@ -1339,7 +1351,7 @@ test("cold cancellation ownership locks Send without a recipient directory until
   fixture.routingSupported = false;
   const view = await render();
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
-  expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+  expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
   act(() => view.getByRole("button", { name: "Retry delivery" }).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
   expect(fixture.enqueue).not.toHaveBeenCalled();
@@ -1363,12 +1375,12 @@ test("cold cancellation ownership locks Send without a recipient directory until
 
 test("a durable cancellation intent supersedes an acknowledgement waiting for the composer", async () => {
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Use this chat" }).click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue");
   fixture.enqueue.mockRejectedValueOnce(new Error("lost response"));
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
   const itemId = fixture.enqueue.mock.calls[0]![0].itemId;
   fixture.pauseEffects = true;
@@ -1411,7 +1423,7 @@ test("cold suppressed acknowledgement ownership permits only the original delive
   fixture.directory = false;
   const view = await render();
   await waitFor(() => expect(view.getByRole("button", { name: "Retry delivery" })).toBeTruthy());
-  expect(view.getByTestId("routing-submit").getAttribute("aria-disabled")).toBe("true");
+  expect(submitControl(view).getAttribute("aria-disabled")).toBe("true");
   expect(
     view.getByTestId<HTMLTextAreaElement>("routing-send-draft").getAttribute("readonly"),
   ).not.toBeNull();
@@ -1431,8 +1443,8 @@ test("Find first never auto-sends, retains choices during edits, and queues only
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "first prompt");
-  expect(view.getByTestId("routing-submit").textContent).toBe("Find first");
-  act(() => view.getByTestId("routing-submit").click());
+  expect(submitControl(view).textContent).toBe("Find first");
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
   expect(fixture.enqueue).not.toHaveBeenCalled();
   act(() => view.getByTestId("routing-delivery-steer").click());
@@ -1454,7 +1466,7 @@ test("explicit Clear resets the visible Find input and results while preserving 
     .getState()
     .editDraftText({ draftKey: SESSION_ROUTING_DRAFT_KEY, text: "keep send draft" });
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
   act(() => view.getByRole("button", { name: "Clear search" }).click());
   expect(view.getByRole<HTMLInputElement>("textbox", { name: "Find query" }).value).toBe("");
@@ -1469,13 +1481,13 @@ test("explicit Clear resets the visible Find input and results while preserving 
 
 test("delivery options are visible and explicit recipient actions name the selected mode", async () => {
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Use this chat" }).click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "draft");
   for (const mode of ["queue", "steer", "interrupt"] as const) {
     act(() => view.getByTestId(`routing-delivery-${mode}`).click());
-    expect(view.getByTestId("routing-submit").textContent?.toLowerCase()).toBe(mode);
+    expect(submitControl(view).textContent?.toLowerCase()).toBe(mode);
   }
   expect(fixture.enqueue).not.toHaveBeenCalled();
 });
@@ -1484,7 +1496,7 @@ test("Clear can dismiss retained candidates after the prompt is manually emptied
   const view = await mount();
   act(() => view.getByTestId("routing-send-mode").click());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "find a destination");
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
   type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "");
   expect(view.getByRole("button", { name: "Queue here" }).getAttribute("aria-disabled")).toBe(
@@ -1500,14 +1512,14 @@ test("Clear can dismiss retained candidates after the prompt is manually emptied
 
 test("an explicitly selected recipient receives the latest prompt when editing and submitting in one render batch", async () => {
   const view = await mount();
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(view.getByRole("button", { name: "Use this chat" })).toBeTruthy());
   act(() => view.getByRole("button", { name: "Use this chat" }).click());
   const input = view.getByTestId<HTMLTextAreaElement>("routing-send-draft");
   type(input, "old prompt");
   act(() => {
     type(input, "same-tick latest prompt");
-    view.getByTestId("routing-submit").click();
+    submitControl(view).click();
   });
   await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
   expect(fixture.enqueue.mock.calls[0][0].text).toBe("same-tick latest prompt");
@@ -1527,7 +1539,7 @@ test("new conversation stores the prompt under the existing workspace draft-tab 
   await waitFor(() =>
     expect(view.getByTestId("routing-new-workspace").textContent).toContain("Paseo"),
   );
-  act(() => view.getByTestId("routing-submit").click());
+  act(() => submitControl(view).click());
   await waitFor(() => expect(fixture.open).toHaveBeenCalledTimes(1));
   const destination = fixture.open.mock.calls[0][0];
   expect(destination).toMatchObject({

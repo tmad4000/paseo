@@ -3,8 +3,12 @@
 The project sidebar combines its immediate [filter](sidebar-filter.md) (projects, workspaces, tab
 titles, and message text) with deliberate intelligent Find and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
 host/session, switches to Send, and restores the independent, persisted send draft. The destination
-chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Enter/Search in the
-filter field or choose Find to submit intelligent matching; typing alone keeps the ordinary filter.
+chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Mod+Enter in the
+filter field or choose **Find with AI** to submit intelligent matching; typing alone keeps the ordinary filter,
+and Enter starts a new chat (see [One field](sidebar-filter.md#one-field-2026-10-11)). Entering Send
+from the field (➤, or Send on a matched tab row) carries the field's text into an empty send draft;
+a saved draft is never overwritten. **Send to best match** under the field is Route to best match
+with the field's text as the prompt.
 
 Choose All projects, Current project, or a named project in the scope menu. A project scope is a
 sidebar project view identity, including its host/clone grouping. Search sends only that scope's

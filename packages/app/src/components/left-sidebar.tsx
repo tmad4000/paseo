@@ -6,6 +6,7 @@ import {
   GitBranch,
   Import,
   Search,
+  Send,
   Server,
   Settings,
   X,
@@ -34,7 +35,12 @@ import {
   SIDEBAR_RESIZE_FAIL_OFFSET,
 } from "@/components/sidebar-resize-handle-layout";
 import { HostPicker } from "@/components/hosts/host-picker";
-import { SessionRoutingComposer } from "@/components/sidebar/session-routing/composer";
+import {
+  SessionRoutingComposer,
+  type FindFieldActions,
+} from "@/components/sidebar/session-routing/composer";
+import { useUniqueSessionForQuery } from "@/components/sidebar/find-or-start";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import {
   EditingTextInput as TextInput,
@@ -888,9 +894,23 @@ function SidebarSearchControls() {
   // A command center "Search messages for …" request: show its text and take focus, once.
   useSidebarFilterRequestFocus(searchInputRef);
   const startChat = useStartChatFromFilterQuery();
-  // Enter stays intelligent Find. Mod+Enter opens Quick launch with the query, and Mod+Shift+Enter
-  // opens it with Start and open preselected; preventing the default keeps the web input from also
-  // submitting Find.
+  // One field (docs/sidebar-filter.md): Enter starts a new chat with the text (Quick launch,
+  // prefilled), unless the text is a session id naming exactly one chat, which Enter opens.
+  // Mod+Enter runs Find with AI; Mod+Shift+Enter starts the chat and opens it. Preventing the
+  // default keeps the web input from also submitting.
+  const uniqueSession = useUniqueSessionForQuery(searchQuery);
+  const handleEnter = useCallback(() => {
+    if (uniqueSession) {
+      navigateToAgent({
+        serverId: uniqueSession.serverId,
+        agentId: uniqueSession.agentId,
+        workspaceId: uniqueSession.workspaceId,
+      });
+      return;
+    }
+    startChat(false);
+  }, [startChat, uniqueSession]);
+  const findWithAiRef = useRef<() => void>(() => {});
   const handleFindKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       const native = event.nativeEvent as TextInputKeyPressEventData & {
@@ -901,83 +921,97 @@ function SidebarSearchControls() {
       };
       if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
       event.preventDefault();
-      // A held Mod+Enter auto-repeats; only the first press opens Quick launch.
+      // A held Mod+Enter auto-repeats; only the first press acts.
       if (native.repeat) return;
-      startChat(native.shiftKey === true);
+      if (native.shiftKey === true) startChat(true);
+      else findWithAiRef.current();
     },
     [startChat],
   );
   const renderFindField = useCallback(
-    (submit: () => void, clear: () => void) => (
-      <View style={styles.sidebarSearchControls}>
-        <View style={styles.sidebarSearchField}>
-          <Search size={15} color={theme.colors.foregroundMuted} />
-          <TextInput
-            ref={searchInputRef}
-            initialValue={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={t("sidebar.filterSidebar.placeholder")}
-            placeholderTextColor={theme.colors.foregroundMuted}
-            accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-            onKeyPress={handleFindKeyPress}
-            onSubmitEditing={submit}
-            testID="sidebar-title-project-filter"
-            style={styles.sidebarSearchInput}
-          />
-          {searchQuery ? (
-            <Pressable
-              onPress={clear}
-              accessibilityRole="button"
-              accessibilityLabel={t("sidebar.filterSidebar.clear")}
-              testID="sidebar-title-project-filter-clear"
-            >
-              <X size={14} color={theme.colors.foregroundMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-        <SidebarFilterScopeMenu />
-        <DropdownMenu compactMode="sheet">
-          <DropdownMenuTrigger
-            style={styles.sidebarSortTrigger}
+    ({ findWithAi, clear, enterSend }: FindFieldActions) => {
+      // The composer owns Find with AI; the key handler reaches it through this ref.
+      findWithAiRef.current = findWithAi;
+      return (
+        <View style={styles.sidebarSearchControls}>
+          <View style={styles.sidebarSearchField}>
+            <Search size={15} color={theme.colors.foregroundMuted} />
+            <TextInput
+              ref={searchInputRef}
+              initialValue={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={t("sidebar.filterSidebar.placeholder")}
+              placeholderTextColor={theme.colors.foregroundMuted}
+              accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              onKeyPress={handleFindKeyPress}
+              onSubmitEditing={handleEnter}
+              testID="sidebar-title-project-filter"
+              style={styles.sidebarSearchInput}
+            />
+            {searchQuery ? (
+              <Pressable
+                onPress={clear}
+                accessibilityRole="button"
+                accessibilityLabel={t("sidebar.filterSidebar.clear")}
+                testID="sidebar-title-project-filter-clear"
+              >
+                <X size={14} color={theme.colors.foregroundMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={enterSend}
             accessibilityRole="button"
-            accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
-              value: t(`sidebar.filterSidebar.sort.${effectiveSortMode}`),
-            })}
-            testID="sidebar-sort-trigger"
+            accessibilityLabel={t("sidebar.routing.sendToChat")}
+            style={styles.sidebarSortTrigger}
+            testID="routing-send-mode"
           >
-            <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            width={280}
-            sheetTitle={t("sidebar.filterSidebar.sortHeading")}
-          >
-            {messageSortAvailability === "unsupported" ? (
-              <DropdownMenuItem disabled>
-                {t("sidebar.filterSidebar.sortUpdateHost")}
-              </DropdownMenuItem>
-            ) : null}
-            {messageSortAvailability === "partial" ? (
-              <DropdownMenuItem disabled testID="sidebar-sort-partial-hosts">
-                {t("sidebar.filterSidebar.sortUpdateHostPartial")}
-              </DropdownMenuItem>
-            ) : null}
-            {SIDEBAR_SORT_MODES.map((mode) => (
-              <SidebarSortItem
-                key={mode}
-                mode={mode}
-                selected={effectiveSortMode === mode}
-                disabled={isMessageSortMode(mode) && !canUseMessageSort(messageSortAvailability)}
-                onSelectMode={setSortMode}
-              />
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </View>
-    ),
+            <Send size={14} color={theme.colors.foregroundMuted} />
+          </Pressable>
+          <SidebarFilterScopeMenu />
+          <DropdownMenu compactMode="sheet">
+            <DropdownMenuTrigger
+              style={styles.sidebarSortTrigger}
+              accessibilityRole="button"
+              accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
+                value: t(`sidebar.filterSidebar.sort.${effectiveSortMode}`),
+              })}
+              testID="sidebar-sort-trigger"
+            >
+              <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              width={280}
+              sheetTitle={t("sidebar.filterSidebar.sortHeading")}
+            >
+              {messageSortAvailability === "unsupported" ? (
+                <DropdownMenuItem disabled>
+                  {t("sidebar.filterSidebar.sortUpdateHost")}
+                </DropdownMenuItem>
+              ) : null}
+              {messageSortAvailability === "partial" ? (
+                <DropdownMenuItem disabled testID="sidebar-sort-partial-hosts">
+                  {t("sidebar.filterSidebar.sortUpdateHostPartial")}
+                </DropdownMenuItem>
+              ) : null}
+              {SIDEBAR_SORT_MODES.map((mode) => (
+                <SidebarSortItem
+                  key={mode}
+                  mode={mode}
+                  selected={effectiveSortMode === mode}
+                  disabled={isMessageSortMode(mode) && !canUseMessageSort(messageSortAvailability)}
+                  onSelectMode={setSortMode}
+                />
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </View>
+      );
+    },
     [
       theme,
       searchQuery,
@@ -986,6 +1020,7 @@ function SidebarSearchControls() {
       setSortMode,
       messageSortAvailability,
       handleFindKeyPress,
+      handleEnter,
       t,
     ],
   );
