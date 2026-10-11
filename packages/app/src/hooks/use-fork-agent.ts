@@ -145,24 +145,30 @@ async function openThreadDraft(input: {
   isCompact: boolean;
 }): Promise<void> {
   const { request } = input;
-  const threadWorkspaceId = request.layoutWorkspaceId ?? request.workspaceId;
+  // A thread runs where its main chat runs: the draft's workspace decides the new session's
+  // working directory, so it is always the main chat's own workspace.
+  const threadWorkspaceId = request.workspaceId ?? request.layoutWorkspaceId;
   if (!threadWorkspaceId) throw new Error(input.missingWorkspaceMessage);
   const anchor = request.boundary ? threadAnchorKey(request.boundary) : null;
   if (!anchor) throw new Error(input.failedMessage);
+  const workspaceKey = buildWorkspaceTabPersistenceKey({
+    serverId: input.serverId,
+    workspaceId: threadWorkspaceId,
+  });
+  if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
   const draftId = await input.prepareForkDraft();
   useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
   const target = buildForkDraftTabTarget(input.draftSetup, draftId);
-  if (input.isCompact) {
+  // Compact layouts have no side pane, and a main chat shown as a split from another workspace
+  // cannot host a draft of its own workspace here: open the thread in that workspace instead.
+  const shownElsewhere = Boolean(
+    request.layoutWorkspaceId && request.layoutWorkspaceId !== threadWorkspaceId,
+  );
+  if (input.isCompact || shownElsewhere) {
     navigateToWorkspace({ serverId: input.serverId, workspaceId: threadWorkspaceId, target });
     return;
   }
-  openWorkspaceTargetBeside({
-    workspaceKey: buildWorkspaceTabPersistenceKey({
-      serverId: input.serverId,
-      workspaceId: threadWorkspaceId,
-    }),
-    target,
-  });
+  openWorkspaceTargetBeside({ workspaceKey, target });
 }
 
 /**

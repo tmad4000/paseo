@@ -41,7 +41,10 @@ export type AssistantTurnForkHandler = (input: {
  * Kept separate from `AssistantTurnForkHandler` (whose `boundary` stays
  * required) so the compiler keeps enforcing that completed turns always pin one.
  */
-export type InFlightTurnForkHandler = (target: AssistantForkTarget) => Promise<void> | void;
+export type InFlightTurnForkHandler = (
+  // A thread needs a completed reply to anchor to, so the streaming turn cannot start one.
+  target: Exclude<AssistantForkTarget, "thread">,
+) => Promise<void> | void;
 
 export const TurnFooter = memo(function TurnFooter({
   isRunning,

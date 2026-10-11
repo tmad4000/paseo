@@ -100,11 +100,13 @@ export function ThreadOriginControls({
   }, [sendBack.isPending, sendBackMutate]);
   const sendDisabled =
     !parent || Boolean(parent.archivedAt) || !canQueue || !hasReply || threadBusy;
+  const parentGone = !parent || Boolean(parent.archivedAt);
   const sendHint = useMemo(() => {
+    if (parentGone) return t("threads.parentUnavailable");
     if (!canQueue) return t("threads.sendToMainUpdateHost");
     if (!hasReply || threadBusy) return t("threads.noReplyYet");
     return undefined;
-  }, [canQueue, hasReply, t, threadBusy]);
+  }, [canQueue, hasReply, parentGone, t, threadBusy]);
 
   if (!origin) return null;
   // One icon-sized control: the chat header beside Pin is narrow in a split thread pane.
@@ -127,6 +129,7 @@ export function ThreadOriginControls({
         <DropdownMenuItem
           leading={backIcon}
           disabled={!parent}
+          description={parent ? undefined : t("threads.parentUnavailable")}
           onSelect={openMain}
           testID="thread-back-to-main"
         >

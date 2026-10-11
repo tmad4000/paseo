@@ -13,10 +13,12 @@ beside it. Slack-style, the reply then shows **N replies**, which reopens the th
 - **N replies** under the reply opens the thread beside the main chat (a menu when there are
   several). Closing a thread's tab only hides it; archive it like any session to remove it.
 - In the thread, the **Thread** menu (beside Pin) has **Back to main thread**, which reveals the
-  main chat, and **Queue this thread's latest answer in …** ("Send to main"), which queues the thread's
-  latest answer in the main chat as a quoted message, with the thread's title and session id. It is
-  queued, not interrupting: the main agent reads it after its current turn. It needs a host with
-  the message queue, a finished answer in the thread, and a main chat that still exists.
+  main chat, and **Send this thread's latest answer to …** ("Send to main"). That puts the
+  thread's latest answer in the main chat as a quoted message with the thread's title and session
+  id, through the message queue: delivered at once when the main chat is idle, after its current
+  turn when it is busy, never interrupting. Answers longer than 2,000 characters are clipped with
+  "…". It needs a host with the message queue, a finished answer in the thread, and a main chat
+  that still exists; a disabled item says which is missing.
 
 Screenshots: [`threaded-replies/thread-open.png`](threaded-replies/thread-open.png) (thread beside
 the main chat, **1 reply** on the anchor) and
@@ -35,8 +37,10 @@ main chat).
   attachment in memory (`threads/draft-store.ts`), not on the persisted tab target, so saved
   layouts stay readable by older builds. Threads deliberately do not use `paseo.parent-agent-id`:
   that is daemon-owned parentage with ownership, notification and archive semantics.
-- **Placement**: a thread opens in the layout that shows its main chat (for a session shown in a
-  split from another workspace, that layout's workspace). It is not auto-opened as a tab on other
+- **Placement**: a thread lives and runs in its main chat's own workspace (the draft's workspace
+  decides the new session's working directory). It opens beside the main chat; when the main chat
+  is a session shown in a split from another workspace, or on a phone, the thread opens as a tab in
+  the main chat's workspace instead. It is not auto-opened as a tab on other
   clients (`agent-visibility.ts`), and closing its tab is layout-only (`close-tab-policy.ts`).
 - **Moving sessions** (code-k9i "Move to project…"): the link names agents, not workspaces, so a
   moved main chat or thread keeps its replies; a thread living in another workspace opens beside

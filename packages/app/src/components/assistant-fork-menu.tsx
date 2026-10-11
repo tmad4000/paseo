@@ -15,8 +15,11 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 /** Where a fork opens. "thread" is Reply in thread (src/threads), offered beside the menu. */
 export type AssistantForkTarget = "tab" | "workspace" | "thread";
 
+/** The menu's own targets; Reply in thread is a separate control. */
+type AssistantForkMenuTarget = Exclude<AssistantForkTarget, "thread">;
+
 interface AssistantForkMenuProps {
-  onFork: (target: AssistantForkTarget) => Promise<void> | void;
+  onFork: (target: AssistantForkMenuTarget) => Promise<void> | void;
   testID?: string;
 }
 
@@ -31,7 +34,7 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
 }: AssistantForkMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [pendingTarget, setPendingTarget] = useState<AssistantForkTarget | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<AssistantForkMenuTarget | null>(null);
   const isLocked = pendingTarget !== null;
 
   const handleOpenChange = useCallback(
@@ -43,7 +46,7 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
   );
 
   const handleSelect = useCallback(
-    (target: AssistantForkTarget) => async () => {
+    (target: AssistantForkMenuTarget) => async () => {
       if (isLocked) return;
       setPendingTarget(target);
       try {

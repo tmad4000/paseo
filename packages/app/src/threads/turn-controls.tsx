@@ -98,7 +98,12 @@ function ThreadRepliesChip({
   onOpen: (threadAgentId: string) => void;
 }) {
   const { t } = useTranslation();
-  const label = t("threads.replies", { count: replies.length });
+  // One string per case rather than plural categories: every locale must carry the same keys,
+  // and a count label reads correctly in languages with more plural forms than English.
+  const label =
+    replies.length === 1
+      ? t("threads.oneReply")
+      : t("threads.manyReplies", { count: replies.length });
   const only = replies.length === 1 ? replies[0] : undefined;
   const openOnly = useCallback(() => {
     if (only) onOpen(only.agentId);
