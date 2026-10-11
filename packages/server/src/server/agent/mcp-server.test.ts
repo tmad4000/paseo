@@ -6540,6 +6540,29 @@ describe("tab MCP tools", () => {
     }
   });
 
+  it("open_tab side placement rejects an unknown agent and keeps the label for a home-workspace agent", async () => {
+    const { agentManager, broadcasts, client } = await createTabToolHarness();
+    try {
+      const unknown = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "nope" }, placement: "side" },
+      });
+      expect(unknown.isError).toBe(true);
+      expect(broadcasts).toEqual([]);
+
+      const home = await client.callTool({
+        name: "open_tab",
+        arguments: { target: { kind: "agent", agentId: "agent-1" }, placement: "side" },
+      });
+      expect(home.isError, JSON.stringify(home.content)).not.toBe(true);
+      expect(agentManager.labelUpdates).toEqual([
+        { agentId: "agent-1", updates: { labels: { "paseo.auto-open-agent-tab": "true" } } },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
   it("close_tab in the caller's workspace leaves a dropped-in session's own labels alone", async () => {
     const { agentManager, broadcasts, client } = await createTabToolHarness();
     try {

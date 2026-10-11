@@ -64,6 +64,8 @@ export function buildViewSessionPickerRows(input: {
   return rows;
 }
 
+const UNFILTERED_PICKER_ROW_LIMIT = 60;
+
 export function filterViewSessionPickerRows(
   rows: ViewSessionPickerRow[],
   query: string,
@@ -114,7 +116,14 @@ export function ViewSessionPicker({
       serverId,
     });
   }, [agents, open, projects, serverId, showHost, t]);
-  const visibleRows = useMemo(() => filterViewSessionPickerRows(rows, query), [query, rows]);
+  // Unfiltered, the most recent sessions are enough to pick from; typing narrows the full list.
+  const visibleRows = useMemo(
+    () =>
+      query.trim()
+        ? filterViewSessionPickerRows(rows, query)
+        : rows.slice(0, UNFILTERED_PICKER_ROW_LIMIT),
+    [query, rows],
+  );
 
   const pick = useCallback(
     (row: ViewSessionPickerRow) => {

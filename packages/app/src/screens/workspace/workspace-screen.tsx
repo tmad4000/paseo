@@ -1888,11 +1888,28 @@ function WorkspaceScreenContent({
     () => (workspaceLayout ? collectAllTabs(workspaceLayout.root) : EMPTY_UI_TABS),
     [workspaceLayout],
   );
-  const foreignSessionWorkspaces = useForeignSessionWorkspaces({
-    serverId: normalizedServerId,
-    workspaceId: normalizedWorkspaceId,
-    tabs: uiTabs,
-  });
+  const { homeByAgentId: foreignSessionWorkspaces, archivedAgentIds: archivedForeignAgentIds } =
+    useForeignSessionWorkspaces({
+      serverId: normalizedServerId,
+      workspaceId: normalizedWorkspaceId,
+      tabs: uiTabs,
+    });
+  const foreignSessionWorkspacesRef = useRef(foreignSessionWorkspaces);
+  foreignSessionWorkspacesRef.current = foreignSessionWorkspaces;
+  // One lookup for every close decision, so a tab drawn as a foreign session can never be
+  // archived by a path that missed it (the directory or agent details may hold the agent).
+  const closePolicyFor = useCallback(
+    (agentId: string) => {
+      const session = useSessionStore.getState().sessions[normalizedServerId];
+      const agent = session?.agents?.get(agentId) ?? session?.agentDetails?.get(agentId) ?? null;
+      const home = foreignSessionWorkspacesRef.current.get(agentId);
+      return resolveCloseAgentTabPolicy(
+        agent ?? (home ? { parentAgentId: null, workspaceId: home } : null),
+        normalizedWorkspaceId,
+      );
+    },
+    [normalizedServerId, normalizedWorkspaceId],
+  );
   useOpenAgentTabLabels({
     client,
     serverId: normalizedServerId,
@@ -2708,7 +2725,7 @@ function WorkspaceScreenContent({
 
         const agent =
           useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-        let closePolicy = resolveCloseAgentTabPolicy(agent, normalizedWorkspaceId);
+        let closePolicy = closePolicyFor(agentId);
         const isRunning = agent?.status === "running";
 
         if (isRunning && closePolicy.kind === "archive-on-close") {
@@ -2735,9 +2752,7 @@ function WorkspaceScreenContent({
             await sessionClient.updateAgent(agentId, {
               labels: { [getOpenAgentTabLabel(clientId)]: "false" },
             });
-            const latestAgent =
-              useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-            closePolicy = resolveCloseAgentTabPolicy(latestAgent, normalizedWorkspaceId);
+            closePolicy = closePolicyFor(agentId);
           } catch (error) {
             console.error("[WorkspaceScreen] Failed to close subagent tab", { error, agentId });
             toast.error(t("workspace.tabs.toasts.failedToCloseAgent"));
@@ -2763,15 +2778,27 @@ function WorkspaceScreenContent({
     },
     [
       archiveAgent,
+      closePolicyFor,
       closeTab,
       closeWorkspaceTabWithCleanup,
       normalizedServerId,
-      normalizedWorkspaceId,
       persistenceKey,
       t,
       toast,
     ],
   );
+
+  // A dropped-in session that has since been archived (from its own workspace, the sidebar, or
+  // the host) leaves this layout too; its explicit-open pin would otherwise keep it forever.
+  useEffect(() => {
+    if (!persistenceKey) return;
+    for (const agentId of archivedForeignAgentIds) {
+      const tab = uiTabs.find(
+        (candidate) => candidate.target.kind === "agent" && candidate.target.agentId === agentId,
+      );
+      if (tab) closeWorkspaceTabWithCleanup({ tabId: tab.tabId, target: tab.target });
+    }
+  }, [archivedForeignAgentIds, closeWorkspaceTabWithCleanup, persistenceKey, uiTabs]);
 
   const handleClosePassiveTab = useCallback(
     function handleClosePassiveTab(input: { tabId: string; target?: WorkspaceTabTarget | null }) {
@@ -3027,12 +3054,9 @@ function WorkspaceScreenContent({
         return true;
       }
 
-      const groups = classifyBulkClosableTabs(tabsToClose, (agentId) => {
-        const agent = useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId);
-        return resolveCloseAgentTabPolicy(agent, normalizedWorkspaceId).kind === "layout-only"
-          ? "layout-only"
-          : "archive";
-      });
+      const groups = classifyBulkClosableTabs(tabsToClose, (agentId) =>
+        closePolicyFor(agentId).kind === "layout-only" ? "layout-only" : "archive",
+      );
       const modifiedCount = tabsToClose.filter(
         (tab) =>
           getPanelInstanceAttributes({
@@ -3068,12 +3092,7 @@ function WorkspaceScreenContent({
           await client.updateAgent(agentId, {
             labels: { [getOpenAgentTabLabel(clientId)]: "false" },
           });
-          const latestAgent =
-            useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-          if (
-            resolveCloseAgentTabPolicy(latestAgent, normalizedWorkspaceId).kind ===
-            "archive-on-close"
-          ) {
+          if (closePolicyFor(agentId).kind === "archive-on-close") {
             await archiveAgent({ serverId: normalizedServerId, agentId });
           }
         },
@@ -3097,6 +3116,7 @@ function WorkspaceScreenContent({
       archiveAgent,
       bulkCloseConfirmationLabels,
       client,
+      closePolicyFor,
       closeTab,
       closeWorkspaceTabWithCleanup,
       normalizedServerId,
@@ -3716,8 +3736,12 @@ function WorkspaceScreenContent({
           tab: input.tab,
           serverId: normalizedServerId,
           homeWorkspaceId,
+          layoutWorkspaceId: normalizedWorkspaceId,
           onCloseCurrentTab: () => {
             void handleCloseTabById(input.tab.tabId);
+          },
+          onRetargetCurrentTab: (target) => {
+            if (persistenceKey) replaceWorkspaceTabTarget(persistenceKey, input.tab.tabId, target);
           },
         });
       }

@@ -172,5 +172,11 @@ test.describe("Split with session", () => {
     await expect(composer).toBeFocused();
     await expect(composer).toHaveValue("typing here");
     expect(page.url()).toBe(routeBefore);
+
+    // Archived from anywhere, the dropped-in session leaves this layout too.
+    await workspace.client.archiveAgent(sessions.other.id);
+    await expect(page.getByRole("textbox", { name: PARENT_COMPOSER })).toHaveCount(1, {
+      timeout: 30_000,
+    });
   });
 });

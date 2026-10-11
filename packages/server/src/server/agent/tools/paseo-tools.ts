@@ -2501,6 +2501,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const agentTargetId = target.kind === "agent" ? target.agentId : null;
       const agentWorkspaceId = agentTargetId ? await resolveAgentWorkspaceId(agentTargetId) : null;
       const callerWorkspaceId = callerAgentId ? await resolveAgentWorkspaceId(callerAgentId) : null;
+      if (mode === "open-side" && agentTargetId && !agentWorkspaceId) {
+        throw new Error(`Agent ${agentTargetId} was not found or has no workspace.`);
+      }
       if (mode !== "open-main") {
         const workspaceId =
           explicit ||
@@ -2572,9 +2575,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           workspaceId,
           placement === "side" ? "open-side" : "open-main",
         );
-        // Side placement shows the session beside someone else's view; it must not also make
-        // the session auto-open as a tab in its own workspace.
-        if (target.kind === "agent" && placement !== "side") {
+        // A session dropped beside another workspace's view must not also auto-open in its own
+        // workspace; one opened in its own workspace keeps the label, so clients that attach
+        // later still show it.
+        const opensInHomeWorkspace =
+          target.kind === "agent" &&
+          (await resolveAgentWorkspaceId(target.agentId)) === resolvedWorkspaceId;
+        if (target.kind === "agent" && opensInHomeWorkspace) {
           await updateAgentCommand(
             { agentManager },
             { agentId: target.agentId, labels: { [AUTO_OPEN_AGENT_TAB_LABEL]: "true" } },
@@ -2601,7 +2608,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ...(delivered === 0
               ? {
                   guidance:
-                    target.kind === "agent"
+                    target.kind === "agent" && opensInHomeWorkspace
                       ? "No app client is attached right now; the auto-open label makes the tab appear when one attaches."
                       : "No app client is attached right now, so nothing acted on the command.",
                 }
