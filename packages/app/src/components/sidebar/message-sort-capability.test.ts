@@ -12,10 +12,17 @@ it("names each host without message activity, with its version", () => {
   const state = {
     sessions: {
       m4: host({ features: {} }),
-      bare: host({ hostname: null, version: null, features: { conversationMessageActivity: false } }),
+      bare: host({
+        hostname: null,
+        version: null,
+        features: { conversationMessageActivity: false },
+      }),
     },
   };
-  expect(olderMessageSortHosts(state, ["m4", "bare"])).toEqual(["SDMM770 (0.10.0-beta.11)", "bare"]);
+  expect(olderMessageSortHosts(state, ["m4", "bare"])).toEqual([
+    "SDMM770 (0.10.0-beta.11)",
+    "bare",
+  ]);
 });
 
 it("skips hosts whose server info has not arrived and hosts that support message activity", () => {
