@@ -1346,6 +1346,17 @@ export const ru: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "Начать чат с «{{query}}»",
+        searchMessages: "Искать «{{query}}» в сообщениях",
+        scope: {
+          trigger: "Область фильтра: {{value}}",
+          heading: "Искать в",
+          names: "Названия",
+          messages: "Названия + сообщения",
+          namesDescription: "Проекты, рабочие пространства и названия вкладок",
+          messagesDescription: "Также ищет в тексте сообщений",
+          needsHostUpdate: "Для поиска по сообщениям нужно обновить хост",
+        },
         coverage: "Просмотрено чатов: {{searched}} из {{total}}",
         inMessages: "В сообщениях",
         searching: "Поиск по сообщениям...",

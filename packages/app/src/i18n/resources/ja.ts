@@ -1342,6 +1342,17 @@ export const ja: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: "「{{query}}」でチャットを開始",
+        searchMessages: "メッセージで「{{query}}」を検索",
+        scope: {
+          trigger: "絞り込み範囲: {{value}}",
+          heading: "検索対象",
+          names: "名前",
+          messages: "名前 + メッセージ",
+          namesDescription: "プロジェクト、ワークスペース、タブのタイトル",
+          messagesDescription: "メッセージ本文も検索します",
+          needsHostUpdate: "メッセージ検索にはホストの更新が必要です",
+        },
         coverage: "{{total}} 件中 {{searched}} 件のチャットを検索",
         inMessages: "メッセージ内",
         searching: "メッセージを検索中...",

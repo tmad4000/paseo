@@ -1358,6 +1358,17 @@ export const ptBR: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: 'Iniciar um chat com "{{query}}"',
+        searchMessages: 'Buscar "{{query}}" nas mensagens',
+        scope: {
+          trigger: "Escopo do filtro: {{value}}",
+          heading: "Buscar em",
+          names: "Nomes",
+          messages: "Nomes + mensagens",
+          namesDescription: "Projetos, espaços de trabalho e títulos de abas",
+          messagesDescription: "Também busca no texto das mensagens",
+          needsHostUpdate: "As mensagens exigem atualizar o host",
+        },
         coverage: "Buscou em {{searched}} de {{total}} chats",
         inMessages: "Nas mensagens",
         searching: "Buscando nas mensagens...",

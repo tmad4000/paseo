@@ -57,6 +57,7 @@ import {
   SidebarTabMatchesProvider,
   type SidebarMessageSearchScope,
 } from "./sidebar-filter-context";
+import { useSidebarFilterRequestStore } from "./sidebar-filter-request";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
@@ -145,6 +146,12 @@ export function SidebarModelProvider({
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
   const [searchQuery, setSearchQuery] = useState("");
+  const filterScope = useSidebarViewStore((state) => state.filterScope);
+  // "Search messages for …" from the command center lands here; the find field mirrors it.
+  const filterRequest = useSidebarFilterRequestStore((state) => state.request);
+  useEffect(() => {
+    if (filterRequest) setSearchQuery(filterRequest.query);
+  }, [filterRequest]);
   const sortMode = useSidebarViewStore((state) => state.sortMode);
   const setSortMode = useSidebarViewStore((state) => state.setSortMode);
   const hostMessageActivitySupport = useSessionStore(
@@ -376,6 +383,7 @@ export function SidebarModelProvider({
           rawQuery={searchQuery}
           normalizedQuery={normalizedQuery}
           scope={messageSearchScope}
+          messagesEnabled={filterScope === "messages"}
         >
           {children}
         </SidebarMessageSearchProvider>

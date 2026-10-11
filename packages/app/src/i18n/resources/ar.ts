@@ -1328,6 +1328,17 @@ export const ar: TranslationResources = {
     },
     filterSidebar: {
       matches: {
+        startChat: 'بدء محادثة بـ "{{query}}"',
+        searchMessages: 'البحث في الرسائل عن "{{query}}"',
+        scope: {
+          trigger: "نطاق التصفية: {{value}}",
+          heading: "البحث في",
+          names: "الأسماء",
+          messages: "الأسماء + الرسائل",
+          namesDescription: "المشاريع ومساحات العمل وعناوين علامات التبويب",
+          messagesDescription: "يبحث أيضًا في نص الرسائل",
+          needsHostUpdate: "تتطلب الرسائل تحديث المضيف",
+        },
         coverage: "تم البحث في {{searched}} من {{total}} محادثة",
         inMessages: "في الرسائل",
         searching: "جارٍ البحث في الرسائل...",

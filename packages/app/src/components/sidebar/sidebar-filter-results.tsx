@@ -12,6 +12,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
+import { Shortcut } from "@/components/ui/shortcut";
 import { isWeb } from "@/constants/platform";
 import { useSessionStore } from "@/stores/session-store";
 import type { Theme } from "@/styles/theme";
@@ -29,6 +30,8 @@ import {
   useSidebarMessageSearchState,
   useSidebarWorkspaceTabMatches,
 } from "./sidebar-filter-context";
+import { useStartChatFromFilterQuery } from "./use-start-chat-from-filter-query";
+import { useSidebarModel } from "./sidebar-model";
 
 /**
  * The sidebar filter's "why it matched" rows (docs/sidebar-filter.md): tab-title matches nested
@@ -36,6 +39,7 @@ import {
  */
 
 const NESTED_TAB_LIMIT = 3;
+const START_CHAT_KEYS = [["mod", "Enter"]];
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -263,8 +267,9 @@ function messageRowStyle({
 
 /**
  * What follows the filtered tree while the sidebar filter is active: the "In messages" group, the
- * empty state once every tier has answered with nothing, and the Enter hint. With no text query it
- * is only the existing label-filter empty state.
+ * "Start a chat with …" row, and the Enter hint. When every tier has answered with nothing, the
+ * empty state takes the start-chat action as its primary button instead of the row. With no text
+ * query it is only the existing label-filter empty state.
  */
 export function SidebarFilterResultsTail({
   treeEmpty,
@@ -275,14 +280,29 @@ export function SidebarFilterResultsTail({
 }) {
   const { t } = useTranslation();
   const search = useSidebarMessageSearchState();
+  const { searchQuery } = useSidebarModel();
+  const startChat = useStartChatFromFilterQuery();
+  const startChatLabel = t("sidebar.filterSidebar.matches.startChat", {
+    query: searchQuery.trim(),
+  });
+  const startChatAndStay = useCallback(() => startChat(false), [startChat]);
+  const emptyPrimaryAction = useMemo(
+    () => ({
+      label: startChatLabel,
+      onPress: startChatAndStay,
+      testID: "sidebar-filter-empty-start-chat",
+    }),
+    [startChatAndStay, startChatLabel],
+  );
   if (!search.query) return treeEmpty ? <SidebarFilterEmptyState /> : null;
   const searching = search.status === "searching";
   const hasHits = search.hits.length > 0;
   // Shown only when a host stopped at a bound, so "no hits" is not mistaken for "not mentioned".
   const partial = !searching && search.coverage?.truncated === true ? search.coverage : null;
+  const nothingMatched = treeEmpty && !hasHits && !searching;
   return (
     <>
-      {treeEmpty && !hasHits && !searching ? <SidebarFilterEmptyState /> : null}
+      {nothingMatched ? <SidebarFilterEmptyState primaryAction={emptyPrimaryAction} /> : null}
       {hasHits || searching || partial ? (
         <View style={styles.messageGroup} testID="sidebar-filter-message-matches">
           <View style={styles.groupHeader}>
@@ -311,11 +331,36 @@ export function SidebarFilterResultsTail({
           ) : null}
         </View>
       ) : null}
+      {nothingMatched ? null : (
+        <Pressable
+          accessibilityRole={isWeb ? undefined : "button"}
+          accessibilityLabel={startChatLabel}
+          onPress={startChatAndStay}
+          style={startChatRowStyle}
+          testID="sidebar-filter-start-chat"
+        >
+          <Text style={styles.startChatText} numberOfLines={1}>
+            {startChatLabel}
+          </Text>
+          <Shortcut chord={START_CHAT_KEYS} />
+        </Pressable>
+      )}
       <Text style={styles.enterHint} testID="sidebar-filter-enter-hint">
         {t("sidebar.filterSidebar.matches.enterHint")}
       </Text>
     </>
   );
+}
+
+function startChatRowStyle({
+  hovered = false,
+  pressed,
+}: PressableStateCallbackType & { hovered?: boolean }) {
+  return [
+    styles.startChatRow,
+    hovered && !pressed && styles.rowHovered,
+    pressed && styles.rowPressed,
+  ];
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -415,6 +460,23 @@ const styles = StyleSheet.create((theme) => ({
   snippet: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  startChatRow: {
+    minHeight: 36,
+    marginTop: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    userSelect: "none",
+  },
+  startChatText: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
   },
   coverage: {
     color: theme.colors.foregroundMuted,
