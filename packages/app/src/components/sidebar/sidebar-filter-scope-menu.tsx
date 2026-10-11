@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useHostFeatureMap } from "@/runtime/host-features";
+import { everyHostLacksFeature, useHostFeatureAvailabilityMap } from "@/runtime/host-features";
 import { useSidebarViewStore, type SidebarFilterScope } from "@/stores/sidebar-view-store";
 import type { Theme } from "@/styles/theme";
 import { useSidebarModel } from "./sidebar-model";
@@ -21,19 +21,17 @@ const SCOPES: readonly SidebarFilterScope[] = ["names", "messages"];
 
 /**
  * What the sidebar find field searches: Names (projects, workspaces, tab titles) or Names +
- * messages. Sits beside the sort trigger. When no host in the sidebar can search messages, the
- * messages item says so instead of failing; the choice is kept for when a host updates.
+ * messages. Sits beside the sort trigger. When every connected host is older and none can search
+ * messages, the messages item says so instead of failing; the choice is kept for when a host
+ * updates. A host whose server info has not arrived is unknown, so it does not trigger the notice.
  */
 export function SidebarFilterScopeMenu() {
   const { t } = useTranslation();
   const filterScope = useSidebarViewStore((state) => state.filterScope);
   const setFilterScope = useSidebarViewStore((state) => state.setFilterScope);
   const { serverIds } = useSidebarModel();
-  const support = useHostFeatureMap(serverIds, "sessionTextSearch");
-  const anyHostSearchesMessages = useMemo(
-    () => serverIds.some((serverId) => support.get(serverId) === true),
-    [serverIds, support],
-  );
+  const support = useHostFeatureAvailabilityMap(serverIds, "sessionTextSearch");
+  const messagesNeedHostUpdate = useMemo(() => everyHostLacksFeature(support), [support]);
   const label = t(`sidebar.filterSidebar.matches.scope.${filterScope}`);
   return (
     <DropdownMenu compactMode="sheet">
@@ -58,7 +56,7 @@ export function SidebarFilterScopeMenu() {
             key={scope}
             scope={scope}
             selected={filterScope === scope}
-            needsHostUpdate={scope === "messages" && !anyHostSearchesMessages}
+            needsHostUpdate={scope === "messages" && messagesNeedHostUpdate}
             onSelectScope={setFilterScope}
           />
         ))}

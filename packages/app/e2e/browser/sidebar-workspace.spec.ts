@@ -12,7 +12,7 @@ import {
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { expectWorkspaceHeader } from "../support/helpers/workspace-ui";
 import { getServerId } from "../support/helpers/server-id";
-import { getE2EDaemonPort } from "../support/helpers/daemon-port";
+import { daemonWsRoutePattern, getE2EDaemonPort } from "../support/helpers/daemon-port";
 import { projectEquivalenceViewKey } from "../support/helpers/project-view-key";
 import { escapeRegex } from "../support/helpers/regex";
 import { openFilesPanel } from "../support/helpers/workspace-tabs";
@@ -650,6 +650,81 @@ test("sidebar conversation sort choices persist and metadata does not reorder ac
     await expect
       .poll(order)
       .toEqual([getWorkspaceRowTestId(a.workspaceId), getWorkspaceRowTestId(b.workspaceId)]);
+  } finally {
+    await a.cleanup();
+    await b.cleanup();
+  }
+});
+
+async function hideMessageActivityCapability(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
+    const serverSocket = browserSocket.connectToServer();
+    browserSocket.onMessage((message) => serverSocket.send(message));
+    serverSocket.onMessage((message) => {
+      if (typeof message !== "string") {
+        browserSocket.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: {
+          type?: string;
+          payload?: { status?: string; features?: Record<string, unknown> };
+        };
+      };
+      if (
+        envelope.message?.type === "status" &&
+        envelope.message.payload?.status === "server_info"
+      ) {
+        envelope.message.payload.features = {
+          ...envelope.message.payload.features,
+          conversationMessageActivity: false,
+        };
+      }
+      browserSocket.send(JSON.stringify(envelope));
+    });
+  });
+}
+
+test("an older host keeps the activity sort and is named in the sort menu", async ({ page }) => {
+  await hideMessageActivityCapability(page);
+  const a = await seedMockAgentWorkspace({
+    repoPrefix: "sidebar-older-sort-a-",
+    title: "Older host sort Alpha",
+  });
+  const b = await seedMockAgentWorkspace({
+    repoPrefix: "sidebar-older-sort-b-",
+    title: "Older host sort Zulu",
+  });
+  try {
+    await gotoAppShell(page);
+    await waitForSidebarWorkspace(page, a.workspaceId);
+    await waitForSidebarWorkspace(page, b.workspaceId);
+    const trigger = page.getByTestId("sidebar-sort-trigger");
+    await expect(trigger).toHaveAttribute("aria-label", /Latest conversation activity/);
+    await trigger.click();
+    await expect(page.getByTestId("sidebar-sort-older-hosts")).toContainText(
+      "sort by approximate times",
+    );
+    await page.getByTestId("sidebar-sort-recent").click();
+    await expect(trigger).toHaveAttribute("aria-label", /Latest conversation activity/);
+
+    const rows = page.locator('[data-testid^="sidebar-workspace-row-"]');
+    const order = () =>
+      rows.evaluateAll(
+        (elements, ids) =>
+          elements.map((el) => el.getAttribute("data-testid")!).filter((id) => ids.includes(id)),
+        [getWorkspaceRowTestId(a.workspaceId), getWorkspaceRowTestId(b.workspaceId)],
+      );
+    await a.client.sendAgentMessage(a.agentId, "hello");
+    await a.client.waitForFinish(a.agentId);
+    await expect
+      .poll(order)
+      .toEqual([getWorkspaceRowTestId(a.workspaceId), getWorkspaceRowTestId(b.workspaceId)]);
+    await b.client.sendAgentMessage(b.agentId, "hello");
+    await b.client.waitForFinish(b.agentId);
+    await expect
+      .poll(order)
+      .toEqual([getWorkspaceRowTestId(b.workspaceId), getWorkspaceRowTestId(a.workspaceId)]);
   } finally {
     await a.cleanup();
     await b.cleanup();

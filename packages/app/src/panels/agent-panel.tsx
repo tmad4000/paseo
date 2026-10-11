@@ -75,7 +75,7 @@ import {
   useHostRuntimeLastError,
   useHosts,
 } from "@/runtime/host-runtime";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import {
   deriveRouteBottomAnchorIntent,
   deriveRouteBottomAnchorRequest,
@@ -1204,7 +1204,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     handleReturnToChat();
     streamViewRef.current?.scrollToBottom("jump-to-bottom");
   }, [handleReturnToChat, streamViewRef]);
-  const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
+  const artifactFeedAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
@@ -1223,7 +1223,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     hasPluginComposerPills,
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
-  const companionStreamSupported = useHostFeature(serverId, "companionStream");
+  const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1375,7 +1375,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     ],
     [t],
   );
-  const showViewSwitcher = companionStreamSupported || artifactFeedSupported;
+  // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
+  const showViewSwitcher = companionStreamAvailability !== false || artifactFeedAvailability !== false;
   const viewSwitcherStyle = useMemo(
     () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
     [isChatVisible],
@@ -1414,8 +1415,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             cwd={cwd}
             entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
             artifacts={artifacts}
-            isSupported={companionStreamSupported}
-            artifactsSupported={artifactFeedSupported}
+            isSupported={companionStreamAvailability === true}
+            artifactsSupported={artifactFeedAvailability === true}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
             onReturnToChat={handleReturnToChat}
             onReplyInChat={handleReplyInChat}

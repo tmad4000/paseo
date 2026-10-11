@@ -71,7 +71,6 @@ import {
   type SidebarWorkspaceEntry,
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
-import { canUseMessageSort, isMessageSortMode } from "@/components/sidebar/message-sort-capability";
 import type { PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
@@ -890,7 +889,7 @@ function lockedSendTriggerStyle() {
 function SidebarSearchControls() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const { searchQuery, setSearchQuery, effectiveSortMode, setSortMode, messageSortAvailability } =
+  const { searchQuery, setSearchQuery, sortMode, setSortMode, olderMessageSortHosts } =
     useSidebarModel();
   const searchInputRef = useRef<EditingTextInputHandle>(null);
   useEffect(() => {
@@ -983,7 +982,7 @@ function SidebarSearchControls() {
               style={styles.sidebarSortTrigger}
               accessibilityRole="button"
               accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
-                value: t(`sidebar.filterSidebar.sort.${effectiveSortMode}`),
+                value: t(`sidebar.filterSidebar.sort.${sortMode}`),
               })}
               testID="sidebar-sort-trigger"
             >
@@ -994,22 +993,18 @@ function SidebarSearchControls() {
               width={280}
               sheetTitle={t("sidebar.filterSidebar.sortHeading")}
             >
-              {messageSortAvailability === "unsupported" ? (
-                <DropdownMenuItem disabled>
-                  {t("sidebar.filterSidebar.sortUpdateHost")}
-                </DropdownMenuItem>
-              ) : null}
-              {messageSortAvailability === "partial" ? (
-                <DropdownMenuItem disabled testID="sidebar-sort-partial-hosts">
-                  {t("sidebar.filterSidebar.sortUpdateHostPartial")}
+              {olderMessageSortHosts.length > 0 ? (
+                <DropdownMenuItem disabled testID="sidebar-sort-older-hosts">
+                  {t("sidebar.filterSidebar.sortOlderHosts", {
+                    hosts: olderMessageSortHosts.join(", "),
+                  })}
                 </DropdownMenuItem>
               ) : null}
               {SIDEBAR_SORT_MODES.map((mode) => (
                 <SidebarSortItem
                   key={mode}
                   mode={mode}
-                  selected={effectiveSortMode === mode}
-                  disabled={isMessageSortMode(mode) && !canUseMessageSort(messageSortAvailability)}
+                  selected={sortMode === mode}
                   onSelectMode={setSortMode}
                 />
               ))}
@@ -1022,9 +1017,9 @@ function SidebarSearchControls() {
       theme,
       searchQuery,
       setSearchQuery,
-      effectiveSortMode,
+      sortMode,
       setSortMode,
-      messageSortAvailability,
+      olderMessageSortHosts,
       handleFindKeyPress,
       handleEnter,
       t,
@@ -1036,12 +1031,10 @@ function SidebarSearchControls() {
 function SidebarSortItem({
   mode,
   selected,
-  disabled,
   onSelectMode,
 }: {
   mode: SidebarSortMode;
   selected: boolean;
-  disabled: boolean;
   onSelectMode: (mode: SidebarSortMode) => void;
 }) {
   const { t } = useTranslation();
@@ -1049,7 +1042,6 @@ function SidebarSortItem({
   return (
     <DropdownMenuItem
       selected={selected}
-      disabled={disabled}
       onSelect={selectMode}
       testID={`sidebar-sort-${mode}`}
     >

@@ -773,7 +773,6 @@ export const en = {
     },
     terminal: {
       hostDisconnected: "Host is not connected",
-      updateHost: "Update the host to use the native terminal renderer.",
       unableToSubscribe: "Unable to subscribe to terminal",
     },
     tabs: {
@@ -1371,8 +1370,7 @@ export const en = {
       clear: "Clear sidebar filter",
       sortHeading: "Sort chats",
       sortBy: "Sort chats: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "Manual order",
         recent: "Latest conversation activity",

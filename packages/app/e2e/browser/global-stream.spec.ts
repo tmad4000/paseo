@@ -1,5 +1,6 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { test } from "../support/fixtures";
+import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { connectSeedClient } from "../support/helpers/seed-client";
 import { createTempGitRepo } from "../support/helpers/workspace";
 import { createIdleAgent, resetSeededPageState } from "../support/helpers/archive-tab";
@@ -191,6 +192,78 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       filter: "pending",
     });
     expect(pending.rows).toHaveLength(2);
+  } finally {
+    await client.removeProject(workspace.projectId);
+    await client.close();
+    await repo.cleanup();
+  }
+});
+
+async function hideDurableStreamCapability(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
+    const serverSocket = browserSocket.connectToServer();
+    browserSocket.onMessage((message) => serverSocket.send(message));
+    serverSocket.onMessage((message) => {
+      if (typeof message !== "string") {
+        browserSocket.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: {
+          type?: string;
+          payload?: { status?: string; features?: Record<string, unknown> };
+        };
+      };
+      if (
+        envelope.message?.type === "status" &&
+        envelope.message.payload?.status === "server_info"
+      ) {
+        envelope.message.payload.features = {
+          ...envelope.message.payload.features,
+          durableStream: false,
+        };
+      }
+      browserSocket.send(JSON.stringify(envelope));
+    });
+  });
+}
+
+test("per-chat Stream on an older host shows the chat's recent entries instead of blocking", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const repo = await createTempGitRepo("older-host-stream-");
+  const client = await connectSeedClient();
+  const created = await client.createWorkspace({ source: { kind: "directory", path: repo.path } });
+  if (!created.workspace) throw new Error(created.error ?? "Workspace missing");
+  const workspace = created.workspace;
+  try {
+    const agent = await createIdleAgent(client, {
+      cwd: repo.path,
+      workspaceId: workspace.id,
+      title: "Older host Stream",
+    });
+    await client.updateStreamEntry({
+      agentId: agent.id,
+      action: "add_question",
+      entryId: "older-host-question",
+      text: "Which host runs this chat?",
+    });
+    await resetSeededPageState(page);
+    await hideDurableStreamCapability(page);
+    await gotoAppShell(page);
+    await page.goto("/stream");
+    await page
+      .getByTestId(`global-stream-row-${agent.id}`)
+      .first()
+      .getByRole("button", { name: /Older host Stream/ })
+      .click();
+    await page.getByTestId("agent-view-artifacts").click();
+    const feed = page.getByTestId("companion-stream");
+    await expect(feed.getByTestId("companion-stream-older-host")).toContainText("runs Paseo");
+    await expect(page.getByTestId("companion-stream-unsupported")).toHaveCount(0);
+    await feed.getByRole("button", { name: "Queue", exact: true }).click();
+    await expect(feed.getByText("Which host runs this chat?", { exact: true })).toBeVisible();
   } finally {
     await client.removeProject(workspace.projectId);
     await client.close();

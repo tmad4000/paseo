@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { PaneFind, type PaneFindHandle } from "@/pane-find";
 import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { planTimelinePromptJump } from "@/timeline/timeline-sync-plan";
@@ -60,8 +60,9 @@ export function ChatFind({
   bindings.current = { viewportRef, revealLoadedMessage, visibleMessageIds, items };
   const active = useRetainedPanelActive();
   // COMPAT(agentHistorySearch): upstream flag, added in v0.3.0. The widget stays
-  // reachable on an older host and explains itself instead of hiding.
-  const supported = useHostFeature(serverId, "agentHistorySearch");
+  // reachable on an older host and explains itself instead of hiding. An unknown host
+  // (server info not arrived) is not an older one: searches run and report connection failures.
+  const supported = useHostFeatureAvailability(serverId, "agentHistorySearch") !== false;
   const key = `${serverId}:${agentId}`;
   const requested = useAgentViewStore((state) => state.findOpen[key] ?? false);
   const setFindOpen = useAgentViewStore((state) => state.setFindOpen);

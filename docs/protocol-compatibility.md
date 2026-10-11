@@ -34,11 +34,15 @@ Features don't have to work across versions. A new feature usually needs a new d
 
 The app checks for the capability and either runs the feature or tells the user to update the host.
 
-- **No fallback paths.** Don't build a degraded version of the feature for old daemons. Don't fan out across legacy RPCs to simulate a capability that isn't there. The user updates or doesn't get the feature.
+- **No fallback paths for new features.** Don't build a degraded version of a new feature for old daemons. Don't fan out across legacy RPCs to simulate a capability that isn't there. The user updates or doesn't get the feature.
 - **No defensive branches spread through the feature.** Detection happens in one place, and everything downstream reads a clean shape.
 - Capability flags live in `features` on the `server_info` message (`packages/protocol/src/messages.ts`, the `server_info` schema).
 
 Existing functionality keeps working across versions because of the protocol contract. Gating a new feature never substitutes for that.
+
+**A new host requirement on an existing surface ships with a degrade adapter.** Clients routinely run ahead of their host for hours: the desktop app and TestFlight builds update before the daemon that holds the chats. When a change makes a surface that already worked on older hosts depend on a new flag, the gate keeps rendering it with what the older host still provides, plus a small muted note naming the host and its version. A blocking "update the host" notice is only for a host that offers nothing usable for that surface. Tag the adapter `COMPAT(<flag>)` with the flag's removal date, and test the older-host path (a unit test on the selection model, and a browser test that hides the flag from `server_info` where one covers the surface). Current adapters: the per-chat Stream (`durableStream`), the sidebar message sorts (`conversationMessageActivity`), and the native terminal renderer (`terminal-input-mode-replay`).
+
+A host whose `server_info` has not arrived is unknown, not older. Read it with `hostFeatureAvailability` / `useHostFeatureAvailability` (`packages/app/src/runtime/host-features.ts`), which return `null` until then, and never show update copy for `null`.
 
 ## Client capability ownership
 

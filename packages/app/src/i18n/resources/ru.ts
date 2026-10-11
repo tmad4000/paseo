@@ -782,7 +782,6 @@ export const ru: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Хост не подключён",
-      updateHost: "Обновите хост, чтобы использовать нативный рендерер терминала.",
       unableToSubscribe: "Не удалось подключиться к терминалу",
     },
     tabs: {
@@ -1379,8 +1378,7 @@ export const ru: TranslationResources = {
       clear: "Сбросить фильтр боковой панели",
       sortHeading: "Сортировка чатов",
       sortBy: "Сортировка чатов: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "Ручной порядок",
         recent: "Latest conversation activity",

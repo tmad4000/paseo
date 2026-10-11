@@ -771,7 +771,6 @@ export const zhCN: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Host 未连接",
-      updateHost: "请更新主机以使用原生终端渲染器。",
       unableToSubscribe: "无法订阅 Terminal",
     },
     tabs: {
@@ -1350,8 +1349,7 @@ export const zhCN: TranslationResources = {
       clear: "清除侧边栏筛选",
       sortHeading: "聊天排序",
       sortBy: "聊天排序：{{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "手动排序",
         recent: "Latest conversation activity",

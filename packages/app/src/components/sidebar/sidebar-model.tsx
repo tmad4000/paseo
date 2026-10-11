@@ -2,11 +2,7 @@ import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSessionStore, type Agent } from "@/stores/session-store";
-import {
-  effectiveSidebarSortMode,
-  messageSortAvailability,
-  type MessageSortAvailability,
-} from "./message-sort-capability";
+import { olderMessageSortHostLabel } from "./message-sort-capability";
 import React, {
   createContext,
   useContext,
@@ -81,11 +77,9 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   hasProjectsBeforeFilter: boolean;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  /** The saved preference. */
   sortMode: SidebarSortMode;
-  /** The order actually applied; differs from `sortMode` while no host supports message sorts. */
-  effectiveSortMode: SidebarSortMode;
-  messageSortAvailability: MessageSortAvailability;
+  /** Connected hosts whose chats sort by legacy clocks, labelled with their version. */
+  olderMessageSortHosts: readonly string[];
   setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
@@ -179,16 +173,14 @@ export function SidebarModelProvider({
   }, [filterRequest]);
   const sortMode = useSidebarViewStore((state) => state.sortMode);
   const setSortMode = useSidebarViewStore((state) => state.setSortMode);
-  const hostMessageActivitySupport = useSessionStore(
+  const olderMessageSortHosts = useSessionStore(
     useShallow((state) =>
-      list.serverIds.map((serverId) => {
-        const info = state.sessions[serverId]?.serverInfo;
-        return info ? info.features?.conversationMessageActivity === true : undefined;
+      list.serverIds.flatMap((serverId) => {
+        const label = olderMessageSortHostLabel(serverId, state.sessions[serverId]?.serverInfo);
+        return label ? [label] : [];
       }),
     ),
   );
-  const sortAvailability = messageSortAvailability(hostMessageActivitySupport);
-  const effectiveSort = effectiveSidebarSortMode(sortMode, sortAvailability);
   const normalizedQuery = useMemo(() => normalizeSidebarQuery(searchQuery), [searchQuery]);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
   const { hosts: labelHosts } = useWorkspaceLabelProjection();
@@ -250,11 +242,11 @@ export function SidebarModelProvider({
     const filtered = scopedWorkspaces.filter((workspace) =>
       workspaceMatchesSidebarFilter(workspace, normalizedQuery, tabMatchedWorkspaceKeys),
     );
-    const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, effectiveSort);
+    const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, sortMode);
     return new Map(sorted.map((workspace) => [workspace.workspaceKey, workspace]));
   }, [
     normalizedQuery,
-    effectiveSort,
+    sortMode,
     scopedWorkspaces,
     tabMatchedWorkspaceKeys,
     workspaceEntriesByKey,
@@ -305,14 +297,14 @@ export function SidebarModelProvider({
       projects,
       entries: filteredWorkspaceEntriesByKey,
       query: normalizedQuery,
-      mode: effectiveSort,
+      mode: sortMode,
       tabMatchedWorkspaceKeys,
     });
   }, [
     hasActiveLabelFilter,
     hasActiveProjectFilter,
     normalizedQuery,
-    effectiveSort,
+    sortMode,
     filteredWorkspaceEntriesByKey,
     resolvedProjectFilters,
     list.projects,
@@ -341,7 +333,7 @@ export function SidebarModelProvider({
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
       pinnedCollapsed,
-      sortMode: effectiveSort,
+      sortMode,
       collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
     }),
@@ -351,7 +343,7 @@ export function SidebarModelProvider({
       collapsedWorkspaceGroupKeys,
       groupMode,
       list.projectNamesByViewKey,
-      effectiveSort,
+      sortMode,
       orderedProjects,
       pinnedCollapsed,
       pinnedKeys,
@@ -370,9 +362,8 @@ export function SidebarModelProvider({
       searchQuery,
       setSearchQuery,
       sortMode,
-      effectiveSortMode: effectiveSort,
       setSortMode,
-      messageSortAvailability: sortAvailability,
+      olderMessageSortHosts,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
@@ -389,9 +380,8 @@ export function SidebarModelProvider({
       normalizedQuery,
       searchQuery,
       sortMode,
-      effectiveSort,
       setSortMode,
-      sortAvailability,
+      olderMessageSortHosts,
       groupMode,
       list,
       orderedProjects,

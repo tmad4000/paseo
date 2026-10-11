@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import { useDefaultProjectForHost } from "./hooks";
@@ -62,7 +62,7 @@ function ProjectChoiceItem({
  */
 export function DefaultProjectSettingsCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
-  const supported = useHostFeature(serverId, "projectPinning");
+  const support = useHostFeatureAvailability(serverId, "projectPinning");
   const current = useDefaultProjectForHost(serverId);
   const choices = useHostProjectChoices(serverId);
   const actions = useProjectPinActions();
@@ -89,12 +89,12 @@ export function DefaultProjectSettingsCard({ serverId }: { serverId: string }) {
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("defaultProject.settings.title")}</Text>
           <Text style={settingsStyles.rowHint}>
-            {supported
-              ? t("defaultProject.settings.hint")
-              : t("defaultProject.settings.updateHost")}
+            {support === false
+              ? t("defaultProject.settings.updateHost")
+              : t("defaultProject.settings.hint")}
           </Text>
         </View>
-        {supported ? (
+        {support === true ? (
           <DropdownMenu>
             <DropdownTrigger
               testID="host-page-default-project-trigger"

@@ -240,11 +240,12 @@ export function SessionRoutingComposer({
             .filter((placement) => placement.serverId === serverId)
             .map((placement) => placement.workspaceId);
           if (workspaceIds.length === 0) return { recipients: [], searched: 0, total: 0 };
-          if (!session?.serverInfo?.features?.sessionSearch)
-            throw new Error(t("sidebar.routing.updateHost"));
+          // Connection first: a host that has not reported server info is offline, not older.
           const client = getHostRuntimeStore().getClient(serverId);
-          if (!client || client.getConnectionState().status !== "connected")
+          if (!client || client.getConnectionState().status !== "connected" || !session.serverInfo)
             throw new Error(t("sidebar.routing.offline"));
+          if (!session.serverInfo.features?.sessionSearch)
+            throw new Error(t("sidebar.routing.updateHost"));
           const payload = await client.searchSessions({
             query,
             workspaceIds,
@@ -313,11 +314,9 @@ export function SessionRoutingComposer({
         throw new Error(t("sidebar.routing.invalidDestination"));
       const client = getHostRuntimeStore().getClient(input.recipient.serverId);
       if (!client) throw new Error(t("sidebar.routing.offline"));
-      const session = useSessionStore.getState().sessions[input.recipient.serverId];
-      if (
-        !session?.serverInfo?.features?.sessionSearch ||
-        !session.serverInfo.features.agentMessageQueue
-      )
+      const serverInfo = useSessionStore.getState().sessions[input.recipient.serverId]?.serverInfo;
+      if (!serverInfo) throw new Error(t("sidebar.routing.offline"));
+      if (!serverInfo.features?.sessionSearch || !serverInfo.features.agentMessageQueue)
         throw new Error(t("sidebar.routing.updateHost"));
       return deliverRoutedPrompt({
         ...input,
