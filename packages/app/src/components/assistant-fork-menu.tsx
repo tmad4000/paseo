@@ -12,7 +12,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
-export type AssistantForkTarget = "tab" | "workspace";
+/** Where a fork opens. "thread" is Reply in thread (src/threads), offered beside the menu. */
+export type AssistantForkTarget = "tab" | "workspace" | "thread";
 
 interface AssistantForkMenuProps {
   onFork: (target: AssistantForkTarget) => Promise<void> | void;

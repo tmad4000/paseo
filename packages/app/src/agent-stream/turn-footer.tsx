@@ -18,6 +18,7 @@ import {
 } from "@/components/message";
 import type { TurnFooterHost } from "./layout";
 import { AssistantForkMenu } from "@/components/assistant-fork-menu";
+import { ThreadTurnControls } from "@/threads/turn-controls";
 import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 
@@ -203,6 +204,7 @@ function CompletedTurnFooter({
     },
     [boundary, onForkAssistantTurn],
   );
+  const handleStartThread = useCallback(() => handleFork("thread"), [handleFork]);
   return (
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
@@ -212,7 +214,11 @@ function CompletedTurnFooter({
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}
         onPin={onPin}
-      />
+      >
+        {onForkAssistantTurn ? (
+          <ThreadTurnControls boundary={boundary} onStartThread={handleStartThread} />
+        ) : null}
+      </AssistantTurnFooter>
     </View>
   );
 }

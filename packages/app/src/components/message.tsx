@@ -673,6 +673,8 @@ interface AssistantTurnFooterProps {
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
   onPin?: (text: string) => void;
+  /** Extra turn actions after Fork, such as Reply in thread. */
+  children?: ReactNode;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -720,6 +722,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   completedAt,
   durationMs,
   onFork,
+  children,
 }: AssistantTurnFooterProps) {
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
@@ -770,6 +773,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
+      {children}
       {primaryLabel ? (
         <Pressable
           onPress={handlePress}

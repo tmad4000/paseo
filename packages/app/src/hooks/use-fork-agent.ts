@@ -20,7 +20,14 @@ import {
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { toErrorMessage } from "@/utils/error-messages";
 import { buildNewWorkspaceRoute } from "@/utils/host-routes";
-import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
+import {
+  buildWorkspaceTabPersistenceKey,
+  type WorkspaceDraftTabSetup,
+  type WorkspaceTabTarget,
+} from "@/workspace-tabs/model";
+import { openWorkspaceTargetBeside } from "@/workspace-tabs/open-beside";
+import { useThreadDraftStore } from "@/threads/draft-store";
+import { threadAnchorKey } from "@/threads/model";
 
 /**
  * The subset of an agent record that a fork needs in order to seed the new
@@ -57,6 +64,11 @@ export interface ForkAgentRequest {
   workspaceId?: string;
   target: AssistantForkTarget;
   boundary?: ForkAgentBoundary;
+  /**
+   * For a thread: the workspace whose layout shows the chat, when the chat is a session from
+   * another workspace shown in a split. The thread opens and lives there.
+   */
+  layoutWorkspaceId?: string;
 }
 
 export interface UseForkAgentInput {
@@ -118,6 +130,34 @@ function buildForkDraftTabTarget(
 }
 
 /**
+ * Reply in thread: the same chat-history draft as a fork, opened beside the chat and linked to the
+ * reply it answers (src/threads). The main chat is not touched.
+ */
+async function openThreadDraft(input: {
+  serverId: string;
+  request: ForkAgentRequest;
+  draftSetup: WorkspaceDraftTabSetup | undefined;
+  prepareForkDraft: () => Promise<string>;
+  missingWorkspaceMessage: string;
+  failedMessage: string;
+}): Promise<void> {
+  const { request } = input;
+  const threadWorkspaceId = request.layoutWorkspaceId ?? request.workspaceId;
+  if (!threadWorkspaceId) throw new Error(input.missingWorkspaceMessage);
+  const anchor = request.boundary ? threadAnchorKey(request.boundary) : null;
+  if (!anchor) throw new Error(input.failedMessage);
+  const draftId = await input.prepareForkDraft();
+  useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
+  openWorkspaceTargetBeside({
+    workspaceKey: buildWorkspaceTabPersistenceKey({
+      serverId: input.serverId,
+      workspaceId: threadWorkspaceId,
+    }),
+    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+  });
+}
+
+/**
  * Shared fork driver behind both turn-footer fork affordances: the completed
  * turn's footer (which supplies a boundary pinned to that turn) and the
  * in-flight turn's footer next to the progress loader (which omits the boundary
@@ -132,7 +172,8 @@ export function useForkAgent(
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const supportsAgentForkContext = useHostFeature(serverId, "agentForkContext") && !readOnly;
 
-  return useStableEvent(async ({ agentId, agent, workspaceId, target, boundary }) => {
+  return useStableEvent(async (request: ForkAgentRequest) => {
+    const { agentId, agent, workspaceId, target, boundary } = request;
     try {
       if (!supportsAgentForkContext) {
         toast?.error(t("message.actions.forkUnavailable"));
@@ -158,6 +199,18 @@ export function useForkAgent(
         });
         return draftId;
       };
+
+      if (target === "thread") {
+        await openThreadDraft({
+          serverId,
+          request,
+          draftSetup,
+          prepareForkDraft,
+          missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
+          failedMessage: t("message.actions.forkFailed"),
+        });
+        return;
+      }
 
       if (target === "tab") {
         if (!workspaceId) {
