@@ -39,11 +39,10 @@ default applies it on each of its hosts; the host Workspaces settings page sets 
 
 ## Host compatibility
 
-The three message sorts are available once at least one selected host advertises
-`conversationMessageActivity`. A connected older host no longer disables them for every host: its
-chats sort by the legacy last-user-message time (falling back to creation time), and the menu shows a
-notice that some hosts need an update. Until server info arrives, or when every connected host is
-older, the sidebar uses stored manual order, shows the update notice in the latter case, and disables
-the message choices. The menu's checkmark and trigger label always name the order actually applied;
-the saved preference is never rewritten and is restored as soon as a supporting host appears.
-Manual and Title remain available throughout.
+The message sorts work against every host. A host that predates `conversationMessageActivity` sends
+no role clocks, so its chats sort by the legacy last-user-message time (falling back to creation
+time), and the menu names each such host with its version ("Chats on SDMM770 (0.10.0-beta.11) sort
+by approximate times"). Until a host's server info arrives, the saved sort applies to its cached
+clocks and the menu shows no notice for it. The saved preference is never rewritten,
+and the menu's checkmark and trigger label name it. This keeps a client that updates before its host
+from losing the activity order it already had.

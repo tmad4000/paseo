@@ -41,6 +41,7 @@ This is the section I read most carefully. I need to see that *you* tested this,
 ### Checklist
 
 - [ ] Fork behavior changes update [the feature register](../docs/fork-features.md); upstream reconciliation includes its preservation matrix (or not applicable)
+- [ ] A new host capability required by an existing surface ships with a [degrade adapter](../docs/protocol-compatibility.md#the-feature-contract-per-feature-gated-once) for older and not-yet-connected hosts (or not applicable)
 
 - [ ] Plugin changes follow the [SDK import boundaries](../docs/plugins.md#sdk-import-boundaries) (if applicable)
 - [ ] One focused change

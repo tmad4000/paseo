@@ -12,7 +12,7 @@ import {
   ToolbarControls,
 } from "@/components/ui/pane-content-toolbar";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { openExternalUrl } from "@/utils/open-external-url";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
@@ -147,8 +147,8 @@ function SessionStream({
 }): ReactElement {
   const { t } = useTranslation();
   // COMPAT(companionStream): same gate as the Chat / Stream switcher.
-  const streamSupported = useHostFeature(serverId, "companionStream");
-  const artifactsSupported = useHostFeature(serverId, "artifactFeed");
+  const streamAvailability = useHostFeatureAvailability(serverId, "companionStream");
+  const artifactsAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const entries = useSessionStore((state) => {
     const session = state.sessions[serverId];
     return (
@@ -163,7 +163,8 @@ function SessionStream({
       NO_ARTIFACTS
     );
   });
-  if (!streamSupported && !artifactsSupported) {
+  // Unknown hosts still render the Stream, which degrades to the snapshot's entries.
+  if (streamAvailability === false && artifactsAvailability === false) {
     return (
       <View style={styles.empty} testID="session-checklist-empty">
         <Text style={styles.meta}>{t("sidePanel.noChecklist")}</Text>
@@ -178,8 +179,8 @@ function SessionStream({
         cwd={cwd}
         entries={entries}
         artifacts={artifacts}
-        isSupported={streamSupported}
-        artifactsSupported={artifactsSupported}
+        isSupported={streamAvailability === true}
+        artifactsSupported={artifactsAvailability === true}
         onOpenWorkspaceFile={onOpenWorkspaceFile}
         onReturnToChat={onFocusParent}
         onReplyInChat={onFocusParent}

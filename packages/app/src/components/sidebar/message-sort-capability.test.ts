@@ -1,36 +1,41 @@
 import { expect, it } from "vitest";
-import {
-  canUseMessageSort,
-  effectiveSidebarSortMode,
-  messageSortAvailability,
-} from "./message-sort-capability";
+import type { DaemonServerInfo } from "@/stores/session-store";
+import { olderMessageSortHosts } from "./message-sort-capability";
 
-it("waits for server info and reports full, partial, or no message-activity support", () => {
-  expect(messageSortAvailability([])).toBe("loading");
-  expect(messageSortAvailability([undefined])).toBe("loading");
-  expect(messageSortAvailability([false, undefined])).toBe("loading");
-  expect(messageSortAvailability([true, undefined])).toBe("ready");
-  expect(messageSortAvailability([true, true])).toBe("ready");
-  expect(messageSortAvailability([false])).toBe("unsupported");
-  expect(messageSortAvailability([false, false])).toBe("unsupported");
+function host(input: Partial<DaemonServerInfo>): { serverInfo: DaemonServerInfo } {
+  return {
+    serverInfo: { serverId: "srv", hostname: "SDMM770", version: "0.10.0-beta.11", ...input },
+  };
+}
+
+it("names each host without message activity, with its version", () => {
+  const state = {
+    sessions: {
+      m4: host({ features: {} }),
+      bare: host({
+        hostname: null,
+        version: null,
+        features: { conversationMessageActivity: false },
+      }),
+    },
+  };
+  expect(olderMessageSortHosts(state, ["m4", "bare"])).toEqual([
+    "SDMM770 (0.10.0-beta.11)",
+    "bare",
+  ]);
 });
 
-it("keeps message sorts usable when one older host sits beside a supporting host", () => {
-  expect(messageSortAvailability([true, false])).toBe("partial");
-  expect(messageSortAvailability([false, true, undefined])).toBe("partial");
-  expect(canUseMessageSort("partial")).toBe(true);
-  expect(canUseMessageSort("ready")).toBe(true);
-  expect(canUseMessageSort("loading")).toBe(false);
-  expect(canUseMessageSort("unsupported")).toBe(false);
+it("skips hosts whose server info has not arrived and hosts that support message activity", () => {
+  const state = {
+    sessions: {
+      pending: { serverInfo: null },
+      current: host({ features: { conversationMessageActivity: true } }),
+    },
+  };
+  expect(olderMessageSortHosts(state, ["pending", "current", "unpaired"])).toEqual([]);
 });
 
-it("applies the saved message sort only when some host supports it", () => {
-  for (const mode of ["recent", "user", "assistant"] as const) {
-    expect(effectiveSidebarSortMode(mode, "loading")).toBe("manual");
-    expect(effectiveSidebarSortMode(mode, "unsupported")).toBe("manual");
-    expect(effectiveSidebarSortMode(mode, "partial")).toBe(mode);
-    expect(effectiveSidebarSortMode(mode, "ready")).toBe(mode);
-  }
-  expect(effectiveSidebarSortMode("title", "unsupported")).toBe("title");
-  expect(effectiveSidebarSortMode("manual", "unsupported")).toBe("manual");
+it("lists a repeated label once", () => {
+  const state = { sessions: { a: host({ features: {} }), b: host({ features: {} }) } };
+  expect(olderMessageSortHosts(state, ["a", "b"])).toEqual(["SDMM770 (0.10.0-beta.11)"]);
 });

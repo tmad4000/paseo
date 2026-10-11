@@ -784,7 +784,6 @@ export const es: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Hostno está conectado",
-      updateHost: "Actualiza el host para usar el renderizador de terminal nativo.",
       unableToSubscribe: "No se puede suscribir al terminal",
     },
     tabs: {
@@ -1401,8 +1400,7 @@ export const es: TranslationResources = {
       clear: "Borrar filtro lateral",
       sortHeading: "Ordenar chats",
       sortBy: "Ordenar chats: {{value}}",
-      sortUpdateHost: "Update selected hosts to sort by message activity.",
-      sortUpdateHostPartial: "Some hosts need an update; their chats sort by approximate times.",
+      sortOlderHosts: "Chats on {{hosts}} sort by approximate times; update for exact order.",
       sort: {
         manual: "Orden manual",
         recent: "Latest conversation activity",
