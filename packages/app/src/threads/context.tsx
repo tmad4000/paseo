@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useSessionStore } from "@/stores/session-store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
@@ -38,6 +39,8 @@ export function openThreadBeside(input: {
   serverId: string;
   layoutWorkspaceId: string;
   threadAgentId: string;
+  /** Compact layouts have no side pane: the thread becomes the visible tab instead. */
+  isCompact: boolean;
 }): string | null {
   const workspaceKey = buildWorkspaceTabPersistenceKey({
     serverId: input.serverId,
@@ -55,7 +58,7 @@ export function openThreadBeside(input: {
   const thread =
     session?.agents.get(input.threadAgentId) ?? session?.agentDetails.get(input.threadAgentId);
   const foreign = Boolean(thread?.workspaceId && thread.workspaceId !== input.layoutWorkspaceId);
-  const paneId = alreadyOpen ? null : store.ensureSidePane(workspaceKey);
+  const paneId = alreadyOpen || input.isCompact ? null : store.ensureSidePane(workspaceKey);
   return store.openTab({
     workspaceKey,
     target,
@@ -90,11 +93,12 @@ export function ThreadsHostProvider({
   children: ReactNode;
 }) {
   const repliesByAnchor = useThreadReplies(serverId, agentId);
+  const isCompact = useIsCompactFormFactor();
   const openThread = useCallback(
     (threadAgentId: string) => {
-      openThreadBeside({ serverId, layoutWorkspaceId, threadAgentId });
+      openThreadBeside({ serverId, layoutWorkspaceId, threadAgentId, isCompact });
     },
-    [layoutWorkspaceId, serverId],
+    [isCompact, layoutWorkspaceId, serverId],
   );
   const value = useMemo<ThreadsHost>(
     () => ({ serverId, parentAgentId: agentId, layoutWorkspaceId, repliesByAnchor, openThread }),

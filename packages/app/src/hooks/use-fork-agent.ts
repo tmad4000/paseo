@@ -9,6 +9,7 @@ import type { AssistantForkTarget } from "@/components/assistant-fork-menu";
 import type { ToastApi } from "@/components/toast-host";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostFeature } from "@/runtime/host-features";
 import { generateDraftId } from "@/stores/draft-keys";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
@@ -140,6 +141,8 @@ async function openThreadDraft(input: {
   prepareForkDraft: () => Promise<string>;
   missingWorkspaceMessage: string;
   failedMessage: string;
+  /** Compact layouts have no side pane: the thread opens as the visible tab instead. */
+  isCompact: boolean;
 }): Promise<void> {
   const { request } = input;
   const threadWorkspaceId = request.layoutWorkspaceId ?? request.workspaceId;
@@ -148,12 +151,17 @@ async function openThreadDraft(input: {
   if (!anchor) throw new Error(input.failedMessage);
   const draftId = await input.prepareForkDraft();
   useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
+  const target = buildForkDraftTabTarget(input.draftSetup, draftId);
+  if (input.isCompact) {
+    navigateToWorkspace({ serverId: input.serverId, workspaceId: threadWorkspaceId, target });
+    return;
+  }
   openWorkspaceTargetBeside({
     workspaceKey: buildWorkspaceTabPersistenceKey({
       serverId: input.serverId,
       workspaceId: threadWorkspaceId,
     }),
-    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+    target,
   });
 }
 
@@ -171,6 +179,7 @@ export function useForkAgent(
   const router = useRouter();
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const supportsAgentForkContext = useHostFeature(serverId, "agentForkContext") && !readOnly;
+  const isCompact = useIsCompactFormFactor();
 
   return useStableEvent(async (request: ForkAgentRequest) => {
     const { agentId, agent, workspaceId, target, boundary } = request;
@@ -208,6 +217,7 @@ export function useForkAgent(
           prepareForkDraft,
           missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
           failedMessage: t("message.actions.forkFailed"),
+          isCompact,
         });
         return;
       }
