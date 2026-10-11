@@ -29,4 +29,13 @@ describe("terminal renderer capability", () => {
       }),
     ).toBe("webview");
   });
+
+  it("waits for the host's server info before attaching either renderer", () => {
+    expect(
+      resolveTerminalRendererSelection({
+        useLegacyTerminalRenderer: false,
+        supportsTerminalInputModeReplay: null,
+      }),
+    ).toBe("pending");
+  });
 });

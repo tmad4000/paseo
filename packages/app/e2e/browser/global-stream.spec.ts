@@ -1,6 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { test } from "../support/fixtures";
-import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
+import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 import { connectSeedClient } from "../support/helpers/seed-client";
 import { createTempGitRepo } from "../support/helpers/workspace";
 import { createIdleAgent, resetSeededPageState } from "../support/helpers/archive-tab";
@@ -199,35 +199,6 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
   }
 });
 
-async function hideDurableStreamCapability(page: Page): Promise<void> {
-  await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
-    const serverSocket = browserSocket.connectToServer();
-    browserSocket.onMessage((message) => serverSocket.send(message));
-    serverSocket.onMessage((message) => {
-      if (typeof message !== "string") {
-        browserSocket.send(message);
-        return;
-      }
-      const envelope = JSON.parse(message) as {
-        message?: {
-          type?: string;
-          payload?: { status?: string; features?: Record<string, unknown> };
-        };
-      };
-      if (
-        envelope.message?.type === "status" &&
-        envelope.message.payload?.status === "server_info"
-      ) {
-        envelope.message.payload.features = {
-          ...envelope.message.payload.features,
-          durableStream: false,
-        };
-      }
-      browserSocket.send(JSON.stringify(envelope));
-    });
-  });
-}
-
 test("per-chat Stream on an older host shows the chat's recent entries instead of blocking", async ({
   page,
 }) => {
@@ -250,7 +221,7 @@ test("per-chat Stream on an older host shows the chat's recent entries instead o
       text: "Which host runs this chat?",
     });
     await resetSeededPageState(page);
-    await hideDurableStreamCapability(page);
+    await overrideServerInfoFeatures(page, { durableStream: false });
     await gotoAppShell(page);
     await page.goto("/stream");
     await page

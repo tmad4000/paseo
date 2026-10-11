@@ -2,7 +2,7 @@ import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSessionStore, type Agent } from "@/stores/session-store";
-import { olderMessageSortHostLabel } from "./message-sort-capability";
+import { olderMessageSortHosts } from "./message-sort-capability";
 import React, {
   createContext,
   useContext,
@@ -78,7 +78,7 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   sortMode: SidebarSortMode;
-  /** Connected hosts whose chats sort by legacy clocks, labelled with their version. */
+  /** Hosts whose chats sort by legacy clocks, labelled with their version. */
   olderMessageSortHosts: readonly string[];
   setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
@@ -173,13 +173,8 @@ export function SidebarModelProvider({
   }, [filterRequest]);
   const sortMode = useSidebarViewStore((state) => state.sortMode);
   const setSortMode = useSidebarViewStore((state) => state.setSortMode);
-  const olderMessageSortHosts = useSessionStore(
-    useShallow((state) =>
-      list.serverIds.flatMap((serverId) => {
-        const label = olderMessageSortHostLabel(serverId, state.sessions[serverId]?.serverInfo);
-        return label ? [label] : [];
-      }),
-    ),
+  const olderSortHosts = useSessionStore(
+    useShallow((state) => olderMessageSortHosts(state, list.serverIds)),
   );
   const normalizedQuery = useMemo(() => normalizeSidebarQuery(searchQuery), [searchQuery]);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
@@ -357,7 +352,7 @@ export function SidebarModelProvider({
       setSearchQuery,
       sortMode,
       setSortMode,
-      olderMessageSortHosts,
+      olderMessageSortHosts: olderSortHosts,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
@@ -375,7 +370,7 @@ export function SidebarModelProvider({
       searchQuery,
       sortMode,
       setSortMode,
-      olderMessageSortHosts,
+      olderSortHosts,
       groupMode,
       list,
       orderedProjects,

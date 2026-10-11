@@ -1224,6 +1224,11 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
   const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
+  // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
+  const showViewSwitcher =
+    companionStreamAvailability !== false || artifactFeedAvailability !== false;
+  // A host that turns out to offer neither view returns the pane to the chat.
+  const visibleView = showViewSwitcher ? selectedView : "chat";
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1275,7 +1280,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       <AgentComposerSection
         agentId={agentId}
         serverId={serverId}
-        isPaneFocused={isPaneFocused && selectedView !== "artifacts"}
+        isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
         isArchivingCurrentAgent={isArchivingCurrentAgent}
         archivedAt={agentState.archivedAt}
         cwd={cwd}
@@ -1345,7 +1350,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
 
   // The chat stays mounted behind the Stream so the draft, scroll position and
   // expanded state survive Back to chat and Reply in chat.
-  const isChatVisible = selectedView === "chat";
+  const isChatVisible = visibleView === "chat";
   const dock = (
     <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
@@ -1375,9 +1380,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     ],
     [t],
   );
-  // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
-  const showViewSwitcher =
-    companionStreamAvailability !== false || artifactFeedAvailability !== false;
   const viewSwitcherStyle = useMemo(
     () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
     [isChatVisible],
@@ -1397,7 +1399,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           {showViewSwitcher ? (
             <SegmentedControl
               options={viewOptions}
-              value={selectedView}
+              value={visibleView}
               onValueChange={handleSetSelectedView}
               size={isCompact ? "sm" : "xs"}
               testID="agent-view-switcher"

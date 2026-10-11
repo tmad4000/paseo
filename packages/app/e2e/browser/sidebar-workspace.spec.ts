@@ -12,7 +12,8 @@ import {
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { expectWorkspaceHeader } from "../support/helpers/workspace-ui";
 import { getServerId } from "../support/helpers/server-id";
-import { daemonWsRoutePattern, getE2EDaemonPort } from "../support/helpers/daemon-port";
+import { getE2EDaemonPort } from "../support/helpers/daemon-port";
+import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 import { projectEquivalenceViewKey } from "../support/helpers/project-view-key";
 import { escapeRegex } from "../support/helpers/regex";
 import { openFilesPanel } from "../support/helpers/workspace-tabs";
@@ -656,37 +657,8 @@ test("sidebar conversation sort choices persist and metadata does not reorder ac
   }
 });
 
-async function hideMessageActivityCapability(page: Page): Promise<void> {
-  await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
-    const serverSocket = browserSocket.connectToServer();
-    browserSocket.onMessage((message) => serverSocket.send(message));
-    serverSocket.onMessage((message) => {
-      if (typeof message !== "string") {
-        browserSocket.send(message);
-        return;
-      }
-      const envelope = JSON.parse(message) as {
-        message?: {
-          type?: string;
-          payload?: { status?: string; features?: Record<string, unknown> };
-        };
-      };
-      if (
-        envelope.message?.type === "status" &&
-        envelope.message.payload?.status === "server_info"
-      ) {
-        envelope.message.payload.features = {
-          ...envelope.message.payload.features,
-          conversationMessageActivity: false,
-        };
-      }
-      browserSocket.send(JSON.stringify(envelope));
-    });
-  });
-}
-
 test("an older host keeps the activity sort and is named in the sort menu", async ({ page }) => {
-  await hideMessageActivityCapability(page);
+  await overrideServerInfoFeatures(page, { conversationMessageActivity: false });
   const a = await seedMockAgentWorkspace({
     repoPrefix: "sidebar-older-sort-a-",
     title: "Older host sort Alpha",

@@ -42,7 +42,7 @@ default applies it on each of its hosts; the host Workspaces settings page sets 
 The message sorts work against every host. A host that predates `conversationMessageActivity` sends
 no role clocks, so its chats sort by the legacy last-user-message time (falling back to creation
 time), and the menu names each such host with its version ("Chats on SDMM770 (0.10.0-beta.11) sort
-by approximate times"). A host whose server info has not arrived yet is unknown, not older: the saved
-sort applies to its cached clocks and no notice is shown. The saved preference is never rewritten,
+by approximate times"). Until a host's server info arrives, the saved sort applies to its cached
+clocks and the menu shows no notice for it. The saved preference is never rewritten,
 and the menu's checkmark and trigger label name it. This keeps a client that updates before its host
 from losing the activity order it already had.
