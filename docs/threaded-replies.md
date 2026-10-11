@@ -12,10 +12,16 @@ beside it. Slack-style, the reply then shows **N replies**, which reopens the th
 - The thread's first message creates its session, linked to the reply it answers.
 - **N replies** under the reply opens the thread beside the main chat (a menu when there are
   several). Closing a thread's tab only hides it; archive it like any session to remove it.
-- In the thread, **Main thread** reveals the main chat, and **Send to main** queues the thread's
+- In the thread, the **Thread** menu (beside Pin) has **Back to main thread**, which reveals the
+  main chat, and **Queue this thread's latest answer in …** ("Send to main"), which queues the thread's
   latest answer in the main chat as a quoted message, with the thread's title and session id. It is
   queued, not interrupting: the main agent reads it after its current turn. It needs a host with
   the message queue, a finished answer in the thread, and a main chat that still exists.
+
+Screenshots: [`threaded-replies/thread-open.png`](threaded-replies/thread-open.png) (thread beside
+the main chat, **1 reply** on the anchor) and
+[`threaded-replies/sent-to-main.png`](threaded-replies/sent-to-main.png) (Send to main queued in the
+main chat).
 
 ## How it works
 
@@ -40,7 +46,7 @@ beside it. Slack-style, the reply then shows **N replies**, which reopens the th
 
 Code: `packages/app/src/threads/`, wired in `agent-stream/turn-footer.tsx` (controls),
 `hooks/use-fork-agent.ts` (the `thread` fork target), `composer/draft/workspace-tab.tsx` (labels
-at creation) and `panels/agent-panel.tsx` (host and Main thread / Send to main).
+at creation) and `panels/agent-panel.tsx` (host and the Thread menu).
 
 ## Not yet
 
