@@ -838,6 +838,8 @@ export const ru: TranslationResources = {
         exitFocusMode: "Выйти из режима фокусировки",
         splitRight: "Разделить панель справа",
         splitDown: "Разделить панель снизу",
+        splitRightWithSession: "Разделить вправо с сессией…",
+        splitDownWithSession: "Разделить вниз с сессией…",
         changes: "Изменения",
         files: "Файлы",
         pullRequest: "PR",

@@ -9,6 +9,7 @@ import { useProjects } from "@/hooks/use-projects";
 import { useHosts } from "@/runtime/host-runtime";
 import type { ViewTabInput } from "@/stores/views-store";
 import { formatTimeAgo } from "@/utils/time";
+import { shortSessionId } from "@getpaseo/protocol/search/session-id";
 
 export type ViewSessionPickerRequest =
   | { mode: "pane"; paneId: string | null }
@@ -22,21 +23,33 @@ export interface ViewSessionPickerRow {
   searchText: string;
 }
 
-/** Sessions that can join a View: agents that belong to a workspace, newest activity first. */
+/**
+ * Sessions that can be dropped into a split: agents that belong to a workspace, newest activity
+ * first. Each row names its provider and short id, and the full id is searchable, so a pasted
+ * `9b8394eb` finds the session.
+ */
 export function buildViewSessionPickerRows(input: {
   agents: AggregatedAgent[];
   workspaceLabelByKey: Map<string, string>;
   showHost: boolean;
   untitledLabel: string;
+  /** Restrict to one host (a workspace split can only hold that host's sessions). */
+  serverId?: string;
 }): ViewSessionPickerRow[] {
   const rows: ViewSessionPickerRow[] = [];
   for (const agent of input.agents) {
     const workspaceId = agent.workspaceId;
     if (!workspaceId || agent.archivedAt) continue;
+    if (input.serverId && agent.serverId !== input.serverId) continue;
     const title = agent.title || input.untitledLabel;
     const workspaceLabel =
       input.workspaceLabelByKey.get(`${agent.serverId}:${workspaceId}`) ?? agent.cwd;
-    const subtitle = [input.showHost ? agent.serverLabel : null, workspaceLabel]
+    const subtitle = [
+      agent.provider,
+      shortSessionId(agent.id),
+      input.showHost ? agent.serverLabel : null,
+      workspaceLabel,
+    ]
       .filter(Boolean)
       .join(" · ");
     rows.push({
@@ -44,7 +57,8 @@ export function buildViewSessionPickerRows(input: {
       agent: { ...agent, workspaceId },
       title,
       subtitle,
-      searchText: `${title} ${workspaceLabel} ${agent.serverLabel} ${agent.cwd}`.toLowerCase(),
+      searchText:
+        `${title} ${workspaceLabel} ${agent.serverLabel} ${agent.cwd} ${agent.provider} ${agent.id}`.toLowerCase(),
     });
   }
   return rows;
@@ -63,10 +77,12 @@ export function ViewSessionPicker({
   request,
   onClose,
   onPick,
+  serverId,
 }: {
   request: ViewSessionPickerRequest | null;
   onClose: () => void;
   onPick: (input: ViewTabInput) => void;
+  serverId?: string;
 }) {
   const { t } = useTranslation();
   const open = request !== null;
@@ -95,8 +111,9 @@ export function ViewSessionPicker({
       workspaceLabelByKey,
       showHost,
       untitledLabel: t("shell.commandCenter.newAgent"),
+      serverId,
     });
-  }, [agents, open, projects, showHost, t]);
+  }, [agents, open, projects, serverId, showHost, t]);
   const visibleRows = useMemo(() => filterViewSessionPickerRows(rows, query), [query, rows]);
 
   const pick = useCallback(

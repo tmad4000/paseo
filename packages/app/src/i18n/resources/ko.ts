@@ -835,6 +835,8 @@ export const ko: TranslationResources = {
         exitFocusMode: "집중 모드 종료",
         splitRight: "창을 오른쪽으로 분할",
         splitDown: "창을 아래로 분할",
+        splitRightWithSession: "세션으로 오른쪽 분할…",
+        splitDownWithSession: "세션으로 아래쪽 분할…",
         changes: "변경 사항",
         files: "파일",
         pullRequest: "풀 리퀘스트",

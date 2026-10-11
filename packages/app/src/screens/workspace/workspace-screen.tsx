@@ -195,6 +195,17 @@ import {
 } from "@/screens/workspace/workspace-bulk-close";
 import { resolveCloseAgentTabPolicy } from "@/subagents";
 import {
+  SplitWithSessionContext,
+  type SplitWithSessionPosition,
+  type SplitWithSessionValue,
+} from "@/workspace-tabs/split-with-session";
+import { ViewSessionPicker, type ViewSessionPickerRequest } from "@/views/view-session-picker";
+import type { ViewTabInput } from "@/stores/views-store";
+import {
+  buildForeignSessionPaneContentModel,
+  useForeignSessionWorkspaces,
+} from "@/screens/workspace/foreign-sessions";
+import {
   getPanelInstanceAttributes,
   useModifiedPanelTabIds,
 } from "@/panels/panel-instance-attributes";
@@ -1877,6 +1888,11 @@ function WorkspaceScreenContent({
     () => (workspaceLayout ? collectAllTabs(workspaceLayout.root) : EMPTY_UI_TABS),
     [workspaceLayout],
   );
+  const foreignSessionWorkspaces = useForeignSessionWorkspaces({
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    tabs: uiTabs,
+  });
   useOpenAgentTabLabels({
     client,
     serverId: normalizedServerId,
@@ -2591,6 +2607,57 @@ function WorkspaceScreenContent({
     [persistenceKey, splitWorkspacePaneEmpty],
   );
 
+  // "Split right/down with session…": split the pane, then drop the picked session into the new
+  // half. A session from another workspace on this host is pinned so tab reconciliation keeps it,
+  // and closes layout-only (it still belongs to its own workspace).
+  const [splitSessionRequest, setSplitSessionRequest] = useState<{
+    paneId: string;
+    position: SplitWithSessionPosition;
+  } | null>(null);
+  const splitWithSessionValue = useMemo<SplitWithSessionValue>(
+    () => ({ request: (paneId, position) => setSplitSessionRequest({ paneId, position }) }),
+    [],
+  );
+  const splitSessionPickerRequest = useMemo<ViewSessionPickerRequest | null>(
+    () =>
+      splitSessionRequest
+        ? {
+            mode: "split",
+            paneId: splitSessionRequest.paneId,
+            position: splitSessionRequest.position,
+          }
+        : null,
+    [splitSessionRequest],
+  );
+  const closeSplitSessionPicker = useCallback(() => setSplitSessionRequest(null), []);
+  const handlePickSplitSession = useCallback(
+    (input: ViewTabInput) => {
+      const request = splitSessionRequest;
+      setSplitSessionRequest(null);
+      if (!request || !persistenceKey || input.target.kind !== "agent") return;
+      const newPaneId = splitWorkspacePaneEmpty(persistenceKey, {
+        targetPaneId: request.paneId,
+        position: request.position,
+      });
+      const tabId = openTab({
+        workspaceKey: persistenceKey,
+        target: input.target,
+        intent: "reveal",
+        placement: { mode: "pane", paneId: newPaneId ?? request.paneId },
+        pin: input.scope.workspaceId !== normalizedWorkspaceId,
+      });
+      if (tabId) navigateToTabId(tabId);
+    },
+    [
+      navigateToTabId,
+      normalizedWorkspaceId,
+      openTab,
+      persistenceKey,
+      splitSessionRequest,
+      splitWorkspacePaneEmpty,
+    ],
+  );
+
   const killTerminalAsync = killTerminalMutation.mutateAsync;
 
   const handleCloseTerminalTab = useCallback(
@@ -2641,7 +2708,7 @@ function WorkspaceScreenContent({
 
         const agent =
           useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-        let closePolicy = resolveCloseAgentTabPolicy(agent);
+        let closePolicy = resolveCloseAgentTabPolicy(agent, normalizedWorkspaceId);
         const isRunning = agent?.status === "running";
 
         if (isRunning && closePolicy.kind === "archive-on-close") {
@@ -2670,7 +2737,7 @@ function WorkspaceScreenContent({
             });
             const latestAgent =
               useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-            closePolicy = resolveCloseAgentTabPolicy(latestAgent);
+            closePolicy = resolveCloseAgentTabPolicy(latestAgent, normalizedWorkspaceId);
           } catch (error) {
             console.error("[WorkspaceScreen] Failed to close subagent tab", { error, agentId });
             toast.error(t("workspace.tabs.toasts.failedToCloseAgent"));
@@ -2699,6 +2766,7 @@ function WorkspaceScreenContent({
       closeTab,
       closeWorkspaceTabWithCleanup,
       normalizedServerId,
+      normalizedWorkspaceId,
       persistenceKey,
       t,
       toast,
@@ -2961,7 +3029,9 @@ function WorkspaceScreenContent({
 
       const groups = classifyBulkClosableTabs(tabsToClose, (agentId) => {
         const agent = useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId);
-        return resolveCloseAgentTabPolicy(agent).kind === "layout-only" ? "layout-only" : "archive";
+        return resolveCloseAgentTabPolicy(agent, normalizedWorkspaceId).kind === "layout-only"
+          ? "layout-only"
+          : "archive";
       });
       const modifiedCount = tabsToClose.filter(
         (tab) =>
@@ -3000,7 +3070,10 @@ function WorkspaceScreenContent({
           });
           const latestAgent =
             useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-          if (resolveCloseAgentTabPolicy(latestAgent).kind === "archive-on-close") {
+          if (
+            resolveCloseAgentTabPolicy(latestAgent, normalizedWorkspaceId).kind ===
+            "archive-on-close"
+          ) {
             await archiveAgent({ serverId: normalizedServerId, agentId });
           }
         },
@@ -3632,8 +3705,23 @@ function WorkspaceScreenContent({
       tab: WorkspaceTabDescriptor;
       paneId?: string | null;
       focusPaneBeforeOpen?: boolean;
-    }) =>
-      buildWorkspacePaneContentModel({
+    }) => {
+      // A session from another workspace keeps its own home for files, tabs and composer.
+      const homeWorkspaceId =
+        input.tab.target.kind === "agent"
+          ? foreignSessionWorkspaces.get(input.tab.target.agentId)
+          : undefined;
+      if (homeWorkspaceId) {
+        return buildForeignSessionPaneContentModel({
+          tab: input.tab,
+          serverId: normalizedServerId,
+          homeWorkspaceId,
+          onCloseCurrentTab: () => {
+            void handleCloseTabById(input.tab.tabId);
+          },
+        });
+      }
+      return buildWorkspacePaneContentModel({
         tab: input.tab,
         normalizedServerId,
         normalizedWorkspaceId,
@@ -3712,8 +3800,10 @@ function WorkspaceScreenContent({
           });
         },
         onOpenImportSheet: openImportSheet,
-      }),
+      });
+    },
     [
+      foreignSessionWorkspaces,
       handleCloseTabById,
       fileNavigationRevisionByTabId,
       handleOpenWorkspaceFileFromPane,
@@ -4167,7 +4257,19 @@ function WorkspaceScreenContent({
     handleResizePaneSplit,
     handleReorderTabsInPane,
   ]);
-  const desktopContent = desktopSplitContent ?? content;
+  const desktopContent = desktopSplitContent ? (
+    <SplitWithSessionContext value={splitWithSessionValue}>
+      {desktopSplitContent}
+      <ViewSessionPicker
+        request={splitSessionPickerRequest}
+        serverId={normalizedServerId}
+        onClose={closeSplitSessionPicker}
+        onPick={handlePickSplitSession}
+      />
+    </SplitWithSessionContext>
+  ) : (
+    content
+  );
   const rendersDesktopSplitContent = !isMobile && desktopSplitContent !== null;
 
   const workspacePanelContent = (

@@ -36,6 +36,19 @@ function hosts(...agents: SidebarTabSource[]) {
 }
 
 describe("tab title matching", () => {
+  it("finds a tab by a pasted session id or its short prefix, without a highlight", () => {
+    const id = "9b8394eb-de93-4c1a-8f3e-0123456789ab";
+    const tabs = collectSidebarTabTitles(
+      hosts(agent(id, { title: "Release orchestrator" }), agent("other")),
+    );
+    for (const query of ["9b8394eb", id.toUpperCase(), "9b8394eb-de93"]) {
+      const matches = matchSidebarTabTitles(tabs, normalizeSidebarQuery(query));
+      expect([...matches.values()].flat().map((match) => [match.agentId, match.range])).toEqual([
+        [id, null],
+      ]);
+    }
+  });
+
   it("keeps only tabs a workspace can show: titled, unarchived, root or auto-opened", () => {
     const tabs = collectSidebarTabTitles(
       hosts(

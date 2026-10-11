@@ -2487,15 +2487,31 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       return stored?.workspaceId ?? null;
     };
 
-    // Agent tabs must live in the agent's own workspace or client
-    // reconciliation drops them; everything else defaults to the caller.
+    // A main-placement agent tab must live in the agent's own workspace or client
+    // reconciliation drops it; everything else defaults to the caller. Side placement is the
+    // exception: it drops a session from any workspace on this host beside the caller's view
+    // (the client keeps it as a foreign, layout-only tab), so it defaults to the caller. A close
+    // with an explicit workspace closes the tab there, wherever the session lives.
     const resolveTabWorkspaceId = async (
       target: z.infer<typeof UiWorkspaceTabTargetSchema>,
       explicitWorkspaceId: string | undefined,
+      mode: "open-main" | "open-side" | "close",
     ): Promise<string> => {
       const explicit = explicitWorkspaceId?.trim();
       const agentTargetId = target.kind === "agent" ? target.agentId : null;
       const agentWorkspaceId = agentTargetId ? await resolveAgentWorkspaceId(agentTargetId) : null;
+      const callerWorkspaceId = callerAgentId ? await resolveAgentWorkspaceId(callerAgentId) : null;
+      if (mode !== "open-main") {
+        const workspaceId =
+          explicit ||
+          (mode === "open-side"
+            ? callerWorkspaceId || agentWorkspaceId
+            : agentWorkspaceId || callerWorkspaceId);
+        if (!workspaceId) {
+          throw new Error("workspaceId is required when the caller has no workspace");
+        }
+        return workspaceId;
+      }
       if (explicit) {
         if (agentWorkspaceId && agentWorkspaceId !== explicit) {
           throw new Error(
@@ -2507,11 +2523,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       if (agentWorkspaceId) {
         return agentWorkspaceId;
       }
-      const workspaceId = callerAgentId ? await resolveAgentWorkspaceId(callerAgentId) : null;
-      if (!workspaceId) {
+      if (!callerWorkspaceId) {
         throw new Error("workspaceId is required when the caller has no workspace");
       }
-      return workspaceId;
+      return callerWorkspaceId;
     };
 
     const tabTargetInputSchema = UiWorkspaceTabTargetSchema.describe(
@@ -2535,7 +2550,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             .optional()
             .describe("Default true. False opens the tab without stealing focus."),
           placement: UiTabPlacementSchema.optional().describe(
-            'Default "main". "side" opens the tab in the workspace\'s side pane, beside what the user is looking at, without navigating or moving focus on any client (compact layouts keep it in the background). For a page such as a checklist, use target { kind: "browser", url } — repeating the same URL reuses its tab, and close_tab with that URL closes it. Browser tabs render in the desktop app.',
+            'Default "main". "side" opens the tab in the workspace\'s side pane, beside what the user is looking at, without navigating or moving focus on any client (compact layouts keep it in the background). An agent target with "side" drops that session (from any workspace on this host) beside the caller\'s conversation; closing that tab never archives it — close it with close_tab and the same workspaceId. For a page such as a checklist, use target { kind: "browser", url } — repeating the same URL reuses its tab, and close_tab with that URL closes it. Browser tabs render in the desktop app.',
           ),
         },
         outputSchema: {
@@ -2552,8 +2567,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             "Opening a page requires browser tools for this agent. Link it with the session side panel instead (update_agent labels paseo.checklist-url and paseo.side-panel).",
           );
         }
-        const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
-        if (target.kind === "agent") {
+        const resolvedWorkspaceId = await resolveTabWorkspaceId(
+          target,
+          workspaceId,
+          placement === "side" ? "open-side" : "open-main",
+        );
+        // Side placement shows the session beside someone else's view; it must not also make
+        // the session auto-open as a tab in its own workspace.
+        if (target.kind === "agent" && placement !== "side") {
           await updateAgentCommand(
             { agentManager },
             { agentId: target.agentId, labels: { [AUTO_OPEN_AGENT_TAB_LABEL]: "true" } },
@@ -2609,8 +2630,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         },
       },
       async ({ target, workspaceId }) => {
-        const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId);
-        if (target.kind === "agent") {
+        const resolvedWorkspaceId = await resolveTabWorkspaceId(target, workspaceId, "close");
+        // Closing a session that was only dropped beside another workspace's view leaves its home
+        // workspace's tab labels alone.
+        const closesInHomeWorkspace =
+          target.kind === "agent" &&
+          (await resolveAgentWorkspaceId(target.agentId)) === resolvedWorkspaceId;
+        if (target.kind === "agent" && closesInHomeWorkspace) {
           const stored = await agentStorage.get(target.agentId);
           const labels = agentManager.getAgent(target.agentId)?.labels ?? stored?.labels ?? {};
           const patch: Record<string, string | null> = {

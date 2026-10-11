@@ -39,6 +39,11 @@ Two things keep typing cheap, and both are easy to undo by accident:
 Model: `packages/app/src/components/sidebar/sidebar-filter-matches.ts`. Rows:
 `packages/app/src/components/sidebar/sidebar-filter-results.tsx`.
 
+A query shaped like a session id (hex with dashes, containing a digit, at least six characters)
+also matches tabs by id prefix, so pasting `9b8394eb` or a full id shows that session's tab. The
+same rule (`protocol/src/search/session-id.ts`) answers Cmd+K and Find a chat on Enter, where the
+daemon returns the id match directly instead of asking the ranking model.
+
 ## In messages
 
 After 300 ms without typing and at least three characters, the app sends
