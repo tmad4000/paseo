@@ -58,6 +58,7 @@ import {
   type SidebarMessageSearchScope,
 } from "./sidebar-filter-context";
 import { useSidebarFilterRequestStore } from "./sidebar-filter-request";
+import { pickUniqueSessionIdMatch, type SessionTarget } from "./find-or-start";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
@@ -132,6 +133,30 @@ function useSidebarTabMatches(
     previousRef.current = next;
     return next;
   }, [normalizedQuery, tabTitles]);
+}
+
+/** A pasted session id's one visible chat; keeps its identity while it names the same chat. */
+function useUniqueSessionIdMatch(
+  tabMatches: SidebarTabMatches,
+  visibleWorkspaceKeys: ReadonlySet<string>,
+  normalizedQuery: string,
+): SessionTarget | null {
+  const previousRef = useRef<SessionTarget | null>(null);
+  return useMemo(() => {
+    const next = pickUniqueSessionIdMatch(tabMatches, visibleWorkspaceKeys, normalizedQuery);
+    const previous = previousRef.current;
+    if (
+      next &&
+      previous &&
+      next.serverId === previous.serverId &&
+      next.agentId === previous.agentId &&
+      next.workspaceId === previous.workspaceId &&
+      next.title === previous.title
+    )
+      return previous;
+    previousRef.current = next;
+    return next;
+  }, [normalizedQuery, tabMatches, visibleWorkspaceKeys]);
 }
 
 export function SidebarModelProvider({
@@ -250,6 +275,7 @@ export function SidebarModelProvider({
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
   );
+  const uniqueSession = useUniqueSessionIdMatch(tabMatches, visibleWorkspaceKeys, normalizedQuery);
   // The two filters prune differently on purpose. The project filter is a membership test on the
   // project itself, so a project you filtered TO survives even with no workspaces — it still owns
   // a header row you can create your first workspace under. The label filter can only ask about
@@ -378,7 +404,7 @@ export function SidebarModelProvider({
 
   return (
     <SidebarModelContext.Provider value={value}>
-      <SidebarTabMatchesProvider tabMatches={tabMatches}>
+      <SidebarTabMatchesProvider tabMatches={tabMatches} uniqueSession={uniqueSession}>
         <SidebarMessageSearchProvider
           rawQuery={searchQuery}
           normalizedQuery={normalizedQuery}

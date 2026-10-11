@@ -35,21 +35,30 @@ each key does with the text:
 - **Enter starts a new chat** with the text, through Quick launch (prefill only; nothing is created
   until Quick launch starts it).
 - **A pasted session id** that names exactly one chat adds **Open <title>** above it and takes
-  Enter, so Enter never surprises: the row that owns Enter shows the ↵.
+  Enter, so Enter never surprises: the row that owns Enter shows the ↵. "Exactly one" counts only
+  the tab rows the filter is showing (same hosts, project and label filters, and tab rules), so
+  Open never names a chat the list hides (`pickUniqueSessionIdMatch` in `find-or-start.ts`).
 - **Send** on a matched tab row, or the ➤ button beside the field, enters the send state with the
-  text carried into the prompt. It is the old Send prompt mode (recipient, Queue/Steer/Interrupt,
+  text carried into an empty prompt (a saved prompt is kept, never overwritten). Send appears only
+  on chats that can be destinations (not child chats), and choosing one widens a Find-with-AI
+  project scope to All projects rather than refusing it. It is the old Send prompt mode (recipient, Queue/Steer/Interrupt,
   New conversation, Route to best match) with a single text field; its picker lists recent chats
   without a search field of its own. **Back to search** returns to the field.
 - **Find with AI** keeps the scope menu (All projects / a project) in its row, the only place scope
-  changes results. **Send to best match** appears when a host supports routing.
+  changes results. "Use this chat" on its results carries the text like Send does. **Send to best
+  match** appears when a host supports routing; if a different prompt is already saved, it shows
+  that prompt instead of routing it, so the row never sends text other than what it sits under.
 
 Before and after screenshots: [`find-or-start/`](find-or-start/) (`before-find.png`,
 `before-send.png`, `after-typing.png`, `after-session-id.png`, `after-send.png`).
 
-Rows stay visible but disabled while the routing draft loads, so the field does not jump. The
-composer exposes `findWithAi`, `clear` and `enterSend` to the field through its render function
-(`FindFieldActions` in `session-routing/composer.tsx`); the tab rows reach the composer through
-`useRoutingBridge` (`find-or-start.ts`), because they render outside it.
+While the routing draft loads or a delivery is pending, Find with AI, Send to best match, ➤ and
+the tab rows' Send stay visible but disabled, so the field does not jump; Enter, Open and New chat
+never touch the routing draft and stay available. The composer exposes `findWithAi`, `clear`,
+`enterSend` and `locked` to the field through its render function (`FindFieldActions` in
+`session-routing/composer.tsx`). The tab rows and the Mod+Enter handler reach it through
+`useRoutingBridge` (`find-or-start.ts`), which also lists routable chats and clears only its own
+registration.
 
 ## Keys and scope
 

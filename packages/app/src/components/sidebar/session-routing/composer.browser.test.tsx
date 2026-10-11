@@ -13,6 +13,7 @@ import { AgentQueueDestinationChangedError } from "@getpaseo/client/internal/dae
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
 import { SessionRoutingComposer, type FindFieldActions } from "./composer";
+import { useRoutingBridge } from "../find-or-start";
 import { searchExistingSessions } from "../../../../../server/src/server/session-search";
 void i18n;
 vi.mock("expo-router", () => ({
@@ -1552,4 +1553,48 @@ test("new conversation stores the prompt under the existing workspace draft-tab 
   ).toBe(text);
   expect(fixture.enqueue).not.toHaveBeenCalled();
   expect(fixture.search).not.toHaveBeenCalled();
+});
+
+test("Send to best match under the field never routes a different saved draft", async () => {
+  useDraftStore
+    .getState()
+    .editDraftText({ draftKey: SESSION_ROUTING_DRAFT_KEY, text: "an older saved prompt" });
+  const view = await mount();
+  act(() => view.getByTestId("routing-route-query").click());
+  // The saved draft is shown for review instead of being routed under the field's text.
+  await waitFor(() =>
+    expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(
+      "an older saved prompt",
+    ),
+  );
+  expect(fixture.search).not.toHaveBeenCalled();
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+});
+
+test("Send to best match under the field routes the field's text when no draft is saved", async () => {
+  const view = await mount();
+  act(() => view.getByTestId("routing-route-query").click());
+  await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(1));
+  expect(fixture.enqueue.mock.calls[0]?.[0]).toMatchObject({
+    agentId: "chat",
+    text: fixture.query,
+  });
+});
+
+test("Send on a chat publishes routable chats and carries the field's text to that chat", async () => {
+  const view = await mount();
+  const entry = useRoutingBridge.getState().entry;
+  expect(entry?.locked).toBe(false);
+  expect(entry?.routableKeys.has(JSON.stringify(["host", "chat"]))).toBe(true);
+  // A chat that is not a destination (unknown here; a child chat in the app) does nothing,
+  // and the field's text stays out of the send draft.
+  act(() => entry?.sendHere({ serverId: "host", agentId: "child" }));
+  expect(view.queryByTestId("routing-send-draft")).toBeNull();
+  expect(useDraftStore.getState().getDraftInput(SESSION_ROUTING_DRAFT_KEY)?.text ?? "").toBe("");
+  act(() => useRoutingBridge.getState().entry?.sendHere({ serverId: "host", agentId: "chat" }));
+  await waitFor(() =>
+    expect(view.getByTestId<HTMLTextAreaElement>("routing-send-draft").value).toBe(fixture.query),
+  );
+  expect(view.getByTestId("routing-recipient").textContent).toContain("Offline indicator");
+  expect(fixture.enqueue).not.toHaveBeenCalled();
 });

@@ -13,7 +13,7 @@ import { getProviderIcon } from "@/components/provider-icons";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import { Button } from "@/components/ui/button";
-import { useRoutingBridge } from "@/components/sidebar/find-or-start";
+import { sessionRouteKey, useRoutingBridge } from "@/components/sidebar/find-or-start";
 import { isWeb } from "@/constants/platform";
 import { useSessionStore } from "@/stores/session-store";
 import type { Theme } from "@/styles/theme";
@@ -107,11 +107,17 @@ const NestedTabRow = memo(function NestedTabRow({
       workspaceId: match.workspaceId,
     });
   }, [match.agentId, match.serverId, match.workspaceId, onNavigate]);
-  // Send the typed text to this chat instead (the composer becomes its destination).
-  const sendHere = useRoutingBridge((bridge) => bridge.sendHere);
+  // Send the typed text to this chat instead (the composer becomes its destination). Only chats
+  // the composer can deliver to offer it: auto-opened child chats, for one, are not destinations.
+  const routable = useRoutingBridge(
+    (bridge) => bridge.entry?.routableKeys.has(sessionRouteKey(match)) === true,
+  );
+  const routingLocked = useRoutingBridge((bridge) => bridge.entry?.locked !== false);
   const handleSendHere = useCallback(() => {
-    sendHere?.({ serverId: match.serverId, agentId: match.agentId });
-  }, [match.agentId, match.serverId, sendHere]);
+    useRoutingBridge
+      .getState()
+      .entry?.sendHere({ serverId: match.serverId, agentId: match.agentId });
+  }, [match.agentId, match.serverId]);
   return (
     <View style={styles.tabRowLine}>
       <Pressable
@@ -135,10 +141,11 @@ const NestedTabRow = memo(function NestedTabRow({
           matchStyle={styles.match}
         />
       </Pressable>
-      {sendHere ? (
+      {routable ? (
         <Button
           size="xs"
           variant="ghost"
+          disabled={routingLocked}
           accessibilityLabel={t("sidebar.routing.sendToTitle", { title: match.title })}
           onPress={handleSendHere}
           testID={`sidebar-filter-send-here-${match.serverId}-${match.agentId}`}

@@ -16,7 +16,12 @@ import { useTranslation } from "react-i18next";
 import { v4 as uuid } from "uuid";
 import { Button } from "@/components/ui/button";
 import { Shortcut } from "@/components/ui/shortcut";
-import { useRoutingBridge, useUniqueSessionForQuery } from "@/components/sidebar/find-or-start";
+import {
+  sessionRouteKey,
+  useRoutingBridge,
+  type RoutingBridgeEntry,
+} from "@/components/sidebar/find-or-start";
+import { useUniqueSessionForQuery } from "@/components/sidebar/sidebar-filter-context";
 import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import {
@@ -92,6 +97,8 @@ export interface FindFieldActions {
   clear: () => void;
   /** Deliver the typed text to an existing chat (the send state, one field). */
   enterSend: () => void;
+  /** The routing draft is loading or a delivery is pending: Send cannot start yet. */
+  locked: boolean;
 }
 
 export function SessionRoutingComposer({
@@ -918,7 +925,16 @@ export function SessionRoutingComposer({
     dispatch({ type: "mode", mode: "send" });
   }, [carryQueryIntoDraft, dispatch]);
   const routeQuery = useCallback(() => {
-    if (isRoutingLocked(latest.current.state)) return;
+    const current = latest.current;
+    if (isRoutingLocked(current.state) || submitting.current) return;
+    const query = current.searchQuery.trim();
+    const saved = current.state.sendDraft.trim();
+    // A saved draft is never overwritten, so routing now would send the draft, not the text the
+    // row is under. Show the draft instead; Route to best match there is one press away.
+    if (saved && saved !== query) {
+      dispatch({ type: "recipient", recipient: null });
+      return;
+    }
     carryQueryIntoDraft();
     dispatch({ type: "recipient", recipient: null });
     void routeToBestMatch();
@@ -935,18 +951,38 @@ export function SessionRoutingComposer({
         (candidate) =>
           candidate.serverId === target.serverId && candidate.agentId === target.agentId,
       );
-      if (!recipient || isRoutingLocked(latest.current.state)) return;
+      const current = latest.current;
+      if (!recipient || isRoutingLocked(current.state)) return;
+      if (!current.serverIds.includes(recipient.serverId)) return;
+      // The person picked this chat by name, so a Find-with-AI scope set earlier must not
+      // silently refuse it: widen to All projects.
+      if (!recipientInScope(recipient, current.state.scope))
+        dispatch({ type: "scope", scope: null });
       carryQueryIntoDraft();
+      select(recipient);
+    },
+    [carryQueryIntoDraft, dispatch, select],
+  );
+  // "Use this chat" on a Find with AI result: the field's text goes with it, as with Send.
+  const selectFromResults = useCallback(
+    (recipient: Recipient | null) => {
+      if (recipient && latest.current.state.mode === "find") carryQueryIntoDraft();
       select(recipient);
     },
     [carryQueryIntoDraft, select],
   );
+  const routableKeys = useMemo(
+    () => new Set(manualRecipients.map((recipient) => sessionRouteKey(recipient))),
+    [manualRecipients],
+  );
   const registerBridge = useRoutingBridge((bridge) => bridge.register);
+  const unregisterBridge = useRoutingBridge((bridge) => bridge.unregister);
   useEffect(() => {
-    registerBridge(sendHere);
-    return () => registerBridge(null);
-  }, [registerBridge, sendHere]);
-  const uniqueSession = useUniqueSessionForQuery(searchQuery);
+    const entry: RoutingBridgeEntry = { sendHere, findWithAi, routableKeys, locked };
+    registerBridge(entry);
+    return () => unregisterBridge(entry);
+  }, [findWithAi, locked, registerBridge, routableKeys, sendHere, unregisterBridge]);
+  const uniqueSession = useUniqueSessionForQuery();
   const startChat = useStartChatFromFilterQuery();
   const startChatAndStay = useCallback(() => startChat(false), [startChat]);
   const openUniqueSession = useCallback(() => {
@@ -1016,7 +1052,7 @@ export function SessionRoutingComposer({
     <View style={styles.container} testID="session-routing-composer">
       {state.mode === "find" ? (
         <>
-          {children({ findWithAi, clear: clearInput, enterSend })}
+          {children({ findWithAi, clear: clearInput, enterSend, locked })}
           {query ? (
             <QueryActions
               query={query}
@@ -1131,7 +1167,7 @@ export function SessionRoutingComposer({
         resultsStale={resultsStale}
         deliveryMode={state.deliveryMode}
         canSend={Boolean(state.sendDraft.trim()) && !locked}
-        onSelect={select}
+        onSelect={selectFromResults}
         onOpen={open}
         onSend={sendChoice}
         onRetry={retryDelivery}
@@ -1180,7 +1216,7 @@ function QueryActions({
           label={t("sidebar.routing.openSession", { title: uniqueSessionTitle })}
           chord={ENTER_KEYS}
           onPress={onOpenSession}
-          disabled={locked}
+          disabled={false}
           testID="routing-open-session"
         />
       ) : null}
@@ -1188,7 +1224,7 @@ function QueryActions({
         label={t("sidebar.routing.newChatWith", { query })}
         chord={opensSession ? null : ENTER_KEYS}
         onPress={onNewChat}
-        disabled={locked}
+        disabled={false}
         testID="routing-new-chat"
       />
       <QueryActionRow
@@ -1205,7 +1241,7 @@ function QueryActions({
           label={t("sidebar.routing.sendToBestMatch")}
           chord={null}
           onPress={onRouteQuery}
-          disabled={locked}
+          disabled={locked || findBusy}
           testID="routing-route-query"
         />
       ) : null}

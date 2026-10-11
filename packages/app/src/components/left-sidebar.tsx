@@ -39,7 +39,8 @@ import {
   SessionRoutingComposer,
   type FindFieldActions,
 } from "@/components/sidebar/session-routing/composer";
-import { useUniqueSessionForQuery } from "@/components/sidebar/find-or-start";
+import { useRoutingBridge } from "@/components/sidebar/find-or-start";
+import { useUniqueSessionForQuery } from "@/components/sidebar/sidebar-filter-context";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import {
@@ -882,6 +883,10 @@ const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = [
   "title",
 ];
 
+function lockedSendTriggerStyle() {
+  return [styles.sidebarSortTrigger, styles.sidebarSendTriggerLocked];
+}
+
 function SidebarSearchControls() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
@@ -898,7 +903,7 @@ function SidebarSearchControls() {
   // prefilled), unless the text is a session id naming exactly one chat, which Enter opens.
   // Mod+Enter runs Find with AI; Mod+Shift+Enter starts the chat and opens it. Preventing the
   // default keeps the web input from also submitting.
-  const uniqueSession = useUniqueSessionForQuery(searchQuery);
+  const uniqueSession = useUniqueSessionForQuery();
   const handleEnter = useCallback(() => {
     if (uniqueSession) {
       navigateToAgent({
@@ -910,7 +915,6 @@ function SidebarSearchControls() {
     }
     startChat(false);
   }, [startChat, uniqueSession]);
-  const findWithAiRef = useRef<() => void>(() => {});
   const handleFindKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       const native = event.nativeEvent as TextInputKeyPressEventData & {
@@ -918,20 +922,21 @@ function SidebarSearchControls() {
         ctrlKey?: boolean;
         shiftKey?: boolean;
         repeat?: boolean;
+        isComposing?: boolean;
       };
       if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
+      // Confirming an IME composition is not a command.
+      if (native.isComposing) return;
       event.preventDefault();
       // A held Mod+Enter auto-repeats; only the first press acts.
       if (native.repeat) return;
       if (native.shiftKey === true) startChat(true);
-      else findWithAiRef.current();
+      else useRoutingBridge.getState().entry?.findWithAi();
     },
     [startChat],
   );
   const renderFindField = useCallback(
-    ({ findWithAi, clear, enterSend }: FindFieldActions) => {
-      // The composer owns Find with AI; the key handler reaches it through this ref.
-      findWithAiRef.current = findWithAi;
+    ({ clear, enterSend, locked }: FindFieldActions) => {
       return (
         <View style={styles.sidebarSearchControls}>
           <View style={styles.sidebarSearchField}>
@@ -945,7 +950,7 @@ function SidebarSearchControls() {
               accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
               autoCorrect={false}
               autoCapitalize="none"
-              returnKeyType="search"
+              returnKeyType="go"
               onKeyPress={handleFindKeyPress}
               onSubmitEditing={handleEnter}
               testID="sidebar-title-project-filter"
@@ -964,9 +969,10 @@ function SidebarSearchControls() {
           </View>
           <Pressable
             onPress={enterSend}
+            disabled={locked}
             accessibilityRole="button"
             accessibilityLabel={t("sidebar.routing.sendToChat")}
-            style={styles.sidebarSortTrigger}
+            style={locked ? lockedSendTriggerStyle : styles.sidebarSortTrigger}
             testID="routing-send-mode"
           >
             <Send size={14} color={theme.colors.foregroundMuted} />
@@ -1118,6 +1124,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.borderRadius.md,
   },
+  sidebarSendTriggerLocked: { opacity: theme.opacity[50] },
   workspacesSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
