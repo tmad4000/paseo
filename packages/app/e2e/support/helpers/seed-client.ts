@@ -143,6 +143,7 @@ export interface SeedDaemonClient {
         currentModeId: string | null;
         status: string;
         title?: string | null;
+        labels?: Record<string, string>;
       };
     }>;
   }>;
