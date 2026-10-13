@@ -58,9 +58,24 @@ export function realtimeAvailable(env = process.env): boolean {
   }
 }
 
+const EventError = z.object({
+  type: z.string().nullable().optional(),
+  code: z.string().nullable().optional(),
+  message: z.string().nullable().optional(),
+});
+
+/** A cause like "credit_balance_exhausted: add credits" must reach the user, not a generic failure. */
+export function realtimeErrorDetail(error?: z.infer<typeof EventError>): string {
+  const parts = [error?.code ?? error?.type, error?.message].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
+  if (!parts.length) return "";
+  return ` (${parts.join(": ").replace(/\s+/g, " ").slice(0, 200)})`;
+}
+
 const Event = z.object({
   type: z.string(),
-  error: z.object({ code: z.string().optional() }).optional(),
+  error: EventError.optional(),
   item_id: z.string().optional(),
   previous_item_id: z.string().nullable().optional(),
   transcript: z.string().optional(),
@@ -525,7 +540,7 @@ export class OpenAiRealtime {
         return;
       case "conversation.item.input_audio_transcription.failed":
         this.fail(
-          "Transcription failed. Draft retained with an unconfirmed segment; nothing automatically resent.",
+          `Transcription failed${realtimeErrorDetail(event.error)}. Draft retained with an unconfirmed segment; nothing automatically resent.`,
         );
         return;
       case "response.created":
@@ -621,7 +636,7 @@ export class OpenAiRealtime {
       case "error":
         if (event.error?.code === "response_cancel_not_active") return;
         this.fail(
-          "GPT Realtime rejected an event. Microphone paused; retry or explicitly choose Paseo voice.",
+          `GPT Realtime rejected an event${realtimeErrorDetail(event.error)}. Microphone paused; retry or explicitly choose Paseo voice.`,
         );
         return;
     }

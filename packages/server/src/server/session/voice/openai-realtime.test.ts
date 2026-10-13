@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { OpenAiRealtime, realtimeAvailable, type RealtimeSocket } from "./openai-realtime.js";
+import {
+  OpenAiRealtime,
+  realtimeAvailable,
+  realtimeErrorDetail,
+  type RealtimeSocket,
+} from "./openai-realtime.js";
 import { RealtimeContextStore } from "./realtime-context.js";
 
 class Socket extends EventEmitter implements RealtimeSocket {
@@ -317,6 +322,55 @@ describe("GPT Realtime attachment", () => {
     );
     f.voice.stop();
   });
+  it("surfaces the provider cause when GPT Realtime rejects an event", async () => {
+    const f = await fixture();
+    f.socket.event({
+      type: "error",
+      error: {
+        type: "insufficient_quota",
+        code: "credit_balance_exhausted",
+        message: "You have no credits remaining.",
+      },
+    });
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain(
+      "(credit_balance_exhausted: You have no credits remaining.)",
+    );
+  });
+  it("accepts a null error code and keeps a bare rejection readable", async () => {
+    const f = await fixture();
+    f.socket.event({ type: "error", error: { code: null, message: "Upstream rejected input." } });
+    await f.settle();
+    expect(f.voice.status().error).toContain("(Upstream rejected input.)");
+    expect(f.voice.status().error).not.toContain("Invalid GPT Realtime event");
+    f.voice.stop();
+    const g = await fixture();
+    g.socket.event({ type: "error" });
+    await g.settle();
+    expect(g.voice.status().error).toContain(
+      "GPT Realtime rejected an event. Microphone paused; retry or explicitly choose Paseo voice.",
+    );
+    g.voice.stop();
+  });
+  it("includes the transcription failure cause while retaining the draft", async () => {
+    const f = await fixture();
+    f.voice.listen();
+    await f.transcript("one", "keep this");
+    f.socket.event({ type: "input_audio_buffer.committed", item_id: "two" });
+    f.socket.event({
+      type: "conversation.item.input_audio_transcription.failed",
+      item_id: "two",
+      error: { code: "audio_transcription_failed", message: "Transcription service errored." },
+    });
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain(
+      "(audio_transcription_failed: Transcription service errored.)",
+    );
+    expect(f.store.read().draft[0].text).toBe("keep this");
+    expect(f.host.submit).not.toHaveBeenCalled();
+  });
   it("mute before final transcription leaves the unsent draft unsent", async () => {
     const f = await fixture();
     f.voice.listen();
@@ -336,6 +390,16 @@ describe("GPT Realtime attachment", () => {
     expect(f.store.read().draft.map((entry) => entry.text)).toEqual(["keep this draft"]);
     expect(f.voice.status()).toMatchObject({ mode: "listen", muted: true });
     f.voice.stop();
+  });
+});
+
+describe("realtimeErrorDetail", () => {
+  it("formats the cause, collapses whitespace, and caps length", () => {
+    expect(realtimeErrorDetail(undefined)).toBe("");
+    expect(realtimeErrorDetail({ type: null, code: null, message: null })).toBe("");
+    expect(realtimeErrorDetail({ type: "server_error" })).toBe(" (server_error)");
+    expect(realtimeErrorDetail({ code: "x", message: "a\n  b" })).toBe(" (x: a b)");
+    expect(realtimeErrorDetail({ code: "c", message: "m".repeat(400) }).length).toBe(203);
   });
 });
 
