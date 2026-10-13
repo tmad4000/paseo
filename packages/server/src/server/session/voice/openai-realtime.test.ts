@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   OpenAiRealtime,
   realtimeAvailable,
-  realtimeErrorDetail,
+  realtimeErrorCause,
   type RealtimeSocket,
 } from "./openai-realtime.js";
 import { RealtimeContextStore } from "./realtime-context.js";
@@ -338,7 +338,7 @@ describe("GPT Realtime attachment", () => {
       "(credit_balance_exhausted: You have no credits remaining.)",
     );
   });
-  it("accepts a null error code and keeps a bare rejection readable", async () => {
+  it("accepts null or malformed error payloads and keeps a bare rejection readable", async () => {
     const f = await fixture();
     f.socket.event({ type: "error", error: { code: null, message: "Upstream rejected input." } });
     await f.settle();
@@ -346,12 +346,30 @@ describe("GPT Realtime attachment", () => {
     expect(f.voice.status().error).not.toContain("Invalid GPT Realtime event");
     f.voice.stop();
     const g = await fixture();
-    g.socket.event({ type: "error" });
+    g.socket.event({ type: "error", error: { code: { nested: true }, message: ["array"] } });
     await g.settle();
     expect(g.voice.status().error).toContain(
       "GPT Realtime rejected an event. Microphone paused; retry or explicitly choose Paseo voice.",
     );
+    expect(g.voice.status().error).not.toContain("Invalid GPT Realtime event");
     g.voice.stop();
+  });
+  it("surfaces the connection failure cause from the socket error", async () => {
+    const f = await fixture();
+    f.socket.emit("error", new Error("Unexpected server response: 401"));
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain("(Unexpected server response: 401)");
+  });
+  it("names the processing failure cause when event handling throws", async () => {
+    const f = await fixture();
+    f.host.submit.mockRejectedValue(new Error("lost ack"));
+    f.voice.focus("agent");
+    await f.transcript("one", "do work");
+    expect(f.voice.status().connection).toBe("unavailable");
+    expect(f.voice.status().error).toContain(
+      "GPT Realtime processing failed (Delivery outcome unknown; no automatic resend.).",
+    );
   });
   it("includes the transcription failure cause while retaining the draft", async () => {
     const f = await fixture();
@@ -393,13 +411,34 @@ describe("GPT Realtime attachment", () => {
   });
 });
 
-describe("realtimeErrorDetail", () => {
-  it("formats the cause, collapses whitespace, and caps length", () => {
-    expect(realtimeErrorDetail(undefined)).toBe("");
-    expect(realtimeErrorDetail({ type: null, code: null, message: null })).toBe("");
-    expect(realtimeErrorDetail({ type: "server_error" })).toBe(" (server_error)");
-    expect(realtimeErrorDetail({ code: "x", message: "a\n  b" })).toBe(" (x: a b)");
-    expect(realtimeErrorDetail({ code: "c", message: "m".repeat(400) }).length).toBe(203);
+describe("realtimeErrorCause", () => {
+  it("formats the cause, collapses whitespace, and caps parts separately", () => {
+    expect(realtimeErrorCause(undefined).detail).toBe("");
+    expect(realtimeErrorCause(null).detail).toBe("");
+    expect(realtimeErrorCause("boom").detail).toBe("");
+    expect(realtimeErrorCause({ type: null, code: null, message: null }).detail).toBe("");
+    expect(realtimeErrorCause({ type: "server_error" }).detail).toBe(" (server_error)");
+    expect(realtimeErrorCause({ code: "x", message: "a\n  b" }).detail).toBe(" (x: a b)");
+    expect(realtimeErrorCause({ message: " \n " }).detail).toBe("");
+    expect(realtimeErrorCause({ code: "", message: "  " }).detail).toBe("");
+  });
+  it("falls back from an empty code to the type and tolerates numbers", () => {
+    expect(
+      realtimeErrorCause({ code: "", type: "insufficient_quota", message: "No credits." }),
+    ).toEqual({ code: "insufficient_quota", detail: " (insufficient_quota: No credits.)" });
+    expect(realtimeErrorCause({ code: 429, message: "Rate limited" }).detail).toBe(
+      " (429: Rate limited)",
+    );
+  });
+  it("keeps the actionable message when the identifier is verbose", () => {
+    const cause = realtimeErrorCause({ code: "c".repeat(200), message: "add credits" });
+    expect(cause.detail.endsWith(": add credits)")).toBe(true);
+    expect(cause.detail.length).toBe(2 + 80 + 2 + "add credits".length + 1);
+  });
+  it("reads the message from an Error instance", () => {
+    expect(realtimeErrorCause(new Error("Unexpected server response: 401")).detail).toBe(
+      " (Unexpected server response: 401)",
+    );
   });
 });
 

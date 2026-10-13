@@ -27,7 +27,8 @@ export interface RealtimeSocket {
   close(): void;
   on(event: "open", listener: () => void): unknown;
   on(event: "message", listener: (data: { toString(): string }) => void): unknown;
-  on(event: "error" | "close", listener: () => void): unknown;
+  on(event: "error", listener: (error?: unknown) => void): unknown;
+  on(event: "close", listener: () => void): unknown;
 }
 export interface RealtimeOptions {
   store: RealtimeContextStore;
@@ -59,23 +60,30 @@ export function realtimeAvailable(env = process.env): boolean {
 }
 
 const EventError = z.object({
-  type: z.string().nullable().optional(),
-  code: z.string().nullable().optional(),
-  message: z.string().nullable().optional(),
+  type: z.union([z.string(), z.number()]).nullable().optional(),
+  code: z.union([z.string(), z.number()]).nullable().optional(),
+  message: z.union([z.string(), z.number()]).nullable().optional(),
 });
 
+function cleanCausePart(value: string | number | null | undefined, max: number): string {
+  const text = typeof value === "number" ? String(value) : (value ?? "");
+  return text.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
 /** A cause like "credit_balance_exhausted: add credits" must reach the user, not a generic failure. */
-export function realtimeErrorDetail(error?: z.infer<typeof EventError>): string {
-  const parts = [error?.code ?? error?.type, error?.message].filter(
-    (part): part is string => typeof part === "string" && part.length > 0,
-  );
-  if (!parts.length) return "";
-  return ` (${parts.join(": ").replace(/\s+/g, " ").slice(0, 200)})`;
+export function realtimeErrorCause(error: unknown): { code: string; detail: string } {
+  const parsed = EventError.safeParse(error);
+  if (!parsed.success) return { code: "", detail: "" };
+  // The message is the actionable part; cap the identifier separately so it cannot crowd the message out.
+  const code = cleanCausePart(parsed.data.code, 80) || cleanCausePart(parsed.data.type, 80);
+  const message = cleanCausePart(parsed.data.message, 200);
+  const parts = [code, message].filter((part) => part.length > 0);
+  return { code, detail: parts.length ? ` (${parts.join(": ")})` : "" };
 }
 
 const Event = z.object({
   type: z.string(),
-  error: EventError.optional(),
+  error: z.unknown().optional(),
   item_id: z.string().optional(),
   previous_item_id: z.string().nullable().optional(),
   transcript: z.string().optional(),
@@ -242,14 +250,18 @@ export class OpenAiRealtime {
           if (generation === this.generation) await this.event(parsed.data);
           return undefined;
         })
-        .catch(() => {
+        .catch((cause: unknown) => {
           if (generation === this.generation)
-            this.fail("GPT Realtime processing failed. Draft retained; no automatic resend.");
+            this.fail(
+              `GPT Realtime processing failed${realtimeErrorCause(cause).detail}. Draft retained; no automatic resend.`,
+            );
         });
     });
-    socket.on("error", () => {
+    socket.on("error", (cause) => {
       if (generation === this.generation)
-        this.fail("GPT Realtime connection failed. Retry or explicitly select Paseo voice.");
+        this.fail(
+          `GPT Realtime connection failed${realtimeErrorCause(cause).detail}. Retry or explicitly select Paseo voice.`,
+        );
     });
     socket.on("close", () => {
       if (generation === this.generation)
@@ -540,7 +552,7 @@ export class OpenAiRealtime {
         return;
       case "conversation.item.input_audio_transcription.failed":
         this.fail(
-          `Transcription failed${realtimeErrorDetail(event.error)}. Draft retained with an unconfirmed segment; nothing automatically resent.`,
+          `Transcription failed${realtimeErrorCause(event.error).detail}. Draft retained with an unconfirmed segment; nothing automatically resent.`,
         );
         return;
       case "response.created":
@@ -633,12 +645,14 @@ export class OpenAiRealtime {
           this.requestResponse();
         }
         return;
-      case "error":
-        if (event.error?.code === "response_cancel_not_active") return;
+      case "error": {
+        const cause = realtimeErrorCause(event.error);
+        if (cause.code === "response_cancel_not_active") return;
         this.fail(
-          `GPT Realtime rejected an event${realtimeErrorDetail(event.error)}. Microphone paused; retry or explicitly choose Paseo voice.`,
+          `GPT Realtime rejected an event${cause.detail}. Microphone paused; retry or explicitly choose Paseo voice.`,
         );
         return;
+      }
     }
   }
   private async drainTranscripts() {
