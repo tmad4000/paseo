@@ -2084,6 +2084,21 @@ export class DaemonClient {
     }
   }
 
+  async markAgentUnread(workspaceId: string, agentId: string, requestId?: string): Promise<void> {
+    const response =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.mark_unread.response">({
+        requestId,
+        message: {
+          type: "workspace.mark_unread.request",
+          workspaceId,
+          agentId,
+        },
+      });
+    if (!response.success) {
+      throw new Error(response.error ?? "Failed to mark agent unread");
+    }
+  }
+
   sendHeartbeat(params: {
     deviceType: "web" | "mobile";
     focusedAgentId: string | null;

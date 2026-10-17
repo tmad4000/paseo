@@ -799,6 +799,7 @@ export const ar: TranslationResources = {
         openFor: "فتح القائمة لـ{{label}}",
         copyResumeCommand: "نسخ أمر السيرة الذاتية",
         copyAgentId: "نسخ معرف الوكيل",
+        markAsUnread: "تعليم كغير مقروء",
         copyTerminalId: "نسخ معرف المحطة",
         copyFilePath: "Copy file path",
         rename: "إعادة تسمية",

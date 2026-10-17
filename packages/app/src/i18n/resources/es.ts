@@ -809,6 +809,7 @@ export const es: TranslationResources = {
         openFor: "Menú abierto para{{label}}",
         copyResumeCommand: "Copiar comando de reanudación",
         copyAgentId: "Copiar ID del agente",
+        markAsUnread: "Marcar como no leído",
         copyTerminalId: "Copiar ID del terminal",
         copyFilePath: "Copy file path",
         rename: "Rebautizar",

@@ -803,6 +803,7 @@ export const ko: TranslationResources = {
         openFor: "{{label}}의 메뉴 열기",
         copyResumeCommand: "재개 명령 복사",
         copyAgentId: "에이전트 ID 복사",
+        markAsUnread: "읽지 않음으로 표시",
         copyTerminalId: "터미널 ID 복사",
         viewArtifacts: "산출물 보기",
         findInChat: "채팅에서 찾기",
