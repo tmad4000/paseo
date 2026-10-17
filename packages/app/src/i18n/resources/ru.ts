@@ -807,6 +807,7 @@ export const ru: TranslationResources = {
         openFor: "Открыть меню для {{label}}",
         copyResumeCommand: "Копировать команду продолжения",
         copyAgentId: "Скопировать идентификатор агента",
+        markAsUnread: "Отметить как непрочитанное",
         copyTerminalId: "Скопировать идентификатор терминала",
         copyFilePath: "Скопировать путь к файлу",
         rename: "Переименовать",

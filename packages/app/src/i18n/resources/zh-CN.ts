@@ -796,6 +796,7 @@ export const zhCN: TranslationResources = {
         openFor: "打开 {{label}} 的菜单",
         copyResumeCommand: "复制恢复命令",
         copyAgentId: "复制 Agent ID",
+        markAsUnread: "标记为未读",
         copyTerminalId: "复制 Terminal ID",
         copyFilePath: "Copy file path",
         rename: "重命名",

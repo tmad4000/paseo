@@ -806,6 +806,7 @@ export const ja: TranslationResources = {
         openFor: "{{label}}のメニューを開く",
         copyResumeCommand: "再開コマンドをコピー",
         copyAgentId: "エージェントIDをコピー",
+        markAsUnread: "未読にする",
         copyTerminalId: "ターミナルIDをコピー",
         copyFilePath: "ファイルパスをコピー",
         rename: "名前を変更",
