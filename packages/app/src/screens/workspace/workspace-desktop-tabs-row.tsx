@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
+  Circle,
   CopyX,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -78,6 +79,7 @@ import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispat
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
+import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
 import {
   paneContentToolbarTrailingPadding,
   ToolbarButton,
@@ -129,6 +131,7 @@ const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
+const ThemedCircle = withUnistyles(Circle);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
@@ -479,6 +482,8 @@ function TabContextMenuItem({
         return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
       case "layout-panel-left":
         return <ThemedLayoutPanelLeft size={16} uniProps={mutedColorMapping} />;
+      case "circle":
+        return <ThemedCircle size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
@@ -1582,15 +1587,25 @@ function ResolvedDesktopTabChip({
     workspaceId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const markUnreadEntries = useMarkTabUnreadMenuEntries({
+    tab: item.tab,
+    serverId,
+    workspaceId,
+    menuTestIDBase: baseResolvedTab.contextMenuTestId,
+  });
   const resolvedTab = useMemo(
     () =>
-      openInViewEntries.length === 0
+      openInViewEntries.length === 0 && markUnreadEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
-            menuEntries: [...openInViewEntries, ...baseResolvedTab.menuEntries],
+            menuEntries: [
+              ...markUnreadEntries,
+              ...openInViewEntries,
+              ...baseResolvedTab.menuEntries,
+            ],
           },
-    [baseResolvedTab, openInViewEntries],
+    [baseResolvedTab, markUnreadEntries, openInViewEntries],
   );
 
   const rawTooltipLabel =
