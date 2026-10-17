@@ -401,6 +401,16 @@ export const zhCN: TranslationResources = {
       answerLabel: "回答：",
       unpin: "取消固定",
       pinToStream: "固定到流",
+      pinSelection: "Pin selected text to Stream",
+      pinMessage: "Pin message to Stream",
+      pinExcerpt: "Pin excerpt…",
+      pinExcerptHint:
+        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+      pinSaved: "Saved to Stream",
+      activityTab: "Activity",
+      noExplicitAsks:
+        "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
+      showActivity: "Show activity",
       trackQAndA: "记录问答",
     },
     states: {

@@ -77,9 +77,9 @@ export function CompanionFeed({
   const artifactPins = useRef(new ArtifactPinOperations());
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [viewTab, setViewTab] = useState<ViewTab>("checklist");
+  const [viewTab, setViewTab] = useState<ViewTab>("stream");
   const [filter, setFilter] = useState<StreamFilter>("all");
-  const [onlyOpen, setOnlyOpen] = useState(true);
+  const [onlyOpen, setOnlyOpen] = useState(false);
   const [pinText, setPinText] = useState("");
   const noteInput = useRef<EditingTextInputHandle>(null);
 
@@ -118,7 +118,8 @@ export function CompanionFeed({
         return item.kind === "entry" && item.entry.kind === "pin";
       } else {
         // Stream / Queue
-        if (item.kind === "entry" && item.entry.kind === "pin") return false;
+        if (item.kind === "entry" && item.entry.kind === "pin")
+          return viewTab === "stream" && filter === "all" && !onlyOpen;
 
         if (item.kind === "artifact") {
           return filter === "all" && !onlyOpen;
@@ -278,7 +279,7 @@ export function CompanionFeed({
           onValueChange={setViewTab}
           options={[
             { value: "checklist", label: "Checklist" },
-            { value: "stream", label: t("agentPanel.stream.queueTab") },
+            { value: "stream", label: t("agentPanel.stream.activityTab") },
             { value: "pinned", label: t("agentPanel.stream.pinnedTab") },
           ]}
         />
@@ -393,18 +394,32 @@ export function CompanionFeed({
     ],
   );
 
+  const showActivity = useCallback(() => {
+    setViewTab("stream");
+    setFilter("all");
+    setOnlyOpen(false);
+  }, []);
+
   const empty = useMemo(
     () => (
       <View style={styles.empty} testID="companion-stream-empty">
         <Text style={styles.title}>
           {viewTab === "pinned" ? "No pinned items" : "No items found"}
         </Text>
+        {viewTab === "checklist" ? (
+          <>
+            <Text style={styles.description}>{t("agentPanel.stream.noExplicitAsks")}</Text>
+            <Button variant="outline" onPress={showActivity}>
+              {t("agentPanel.stream.showActivity")}
+            </Button>
+          </>
+        ) : null}
         <Button variant="outline" style={styles.touchTarget} onPress={onReturnToChat}>
           {t("agentPanel.stream.backToChat")}
         </Button>
       </View>
     ),
-    [viewTab, onReturnToChat, t],
+    [viewTab, onReturnToChat, t, showActivity],
   );
 
   const footer = useMemo(

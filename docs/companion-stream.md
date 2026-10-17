@@ -18,6 +18,14 @@ archive. Paired hosts are combined on the client; no additional cloud copy is ma
 
 ## Questions and pins
 
+Pin a user message or completed assistant response using its pin menu. Right-click an
+assistant item (long-press on native) to pin that item independently. A text selection
+inside that item adds **Pin selected text to Stream** on web and desktop. **Pin excerpt…**
+opens an editable passage on every platform. Messages longer than 4,000 characters open
+the excerpt editor rather than silently truncating. Pins appear in Activity and Pinned,
+including global Stream. Saves wait for durable acknowledgement, show progress and errors,
+and retain an unsaved excerpt and its retry identity after failure.
+
 All captured entries are retained, including completed questions and old outcomes.
 The 50-item bound applies only to wire snapshots and default read pages, never storage. Text remains bounded to **4,000** characters; Chat holds full context.
 Sending an unrelated message never changes another question's status. Open, Reviewed and
@@ -56,9 +64,12 @@ still deduplicates. This does not repair previously missing historical cards.
 
 ## Durable ask checklist
 
-Per-chat Stream opens on **Checklist**, showing unresolved explicitly tracked asks first.
-Use **Show completed too** to include completed work, and **Load more** to read older pages.
-Queue and Pinned retain their existing meanings. Refresh and reconnect reread durable records;
+Per-chat Stream opens on **Activity**, including completed replies and saved pins.
+**Checklist** shows explicitly tracked asks; it is empty when no agent has recorded one,
+even when Activity contains captured replies. Its empty state links back to Activity.
+Use **Show unresolved only** to focus on outstanding entries, **Show completed too** to
+restore completed work, and **Load more** to read older pages. Pinned shows saved pins.
+Refresh and reconnect reread durable records;
 offline pages remain readable with a stale-data notice. Cached data is not an offline archive.
 
 Use the existing agent MCP interface:
@@ -116,6 +127,11 @@ The UI reuses Paseo theme tokens, headers, host picker, buttons and existing Str
 No dependency update or new inference provider is needed.
 
 ## Verification
+
+Pinning browser evidence: [phone excerpt retry](stream-pins/excerpt-retry-phone.png) and
+[desktop Activity](stream-pins/activity-desktop.png). The global Stream browser suite also
+checks user/assistant/item/selection pins, failed-write recovery, reload, and completed replies
+appearing without an explicit ask. These use the app's existing theme and controls.
 
 Collector, provider, manager, protocol and feed tests cover retention, unrelated replies,
 per-item status, explicit lists, ID collisions, duplicate outcomes, pagination, filters,

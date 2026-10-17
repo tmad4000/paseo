@@ -407,6 +407,16 @@ export const ko: TranslationResources = {
       answerLabel: "답변:",
       unpin: "고정 해제",
       pinToStream: "스트림에 고정",
+      pinSelection: "Pin selected text to Stream",
+      pinMessage: "Pin message to Stream",
+      pinExcerpt: "Pin excerpt…",
+      pinExcerptHint:
+        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+      pinSaved: "Saved to Stream",
+      activityTab: "Activity",
+      noExplicitAsks:
+        "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
+      showActivity: "Show activity",
       trackQAndA: "Q&A 기록",
     },
     states: {
