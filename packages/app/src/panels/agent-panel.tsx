@@ -1190,6 +1190,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     (state) => state.selectedViews[`${serverId}:${agentId}`] || "chat",
   );
   const setSelectedView = useAgentViewStore((state) => state.setSelectedView);
+  const findOpen = useAgentViewStore((state) => state.findOpen[`${serverId}:${agentId}`] ?? false);
   const handleSetSelectedView = useCallback(
     (view: "chat" | "artifacts") => {
       setSelectedView(serverId, agentId, view);
@@ -1381,8 +1382,12 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     [t],
   );
   const viewSwitcherStyle = useMemo(
-    () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
-    [isChatVisible],
+    () => [
+      styles.viewSwitcher,
+      !isChatVisible && styles.streamViewSwitcher,
+      isCompact && isChatVisible && findOpen && styles.hiddenPane,
+    ],
+    [isChatVisible, isCompact, findOpen],
   );
 
   return (
