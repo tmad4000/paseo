@@ -1263,6 +1263,7 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} علامات تبويب مفتوحة",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
