@@ -1293,6 +1293,7 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} abas abertas",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

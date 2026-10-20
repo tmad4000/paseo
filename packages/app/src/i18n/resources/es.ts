@@ -1303,6 +1303,7 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} pestañas abiertas",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

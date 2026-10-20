@@ -1281,6 +1281,7 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "Открытых вкладок: {{count}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
