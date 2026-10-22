@@ -40,7 +40,7 @@ interface SendOutboxActions {
   /** Clears a refusal so the next flush resends the identical request. */
   clearRejectionDurably: (clientMessageId: string) => Promise<void>;
   entriesForServer: (serverId: string) => PendingDirectSend[];
-  rememberHostSupport: (serverId: string, supported: boolean) => void;
+  rememberHostSupport: (serverId: string, supported: boolean) => Promise<void>;
 }
 
 type SendOutboxStore = PersistedSendOutbox & SendOutboxActions;
@@ -133,14 +133,20 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
             ...entry,
             attempts: 0,
           })),
-        rememberHostSupport: (serverId, supported) => {
-          const known = get().durableHosts?.[serverId] === true;
-          if (known === supported) return;
-          const durableHosts = { ...get().durableHosts };
-          if (supported) durableHosts[serverId] = true;
-          else delete durableHosts[serverId];
-          set({ durableHosts });
-        },
+        // Never set() before hydration: persist would write the empty initial
+        // state over the saved entries (reproduced: a reconnect right after a
+        // cold start wiped an unsent message).
+        rememberHostSupport: (serverId, supported) =>
+          serializeQueueOperation(MUTATION_KEY, async () => {
+            await awaitSendOutboxHydration();
+            const known = get().durableHosts?.[serverId] === true;
+            if (known === supported) return;
+            const durableHosts = { ...get().durableHosts };
+            if (supported) durableHosts[serverId] = true;
+            else delete durableHosts[serverId];
+            set({ durableHosts });
+            await pendingWrite;
+          }),
         entriesForServer: (serverId) =>
           Object.values(get().entries)
             .filter((entry) => entry.serverId === serverId)
