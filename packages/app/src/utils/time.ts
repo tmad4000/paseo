@@ -58,7 +58,7 @@ const ABSOLUTE_AFTER_MS = 7 * DAY_MS;
 /**
  * The same instant with the prose removed, for somewhere with no room for it — a dense list
  * where the column is understood to be a timestamp and "ago" is the only word on the line.
- * Examples: "now", "5m", "2h", "3d", "Jan 15".
+ * Examples: "now", "5m", "2h", "3d", "Jan 15", and "Sep '24" for an earlier year.
  *
  * Deliberately never sub-minute. A seconds label is only correct for the second it was rendered,
  * so it either lies or forces a once-a-second re-render of a list that has nothing new to say.
@@ -83,7 +83,11 @@ export function describeCompactTimeAgo(date: Date, now: Date = new Date()): Comp
     return { label: `${Math.floor(elapsedMs / DAY_MS)}d`, resolution: "day" };
   }
 
+  // A bare "Sep 23" would read as this year, so an earlier year keeps a two-digit tail.
   const month = date.toLocaleDateString("en-US", { month: "short" });
+  if (date.getFullYear() !== now.getFullYear()) {
+    return { label: `${month} '${String(date.getFullYear()).slice(-2)}`, resolution: "static" };
+  }
   return { label: `${month} ${date.getDate()}`, resolution: "static" };
 }
 

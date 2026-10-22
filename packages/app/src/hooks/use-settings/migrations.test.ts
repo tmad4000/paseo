@@ -52,7 +52,11 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("steer");
     expect(storedSendBehavior(storage)).toBe("steer");
-    expect(appliedIds(storage)).toEqual(["steer-default", "summary-tool-calls"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "summary-tool-calls",
+      "sidebar-trailing-last-active",
+    ]);
   });
 
   it("leaves interrupt alone once the migration has run", async () => {
@@ -71,7 +75,11 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("queue");
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default", "summary-tool-calls"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "summary-tool-calls",
+      "sidebar-trailing-last-active",
+    ]);
   });
 
   it("marks itself applied on a fresh install without rewriting settings", async () => {
@@ -80,7 +88,11 @@ describe("migrateAppSettings", () => {
     await migrateAppSettings(settingsWith("steer"), storage);
 
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default", "summary-tool-calls"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "summary-tool-calls",
+      "sidebar-trailing-last-active",
+    ]);
   });
 
   it("keeps unknown migration ids written by a newer client", async () => {
@@ -94,6 +106,7 @@ describe("migrateAppSettings", () => {
       "some-later-migration",
       "steer-default",
       "summary-tool-calls",
+      "sidebar-trailing-last-active",
     ]);
   });
 
@@ -108,6 +121,7 @@ describe("migrateAppSettings", () => {
     expect(appliedIds(storage)).toEqual([
       "steer-default",
       "summary-tool-calls",
+      "sidebar-trailing-last-active",
       "mobile-content-16",
     ]);
   });
@@ -120,7 +134,11 @@ describe("migrateAppSettings", () => {
 
     expect(result.contentFontSize).toBe(15);
     expect(storedContentFontSize(storage)).toBeUndefined();
-    expect(appliedIds(storage)).toEqual(["steer-default", "summary-tool-calls"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "summary-tool-calls",
+      "sidebar-trailing-last-active",
+    ]);
   });
 
   it("lets a mobile user choose 15px after the default migration ran", async () => {
@@ -159,7 +177,11 @@ describe("migrateAppSettings", () => {
     const result = await migrateAppSettings(settingsWith("steer"), recovered);
 
     expect(result.sendBehavior).toBe("steer");
-    expect(appliedIds(recovered)).toEqual(["steer-default", "summary-tool-calls"]);
+    expect(appliedIds(recovered)).toEqual([
+      "steer-default",
+      "summary-tool-calls",
+      "sidebar-trailing-last-active",
+    ]);
   });
 
   it("moves the old full-detail default to summary once while retaining later choices", async () => {
@@ -187,9 +209,32 @@ describe("migrateAppSettings", () => {
       "quiet-tool-calls",
       "steer-default",
       "summary-tool-calls",
+      "sidebar-trailing-last-active",
     ]);
 
     const laterChoice = await migrateAppSettings(quietSettings, storage);
     expect(laterChoice.toolCallDetailLevel).toBe("quiet");
+  });
+
+  it("moves a stored diff slot to last-active time once and retains a later diff choice", async () => {
+    const storage = createInMemoryKeyValueStorage();
+    const diffSettings = { ...settingsWith("steer"), sidebarWorkspaceTrailing: "diff" as const };
+
+    const migrated = await migrateAppSettings(diffSettings, storage);
+    expect(migrated.sidebarWorkspaceTrailing).toBe("timestamp");
+    expect(JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "{}").sidebarWorkspaceTrailing).toBe(
+      "timestamp",
+    );
+
+    const laterChoice = await migrateAppSettings(diffSettings, storage);
+    expect(laterChoice.sidebarWorkspaceTrailing).toBe("diff");
+  });
+
+  it("leaves a hidden slot alone", async () => {
+    const storage = createInMemoryKeyValueStorage();
+    const hidden = { ...settingsWith("steer"), sidebarWorkspaceTrailing: "none" as const };
+
+    const result = await migrateAppSettings(hidden, storage);
+    expect(result.sidebarWorkspaceTrailing).toBe("none");
   });
 });

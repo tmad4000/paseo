@@ -37,6 +37,7 @@ describe("describeCompactTimeAgo", () => {
     ["2026-07-10T12:00:00.000Z", "6d", "day"],
     ["2026-07-09T12:00:00.000Z", "Jul 9", "static"],
     ["2026-01-15T12:00:00.000Z", "Jan 15", "static"],
+    ["2025-09-23T12:00:00.000Z", "Sep '25", "static"],
   ] as const)("formats %s as %s at %s resolution", (date, label, resolution) => {
     expect(describeCompactTimeAgo(new Date(date), now)).toEqual({ label, resolution });
   });
