@@ -610,7 +610,10 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           }).catch((error) => console.warn("[Session] Failed to flush queue outbox", error));
         }
         const durableDirectSend = supportsDurableDirectSend(features);
-        useSendOutboxStore.getState().rememberHostSupport(serverId, durableDirectSend);
+        void useSendOutboxStore
+          .getState()
+          .rememberHostSupport(serverId, durableDirectSend)
+          .catch((error) => console.warn("[Session] Failed to remember host support", error));
         if (durableDirectSend) {
           void flushSendOutboxForServer({
             serverId,

@@ -319,6 +319,16 @@ that device.
 
 ## Known edges
 
+Both outboxes are only as durable as the platform's `AsyncStorage`. On iOS and Android a write is
+on disk when `setItem` resolves, and the outboxes wait for it before sending. On web and Electron
+`AsyncStorage` is Chromium localStorage, which commits to disk in batches. A crash or SIGKILL within
+a few seconds of a write can drop it; a normal quit or tab close flushes. Reproduced: a kill 3 s
+after sending lost the entry, while a kill 15 s after it was delivered exactly once.
+
+Never `set()` a persisted outbox store before it has rehydrated. Persist writes the in-memory
+state, so an early write replaces the saved entries with the empty initial state. Every mutation
+awaits hydration first (`send-outbox-store/index.test.ts` covers the connect-time case).
+
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
 affordance; adding one is a separate change.
 
