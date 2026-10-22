@@ -275,6 +275,33 @@ export const ptBR: TranslationResources = {
       openReview: "Abrir anexo de revisão",
       removeReview: "Remover anexo de revisão",
     },
+    delivery: {
+      pending: "Salvo neste dispositivo — aguardando o host",
+      accepted: "Recebido pelo host",
+      delivered: "Entregue ao agente",
+      attention: "Ainda não entregue — requer atenção",
+      attentionShort: "Não entregue",
+      attentionTitle: "Mensagem ainda não entregue",
+      rejectedDetail: "O host recusou esta mensagem: {{error}}",
+      retryingDetail:
+        "O host não respondeu após {{count}} tentativas. A mensagem está salva neste dispositivo e é reenviada sempre que o host se reconecta.",
+      retryNow: "Tentar agora",
+      keepWaiting: "Continuar aguardando",
+      rejectedToast:
+        "O host recusou uma mensagem salva. Abra a conversa para tentar de novo ou editá-la.",
+      retryLimitToast:
+        "Uma mensagem não chegou ao host. Ela está salva neste dispositivo e será reenviada ao conectar.",
+      queueAttention: "Ainda não sincronizado — salvo aqui, tentando novamente",
+      queueOnHost: "No host — enviado quando o agente estiver livre",
+      unsentHeader: "Mensagens não enviadas ({{count}})",
+      unsentPending: "Salvo neste dispositivo — enviado quando o host se reconectar",
+      editUnsent: "Voltar para a caixa de mensagem",
+      discardUnsent: "Descartar mensagem não enviada",
+      uncertainDetail:
+        "O host parou enquanto enviava esta mensagem, então talvez já a tenha. Tente de novo só se o agente não a recebeu.",
+      retryUnsupported:
+        "Este host não consegue reenviar mensagens com segurança. Atualize o host ou copie o texto e envie de novo.",
+    },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
       queueEditRequiresUpdatedHost:

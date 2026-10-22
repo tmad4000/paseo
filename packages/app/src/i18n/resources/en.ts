@@ -270,6 +270,32 @@ export const en = {
       openReview: "Open review attachment",
       removeReview: "Remove review attachment",
     },
+    delivery: {
+      pending: "Saved on this device — waiting for the host",
+      accepted: "Received by the host",
+      delivered: "Delivered to the agent",
+      attention: "Not delivered yet — needs attention",
+      attentionShort: "Not delivered",
+      attentionTitle: "Message not delivered yet",
+      rejectedDetail: "The host refused this message: {{error}}",
+      retryingDetail:
+        "The host has not answered after {{count}} tries. The message is saved on this device and retries whenever the host reconnects.",
+      retryNow: "Retry now",
+      keepWaiting: "Keep waiting",
+      rejectedToast: "A saved message was refused by the host. Open its chat to retry or edit it.",
+      retryLimitToast:
+        "A message could not reach the host. It is saved on this device and will retry when connected.",
+      queueAttention: "Not synced yet — saved here, still retrying",
+      queueOnHost: "On the host — sends when the agent is free",
+      unsentHeader: "Unsent messages ({{count}})",
+      unsentPending: "Saved on this device — sends when the host reconnects",
+      editUnsent: "Move back to the message box",
+      discardUnsent: "Discard unsent message",
+      uncertainDetail:
+        "The host stopped while submitting this message, so it may already have it. Retry only if the agent did not receive it.",
+      retryUnsupported:
+        "This host cannot safely resend messages. Update the host, or copy the text and send it again.",
+    },
     errors: {
       failedToSend: "Failed to send message",
       queueEditRequiresUpdatedHost: "Update this Paseo host to edit queued messages in place.",

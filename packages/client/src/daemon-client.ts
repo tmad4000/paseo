@@ -1002,6 +1002,17 @@ export class DaemonConnectionError extends Error {
   }
 }
 
+/**
+ * The host answered a send with a refusal. Distinct from transport failures, which
+ * say nothing about whether the host received the request.
+ */
+export class AgentMessageRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentMessageRejectedError";
+  }
+}
+
 export class AgentQueueDestinationChangedError extends Error {
   constructor() {
     super("The selected chat moved, was archived, or was deleted. Choose its destination again.");
@@ -3736,7 +3747,7 @@ export class DaemonClient {
       },
     });
     if (!payload.accepted) {
-      throw new Error(payload.error ?? "sendAgentMessage rejected");
+      throw new AgentMessageRejectedError(payload.error ?? "sendAgentMessage rejected");
     }
     return { queued: payload.queued === true };
   }
