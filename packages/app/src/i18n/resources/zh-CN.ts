@@ -293,6 +293,8 @@ export const zhCN: TranslationResources = {
       unsentPending: "已保存在此设备 — 主机重新连接时发送",
       editUnsent: "移回消息框",
       discardUnsent: "丢弃未发送的消息",
+      uncertainDetail: "主机在提交此消息时停止，可能已经收到。仅在代理未收到时重试。",
+      retryUnsupported: "此主机无法安全地重新发送消息。请更新主机，或复制文本后重新发送。",
     },
     errors: {
       failedToSend: "发送消息失败",

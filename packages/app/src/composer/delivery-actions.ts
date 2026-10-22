@@ -1,9 +1,12 @@
 import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { i18n } from "@/i18n/i18next";
+import { useSessionStore } from "@/stores/session-store";
 import {
   flushSendOutboxForServer,
+  isUncertainSendOutcome,
   SEND_OUTBOX_MAX_ATTEMPTS,
+  supportsDurableDirectSend,
   useSendOutboxStore,
   type PendingDirectSend,
 } from "@/stores/send-outbox-store";
@@ -16,6 +19,11 @@ export async function retryDirectSend(input: {
   client: SendOutboxFlushClient;
 }): Promise<void> {
   const { entry, client } = input;
+  // Same guard as the reconnect flush: never resend to a host that cannot dedupe.
+  const serverInfo = useSessionStore.getState().sessions[entry.serverId]?.serverInfo;
+  if (serverInfo && !supportsDurableDirectSend(serverInfo.features)) {
+    throw new Error(i18n.t("composer.delivery.retryUnsupported"));
+  }
   await useSendOutboxStore.getState().clearRejectionDurably(entry.clientMessageId);
   await flushSendOutboxForServer({
     serverId: entry.serverId,
@@ -47,6 +55,9 @@ export async function editDirectSend(input: {
 }
 
 export function describeDirectSendAttention(entry: PendingDirectSend): string {
+  if (isUncertainSendOutcome(entry.rejectedError)) {
+    return i18n.t("composer.delivery.uncertainDetail");
+  }
   if (entry.rejectedError !== undefined) {
     return i18n.t("composer.delivery.rejectedDetail", { error: entry.rejectedError });
   }

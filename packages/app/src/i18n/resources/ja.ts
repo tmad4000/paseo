@@ -297,6 +297,10 @@ export const ja: TranslationResources = {
       unsentPending: "この端末に保存済み — ホストの再接続時に送信",
       editUnsent: "入力欄に戻す",
       discardUnsent: "未送信のメッセージを破棄",
+      uncertainDetail:
+        "このメッセージの送信中にホストが停止したため、すでに受信している可能性があります。エージェントが受け取っていない場合のみ再試行してください。",
+      retryUnsupported:
+        "このホストはメッセージを安全に再送できません。ホストを更新するか、テキストをコピーして送り直してください。",
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",

@@ -14,7 +14,11 @@ import {
 } from "@/composer/delivery-actions";
 import { needsDirectSendAttention } from "@/composer/delivery-state";
 import { useSessionStore } from "@/stores/session-store";
-import { useSendOutboxStore, type PendingDirectSend } from "@/stores/send-outbox-store";
+import {
+  canEditRefusedSend,
+  useSendOutboxStore,
+  type PendingDirectSend,
+} from "@/stores/send-outbox-store";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
@@ -146,7 +150,7 @@ const UnsentRow = memo(function UnsentRow({
         >
           <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
         </Pressable>
-        {entry.rejectedError !== undefined ? (
+        {canEditRefusedSend(entry) ? (
           <Pressable
             onPress={handleEdit}
             disabled={isBusy}

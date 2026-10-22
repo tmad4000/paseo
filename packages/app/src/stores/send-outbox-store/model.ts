@@ -1,4 +1,4 @@
-import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
+import { AgentMessageRejectedError } from "@getpaseo/client/internal/daemon-client";
 import { z } from "zod";
 import {
   ActiveTurnBehaviorSchema,
@@ -35,12 +35,34 @@ export type PendingDirectSend = z.infer<typeof PendingDirectSendSchema>;
 export const SEND_OUTBOX_MAX_ATTEMPTS = 8;
 
 /**
- * A transport failure says nothing about whether the host received the request,
- * so the entry stays and is retried with the same id. Anything else is the
- * host's answer and must not be retried blindly.
+ * Only a definitive answer is final: the host refused the send, rejected the RPC,
+ * or the request could not be built at all. Everything else (connection loss,
+ * timeouts, a client closed or replaced mid-request) says nothing about whether
+ * the host received it, so the entry stays and is resent with the same id.
  */
-export function isTransportFailure(error: unknown): boolean {
-  return error instanceof DaemonConnectionError;
+export function isDefinitiveSendFailure(error: unknown): boolean {
+  if (error instanceof AgentMessageRejectedError) return true;
+  return error instanceof Error && (error.name === "DaemonRpcError" || error.name === "ZodError");
+}
+
+/**
+ * The host stopped mid-submit and cannot say whether the agent received the
+ * message. It must not return to the composer, where a resend gets a new id.
+ */
+export function isUncertainSendOutcome(error: string | undefined): boolean {
+  return error?.includes("agent_request_outcome_unknown") === true;
+}
+
+/** Edit moves only plain text; a message with attachments or an uncertain outcome stays put. */
+export function canEditRefusedSend(
+  entry: Pick<PendingDirectSend, "rejectedError" | "images" | "attachments">,
+): boolean {
+  return (
+    entry.rejectedError !== undefined &&
+    !isUncertainSendOutcome(entry.rejectedError) &&
+    entry.images.length === 0 &&
+    entry.attachments.length === 0
+  );
 }
 
 /**
@@ -122,23 +144,30 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
           .filter((item) => item.agentId === agentId)) {
           const entry = input.outbox.get(candidate.clientMessageId);
           if (!entry || entry.rejectedError !== undefined) continue;
+          let result: { queued: boolean };
           try {
-            const result = await input.client.sendAgentMessage(
+            result = await input.client.sendAgentMessage(
               entry.agentId,
               entry.text,
               buildDirectSendOptions(entry),
             );
-            await input.outbox.remove(entry.clientMessageId);
-            input.onAccepted?.(entry, result);
           } catch (error) {
-            if (!isTransportFailure(error)) {
+            if (isDefinitiveSendFailure(error)) {
               const message = error instanceof Error ? error.message : String(error);
               await input.outbox.markRejected(entry.clientMessageId, message);
               input.onRejected?.(entry, message);
               continue;
             }
-            await input.outbox.bumpAttempts(entry.clientMessageId);
+            await Promise.resolve(input.outbox.bumpAttempts(entry.clientMessageId)).catch(() => {});
             if (entry.attempts + 1 === SEND_OUTBOX_MAX_ATTEMPTS) input.onRetryLimit?.(entry);
+            break;
+          }
+          // Accepted. Bookkeeping failures must not read as a refusal: the entry
+          // stays and its identical resend is a no-op on the host.
+          input.onAccepted?.(entry, result);
+          try {
+            await input.outbox.remove(entry.clientMessageId);
+          } catch {
             break;
           }
         }

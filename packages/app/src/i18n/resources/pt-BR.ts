@@ -297,6 +297,10 @@ export const ptBR: TranslationResources = {
       unsentPending: "Salvo neste dispositivo — enviado quando o host se reconectar",
       editUnsent: "Voltar para a caixa de mensagem",
       discardUnsent: "Descartar mensagem não enviada",
+      uncertainDetail:
+        "O host parou enquanto enviava esta mensagem, então talvez já a tenha. Tente de novo só se o agente não a recebeu.",
+      retryUnsupported:
+        "Este host não consegue reenviar mensagens com segurança. Atualize o host ou copie o texto e envie de novo.",
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
