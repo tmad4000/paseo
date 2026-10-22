@@ -95,10 +95,7 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { runCreateEmptyWorkspace } from "./new-workspace-empty";
-import {
-  createNewWorkspaceAgentForVoice,
-  resolveNewWorkspaceSubmissionKind,
-} from "./new-workspace-voice";
+import { resolveNewWorkspaceSubmissionKind } from "./new-workspace-voice";
 import {
   getWorkspaceNamingAttachments,
   remapDraftCwdToWorkspace,
@@ -2112,17 +2109,6 @@ export function NewWorkspaceScreen({
     ],
   );
 
-  // A brand-new session has no agent until its first message. The voice button creates the
-  // workspace and its agent with no prompt (no turn starts), so the session can begin by talking.
-  const createAgentForVoice = useCallback(
-    () =>
-      createNewWorkspaceAgentForVoice({
-        cwd: selectedSourceDirectory,
-        createChatAgent: submitChatAgent,
-      }),
-    [selectedSourceDirectory, submitChatAgent],
-  );
-
   const handleSubmitTerminalLaunch = useCallback(async () => {
     try {
       setErrorMessage(null);
@@ -2368,7 +2354,6 @@ export function NewWorkspaceScreen({
       autoFocusKey={launchFocusKey}
       commandDraftConfig={composerState?.commandDraftConfig}
       agentControls={agentControlsWithDisabled}
-      createAgentForVoice={createAgentForVoice}
     />
   );
   return (
