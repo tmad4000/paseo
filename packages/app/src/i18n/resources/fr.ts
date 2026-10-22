@@ -300,6 +300,10 @@ export const fr: TranslationResources = {
       unsentPending: "Enregistré sur cet appareil — envoyé à la reconnexion de l’hôte",
       editUnsent: "Remettre dans la zone de message",
       discardUnsent: "Supprimer le message non envoyé",
+      uncertainDetail:
+        "L’hôte s’est arrêté pendant l’envoi de ce message ; il l’a peut-être déjà. Réessayez seulement si l’agent ne l’a pas reçu.",
+      retryUnsupported:
+        "Cet hôte ne peut pas renvoyer les messages en toute sécurité. Mettez l’hôte à jour, ou copiez le texte et renvoyez-le.",
     },
     errors: {
       failedToSend: "Échec de l'envoi du message",

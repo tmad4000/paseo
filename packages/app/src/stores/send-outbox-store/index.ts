@@ -14,7 +14,9 @@ import {
 
 export {
   SEND_OUTBOX_MAX_ATTEMPTS,
-  isTransportFailure,
+  isDefinitiveSendFailure,
+  isUncertainSendOutcome,
+  canEditRefusedSend,
   supportsDurableDirectSend,
   type PendingDirectSend,
 } from "./model";

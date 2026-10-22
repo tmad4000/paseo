@@ -296,6 +296,10 @@ export const ko: TranslationResources = {
       unsentPending: "이 기기에 저장됨 — 호스트가 다시 연결되면 전송",
       editUnsent: "메시지 입력창으로 되돌리기",
       discardUnsent: "보내지 않은 메시지 삭제",
+      uncertainDetail:
+        "이 메시지를 제출하는 중에 호스트가 멈춰 이미 받았을 수 있습니다. 에이전트가 받지 못한 경우에만 다시 시도하세요.",
+      retryUnsupported:
+        "이 호스트는 메시지를 안전하게 다시 보낼 수 없습니다. 호스트를 업데이트하거나 텍스트를 복사해 다시 보내세요.",
     },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",

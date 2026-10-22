@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
+import {
+  AgentMessageRejectedError,
+  DaemonConnectionError,
+} from "@getpaseo/client/internal/daemon-client";
 import {
   flushSendOutbox,
   type PendingDirectSend,
@@ -1642,7 +1645,9 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
 
   it("hands a refused send back to the composer and stores nothing", async () => {
     const stream = createFakeStream();
-    const client = createFakeSendClient({ rejection: new Error("Agent not found") });
+    const client = createFakeSendClient({
+      rejection: new AgentMessageRejectedError("Agent not found"),
+    });
     const { entries, outbox } = createFakeOutbox(client, stream);
 
     await expect(
@@ -1659,6 +1664,28 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
 
     expect(entries.size).toBe(0);
     expect(stream.tail.get("agent")).toHaveLength(0);
+  });
+
+  it("keeps a message with an uncertain outcome parked instead of returning it", async () => {
+    const stream = createFakeStream();
+    const client = createFakeSendClient({
+      rejection: new AgentMessageRejectedError("agent_request_outcome_unknown"),
+    });
+    const { entries, outbox } = createFakeOutbox(client, stream);
+
+    await expect(
+      dispatchComposerAgentMessage({
+        client,
+        agentId: "agent",
+        text: "maybe delivered",
+        attachments: [],
+        encodeImages: async () => [],
+        submission: stream,
+        outbox,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect([...entries.values()][0]?.rejectedError).toBe("agent_request_outcome_unknown");
   });
 
   it("does not send when the message could not be stored", async () => {

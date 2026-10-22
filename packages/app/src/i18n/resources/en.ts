@@ -291,6 +291,10 @@ export const en = {
       unsentPending: "Saved on this device — sends when the host reconnects",
       editUnsent: "Move back to the message box",
       discardUnsent: "Discard unsent message",
+      uncertainDetail:
+        "The host stopped while submitting this message, so it may already have it. Retry only if the agent did not receive it.",
+      retryUnsupported:
+        "This host cannot safely resend messages. Update the host, or copy the text and send it again.",
     },
     errors: {
       failedToSend: "Failed to send message",

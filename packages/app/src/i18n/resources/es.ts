@@ -297,6 +297,10 @@ export const es: TranslationResources = {
       unsentPending: "Guardado en este dispositivo — se envía cuando el host se reconecte",
       editUnsent: "Devolver al cuadro de mensaje",
       discardUnsent: "Descartar mensaje sin enviar",
+      uncertainDetail:
+        "El host se detuvo mientras enviaba este mensaje, así que puede que ya lo tenga. Reintenta solo si el agente no lo recibió.",
+      retryUnsupported:
+        "Este host no puede reenviar mensajes de forma segura. Actualiza el host, o copia el texto y envíalo de nuevo.",
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",

@@ -1,9 +1,13 @@
-import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
+import {
+  AgentMessageRejectedError,
+  DaemonConnectionError,
+} from "@getpaseo/client/internal/daemon-client";
 import { describe, expect, test } from "vitest";
 
 import {
   flushSendOutbox,
-  isTransportFailure,
+  canEditRefusedSend,
+  isDefinitiveSendFailure,
   SEND_OUTBOX_MAX_ATTEMPTS,
   supportsDurableDirectSend,
   type PendingDirectSend,
@@ -116,13 +120,45 @@ describe("flushSendOutbox", () => {
     expect(entries.get("second")?.attempts).toBe(0);
   });
 
+  test("keeps an entry pending when the client is replaced mid-request", async () => {
+    const { entries, outbox } = createOutbox([pendingSend()]);
+    const { client } = createClient(async () => {
+      throw new Error("Daemon client closed");
+    });
+
+    await flushSendOutbox({ serverId: "server-1", outbox, client });
+
+    expect(entries.get("msg-1")).toMatchObject({ attempts: 1 });
+    expect(entries.get("msg-1")?.rejectedError).toBeUndefined();
+  });
+
+  test("an accepted send whose removal cannot be saved is not reported as refused", async () => {
+    const { entries, outbox } = createOutbox([pendingSend()]);
+    outbox.remove = () => {
+      throw new Error("Storage full");
+    };
+    const { client } = createClient(async () => ({ queued: false }));
+    const accepted: string[] = [];
+
+    await flushSendOutbox({
+      serverId: "server-1",
+      outbox,
+      client,
+      onAccepted: (entry) => accepted.push(entry.clientMessageId),
+    });
+
+    expect(accepted).toEqual(["msg-1"]);
+    expect(entries.get("msg-1")?.rejectedError).toBeUndefined();
+  });
+
   test("parks a refused message for the user and continues with later ones", async () => {
     const { entries, outbox } = createOutbox([
       pendingSend({ clientMessageId: "refused", createdAt: 1 }),
       pendingSend({ clientMessageId: "later", createdAt: 2 }),
     ]);
     const { client } = createClient(async (call) => {
-      if (call.options.messageId === "refused") throw new Error("Agent not found");
+      if (call.options.messageId === "refused")
+        throw new AgentMessageRejectedError("Agent not found");
       return { queued: true };
     });
     const rejected: string[] = [];
@@ -181,16 +217,36 @@ describe("flushSendOutbox", () => {
   });
 });
 
-describe("isTransportFailure", () => {
-  test("treats connection loss and timeouts as unknown delivery", () => {
-    expect(isTransportFailure(new DaemonConnectionError("lost"))).toBe(true);
-    expect(isTransportFailure(new DaemonConnectionError("slow", "DAEMON_REQUEST_TIMEOUT"))).toBe(
+describe("isDefinitiveSendFailure", () => {
+  test("treats only a host answer or an unbuildable request as final", () => {
+    expect(isDefinitiveSendFailure(new AgentMessageRejectedError("Agent not found"))).toBe(true);
+    expect(isDefinitiveSendFailure(Object.assign(new Error("x"), { name: "DaemonRpcError" }))).toBe(
       true,
     );
   });
 
-  test("treats a host answer as final", () => {
-    expect(isTransportFailure(new Error("agent_request_outcome_unknown"))).toBe(false);
+  test("treats connection loss, timeouts and a replaced client as unknown delivery", () => {
+    expect(isDefinitiveSendFailure(new DaemonConnectionError("lost"))).toBe(false);
+    expect(
+      isDefinitiveSendFailure(new DaemonConnectionError("slow", "DAEMON_REQUEST_TIMEOUT")),
+    ).toBe(false);
+    // Review finding: HostRuntime replacing its client rejects waiters with a plain Error.
+    expect(isDefinitiveSendFailure(new Error("Daemon client closed"))).toBe(false);
+    expect(isDefinitiveSendFailure(new Error("WebSocket not open (readyState=3)"))).toBe(false);
+  });
+});
+
+describe("canEditRefusedSend", () => {
+  test("moves only plain-text messages the host definitely refused", () => {
+    const refused = { rejectedError: "Agent not found", images: [], attachments: [] };
+    expect(canEditRefusedSend(refused)).toBe(true);
+    expect(canEditRefusedSend({ ...refused, rejectedError: undefined })).toBe(false);
+    expect(canEditRefusedSend({ ...refused, rejectedError: "agent_request_outcome_unknown" })).toBe(
+      false,
+    );
+    expect(
+      canEditRefusedSend({ ...refused, images: [{ data: "aGk=", mimeType: "image/png" }] }),
+    ).toBe(false);
   });
 });
 

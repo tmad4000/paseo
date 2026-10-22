@@ -272,14 +272,21 @@ receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then s
 per-agent ordered flush that reconnects use:
 
 - Accepted: the entry is removed and the optimistic bubble proceeds as before.
-- Transport failure (`DaemonConnectionError`, including timeouts): the entry stays, the bubble
+- Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
+  mid-request): the entry stays, the bubble
   stays with its pending mark, and the composer does not take the text back. Every reconnect and
   cold start resends the **identical** request. The daemon's receipt (or queue item id) makes a
   retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
   receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
-- The host answers with a refusal: while the author is sending, the entry is removed and the text
-  returns to the composer with the error, as before. A refusal during a background flush parks
-  the entry with `rejectedError`; it is not retried until the user taps Retry.
+- A definitive answer (`AgentMessageRejectedError` from `accepted: false`, a `DaemonRpcError`,
+  or a request that cannot be built): while the author is sending, the entry is removed and the
+  text returns to the composer with the error, as before. A refusal during a background flush
+  parks the entry with `rejectedError`; it is not retried until the user taps Retry. Classify
+  refusals positively. Any unrecognized error means "unknown", never "refused", because handing an
+  arrived message back to the composer turns the user's resend into a duplicate.
+- `agent_request_outcome_unknown` arrives as a refusal, but the host may have delivered the message.
+  It stays parked with its own explanation and never returns to the composer. Edit is offered only
+  for definitive refusals of plain-text messages, since the outbox does not keep composer attachments.
 
 A send failure stops that agent's later entries so they cannot overtake it. A refusal does not.
 The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the

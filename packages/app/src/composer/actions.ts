@@ -20,7 +20,7 @@ import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
-import type { PendingDirectSend } from "@/stores/send-outbox-store/model";
+import { isUncertainSendOutcome, type PendingDirectSend } from "@/stores/send-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
 
 export interface QueuedComposerMessage {
@@ -247,14 +247,15 @@ async function dispatchDurableComposerAgentMessage(
   }
   await input.outbox.flush(input.agentId);
   const entry = input.outbox.get(clientMessageId);
-  if (entry?.rejectedError !== undefined) {
+  if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
     // The host refused this message while the author is still here: hand the
     // text back to the composer instead of parking it.
     await input.outbox.remove(clientMessageId);
     input.submission.reject(input.agentId, clientMessageId);
     throw new Error(entry.rejectedError);
   }
-  // Either accepted (the flush removed it) or saved for retry on reconnect.
+  // Accepted (the flush removed it), saved for retry on reconnect, or parked
+  // with an uncertain outcome for the user to judge.
 }
 
 export async function dispatchComposerAgentMessage(
