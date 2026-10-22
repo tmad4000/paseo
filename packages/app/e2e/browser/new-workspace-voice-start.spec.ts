@@ -99,9 +99,10 @@ interface AgentTurnFacts {
 }
 
 interface CreateRequestRecord {
-  withInitialAgent: unknown;
-  initialPrompt: unknown;
+  /** The wire request carries the initial agent itself; there is no separate flag. */
   hasAgent: boolean;
+  initialPrompt: unknown;
+  firstAgentPrompt: unknown;
 }
 
 /**
@@ -131,10 +132,11 @@ async function installVoiceStartHarness(page: Page, options: { failCreate: boole
 
       if (request && type === "workspace.create.request") {
         const agent = request.agent as { initialPrompt?: unknown } | undefined;
+        const firstAgentContext = request.firstAgentContext as { prompt?: unknown } | undefined;
         createRequests.push({
-          withInitialAgent: request.withInitialAgent,
-          initialPrompt: agent?.initialPrompt,
           hasAgent: agent !== undefined,
+          initialPrompt: agent?.initialPrompt,
+          firstAgentPrompt: firstAgentContext?.prompt,
         });
         if (options.failCreate && typeof request.requestId === "string") {
           sendSessionMessage(ws, {
@@ -242,8 +244,9 @@ test.describe("New workspace voice start before the first message", () => {
       await voiceButton.click();
 
       await expect.poll(() => harness.createRequests.length, { timeout: 60_000 }).toBe(1);
-      expect(harness.createRequests[0]).toMatchObject({ withInitialAgent: true, hasAgent: true });
+      expect(harness.createRequests[0].hasAgent).toBe(true);
       expect(harness.createRequests[0].initialPrompt ?? "").toBe("");
+      expect(harness.createRequests[0].firstAgentPrompt ?? "").toBe("");
 
       // Voice must not start until the agent exists, and must still start after the create
       // screen has been replaced by the new workspace.
