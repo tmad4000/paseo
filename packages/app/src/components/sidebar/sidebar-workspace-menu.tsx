@@ -22,7 +22,9 @@ import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuHint,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,6 +35,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
+import { workspaceLastActiveAt } from "@/components/sidebar/workspace-trailing";
+import { formatMessageTimestamp } from "@/utils/time";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
@@ -97,6 +101,8 @@ export interface SidebarWorkspaceMenuProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
+  /** The exact instant behind the sidebar's compact last-active label. */
+  lastActiveAt?: Date | null;
   /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
@@ -145,6 +151,7 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  lastActiveAt,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -245,6 +252,17 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
+      {lastActiveAt ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuHint
+            trailing={formatMessageTimestamp(lastActiveAt)}
+            testID={`sidebar-workspace-menu-last-active-${workspaceKey}`}
+          >
+            {t("sidebar.workspace.actions.lastActive")}
+          </DropdownMenuHint>
+        </>
+      ) : null}
     </>
   );
 }
@@ -267,6 +285,7 @@ export function SidebarWorkspaceMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  lastActiveAt,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -313,6 +332,7 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          lastActiveAt={lastActiveAt}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -426,6 +446,7 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          lastActiveAt={workspaceLastActiveAt(workspace)}
         />
       </ContextMenuContent>
     </ContextMenu>
