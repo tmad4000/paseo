@@ -38,6 +38,11 @@ const StoredAgentQueueSchema = z.object({
   // Ids of items that have already been drained. An enqueue retry (same id) that
   // arrives after its item was delivered must be a no-op, not a resend.
   drainedIds: z.array(z.string()).optional(),
+  // When each remembered id left the queue for delivery, for `paseo queue ls`.
+  // Derived from drainedIds in mutate(); bounded the same way.
+  drainedLog: z
+    .array(z.object({ id: z.string(), drainedAt: z.string(), preview: z.string() }))
+    .optional(),
 });
 
 export type StoredQueuedImage = z.infer<typeof StoredQueuedImageSchema>;
@@ -58,6 +63,36 @@ export const MAX_REMEMBERED_DRAINED_IDS = 100;
 export function recordDrainedId(ids: readonly string[] | undefined, id: string): string[] {
   const next = [...(ids ?? []).filter((existing) => existing !== id), id];
   return next.slice(-MAX_REMEMBERED_DRAINED_IDS);
+}
+
+const DRAINED_PREVIEW_CHARS = 120;
+
+/**
+ * Keeps `drainedLog` in step with `drainedIds`: an id that just became drained
+ * gets a timestamp and a short preview of its text; an id that was restored
+ * (a failed drain) loses its entry.
+ */
+export function reconcileDrainedLog(
+  before: StoredAgentQueue,
+  after: StoredAgentQueue,
+  now: string,
+): StoredAgentQueue["drainedLog"] {
+  const drained = new Set(after.drainedIds ?? []);
+  const previous = new Set(before.drainedIds ?? []);
+  const kept = (after.drainedLog ?? before.drainedLog ?? []).filter((entry) =>
+    drained.has(entry.id),
+  );
+  const logged = new Set(kept.map((entry) => entry.id));
+  for (const id of after.drainedIds ?? []) {
+    if (previous.has(id) || logged.has(id)) continue;
+    const text = before.items.find((item) => item.id === id)?.text ?? "";
+    kept.push({
+      id,
+      drainedAt: now,
+      preview: text.replace(/\s+/g, " ").trim().slice(0, DRAINED_PREVIEW_CHARS),
+    });
+  }
+  return kept.length > 0 ? kept.slice(-MAX_REMEMBERED_DRAINED_IDS) : undefined;
 }
 
 /** Projects the stored queue onto the wire, replacing image bytes with descriptors. */
@@ -149,15 +184,18 @@ export class AgentQueueStore {
       if (next === current) {
         return { queue: current, changed: false };
       }
+      const recordedAt = new Date().toISOString();
+      const drainedLog = reconcileDrainedLog(current, next, recordedAt);
       const updated = StoredAgentQueueSchema.parse({
         ...next,
         agentId,
         revision: current.revision + 1,
+        drainedLog,
       });
       // Record the recoverable state before replacing the queue file. If the
       // journal cannot be written, leave the existing queue untouched.
       await this.appendJournal({
-        recordedAt: new Date().toISOString(),
+        recordedAt,
         before: current,
         after: updated,
       });

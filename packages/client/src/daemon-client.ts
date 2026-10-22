@@ -3078,6 +3078,36 @@ export class DaemonClient {
     );
   }
 
+  /** Host-side delivery state for one agent. Requires `deliveryInspect`. */
+  async inspectAgentDelivery(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.queue.inspect.response">> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.inspect.response">({
+        message: { type: "agent.queue.inspect.request", agentId },
+      });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  /** Tells the host what this device still holds unsent. Requires `deliveryInspect`. */
+  async reportOutbox(input: {
+    deviceLabel?: string;
+    platform?: string;
+    agents: Array<{
+      agentId: string;
+      unsentQueued: number;
+      unsentDirect: number;
+      oldestCreatedAt?: string;
+    }>;
+  }): Promise<void> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"client.outbox.report.response">({
+        message: { type: "client.outbox.report.request", ...input },
+      });
+    if (payload.error) throw new Error(payload.error);
+  }
+
   async listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot> {
     return this.requireAgentQueuePayload(
       await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.list.response">({
