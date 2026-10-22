@@ -2682,6 +2682,10 @@ export class Session {
         return this.handleAgentQueueRequest(msg);
       case "agent.queue.get_item_images.request":
         return this.handleAgentQueueGetItemImagesRequest(msg);
+      case "agent.queue.inspect.request":
+        return this.handleAgentQueueInspectRequest(msg);
+      case "client.outbox.report.request":
+        return this.handleClientOutboxReportRequest(msg);
       default:
         return undefined;
     }
@@ -5137,6 +5141,70 @@ export class Session {
         source,
       );
     }
+  }
+
+  private async handleAgentQueueInspectRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.inspect.request" }>,
+  ): Promise<void> {
+    const emit = (
+      agentId: string,
+      result: Awaited<ReturnType<AgentQueueService["inspect"]>> | null,
+      error: string | null,
+    ) => {
+      this.emit({
+        type: "agent.queue.inspect.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          queue: result?.queue ?? null,
+          drained: result?.drained ?? [],
+          receipts: result?.receipts ?? [],
+          deviceReports: result?.deviceReports ?? [],
+          error,
+        },
+      });
+    };
+    const service = this.agentQueueService;
+    if (!service) {
+      emit(msg.agentId, null, "This daemon does not support queued agent messages.");
+      return;
+    }
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      emit(msg.agentId, null, resolved.error);
+      return;
+    }
+    try {
+      emit(resolved.agentId, await service.inspect(resolved.agentId), null);
+    } catch (error) {
+      emit(resolved.agentId, null, errorToFriendlyMessage(error));
+    }
+  }
+
+  private async handleClientOutboxReportRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.outbox.report.request" }>,
+  ): Promise<void> {
+    this.agentQueueService?.recordOutboxReport({
+      clientId: this.clientId,
+      deviceLabel: msg.deviceLabel ?? null,
+      platform: msg.platform ?? null,
+      reportedAt: new Date().toISOString(),
+      agents: msg.agents.map((entry) => ({
+        agentId: entry.agentId,
+        unsentQueued: entry.unsentQueued,
+        unsentDirect: entry.unsentDirect,
+        oldestCreatedAt: entry.oldestCreatedAt ?? null,
+      })),
+    });
+    this.emit({
+      type: "client.outbox.report.response",
+      payload: {
+        requestId: msg.requestId,
+        error: this.agentQueueService
+          ? null
+          : "This daemon does not support queued agent messages.",
+      },
+    });
   }
 
   private async handleAgentQueueGetItemImagesRequest(

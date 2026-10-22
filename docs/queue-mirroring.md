@@ -64,6 +64,8 @@ defined there, and a separate module would import them in a cycle.
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
 | `agent.queue.get_item_images.request` | in        | Fetch one item's image bytes                   |
+| `agent.queue.inspect.request`         | in        | Host delivery state for `paseo queue ls`       |
+| `client.outbox.report.request`        | in        | A device's unsent counts after a reconnect     |
 | `agent.queue.update`                  | out       | Unsolicited snapshot broadcast; no `requestId` |
 
 Each `.request` has the matching `.response`. `agent.queue.update` is a broadcast and follows
@@ -307,8 +309,26 @@ Clock, check and alert stay visible on every platform. The double check joins th
 which desktop reveals on hover. The alert never stops retries; it only tells the user. Tapping a
 bubble's alert explains it and offers Retry now.
 
-The CLI can only see what reached the host. A message still in a device's outbox exists only on
-that device.
+## Delivery inspection
+
+`paseo queue ls <agent>` shows the host's view of delivery for one agent, gated on
+`deliveryInspect`:
+
+- **Queued on the host:** the daemon queue, with creation times.
+- **Recently delivered:** items that left the queue for the agent, newest first, with time and a
+  one-line preview. The store derives `drainedLog` from `drainedIds` inside `mutate()`, so every
+  drain path records it and a failed drain that restores the item removes its entry. Items
+  drained before this existed show an unknown time.
+- **Delivery receipts:** direct-send and drain receipts. `completed` means the provider accepted
+  the message; `pending` means the host stopped mid-submit and the outcome is unknown.
+- **Devices reporting unsent messages:** after each reconnect flush settles, a client sends
+  `client.outbox.report.request` with per-agent counts of queued and direct messages still in
+  its outbox, plus the oldest one's time. Reports are held in memory, replaced per client id
+  and capped at 64 devices; they reset when the daemon restarts and refill as devices reconnect.
+
+The limit is fundamental: a message saved on a device that has not reconnected exists only on
+that device. The host cannot see it, and neither can the CLI. A report says only "this device
+held N unsent messages at time T", never their text.
 
 ## Known edges
 

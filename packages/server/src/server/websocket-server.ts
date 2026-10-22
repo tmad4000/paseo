@@ -1969,6 +1969,8 @@ export class VoiceAssistantWebSocketServer {
         artifactFeed: true,
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: this.agentQueueService !== null,
+        // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
+        deliveryInspect: this.agentQueueService !== null,
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: true,
         globalStream: true,
