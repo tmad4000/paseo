@@ -2828,16 +2828,19 @@ export const AgentQueueInspectRequestSchema = z.object({
 export const ClientOutboxReportRequestSchema = z.object({
   type: z.literal("client.outbox.report.request"),
   requestId: z.string(),
-  deviceLabel: z.string().optional(),
-  platform: z.string().optional(),
-  agents: z.array(
-    z.object({
-      agentId: z.string(),
-      unsentQueued: z.number().int().nonnegative(),
-      unsentDirect: z.number().int().nonnegative(),
-      oldestCreatedAt: z.string().optional(),
-    }),
-  ),
+  // Bounded: the daemon keeps one report per client in memory.
+  deviceLabel: z.string().max(120).optional(),
+  platform: z.string().max(40).optional(),
+  agents: z
+    .array(
+      z.object({
+        agentId: z.string().max(200),
+        unsentQueued: z.number().int().nonnegative(),
+        unsentDirect: z.number().int().nonnegative(),
+        oldestCreatedAt: z.string().max(64).optional(),
+      }),
+    )
+    .max(500),
 });
 
 export const AgentQueueReorderRequestSchema = z.object({
