@@ -275,6 +275,29 @@ export const es: TranslationResources = {
       openReview: "Abrir archivo adjunto de reseña",
       removeReview: "Eliminar archivo adjunto de reseña",
     },
+    delivery: {
+      pending: "Guardado en este dispositivo — esperando al host",
+      accepted: "Recibido por el host",
+      delivered: "Entregado al agente",
+      attention: "Aún no entregado — requiere atención",
+      attentionShort: "No entregado",
+      attentionTitle: "Mensaje aún no entregado",
+      rejectedDetail: "El host rechazó este mensaje: {{error}}",
+      retryingDetail:
+        "El host no ha respondido tras {{count}} intentos. El mensaje está guardado en este dispositivo y se reintenta cada vez que el host se reconecta.",
+      retryNow: "Reintentar ahora",
+      keepWaiting: "Seguir esperando",
+      rejectedToast:
+        "El host rechazó un mensaje guardado. Abre su chat para reintentarlo o editarlo.",
+      retryLimitToast:
+        "Un mensaje no pudo llegar al host. Está guardado en este dispositivo y se reintentará al conectarse.",
+      queueAttention: "Aún sin sincronizar — guardado aquí, se sigue reintentando",
+      queueOnHost: "En el host — se envía cuando el agente quede libre",
+      unsentHeader: "Mensajes sin enviar ({{count}})",
+      unsentPending: "Guardado en este dispositivo — se envía cuando el host se reconecte",
+      editUnsent: "Devolver al cuadro de mensaje",
+      discardUnsent: "Descartar mensaje sin enviar",
+    },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
       queueEditRequiresUpdatedHost:

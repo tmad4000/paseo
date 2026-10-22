@@ -274,6 +274,29 @@ export const ko: TranslationResources = {
       openReview: "리뷰 첨부 열기",
       removeReview: "리뷰 첨부 제거",
     },
+    delivery: {
+      pending: "이 기기에 저장됨 — 호스트를 기다리는 중",
+      accepted: "호스트가 받음",
+      delivered: "에이전트에 전달됨",
+      attention: "아직 전달되지 않음 — 확인 필요",
+      attentionShort: "전달되지 않음",
+      attentionTitle: "메시지가 아직 전달되지 않았습니다",
+      rejectedDetail: "호스트가 이 메시지를 거부했습니다: {{error}}",
+      retryingDetail:
+        "{{count}}번 시도했지만 호스트가 응답하지 않았습니다. 메시지는 이 기기에 저장되어 있으며 호스트가 다시 연결될 때마다 재시도합니다.",
+      retryNow: "지금 다시 시도",
+      keepWaiting: "계속 기다리기",
+      rejectedToast:
+        "저장된 메시지를 호스트가 거부했습니다. 채팅을 열어 다시 시도하거나 수정하세요.",
+      retryLimitToast:
+        "메시지가 호스트에 도달하지 못했습니다. 이 기기에 저장되어 있으며 연결되면 다시 시도합니다.",
+      queueAttention: "아직 동기화되지 않음 — 여기에 저장됨, 재시도 중",
+      queueOnHost: "호스트에 있음 — 에이전트가 한가해지면 전송",
+      unsentHeader: "보내지 않은 메시지 ({{count}})",
+      unsentPending: "이 기기에 저장됨 — 호스트가 다시 연결되면 전송",
+      editUnsent: "메시지 입력창으로 되돌리기",
+      discardUnsent: "보내지 않은 메시지 삭제",
+    },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",
       queueEditRequiresUpdatedHost:

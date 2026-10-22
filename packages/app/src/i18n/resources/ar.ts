@@ -274,6 +274,28 @@ export const ar: TranslationResources = {
       openReview: "فتح مرفق المراجعة",
       removeReview: "إزالة مرفق المراجعة",
     },
+    delivery: {
+      pending: "محفوظة على هذا الجهاز — بانتظار المضيف",
+      accepted: "استلمها المضيف",
+      delivered: "سُلّمت إلى الوكيل",
+      attention: "لم تُسلَّم بعد — تحتاج إلى انتباه",
+      attentionShort: "لم تُسلَّم",
+      attentionTitle: "لم تُسلَّم الرسالة بعد",
+      rejectedDetail: "رفض المضيف هذه الرسالة: {{error}}",
+      retryingDetail:
+        "لم يرد المضيف بعد {{count}} محاولات. الرسالة محفوظة على هذا الجهاز وتُعاد المحاولة كلما أعاد المضيف الاتصال.",
+      retryNow: "أعد المحاولة الآن",
+      keepWaiting: "واصل الانتظار",
+      rejectedToast: "رفض المضيف رسالة محفوظة. افتح محادثتها لإعادة المحاولة أو تعديلها.",
+      retryLimitToast:
+        "تعذّر وصول رسالة إلى المضيف. إنها محفوظة على هذا الجهاز وستُعاد المحاولة عند الاتصال.",
+      queueAttention: "لم تتم المزامنة بعد — محفوظة هنا وما زالت المحاولة جارية",
+      queueOnHost: "لدى المضيف — تُرسل عندما يتفرغ الوكيل",
+      unsentHeader: "رسائل غير مرسلة ({{count}})",
+      unsentPending: "محفوظة على هذا الجهاز — تُرسل عند إعادة اتصال المضيف",
+      editUnsent: "أعدها إلى مربع الرسالة",
+      discardUnsent: "تجاهل الرسالة غير المرسلة",
+    },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
       queueEditRequiresUpdatedHost:

@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
+import {
+  flushSendOutbox,
+  type PendingDirectSend,
+  type SendOutboxAccess,
+} from "@/stores/send-outbox-store/model";
 import type {
   AgentAttachment,
   AgentQueueSnapshot,
@@ -39,6 +45,7 @@ import {
   toggleForgeAttachment,
   toggleForgeAttachmentFromPicker,
   type MessageSubmissionWriter,
+  type DirectSendOutbox,
   type AttachmentPersister,
   type ComposerCancelClient,
   type ComposerSendClient,
@@ -1542,4 +1549,139 @@ describe("file upload preparation", () => {
       expect(sends).toBe(0);
     },
   );
+});
+
+describe("dispatchComposerAgentMessage with a durable outbox", () => {
+  function createFakeOutbox(client: ComposerSendClient, submission: MessageSubmissionWriter) {
+    const entries = new Map<string, PendingDirectSend>();
+    const access: SendOutboxAccess = {
+      list: () => [...entries.values()],
+      get: (id) => entries.get(id),
+      remove: (id) => {
+        entries.delete(id);
+      },
+      bumpAttempts: (id) => {
+        const entry = entries.get(id);
+        if (entry) entries.set(id, { ...entry, attempts: entry.attempts + 1 });
+      },
+      markRejected: (id, error) => {
+        const entry = entries.get(id);
+        if (entry) entries.set(id, { ...entry, rejectedError: error });
+      },
+    };
+    const outbox: DirectSendOutbox = {
+      serverId: "server",
+      add: async (entry) => {
+        entries.set(entry.clientMessageId, { ...entry, createdAt: entries.size, attempts: 0 });
+      },
+      flush: (agentId) =>
+        flushSendOutbox({
+          serverId: "server",
+          agentId,
+          outbox: access,
+          client: {
+            sendAgentMessage: async (targetAgentId, text, options) =>
+              (await client.sendAgentMessage(targetAgentId, text, options)) ?? { queued: false },
+          },
+          onAccepted: (entry) => submission.accept(entry.agentId, entry.clientMessageId),
+        }),
+      get: (id) => entries.get(id),
+      remove: async (id) => {
+        entries.delete(id);
+      },
+    };
+    return { entries, outbox };
+  }
+
+  it("stores the message before sending and forgets it once the host accepts", async () => {
+    const stream = createFakeStream();
+    const client = createFakeSendClient();
+    const { entries, outbox } = createFakeOutbox(client, stream);
+
+    await dispatchComposerAgentMessage({
+      client,
+      agentId: "agent",
+      text: "hello",
+      attachments: [],
+      encodeImages: async () => [],
+      submission: stream,
+      outbox,
+      activeTurnBehavior: "steer_only",
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.options).toMatchObject({ activeTurnBehavior: "steer_only" });
+    expect(entries.size).toBe(0);
+    expect(stream.tail.get("agent")).toHaveLength(1);
+  });
+
+  it("keeps an unreachable send pending instead of handing it back to the composer", async () => {
+    const stream = createFakeStream();
+    const client = createFakeSendClient({ rejection: new DaemonConnectionError("Lost") });
+    const { entries, outbox } = createFakeOutbox(client, stream);
+
+    await expect(
+      dispatchComposerAgentMessage({
+        client,
+        agentId: "agent",
+        text: "survive the outage",
+        attachments: [],
+        encodeImages: async () => [],
+        submission: stream,
+        outbox,
+      }),
+    ).resolves.toBeUndefined();
+
+    const [entry] = [...entries.values()];
+    expect(entry).toMatchObject({ text: "survive the outage", attempts: 1 });
+    expect(entry?.clientMessageId).toBe(client.calls[0]?.options.messageId);
+    // The optimistic bubble stays, still sending.
+    expect(stream.tail.get("agent")).toHaveLength(1);
+    expect(readSubmission(stream, "agent").submissions).toHaveLength(1);
+  });
+
+  it("hands a refused send back to the composer and stores nothing", async () => {
+    const stream = createFakeStream();
+    const client = createFakeSendClient({ rejection: new Error("Agent not found") });
+    const { entries, outbox } = createFakeOutbox(client, stream);
+
+    await expect(
+      dispatchComposerAgentMessage({
+        client,
+        agentId: "agent",
+        text: "nowhere to go",
+        attachments: [],
+        encodeImages: async () => [],
+        submission: stream,
+        outbox,
+      }),
+    ).rejects.toThrow("Agent not found");
+
+    expect(entries.size).toBe(0);
+    expect(stream.tail.get("agent")).toHaveLength(0);
+  });
+
+  it("does not send when the message could not be stored", async () => {
+    const stream = createFakeStream();
+    const client = createFakeSendClient();
+    const { outbox } = createFakeOutbox(client, stream);
+    outbox.add = async () => {
+      throw new Error("Storage full");
+    };
+
+    await expect(
+      dispatchComposerAgentMessage({
+        client,
+        agentId: "agent",
+        text: "keep me in the composer",
+        attachments: [],
+        encodeImages: async () => [],
+        submission: stream,
+        outbox,
+      }),
+    ).rejects.toThrow("Storage full");
+
+    expect(client.calls).toHaveLength(0);
+    expect(stream.tail.get("agent")).toHaveLength(0);
+  });
 });

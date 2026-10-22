@@ -41,7 +41,7 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
-import type { StreamItem } from "@/types/stream";
+import { isUnreconciledLocalUserMessage, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import type { PendingPermission } from "@/types/shared";
@@ -52,6 +52,9 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
+import { useSendOutboxStore } from "@/stores/send-outbox-store";
+import { resolveChatMessageDeliveryState } from "@/composer/delivery-state";
+import { promptDirectSendAttention } from "@/composer/delivery-actions";
 import { useRevealedText } from "@/hooks/use-revealed-text";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { useLoadOlderAgentHistory } from "@/hooks/use-load-older-agent-history";
@@ -356,6 +359,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       () => new Set(pendingMessageSubmissions.map((submission) => submission.clientMessageId)),
       [pendingMessageSubmissions],
     );
+    const submissionsByClientMessageId = useMemo(
+      () =>
+        new Map(
+          pendingMessageSubmissions.map((submission) => [
+            submission.clientMessageId,
+            { rpcSettled: submission.rpcSettled === true },
+          ]),
+        ),
+      [pendingMessageSubmissions],
+    );
     const isMobile = useIsCompactFormFactor();
     const streamRenderStrategy = useMemo(
       () =>
@@ -378,6 +391,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const transformTimelineItem = useInstalledTimelineTransform(resolvedServerId);
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
+    const sendOutboxEntries = useSendOutboxStore((state) => state.entries);
     const sessionStreamHead = useSessionStore((state) =>
       state.sessions[resolvedServerId]?.agentStreamHead?.get(agentId),
     );
@@ -712,6 +726,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       });
     }, []);
 
+    const handleDeliveryAttention = useCallback(
+      (clientMessageId: string) => {
+        const entry = useSendOutboxStore.getState().entries[clientMessageId];
+        if (entry) void promptDirectSendAttention({ entry, client });
+      },
+      [client],
+    );
+
     const renderUserMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "user_message" }>) => {
         return (
@@ -733,6 +755,17 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                   item.clientMessageId !== undefined &&
                   pendingClientMessageIds.has(item.clientMessageId)
                 }
+                deliveryState={resolveChatMessageDeliveryState({
+                  isCanonical: !isUnreconciledLocalUserMessage(item),
+                  submission: item.clientMessageId
+                    ? submissionsByClientMessageId.get(item.clientMessageId)
+                    : undefined,
+                  outboxEntry: item.clientMessageId
+                    ? sendOutboxEntries[item.clientMessageId]
+                    : undefined,
+                })}
+                clientMessageId={item.clientMessageId}
+                onDeliveryAttentionPress={handleDeliveryAttention}
                 onPin={handlePin}
                 onQAndA={handleQAndA}
               />
@@ -745,6 +778,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agentId,
         client,
         pendingClientMessageIds,
+        submissionsByClientMessageId,
+        sendOutboxEntries,
+        handleDeliveryAttention,
         resolvedServerId,
         handlePin,
         handleQAndA,

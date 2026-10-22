@@ -221,7 +221,15 @@ failures the client shows one attention message and continues retrying.
 
 On every (re)connect that advertises `agentMessageQueue` (the `server_info`
 status message, which is exactly the re-established-transport signal), the
-session flushes eligible outbox entries oldest first within each agent. Enqueue entries use
+session flushes eligible outbox entries oldest first within each agent.
+Listen for that message with a raw `client.on("status")` handler
+(`contexts/session-outbox-flush.ts`). The daemon sends the connect-time
+`server_info` before any owned `observeEvents` subscription exists, so a feed
+subscriber never receives it. From 2026-09-28 to 2026-10-22 the flush listened on
+the feed and never ran on reconnect, leaving rows on "Waiting to sync with host"
+indefinitely. The same helper also flushes once at mount when the client is
+already connected, because a cold start can connect before the session context
+subscribes. Enqueue entries use
 the ordinary enqueue RPC; removal intents use the remove RPC and are never
 re-enqueued. A failed predecessor blocks later items for that agent while other
 agents proceed. Re-sending an enqueue is safe because the daemon treats a
@@ -249,6 +257,58 @@ acknowledges an enqueue only when no removal intent is pending. Persist removal 
 before attempting the remove RPC. The intent survives snapshots that still include
 its item; after the RPC is acknowledged, persist its deletion from the outbox.
 This also reconciles a lost enqueue response without resending the canceled payload.
+
+## Direct sends
+
+A direct send (Enter, Steer, Interrupt, or Send now from the composer) has the same un-acked
+window as a queued message. Before 2026-10-22 it had no durable copy: the composer cleared the
+draft, awaited the RPC for up to 60 seconds, and restored the text only on failure. An app kill or
+iOS suspension in that window lost the message (reproduced against a SIGSTOPped daemon).
+
+The send outbox (`packages/app/src/stores/send-outbox-store/`) closes it. When the host
+dedupes retried sends, `dispatchComposerAgentMessage` stores the full request under its
+client message id before sending. That requires both `agentRequestReceipts` (steer and interrupt
+receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
+per-agent ordered flush that reconnects use:
+
+- Accepted: the entry is removed and the optimistic bubble proceeds as before.
+- Transport failure (`DaemonConnectionError`, including timeouts): the entry stays, the bubble
+  stays with its pending mark, and the composer does not take the text back. Every reconnect and
+  cold start resends the **identical** request. The daemon's receipt (or queue item id) makes a
+  retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
+  receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
+- The host answers with a refusal: while the author is sending, the entry is removed and the text
+  returns to the composer with the error, as before. A refusal during a background flush parks
+  the entry with `rejectedError`; it is not retried until the user taps Retry.
+
+A send failure stops that agent's later entries so they cannot overtake it. A refusal does not.
+The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the
+host unreachable, before its features are known, can still store a send first. The reconnect flush
+itself checks the live features, so a downgraded daemon is never sent retries it cannot dedupe.
+
+Entries with no live chat bubble appear in the composer's **Unsent messages** track: after a
+relaunch, or for another chat's sends. Each row offers Retry, Discard, and, for refused messages, Edit,
+which moves the text back into the message box. Only a refused message may be edited. One that is
+still retrying could already be on the host.
+
+## Delivery marks
+
+The user's own messages carry a messaging-app style tick
+(`composer/delivery-state.ts`, rendered by `components/delivery-mark.tsx`):
+
+| Mark         | Chat bubble                                                  | Queued row                                       |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------ |
+| Clock        | Optimistic, host has not answered (`rpcSettled` false)       | Outbox entry not in the latest host snapshot     |
+| Check        | Host accepted the send; provider echo not seen yet           | In the host queue: "On the host"                 |
+| Double check | Canonical timeline row (has `messageId` or `timelineCursor`) | Never; a drained item becomes a delivered bubble |
+| Alert        | Outbox entry refused or at `SEND_OUTBOX_MAX_ATTEMPTS`        | Outbox entry at `QUEUE_OUTBOX_MAX_ATTEMPTS`      |
+
+Clock, check and alert stay visible on every platform. The double check joins the timestamp row,
+which desktop reveals on hover. The alert never stops retries; it only tells the user. Tapping a
+bubble's alert explains it and offers Retry now.
+
+The CLI can only see what reached the host. A message still in a device's outbox exists only on
+that device.
 
 ## Known edges
 

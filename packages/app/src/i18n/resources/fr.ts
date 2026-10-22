@@ -278,6 +278,29 @@ export const fr: TranslationResources = {
       openReview: "Ouvrir la pièce jointe de l'avis",
       removeReview: "Supprimer la pièce jointe de l'avis",
     },
+    delivery: {
+      pending: "Enregistré sur cet appareil — en attente de l’hôte",
+      accepted: "Reçu par l’hôte",
+      delivered: "Remis à l’agent",
+      attention: "Pas encore remis — action requise",
+      attentionShort: "Non remis",
+      attentionTitle: "Message pas encore remis",
+      rejectedDetail: "L’hôte a refusé ce message : {{error}}",
+      retryingDetail:
+        "L’hôte n’a pas répondu après {{count}} tentatives. Le message est enregistré sur cet appareil et réessayé à chaque reconnexion de l’hôte.",
+      retryNow: "Réessayer maintenant",
+      keepWaiting: "Continuer d’attendre",
+      rejectedToast:
+        "L’hôte a refusé un message enregistré. Ouvrez sa conversation pour le réessayer ou le modifier.",
+      retryLimitToast:
+        "Un message n’a pas pu atteindre l’hôte. Il est enregistré sur cet appareil et sera réessayé à la connexion.",
+      queueAttention: "Pas encore synchronisé — enregistré ici, nouvelles tentatives en cours",
+      queueOnHost: "Sur l’hôte — envoyé quand l’agent sera libre",
+      unsentHeader: "Messages non envoyés ({{count}})",
+      unsentPending: "Enregistré sur cet appareil — envoyé à la reconnexion de l’hôte",
+      editUnsent: "Remettre dans la zone de message",
+      discardUnsent: "Supprimer le message non envoyé",
+    },
     errors: {
       failedToSend: "Échec de l'envoi du message",
       queueEditRequiresUpdatedHost:

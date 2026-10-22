@@ -38,6 +38,13 @@ import {
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { flushQueueOutboxForServer } from "@/stores/queue-outbox-store";
+import {
+  flushSendOutboxForServer,
+  supportsDurableDirectSend,
+  useSendOutboxStore,
+} from "@/stores/send-outbox-store";
+import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
+import { startOutboxReconnectFlush } from "@/contexts/session-outbox-flush";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -586,6 +593,36 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
     });
 
+    const unsubRawStatus = startOutboxReconnectFlush({
+      client,
+      subscribeStatus: (handler) =>
+        client.on("status", (message) => {
+          if (message.type === "status") handler(message.payload);
+        }),
+      flush: (features) => {
+        if (features?.agentMessageQueue === true) {
+          void flushQueueOutboxForServer({
+            serverId,
+            client,
+            applySnapshot: (snapshot) =>
+              useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
+            onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
+          }).catch((error) => console.warn("[Session] Failed to flush queue outbox", error));
+        }
+        const durableDirectSend = supportsDurableDirectSend(features);
+        useSendOutboxStore.getState().rememberHostSupport(serverId, durableDirectSend);
+        if (durableDirectSend) {
+          void flushSendOutboxForServer({
+            serverId,
+            client,
+            onAccepted: createDirectSendAcceptanceHandler(serverId),
+            onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
+            onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
+          }).catch((error) => console.warn("[Session] Failed to flush send outbox", error));
+        }
+      },
+    });
+
     const unsubCheckoutStatusUpdate = onFeed("checkout_status_update", (message) => {
       if (message.type !== "checkout_status_update") return;
       applyCheckoutStatusUpdateFromEvent({ queryClient, serverId, message });
@@ -610,17 +647,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
           ...(serverInfo.features ? { features: serverInfo.features } : {}),
         });
-        if (serverInfo.features?.agentMessageQueue === true) {
-          // Server info arrives on every (re)connect, which is exactly when an
-          // enqueue the daemon never acknowledged should be retried.
-          void flushQueueOutboxForServer({
-            serverId,
-            client,
-            applySnapshot: (snapshot) =>
-              useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-            onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
-          });
-        }
         return;
       }
     });
@@ -789,6 +815,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubCheckoutStatusUpdate();
       unsubWorkspaceSetupProgress();
       unsubStatus();
+      unsubRawStatus();
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();

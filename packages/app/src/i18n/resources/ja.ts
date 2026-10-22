@@ -275,6 +275,29 @@ export const ja: TranslationResources = {
       openReview: "レビュー添付ファイルを開く",
       removeReview: "レビュー添付ファイルを削除",
     },
+    delivery: {
+      pending: "この端末に保存済み — ホストを待っています",
+      accepted: "ホストが受信しました",
+      delivered: "エージェントに配信済み",
+      attention: "未配信 — 対応が必要です",
+      attentionShort: "未配信",
+      attentionTitle: "メッセージはまだ配信されていません",
+      rejectedDetail: "ホストがこのメッセージを拒否しました: {{error}}",
+      retryingDetail:
+        "{{count}} 回試してもホストから応答がありません。メッセージはこの端末に保存され、ホストが再接続するたびに再送されます。",
+      retryNow: "今すぐ再試行",
+      keepWaiting: "待ち続ける",
+      rejectedToast:
+        "保存済みのメッセージがホストに拒否されました。チャットを開いて再試行または編集してください。",
+      retryLimitToast:
+        "メッセージをホストに届けられませんでした。この端末に保存されており、接続時に再試行します。",
+      queueAttention: "未同期 — この端末に保存、再試行中",
+      queueOnHost: "ホスト上 — エージェントが空いたら送信",
+      unsentHeader: "未送信のメッセージ ({{count}})",
+      unsentPending: "この端末に保存済み — ホストの再接続時に送信",
+      editUnsent: "入力欄に戻す",
+      discardUnsent: "未送信のメッセージを破棄",
+    },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
       queueEditRequiresUpdatedHost:
