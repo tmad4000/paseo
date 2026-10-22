@@ -8,6 +8,9 @@ interface SendAgentMessageRequest {
   requestId: string;
   agentId: string;
   itemId?: string;
+  /** Client-generated id the host dedupes on; a resend must reuse it. */
+  messageId?: string;
+  text?: string;
   /** Absent when the client sends into an idle agent. */
   activeTurnBehavior?: string;
 }
@@ -35,6 +38,8 @@ function readSendRequest(
       requestId: request.requestId,
       agentId: request.agentId,
       itemId: typeof request.itemId === "string" ? request.itemId : undefined,
+      messageId: typeof request.messageId === "string" ? request.messageId : undefined,
+      text: typeof request.text === "string" ? request.text : undefined,
       activeTurnBehavior:
         typeof request.activeTurnBehavior === "string" ? request.activeTurnBehavior : undefined,
     };
