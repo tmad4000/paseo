@@ -107,15 +107,16 @@ interface CreateRequestRecord {
 
 /**
  * Proxies the real test daemon, recording the create and voice-start requests. The voice start is
- * acknowledged here so no host recognizer is needed. The final create response is held until the
- * New workspace screen has navigated away, so voice must start after that screen unmounted.
+ * acknowledged here so no host recognizer is needed. Any final create response that arrives before
+ * the New workspace screen has navigated away is held until it has, so voice can only start after
+ * that screen unmounted. Responses arriving after navigation pass straight through.
  */
 async function installVoiceStartHarness(page: Page, options: { failCreate: boolean }) {
   const createRequests: CreateRequestRecord[] = [];
   const voiceStarts: VoiceStartRecord[] = [];
   const createdAgentIds: string[] = [];
   let heldCreateResponse: { send: () => void } | null = null;
-  let createResponseReleasedAfterNavigation = false;
+  let navigatedAway = false;
 
   const releaseHeldResponse = () => {
     const held = heldCreateResponse;
@@ -163,6 +164,10 @@ async function installVoiceStartHarness(page: Page, options: { failCreate: boole
               agentId: typeof request.agentId === "string" ? request.agentId : null,
               accepted: true,
               error: null,
+              // A host with concurrent voice input acknowledges the client's attachment.
+              ...(typeof request.attachmentId === "string"
+                ? { attachmentId: request.attachmentId, generation: "e2e-voice-1" }
+                : {}),
             },
           });
         }
@@ -187,7 +192,7 @@ async function installVoiceStartHarness(page: Page, options: { failCreate: boole
           const agentId = createdAgentId(response);
           if (agentId && !createdAgentIds.includes(agentId)) createdAgentIds.push(agentId);
         }
-        if (type === "workspace.create.response" && !options.failCreate) {
+        if (type === "workspace.create.response" && !options.failCreate && !navigatedAway) {
           const forwarded = enableVoiceCapability(message);
           heldCreateResponse = { send: () => ws.send(forwarded) };
           return;
@@ -201,15 +206,13 @@ async function installVoiceStartHarness(page: Page, options: { failCreate: boole
     createRequests,
     voiceStarts,
     createdAgentIds,
-    hasHeldCreateResponse: () => heldCreateResponse !== null,
-    /** Releases the held create response once the app has left the New workspace screen. */
+    /** Waits until the app has left the New workspace screen, then lets the create response through. */
     releaseCreateResponseAfterNavigation: async () => {
       await page.waitForURL((url) => url.pathname.includes("/workspace/"), { timeout: 60_000 });
-      createResponseReleasedAfterNavigation = heldCreateResponse !== null;
+      navigatedAway = true;
       releaseHeldResponse();
     },
     releaseCreateResponse: releaseHeldResponse,
-    wasReleasedAfterNavigation: () => createResponseReleasedAfterNavigation,
   };
 }
 
@@ -259,6 +262,8 @@ test.describe("New workspace voice start before the first message", () => {
       expect(harness.createdAgentIds).toContain(voiceStart.agentId);
       expect(voiceStart.url).toMatch(/\/workspace\//);
       expect(voiceStart.url).not.toMatch(NEW_WORKSPACE_PATH);
+      // The voice start was accepted; no attachment or start failure surfaced.
+      await expect(page.getByText("Host did not acknowledge this voice attachment")).toHaveCount(0);
 
       // The host created the agent without a prompt, so it has no user turn.
       const agentId = voiceStart.agentId as string;
