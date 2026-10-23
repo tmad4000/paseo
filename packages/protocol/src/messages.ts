@@ -89,6 +89,12 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  ClientDiagnosticsListRequestSchema,
+  ClientDiagnosticsListResponseSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsReportResponseSchema,
+} from "./client-diagnostics.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -3894,6 +3900,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueGetItemImagesRequestSchema,
   AgentQueueInspectRequestSchema,
   ClientOutboxReportRequestSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsListRequestSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
   CheckoutDiffGetRequestSchema,
@@ -4290,6 +4298,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentMessageQueue: z.boolean().optional(),
         // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
         deliveryInspect: z.boolean().optional(),
+        // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+        clientDiagnostics: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
         // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
@@ -7594,6 +7604,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueGetItemImagesResponseSchema,
   AgentQueueInspectResponseSchema,
   ClientOutboxReportResponseSchema,
+  ClientDiagnosticsReportResponseSchema,
+  ClientDiagnosticsListResponseSchema,
   AgentQueueUpdateMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,

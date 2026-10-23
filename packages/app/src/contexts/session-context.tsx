@@ -46,6 +46,11 @@ import {
 import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
 import { startOutboxReconnectFlush } from "@/contexts/session-outbox-flush";
 import { buildOutboxReportAgents, describeThisDevice } from "@/contexts/outbox-report";
+import {
+  flushClientDiagnosticsForServer,
+  onClientDiagnosticQueued,
+} from "@/diagnostics/client-errors/store";
+import { createClientDiagnosticsFlushScheduler } from "@/diagnostics/client-errors/scheduler";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -594,6 +599,19 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
     });
 
+    // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+    let hostRecordsDiagnostics = false;
+    // New diagnostics reach a connected host within a few seconds; a rate-limited or failed
+    // report is retried with backoff while connected, even if nothing new happens.
+    const diagnosticsScheduler = createClientDiagnosticsFlushScheduler({
+      flush: async () => {
+        if (!hostRecordsDiagnostics || !client.isConnected) return "skipped";
+        return flushClientDiagnosticsForServer({ serverId, client, device: describeThisDevice() });
+      },
+      onError: (error) => console.warn("[Session] Failed to report client diagnostics", error),
+    });
+    const unsubDiagnosticsQueued = onClientDiagnosticQueued(() => diagnosticsScheduler.trigger());
+
     const unsubRawStatus = startOutboxReconnectFlush({
       client,
       subscribeStatus: (handler) =>
@@ -601,6 +619,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           if (message.type === "status") handler(message.payload);
         }),
       flush: (features) => {
+        hostRecordsDiagnostics = features?.clientDiagnostics === true;
+        // Diagnostics saved while offline go out on every reconnect.
+        if (hostRecordsDiagnostics) diagnosticsScheduler.flushNow();
         const flushes: Promise<void>[] = [];
         if (features?.agentMessageQueue === true) {
           flushes.push(
@@ -841,6 +862,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubWorkspaceSetupProgress();
       unsubStatus();
       unsubRawStatus();
+      unsubDiagnosticsQueued();
+      diagnosticsScheduler.stop();
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();
