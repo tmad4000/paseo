@@ -7,13 +7,17 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 import {
   addClientDiagnostic,
   applyClientDiagnosticAck,
+  claimClientDiagnostics,
   PendingClientDiagnosticSchema,
+  pruneExpiredClientDiagnostics,
+  releaseClientDiagnosticClaims,
   selectClientDiagnosticBatch,
   toWireDiagnostic,
   type ClientDiagnosticInput,
   type PendingClientDiagnostic,
 } from "./model";
 import { setClientDiagnosticSink } from "./record";
+import type { ClientDiagnosticsFlushOutcome } from "./scheduler";
 
 const PersistedClientDiagnosticsSchema = z.object({
   entries: z.array(PendingClientDiagnosticSchema),
@@ -75,52 +79,78 @@ let installPromise: Promise<void> | null = null;
  * hydration finishes are buffered by the recorder and replayed, so saved entries are never
  * overwritten by an empty initial state.
  */
-export function installClientDiagnostics(): Promise<void> {
+export function installClientDiagnostics(now: () => number = Date.now): Promise<void> {
   installPromise ??= Promise.resolve(useClientDiagnosticsStore.persist.rehydrate())
     .catch(() => undefined)
     .then(() => {
+      // Nothing was being sent across a restart, and an old backlog must not outlive its limit.
+      useClientDiagnosticsStore.setState({
+        entries: releaseClientDiagnosticClaims(
+          pruneExpiredClientDiagnostics(useClientDiagnosticsStore.getState().entries, now()),
+        ),
+      });
       setClientDiagnosticSink((input) => addPendingClientDiagnostic(input));
       return undefined;
     });
   return installPromise;
 }
 
-const inFlight = new Map<string, Promise<void>>();
+const inFlight = new Map<string, Promise<ClientDiagnosticsFlushOutcome>>();
+
+function updateEntries(update: (entries: PendingClientDiagnostic[]) => PendingClientDiagnostic[]) {
+  useClientDiagnosticsStore.setState({
+    entries: update(useClientDiagnosticsStore.getState().entries),
+  });
+}
 
 /**
  * Sends this host the diagnostics it should receive, in batches, and forgets what it
- * acknowledged. Deferred (rate-limited) ones stay for a later flush. One flush per host at a time.
+ * acknowledged. Unassigned diagnostics are claimed for this host before sending, so a concurrent
+ * flush to another host cannot send them too; unacknowledged claims are released afterwards.
+ * Deferred (rate-limited) diagnostics stay queued; the caller schedules the retry from the outcome.
+ * One flush per host at a time.
  */
 export function flushClientDiagnosticsForServer(input: {
   serverId: string;
   client: ClientDiagnosticsReporter;
   device: { deviceLabel: string; platform: string };
   maxBatches?: number;
-}): Promise<void> {
+  now?: () => number;
+}): Promise<ClientDiagnosticsFlushOutcome> {
   const running = inFlight.get(input.serverId);
   if (running) return running;
-  const run = (async () => {
-    if (!useClientDiagnosticsStore.persist.hasHydrated()) return;
+  const now = input.now ?? Date.now;
+  const run = (async (): Promise<ClientDiagnosticsFlushOutcome> => {
+    if (!useClientDiagnosticsStore.persist.hasHydrated()) return "skipped";
+    updateEntries((entries) => pruneExpiredClientDiagnostics(entries, now()));
     for (let batch = 0; batch < (input.maxBatches ?? 4); batch += 1) {
       const sent = selectClientDiagnosticBatch(
         useClientDiagnosticsStore.getState().entries,
         input.serverId,
+        now(),
       );
-      if (sent.length === 0) return;
-      const result = await input.client.reportClientDiagnostics({
-        ...input.device,
-        events: sent.map(toWireDiagnostic),
-      });
-      useClientDiagnosticsStore.setState({
-        entries: applyClientDiagnosticAck(
-          useClientDiagnosticsStore.getState().entries,
-          sent,
-          result.acknowledgedIds,
-        ),
-      });
-      // The host is rate limiting this device; try again on a later flush.
-      if (result.deferredIds.length > 0 || result.acknowledgedIds.length === 0) return;
+      if (sent.length === 0) return "delivered";
+      updateEntries((entries) => claimClientDiagnostics(entries, sent, input.serverId));
+      const sentIds = new Set(sent.map((entry) => entry.id));
+      let acknowledged: string[] = [];
+      try {
+        const result = await input.client.reportClientDiagnostics({
+          ...input.device,
+          events: sent.map(toWireDiagnostic),
+        });
+        acknowledged = result.acknowledgedIds;
+        updateEntries((entries) => applyClientDiagnosticAck(entries, sent, acknowledged));
+        if (result.deferredIds.length > 0 || acknowledged.length === 0) return "deferred";
+      } finally {
+        updateEntries((entries) => releaseClientDiagnosticClaims(entries, sentIds));
+      }
     }
+    const remaining = selectClientDiagnosticBatch(
+      useClientDiagnosticsStore.getState().entries,
+      input.serverId,
+      now(),
+    );
+    return remaining.length > 0 ? "more" : "delivered";
   })().finally(() => inFlight.delete(input.serverId));
   inFlight.set(input.serverId, run);
   return run;

@@ -21,6 +21,11 @@ export const PendingClientDiagnosticSchema = ClientDiagnosticEventSchema.extend(
   fingerprint: z.string(),
   /** Host the diagnostic belongs to; absent means any host may take it. */
   serverId: z.string().optional(),
+  /**
+   * Host currently sending an unassigned diagnostic. While set, no other host takes it; released
+   * if that host does not acknowledge it, and cleared on restart (no send survives a restart).
+   */
+  claimedBy: z.string().optional(),
   lastSeenMs: z.number(),
 });
 export type PendingClientDiagnostic = z.infer<typeof PendingClientDiagnosticSchema>;
@@ -60,13 +65,17 @@ export function addClientDiagnostic(
   };
   const fingerprint = diagnosticFingerprint(event);
   const serverId = input.serverId ?? undefined;
-  const next = entries.filter(
-    (entry) => options.now - entry.lastSeenMs < CLIENT_DIAGNOSTICS_MAX_AGE_MS,
-  );
+  const phase = redactDiagnosticField(input.phase);
+  const agentId = redactDiagnosticField(input.agentId ?? undefined);
+  const next = pruneExpiredClientDiagnostics(entries, options.now);
+  // A repeat is the same problem in the same context: the same message in another chat or phase
+  // is a separate diagnostic, so a count never misattributes failures to the first chat.
   const repeat = next.find(
     (entry) =>
       entry.fingerprint === fingerprint &&
       entry.serverId === serverId &&
+      entry.agentId === agentId &&
+      entry.phase === phase &&
       options.now - entry.lastSeenMs < CLIENT_DIAGNOSTICS_COALESCE_MS,
   );
   if (repeat) {
@@ -86,8 +95,8 @@ export function addClientDiagnostic(
     occurredAt: iso(options.now),
     count: 1,
     ...event,
-    ...optional("phase", redactDiagnosticField(input.phase)),
-    ...optional("agentId", redactDiagnosticField(input.agentId ?? undefined)),
+    ...optional("phase", phase),
+    ...optional("agentId", agentId),
     ...optional("appVersion", redactDiagnosticField(input.appVersion ?? undefined)),
     fingerprint,
     ...(serverId ? { serverId } : {}),
@@ -100,15 +109,55 @@ export function addClientDiagnostic(
     .slice(withNew.length - CLIENT_DIAGNOSTICS_MAX_PENDING);
 }
 
-/** Diagnostics this host should receive now, oldest first, at most one report's worth. */
+/** Drops diagnostics past the device age limit. Applied on add, on load and before sending. */
+export function pruneExpiredClientDiagnostics(
+  entries: readonly PendingClientDiagnostic[],
+  now: number,
+): PendingClientDiagnostic[] {
+  return entries.filter((entry) => now - entry.lastSeenMs < CLIENT_DIAGNOSTICS_MAX_AGE_MS);
+}
+
+/**
+ * Diagnostics this host should receive now, oldest first, at most one report's worth: its own,
+ * plus unassigned ones no other host has claimed. Expired ones are never sent.
+ */
 export function selectClientDiagnosticBatch(
   entries: readonly PendingClientDiagnostic[],
   serverId: string,
+  now: number,
 ): PendingClientDiagnostic[] {
-  return entries
-    .filter((entry) => entry.serverId === undefined || entry.serverId === serverId)
+  return pruneExpiredClientDiagnostics(entries, now)
+    .filter((entry) =>
+      entry.serverId === undefined
+        ? entry.claimedBy === undefined || entry.claimedBy === serverId
+        : entry.serverId === serverId,
+    )
     .sort((a, b) => a.lastSeenMs - b.lastSeenMs)
     .slice(0, CLIENT_DIAGNOSTIC_BATCH_MAX);
+}
+
+/** Marks the unassigned diagnostics in `sent` as being sent to `serverId`. */
+export function claimClientDiagnostics(
+  entries: readonly PendingClientDiagnostic[],
+  sent: readonly PendingClientDiagnostic[],
+  serverId: string,
+): PendingClientDiagnostic[] {
+  const ids = new Set(
+    sent.filter((entry) => entry.serverId === undefined).map((entry) => entry.id),
+  );
+  return entries.map((entry) => (ids.has(entry.id) ? { ...entry, claimedBy: serverId } : entry));
+}
+
+/** Makes claimed diagnostics available to any host again (not acknowledged, or after restart). */
+export function releaseClientDiagnosticClaims(
+  entries: readonly PendingClientDiagnostic[],
+  ids?: ReadonlySet<string>,
+): PendingClientDiagnostic[] {
+  return entries.map((entry) => {
+    if (entry.claimedBy === undefined || (ids && !ids.has(entry.id))) return entry;
+    const { claimedBy: _claimedBy, ...released } = entry;
+    return released;
+  });
 }
 
 /** The wire form of a queued diagnostic: device-only bookkeeping removed. */
@@ -116,6 +165,7 @@ export function toWireDiagnostic(entry: PendingClientDiagnostic): ClientDiagnost
   const {
     fingerprint: _fingerprint,
     serverId: _serverId,
+    claimedBy: _claimedBy,
     lastSeenMs: _lastSeenMs,
     ...wire
   } = entry;

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   addClientDiagnostic,
   applyClientDiagnosticAck,
+  claimClientDiagnostics,
+  pruneExpiredClientDiagnostics,
+  releaseClientDiagnosticClaims,
   CLIENT_DIAGNOSTICS_COALESCE_MS,
   CLIENT_DIAGNOSTICS_MAX_AGE_MS,
   CLIENT_DIAGNOSTICS_MAX_PENDING,
@@ -142,10 +145,9 @@ describe("selectClientDiagnosticBatch / applyClientDiagnosticAck", () => {
   }
 
   it("sends a host its own diagnostics plus unassigned ones, oldest first", () => {
-    expect(selectClientDiagnosticBatch(queue(), "A").map((entry) => entry.message)).toEqual([
-      "any host",
-      "host A",
-    ]);
+    expect(
+      selectClientDiagnosticBatch(queue(), "A", T0 + 10).map((entry) => entry.message),
+    ).toEqual(["any host", "host A"]);
   });
 
   it("strips device-only bookkeeping from what goes on the wire", () => {
@@ -157,7 +159,7 @@ describe("selectClientDiagnosticBatch / applyClientDiagnosticAck", () => {
 
   it("forgets acknowledged entries but keeps unacknowledged and newly repeated ones", () => {
     const entries = queue();
-    const sent = selectClientDiagnosticBatch(entries, "A");
+    const sent = selectClientDiagnosticBatch(entries, "A", T0 + 10);
     // While the report was in flight the first problem happened again.
     const repeated = structuredClone(entries);
     const again = repeated.find((entry) => entry.id === sent[0].id);
@@ -165,5 +167,84 @@ describe("selectClientDiagnosticBatch / applyClientDiagnosticAck", () => {
     const after = applyClientDiagnosticAck(repeated, sent, [sent[0].id, sent[1].id]);
     expect(after.map((entry) => entry.message)).toEqual(["any host", "host B"]);
     expect(after[0].count).toBe(2);
+  });
+});
+
+describe("coalescing keeps chats and phases apart", () => {
+  const message = "GPT Realtime rejected an event (invalid_value: bad audio).";
+
+  it("never folds the same error from another agent into the first agent's diagnostic", () => {
+    const createId = ids();
+    let entries: PendingClientDiagnostic[] = [];
+    entries = addClientDiagnostic(
+      entries,
+      { source: "voice", message, agentId: "agent-1" },
+      { now: T0, createId },
+    );
+    entries = addClientDiagnostic(
+      entries,
+      { source: "voice", message, agentId: "agent-2" },
+      { now: T0 + 1, createId },
+    );
+    entries = addClientDiagnostic(
+      entries,
+      { source: "voice", message, agentId: "agent-2" },
+      { now: T0 + 2, createId },
+    );
+    expect(entries.map((entry) => [entry.agentId, entry.count])).toEqual([
+      ["agent-1", 1],
+      ["agent-2", 2],
+    ]);
+  });
+
+  it("records the same error in two phases separately", () => {
+    const createId = ids();
+    let entries: PendingClientDiagnostic[] = [];
+    entries = addClientDiagnostic(
+      entries,
+      { source: "voice", message, agentId: "a", phase: "starting" },
+      { now: T0, createId },
+    );
+    entries = addClientDiagnostic(
+      entries,
+      { source: "voice", message, agentId: "a", phase: "active" },
+      { now: T0 + 1, createId },
+    );
+    expect(entries.map((entry) => [entry.phase, entry.count])).toEqual([
+      ["starting", 1],
+      ["active", 1],
+    ]);
+  });
+});
+
+describe("device retention", () => {
+  it("never selects or keeps a diagnostic past the age limit, even with no new event", () => {
+    const createId = ids();
+    const entries = addClientDiagnostic(
+      [],
+      { source: "toast", message: "old" },
+      { now: T0, createId },
+    );
+    const eightDaysLater = T0 + 8 * 24 * 60 * 60 * 1000;
+    expect(selectClientDiagnosticBatch(entries, "A", eightDaysLater)).toEqual([]);
+    expect(pruneExpiredClientDiagnostics(entries, eightDaysLater)).toEqual([]);
+    expect(selectClientDiagnosticBatch(entries, "A", T0 + 1000)).toHaveLength(1);
+  });
+});
+
+describe("claims for unassigned diagnostics", () => {
+  it("lets only the claiming host select an unassigned diagnostic until it is released", () => {
+    const createId = ids();
+    const entries = addClientDiagnostic(
+      [],
+      { source: "toast", message: "any host" },
+      { now: T0, createId },
+    );
+    const sent = selectClientDiagnosticBatch(entries, "A", T0);
+    const claimed = claimClientDiagnostics(entries, sent, "A");
+    expect(selectClientDiagnosticBatch(claimed, "B", T0)).toEqual([]);
+    expect(selectClientDiagnosticBatch(claimed, "A", T0)).toHaveLength(1);
+    const released = releaseClientDiagnosticClaims(claimed, new Set(sent.map((e) => e.id)));
+    expect(selectClientDiagnosticBatch(released, "B", T0)).toHaveLength(1);
   });
 });

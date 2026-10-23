@@ -50,6 +50,7 @@ import {
   flushClientDiagnosticsForServer,
   onClientDiagnosticQueued,
 } from "@/diagnostics/client-errors/store";
+import { createClientDiagnosticsFlushScheduler } from "@/diagnostics/client-errors/scheduler";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -600,23 +601,16 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
     // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
     let hostRecordsDiagnostics = false;
-    let diagnosticsTimer: ReturnType<typeof setTimeout> | null = null;
-    const flushDiagnostics = () => {
-      if (!hostRecordsDiagnostics || !client.isConnected) return;
-      void flushClientDiagnosticsForServer({
-        serverId,
-        client,
-        device: describeThisDevice(),
-      }).catch((error) => console.warn("[Session] Failed to report client diagnostics", error));
-    };
-    // New diagnostics reach a connected host within a few seconds; bursts go as one report.
-    const unsubDiagnosticsQueued = onClientDiagnosticQueued(() => {
-      if (diagnosticsTimer) return;
-      diagnosticsTimer = setTimeout(() => {
-        diagnosticsTimer = null;
-        flushDiagnostics();
-      }, 2000);
+    // New diagnostics reach a connected host within a few seconds; a rate-limited or failed
+    // report is retried with backoff while connected, even if nothing new happens.
+    const diagnosticsScheduler = createClientDiagnosticsFlushScheduler({
+      flush: async () => {
+        if (!hostRecordsDiagnostics || !client.isConnected) return "skipped";
+        return flushClientDiagnosticsForServer({ serverId, client, device: describeThisDevice() });
+      },
+      onError: (error) => console.warn("[Session] Failed to report client diagnostics", error),
     });
+    const unsubDiagnosticsQueued = onClientDiagnosticQueued(() => diagnosticsScheduler.trigger());
 
     const unsubRawStatus = startOutboxReconnectFlush({
       client,
@@ -627,7 +621,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       flush: (features) => {
         hostRecordsDiagnostics = features?.clientDiagnostics === true;
         // Diagnostics saved while offline go out on every reconnect.
-        flushDiagnostics();
+        if (hostRecordsDiagnostics) diagnosticsScheduler.flushNow();
         const flushes: Promise<void>[] = [];
         if (features?.agentMessageQueue === true) {
           flushes.push(
@@ -869,7 +863,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubStatus();
       unsubRawStatus();
       unsubDiagnosticsQueued();
-      if (diagnosticsTimer) clearTimeout(diagnosticsTimer);
+      diagnosticsScheduler.stop();
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();

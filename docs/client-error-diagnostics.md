@@ -45,12 +45,16 @@ You can grep `~/.paseo/daemon.log` for these lines.
 ## Delivery
 
 - Devices queue diagnostics locally: persisted in AsyncStorage as `paseo-client-diagnostics`.
-- Repeats of the same problem within 10 minutes are counted on one event. Numbers are ignored when matching.
-- The queue keeps at most 200 events and drops events older than 7 days.
+- Repeats of the same problem within 10 minutes are counted on one event. "The same problem" means the same source, severity, code, operation and message (numbers ignored), on the same host, **for the same agent and in the same phase**. The same error in another chat or phase is a separate diagnostic, so a count never attributes failures to the wrong chat.
+- The queue keeps at most 200 events. Events older than 7 days are dropped when a diagnostic is added, when the saved queue loads after a restart, and before every send. An old backlog is never uploaded.
 - On every connection to a host that advertises `clientDiagnostics`, the device sends what it holds in batches of up to 50. New diagnostics also go to a connected host within about 2 seconds.
+- If the host defers some (rate limit), acknowledges nothing, or the report fails, the device retries while the host stays connected, even if nothing new happens.
+  - Backoff starts at 15 seconds, doubles, and is capped at 10 minutes.
+  - When more batches remain, the next one follows within about 2 seconds.
+  - Retrying stops on disconnect and starts fresh on the next reconnect.
 - Each event has a stable id. The host dedupes retries and merges a higher repeat count, so a lost acknowledgement never creates duplicates.
 - The device forgets an event only after the host acknowledges it.
-- Diagnostics tied to a host go only to that host. Untied ones, such as toasts, go to the first capable host that connects.
+- Diagnostics tied to a host go only to that host. Untied ones, such as toasts, are **claimed** by the host that sends them, so two hosts flushing at the same moment never both receive the same event. A claim the host does not acknowledge, or one interrupted by a failure or restart, is released, and the event becomes available to whichever capable host flushes next.
 - Recordings made before the app finishes loading its saved queue are buffered and replayed. The saved queue is never overwritten.
 
 ## Bounds on the host
@@ -94,7 +98,8 @@ Redaction is best effort. Code that records a diagnostic must still never pass c
   - `session/voice/openai-realtime.test.ts` covers rejection code/param/event id/last operation, close code and reason, processing errors, and a throwing reporter.
   - `client-diagnostics.e2e.test.ts` runs a real daemon round trip: report, retry merge, redaction, then readback from another client. It is part of `test:integration`.
 - App:
-  - `diagnostics/client-errors/model.test.ts` covers coalescing, bounds, age, redaction, host targeting and acknowledgement.
-  - `store.test.ts` covers early recordings, restart while offline, flush on reconnect, deferred and failed reports, and one flush per host.
+  - `diagnostics/client-errors/model.test.ts` covers coalescing (kept separate per agent and per phase), bounds, age at selection, claims, redaction, host targeting and acknowledgement.
+  - `store.test.ts` covers early recordings, restart while offline, flush on reconnect, deferred and failed reports, and one flush per host. It also covers the review follow-ups: a rate-limited backlog delivered by retry on a stable connection with no new events (fake clock), no upload of an expired backlog after a restart, an unassigned event sent to only one of two concurrently flushing hosts, and claims released on failure.
+  - `scheduler.test.ts` covers backoff doubling and cap, stop on disconnect, retry after failure, quick follow-up, debounce and stop.
   - `global-handlers.test.ts`, `components/toast-host.diagnostics.test.tsx` and `voice/voice-runtime.test.ts` (voice failure diagnostics) cover the capture points.
 - CLI: `commands/diagnostics/errors.test.ts` covers rendering and `--since`.
