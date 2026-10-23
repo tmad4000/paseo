@@ -230,6 +230,7 @@ import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
 import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
+import type { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
   createGitHubService,
@@ -476,6 +477,7 @@ export interface SessionOptions {
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
   agentQueueService?: AgentQueueService | null;
+  clientDiagnostics?: ClientDiagnosticsStore | null;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -661,6 +663,10 @@ function resolveAgentQueueService(options: SessionOptions): AgentQueueService | 
   return options.agentQueueService ?? null;
 }
 
+function resolveClientDiagnostics(options: SessionOptions): ClientDiagnosticsStore | null {
+  return options.clientDiagnostics ?? null;
+}
+
 type AgentQueueRequestMessage = Extract<
   SessionInboundMessage,
   { type: keyof typeof AGENT_QUEUE_RESPONSE_TYPES }
@@ -829,6 +835,7 @@ export class Session {
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
   private readonly agentQueueService: AgentQueueService | null;
+  private readonly clientDiagnostics: ClientDiagnosticsStore | null;
   private readonly sessionSearchGeneration: StructuredTextGeneration;
   private readonly sessionSearchAbort = new AbortController();
   private sessionSearchActive: AbortController | null = null;
@@ -1016,6 +1023,7 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.agentQueueService = resolveAgentQueueService(options);
+    this.clientDiagnostics = resolveClientDiagnostics(options);
     this.unsubscribeAgentQueue = this.subscribeToAgentQueueMutations();
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
@@ -1248,6 +1256,8 @@ export class Session {
               voiceOwner: options.voiceOwner,
             });
           },
+          reportDiagnostic: (input) =>
+            this.clientDiagnostics?.recordHost({ ...input, clientId: this.clientId }),
         },
         logger: this.sessionLogger,
         sessionId: this.sessionId,
@@ -2686,6 +2696,10 @@ export class Session {
         return this.handleAgentQueueInspectRequest(msg);
       case "client.outbox.report.request":
         return this.handleClientOutboxReportRequest(msg);
+      case "client.diagnostics.report.request":
+        return this.handleClientDiagnosticsReportRequest(msg);
+      case "client.diagnostics.list.request":
+        return this.handleClientDiagnosticsListRequest(msg);
       default:
         return undefined;
     }
@@ -5179,6 +5193,52 @@ export class Session {
     } catch (error) {
       emit(resolved.agentId, null, errorToFriendlyMessage(error));
     }
+  }
+
+  private async handleClientDiagnosticsReportRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.diagnostics.report.request" }>,
+  ): Promise<void> {
+    if (!this.clientDiagnostics) {
+      this.emit({
+        type: "client.diagnostics.report.response",
+        payload: {
+          requestId: msg.requestId,
+          acknowledgedIds: [],
+          deferredIds: [],
+          error: "This daemon does not record client diagnostics.",
+        },
+      });
+      return;
+    }
+    const result = this.clientDiagnostics.record(
+      {
+        clientId: this.clientId,
+        deviceLabel: msg.deviceLabel ?? null,
+        platform: msg.platform ?? null,
+        appVersion: this.appVersion,
+      },
+      msg.events,
+    );
+    this.emit({
+      type: "client.diagnostics.report.response",
+      payload: { requestId: msg.requestId, ...result, error: null },
+    });
+  }
+
+  private async handleClientDiagnosticsListRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.diagnostics.list.request" }>,
+  ): Promise<void> {
+    const store = this.clientDiagnostics;
+    this.emit({
+      type: "client.diagnostics.list.response",
+      payload: {
+        requestId: msg.requestId,
+        events: store?.list({ limit: msg.limit, since: msg.since, source: msg.source }) ?? [],
+        rateLimited: store?.rateLimitedCount ?? 0,
+        retention: store?.retention ?? { maxEvents: 1, maxAgeDays: 1 },
+        error: store ? null : "This daemon does not record client diagnostics.",
+      },
+    });
   }
 
   private async handleClientOutboxReportRequest(

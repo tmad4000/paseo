@@ -63,3 +63,7 @@ The admission ledger is written before dispatch. An acknowledged message is neve
 Realtime connections have a documented 60-minute maximum. Connection loss/expiry pauses microphone capture and offers explicit retry with the microphone off. “Listen until I finish” suppresses turn-based replies and dispatch; it cannot promise uninterrupted networking or operating-system background microphone access. [Session lifecycle and interruption](https://developers.openai.com/api/docs/guides/realtime-conversations).
 
 No dependencies were added or updated. No running app was replaced, no daemon was restarted and no production configuration was migrated. Wake-word mode is separate scope. Visual device acceptance, physical microphone/echo tests, comparative latency/quality/cost benchmarks, and release activation remain required before a quality or deployment claim.
+
+## Failure diagnostics
+
+Every GPT Realtime failure is recorded on the host before its message is forwarded to the device. The record has the OpenAI error code, `param` and `event_id`, the last non-audio client event, the close code and reason, and the phase. Read it with `paseo diagnostics errors --source host-voice`, or grep `realtime_voice_failed` in the daemon log. See [client error diagnostics](client-error-diagnostics.md).

@@ -1,3 +1,6 @@
+import { resolveAppVersion } from "@/utils/app-version";
+import { installGlobalErrorDiagnostics } from "@/diagnostics/client-errors/global-handlers";
+import { installClientDiagnostics } from "@/diagnostics/client-errors/store";
 import "@/styles/unistyles";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalProvider } from "@gorhom/portal";
@@ -15,7 +18,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppState, useWindowDimensions, View } from "react-native";
+import { AppState, Platform, useWindowDimensions, View } from "react-native";
 import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -1002,6 +1005,18 @@ function RootAppTree() {
 
 export default function RootLayout() {
   useEffect(() => installWebScrollbarStyles(), []);
+  useEffect(() => {
+    void installClientDiagnostics();
+    return installGlobalErrorDiagnostics({
+      errorUtils: (
+        globalThis as {
+          ErrorUtils?: Parameters<typeof installGlobalErrorDiagnostics>[0]["errorUtils"];
+        }
+      ).ErrorUtils,
+      target: Platform.OS === "web" && typeof window !== "undefined" ? window : null,
+      appVersion: resolveAppVersion(),
+    });
+  }, []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active") {

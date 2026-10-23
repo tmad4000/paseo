@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
 import { MessageReceipts } from "./message-receipts/index.js";
+import { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
@@ -545,6 +546,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly agentManager: AgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly messageReceipts: MessageReceipts;
+  private readonly clientDiagnostics: ClientDiagnosticsStore;
   private readonly creationService: CreationService;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -701,6 +703,10 @@ export class VoiceAssistantWebSocketServer {
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
     this.messageReceipts = new MessageReceipts(join(paseoHome, "agent-requests"));
+    this.clientDiagnostics = new ClientDiagnosticsStore(
+      join(paseoHome, "diagnostics"),
+      this.logger.child({ module: "client-diagnostics" }),
+    );
     this.creationService = new CreationService(
       join(paseoHome, "creations"),
       this.logger.child({ module: "creation" }),
@@ -1193,6 +1199,10 @@ export class VoiceAssistantWebSocketServer {
     this.socketIdentities.clear();
     this.externalSessionsByKey.clear();
     this.wss.close();
+    // Last, so shutdown ordering is unchanged; a pending diagnostics write still lands on disk.
+    await this.clientDiagnostics
+      .flush()
+      .catch((error) => this.logger.warn({ err: error }, "Failed to flush client diagnostics"));
   }
 
   private sendToClient(ws: WebSocketLike, message: WSOutboundMessage): void {
@@ -1545,6 +1555,7 @@ export class VoiceAssistantWebSocketServer {
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       agentQueueService: this.agentQueueService,
+      clientDiagnostics: this.clientDiagnostics,
       checkoutDiffManager: this.checkoutDiffManager,
       github: this.github,
       workspaceGitService: this.workspaceGitService,
@@ -1971,6 +1982,8 @@ export class VoiceAssistantWebSocketServer {
         agentMessageQueue: this.agentQueueService !== null,
         // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
         deliveryInspect: this.agentQueueService !== null,
+        // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+        clientDiagnostics: true,
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: true,
         globalStream: true,
