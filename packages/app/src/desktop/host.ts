@@ -1,3 +1,4 @@
+import type { AppDeepLinkTarget } from "@getpaseo/protocol/app-deep-link";
 import { Platform } from "react-native";
 import { getElectronHost } from "@/desktop/electron/host";
 import type { BrowserKeyboardPolicy } from "@/desktop/browser/shortcuts";
@@ -126,7 +127,7 @@ export interface DesktopEventsBridge {
 }
 
 export interface DesktopAgentNavigationBridge {
-  ready?: () => Promise<{ serverId: string; agentId: string } | null>;
+  ready?: () => Promise<AppDeepLinkTarget | null>;
 }
 
 export type DesktopBrowserShortcutEvent =

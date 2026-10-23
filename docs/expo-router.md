@@ -138,6 +138,19 @@ targets.
 Both paths converge on `navigateToAgent()`. Do not make notification routing
 guess a workspace, and do not add a workspace to the stable agent URL format.
 
+## Copied workspace and tab links
+
+The workspace header copies explicit routes instead of the address bar: tab focus is
+stored outside Expo Router, and the workspace route consumes its `open` query.
+Session links retain the stable agent route described above. Terminal, file and
+setup links use the existing workspace `open` intent. Device-local drafts and
+browser tabs have no portable route, so their menu offers only a workspace link.
+Web links retain the serving origin; native uses its configured Expo scheme;
+desktop uses `paseo-fork://h/...` rather than its internal renderer origin.
+Desktop's navigation inbox handles both session and workspace targets, including
+links received before a window is ready. These are navigation links for devices
+already paired to the host, not invitations or public shares.
+
 ## Params
 
 Required dynamic params belong to the matched route.

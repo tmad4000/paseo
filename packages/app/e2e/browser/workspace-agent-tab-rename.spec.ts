@@ -144,3 +144,72 @@ test.describe("Workspace agent tab rename", () => {
     }
   });
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 800 },
+  { name: "compact", width: 390, height: 844 },
+]) {
+  test(`top-bar links reopen the workspace and selected session on ${viewport.name}`, async ({
+    page,
+    context,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.setViewportSize(viewport);
+    const session = await seedMockAgentWorkspace({
+      repoPrefix: "workspace-links-",
+      title: "Linked session",
+    });
+    try {
+      await openAgentRoute(page, session);
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      const copyTab = page.getByTestId("workspace-header-copy-tab-link");
+      await copyTab.click({ trial: true });
+      await page.screenshot({
+        path: testInfo.outputPath("copy-links-menu.png"),
+        animations: "disabled",
+      });
+      await copyTab.click();
+      const expectedTab = new URL(
+        buildHostAgentDetailRoute(getServerId(), session.agentId),
+        page.url(),
+      ).href;
+      await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(expectedTab);
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      await page.getByTestId("workspace-header-copy-workspace-link").click();
+      const expectedWorkspace = new URL(page.url());
+      expectedWorkspace.search = "";
+      await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(expectedWorkspace.href);
+      await page.goto("/settings");
+      await page.goto(expectedWorkspace.href);
+      await expect(
+        page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }),
+      ).toBeVisible();
+      const second = await session.client.createAgent({
+        provider: "mock",
+        cwd: session.cwd,
+        workspaceId: session.workspaceId,
+        title: "Different session",
+        modeId: "load-test",
+        model: "e2e-fast-stream",
+      });
+      await openAgentRoute(page, { ...session, agentId: second.id });
+      await page.goto(expectedTab);
+      await page.waitForURL(
+        (url) => url.pathname.includes("/workspace/") && !url.searchParams.has("open"),
+      );
+      // The linked session wins over the last focused session after a fresh navigation.
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      await page.getByTestId("workspace-header-rename-tab").click();
+      await expect(
+        renameModalInput(page, `workspace-tab-rename-modal-agent-${session.agentId}`),
+      ).toHaveValue("Linked session");
+    } finally {
+      await session.cleanup();
+    }
+  });
+}
