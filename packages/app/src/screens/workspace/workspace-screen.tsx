@@ -219,6 +219,7 @@ import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
   WorkspaceHeaderMenuDesktop,
   WorkspaceHeaderMenuMobile,
+  type WorkspaceHeaderTabActions,
 } from "@/screens/workspace/workspace-header-menu";
 import { PluginHeaderButtons } from "@/plugins";
 import {
@@ -996,7 +997,14 @@ function WorkspaceHeaderProjectRow({
   );
 }
 
-interface WorkspaceHeaderTitleBarProps {
+function getHeaderRenameTabKind(
+  tab: WorkspaceTabDescriptor | null,
+): WorkspaceHeaderTabActions["renameTabKind"] {
+  const kind = tab?.target.kind;
+  return kind === "agent" || kind === "terminal" ? kind : null;
+}
+
+interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
   isLoading: boolean;
   title: string;
   subtitle: string;
@@ -1026,6 +1034,8 @@ interface WorkspaceHeaderTitleBarProps {
 }
 
 function WorkspaceHeaderTitleBar({
+  renameTabKind,
+  onRenameCurrentTab,
   isLoading,
   title,
   subtitle,
@@ -1072,6 +1082,8 @@ function WorkspaceHeaderTitleBar({
       <View style={styles.compactHeaderMenuCluster}>
         {isMobile ? (
           <WorkspaceHeaderMenuMobile
+            renameTabKind={renameTabKind}
+            onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -1090,6 +1102,8 @@ function WorkspaceHeaderTitleBar({
           />
         ) : (
           <WorkspaceHeaderMenuDesktop
+            renameTabKind={renameTabKind}
+            onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
             importAgentDisabled={importAgentDisabled}
@@ -3696,6 +3710,10 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const renameTabKind = getHeaderRenameTabKind(activeTabDescriptor);
+  const handleRenameCurrentTab = useCallback(() => {
+    if (activeTabDescriptor) handleRenameTab(activeTabDescriptor);
+  }, [activeTabDescriptor, handleRenameTab]);
   const activeFileFields = getWorkspaceFileLocationFields(activeTabDescriptor);
   const activeFilePath = activeFileFields.path;
   const activeFileLineStart = activeFileFields.lineStart;
@@ -4138,6 +4156,8 @@ function WorkspaceScreenContent({
               <NavigationForwardButton />
               <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
+                renameTabKind={renameTabKind}
+                onRenameCurrentTab={handleRenameCurrentTab}
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
                 subtitle={workspaceHeaderSubtitle}
@@ -4171,6 +4191,8 @@ function WorkspaceScreenContent({
         />
       ) : null,
     [
+      renameTabKind,
+      handleRenameCurrentTab,
       canOpenImportSheet,
       createTerminalDisabled,
       currentBranchName,
