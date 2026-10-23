@@ -5,6 +5,7 @@ import { createIdleAgent, expectWorkspaceTabVisible } from "../support/helpers/a
 import { waitForWorkspaceTabsVisible } from "../support/helpers/workspace-tabs";
 import { buildHostAgentDetailRoute } from "@/utils/host-routes";
 import { renameModalInput, renameModalSubmit } from "../support/helpers/rename";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { getServerId } from "../support/helpers/server-id";
 
 async function openAgentInWorkspace(page: Page, agent: { id: string; workspaceId: string }) {
@@ -23,6 +24,81 @@ async function fetchAgentTitle(client: SeedDaemonClient, agentId: string): Promi
 }
 
 test.describe("Workspace agent tab rename", () => {
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 800 },
+    { name: "compact", width: 390, height: 844 },
+  ]) {
+    test(`top-bar rename follows the selected session on ${viewport.name}`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      const session = await seedMockAgentWorkspace({
+        repoPrefix: "workspace-header-rename-",
+        title: "First session",
+      });
+      try {
+        const second = await session.client.createAgent({
+          provider: "mock",
+          cwd: session.cwd,
+          workspaceId: session.workspaceId,
+          title: "Second session",
+          modeId: "load-test",
+          model: "e2e-fast-stream",
+        });
+        await openAgentRoute(page, session);
+        await openAgentRoute(page, { ...session, agentId: second.id });
+        await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+        const rename = page.getByTestId("workspace-header-rename-tab");
+        await expect(rename).toHaveText("Rename agent");
+        await rename.click({ trial: true });
+        await page.screenshot({
+          path: testInfo.outputPath("header-menu.png"),
+          animations: "disabled",
+        });
+        await rename.click();
+
+        const prefix = `workspace-tab-rename-modal-agent-${second.id}`;
+        const input = renameModalInput(page, prefix);
+        await expect(input).toHaveValue("Second session");
+        await expect(input).toBeFocused();
+        await input.fill("   ");
+        await expect(renameModalSubmit(page, prefix)).toBeDisabled();
+        await input.fill("Discard this name");
+        await page.getByTestId(`${prefix}-cancel`).click();
+        await expect(input).toHaveCount(0);
+        await expect.poll(() => fetchAgentTitle(session.client, second.id)).toBe("Second session");
+
+        await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+        await rename.click();
+        await expect(input).toHaveValue("Second session");
+        await input.fill("Renamed from the top bar");
+        await input.click({ trial: true });
+        await page.screenshot({
+          path: testInfo.outputPath("rename-dialog.png"),
+          animations: "disabled",
+        });
+        await input.press("Enter");
+        await expect(input).toHaveCount(0);
+        await expect
+          .poll(() => fetchAgentTitle(session.client, second.id))
+          .toBe("Renamed from the top bar");
+        await expect
+          .poll(() => fetchAgentTitle(session.client, session.agentId))
+          .toBe("First session");
+        const activeLabel =
+          viewport.name === "compact"
+            ? page.getByTestId("workspace-tab-switcher-trigger")
+            : page.getByTestId(`workspace-tab-agent_${second.id}`).first();
+        await expect(activeLabel).toContainText("Renamed from the top bar");
+        await page.reload();
+        await expect(activeLabel).toContainText("Renamed from the top bar");
+      } finally {
+        await session.cleanup();
+      }
+    });
+  }
+
   test("right-click rename persists the agent title and updates the tab label", async ({
     page,
   }) => {
