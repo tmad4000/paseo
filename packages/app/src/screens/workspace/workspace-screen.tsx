@@ -1,3 +1,4 @@
+import { useWorkspaceLinks } from "./use-workspace-links";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
@@ -1034,6 +1035,9 @@ interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
 }
 
 function WorkspaceHeaderTitleBar({
+  canCopyTabLink,
+  onCopyTabLink,
+  onCopyWorkspaceLink,
   renameTabKind,
   onRenameCurrentTab,
   isLoading,
@@ -1082,6 +1086,9 @@ function WorkspaceHeaderTitleBar({
       <View style={styles.compactHeaderMenuCluster}>
         {isMobile ? (
           <WorkspaceHeaderMenuMobile
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
@@ -1102,6 +1109,9 @@ function WorkspaceHeaderTitleBar({
           />
         ) : (
           <WorkspaceHeaderMenuDesktop
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
@@ -3710,6 +3720,11 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const { canCopyTabLink, onCopyTabLink, onCopyWorkspaceLink } = useWorkspaceLinks(
+    normalizedServerId,
+    normalizedWorkspaceId,
+    activeTabDescriptor,
+  );
   const renameTabKind = getHeaderRenameTabKind(activeTabDescriptor);
   const handleRenameCurrentTab = useCallback(() => {
     if (activeTabDescriptor) handleRenameTab(activeTabDescriptor);
@@ -4156,6 +4171,9 @@ function WorkspaceScreenContent({
               <NavigationForwardButton />
               <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
+                canCopyTabLink={canCopyTabLink}
+                onCopyTabLink={onCopyTabLink}
+                onCopyWorkspaceLink={onCopyWorkspaceLink}
                 renameTabKind={renameTabKind}
                 onRenameCurrentTab={handleRenameCurrentTab}
                 isLoading={isWorkspaceHeaderLoading}
@@ -4191,6 +4209,9 @@ function WorkspaceScreenContent({
         />
       ) : null,
     [
+      canCopyTabLink,
+      onCopyTabLink,
+      onCopyWorkspaceLink,
       renameTabKind,
       handleRenameCurrentTab,
       canOpenImportSheet,
