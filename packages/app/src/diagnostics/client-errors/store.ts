@@ -90,6 +90,10 @@ export function installClientDiagnostics(now: () => number = Date.now): Promise<
         ),
       });
       setClientDiagnosticSink((input) => addPendingClientDiagnostic(input));
+      // A host may have connected (and flushed nothing) while the saved backlog was still loading.
+      if (useClientDiagnosticsStore.getState().entries.length > 0) {
+        for (const listener of flushListeners) listener();
+      }
       return undefined;
     });
   return installPromise;
@@ -121,6 +125,9 @@ export function flushClientDiagnosticsForServer(input: {
   if (running) return running;
   const now = input.now ?? Date.now;
   const run = (async (): Promise<ClientDiagnosticsFlushOutcome> => {
+    // A host can connect before the saved queue has loaded on a cold start. Wait for it rather
+    // than reporting "skipped", which the scheduler treats as disconnected and stops retrying.
+    if (!useClientDiagnosticsStore.persist.hasHydrated()) await installClientDiagnostics();
     if (!useClientDiagnosticsStore.persist.hasHydrated()) return "skipped";
     updateEntries((entries) => pruneExpiredClientDiagnostics(entries, now()));
     for (let batch = 0; batch < (input.maxBatches ?? 4); batch += 1) {

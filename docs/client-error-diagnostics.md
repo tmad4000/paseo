@@ -56,6 +56,7 @@ You can grep `~/.paseo/daemon.log` for these lines.
 - The device forgets an event only after the host acknowledges it.
 - Diagnostics tied to a host go only to that host. Untied ones, such as toasts, are **claimed** by the host that sends them, so two hosts flushing at the same moment never both receive the same event. A claim the host does not acknowledge, or one interrupted by a failure or restart, is released, and the event becomes available to whichever capable host flushes next.
 - Recordings made before the app finishes loading its saved queue are buffered and replayed. The saved queue is never overwritten.
+- On a cold start a host can connect before the saved queue has loaded. Its flush waits for the load, rather than treating the queue as unavailable, and the load also triggers a flush when a saved backlog exists. Saved offline diagnostics therefore reach a host that is already connected, without any new event.
 
 ## Bounds on the host
 
@@ -99,7 +100,7 @@ Redaction is best effort. Code that records a diagnostic must still never pass c
   - `client-diagnostics.e2e.test.ts` runs a real daemon round trip: report, retry merge, redaction, then readback from another client. It is part of `test:integration`.
 - App:
   - `diagnostics/client-errors/model.test.ts` covers coalescing (kept separate per agent and per phase), bounds, age at selection, claims, redaction, host targeting and acknowledgement.
-  - `store.test.ts` covers early recordings, restart while offline, flush on reconnect, deferred and failed reports, and one flush per host. It also covers the review follow-ups: a rate-limited backlog delivered by retry on a stable connection with no new events (fake clock), no upload of an expired backlog after a restart, an unassigned event sent to only one of two concurrently flushing hosts, and claims released on failure.
+  - `store.test.ts` covers early recordings, restart while offline, flush on reconnect, deferred and failed reports, and one flush per host. It also covers the review follow-ups: a rate-limited backlog delivered by retry on a stable connection with no new events (fake clock), no upload of an expired backlog after a restart, delivery of a saved backlog when the host connects before AsyncStorage finishes loading (delayed read, no new event, delivered exactly once), an unassigned event sent to only one of two concurrently flushing hosts, and claims released on failure.
   - `scheduler.test.ts` covers backoff doubling and cap, stop on disconnect, retry after failure, quick follow-up, debounce and stop.
   - `global-handlers.test.ts`, `components/toast-host.diagnostics.test.tsx` and `voice/voice-runtime.test.ts` (voice failure diagnostics) cover the capture points.
 - CLI: `commands/diagnostics/errors.test.ts` covers rendering and `--since`.

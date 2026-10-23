@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const storage = vi.hoisted(() => ({ values: new Map<string, string>() }));
+const storage = vi.hoisted(() => ({
+  values: new Map<string, string>(),
+  readHold: undefined as Promise<void> | undefined,
+}));
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
-    getItem: async (key: string) => storage.values.get(key) ?? null,
+    getItem: async (key: string) => {
+      await storage.readHold;
+      return storage.values.get(key) ?? null;
+    },
     setItem: async (key: string, value: string) => {
       storage.values.set(key, value);
     },
@@ -49,6 +55,7 @@ function reporter(
 
 beforeEach(() => {
   storage.values.clear();
+  storage.readHold = undefined;
 });
 
 describe("client diagnostics queue", () => {
@@ -267,5 +274,62 @@ describe("review follow-ups", () => {
       m.flushClientDiagnosticsForServer({ serverId: "A", client: failing, device }),
     ).rejects.toThrow("socket closed");
     expect(m.useClientDiagnosticsStore.getState().entries[0]).not.toHaveProperty("claimedBy");
+  });
+});
+
+describe("cold start", () => {
+  it("delivers a saved offline diagnostic once when the host connects before the queue loads", async () => {
+    const savedAt = Date.now() - 60_000;
+    storage.values.set(
+      "paseo-client-diagnostics",
+      JSON.stringify({
+        state: {
+          entries: [
+            {
+              id: "saved-1",
+              occurredAt: new Date(savedAt).toISOString(),
+              count: 1,
+              source: "voice",
+              severity: "error",
+              message: "GPT Realtime rejected an event (invalid_value: bad audio).",
+              fingerprint: "f",
+              lastSeenMs: savedAt,
+            },
+          ],
+        },
+        version: 1,
+      }),
+    );
+    let finishLoading!: () => void;
+    storage.readHold = new Promise<void>((resolve) => {
+      finishLoading = resolve;
+    });
+
+    const m = await loadModules();
+    const { createClientDiagnosticsFlushScheduler } = await import("./scheduler");
+    // RootLayout starts installation without awaiting it.
+    void m.installClientDiagnostics();
+
+    // The host connects first; nothing new is ever recorded.
+    const host = reporter();
+    const scheduler = createClientDiagnosticsFlushScheduler({
+      flush: () =>
+        m.flushClientDiagnosticsForServer({ serverId: "srv_1", client: host.client, device }),
+    });
+    const unsubscribe = m.onClientDiagnosticQueued(() => scheduler.trigger());
+    scheduler.flushNow();
+    await settle();
+    expect(host.calls).toHaveLength(0);
+
+    finishLoading();
+    await vi.waitFor(() => expect(host.calls).toHaveLength(1));
+    expect(host.calls[0].events.map((event) => event.id)).toEqual(["saved-1"]);
+    expect(m.useClientDiagnosticsStore.getState().entries).toEqual([]);
+
+    // The hydration-ready notification's debounced flush finds nothing left to send.
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    expect(host.calls).toHaveLength(1);
+    unsubscribe();
+    scheduler.stop();
   });
 });
