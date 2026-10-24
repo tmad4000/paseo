@@ -1,0 +1,580 @@
+# Conversation sharing
+
+Status: design, 2026-10-24. Beads epic `pspin-twk` (design `pspin-twk.1`, Phase 1 `pspin-twk.2`,
+Phase 2 `pspin-twk.3`). Requested by the fork owner; first external user is Brenda Mathisen.
+
+## Problem
+
+A Paseo conversation lives on one daemon and is visible only to principals paired with that daemon.
+Pairing grants daemon-wide authority (see [permissions.md](../permissions.md)): even the narrowest
+preset, viewer, carries `workspace.read`, which covers every workspace, agent, timeline, file, diff
+and terminal on the host, unredacted. The legacy relay offer is broader still: it carries the daemon
+public key and the relay session id (`serverId`), and on a daemon with no password anything that
+completes that handshake is a trusted operator. There is no middle ground between "sees my whole
+machine" and "no access".
+
+Today, showing someone a conversation means copying prose out of the chat into an Ideaflow Vision
+note by hand, stripping tool calls, file paths and anything that looks like a credential as you go.
+That curation is slow, lossy and easy to get wrong. The goal of this design is to make it
+unnecessary: a shared view that is safe by default, revocable, and eventually collaborative.
+
+Three asks, in priority order:
+
+1. **Read-only share link.** A web page anyone with the link can open. Revocable. Optional expiry.
+2. **Collaborative conversation.** Invite a human into a live agent chat with roles (viewer,
+   commenter, participant who can prompt), presence, and attribution of who said what.
+3. **Supporting sharing features**, proposed and ranked below: snapshot vs live, per-message
+   curation, default redaction, comments and annotations, export to Vision or the Deep Dialogues
+   gallery, the mobile share sheet, deep links.
+
+## Goals and non-goals
+
+Goals:
+
+- A shared view never exposes secrets, tool output, reasoning, local paths or third-party contact
+  details unless the owner deliberately includes them.
+- Sharing is one gesture from the conversation, on desktop and phone, with a preview of exactly what
+  the guest will see.
+- Shares are revocable from any client, and revocation is immediate.
+- Nothing about sharing weakens the pairing trust model. A share link must never be upgradable to
+  daemon control.
+- Protocol changes stay backward compatible; the feature is gated once on
+  `server_info.features.conversationSharing`.
+
+Non-goals (for this design):
+
+- Public discovery, search, or a gallery inside Paseo. Shares are unlisted.
+- Sharing terminals, files, diffs or browser tabs. Only agent conversations.
+- Sharing across daemons (a share is served by the daemon that owns the conversation).
+- Replacing Paseo Hub or the relay. Shares use neither.
+
+## User stories
+
+**Jacob shares a chat with Brenda (Phase 1).** Jacob is in a conversation on his phone. He opens
+the conversation menu, taps **Share…**, and sees the redacted preview: his prompts and the agent's
+replies, with tool calls and reasoning hidden, paths collapsed, and a masked token called out as
+"1 secret hidden". He leaves the defaults, sets expiry to 7 days, taps **Create link**, and the
+system share sheet opens with the URL. Brenda opens it in Safari with no app and no account and reads
+the conversation. A week later the link shows "This share has expired". Jacob can also revoke it
+earlier from **Manage shares**.
+
+**Jacob shares a live chat (Phase 1b).** Same flow, but Jacob picks **Live**. Brenda's page updates
+as the conversation continues, still redacted. Revoking stops updates and hides the page.
+
+**Brenda joins live (Phase 2).** Jacob invites `brenda@…` as a **participant**. Brenda gets a link,
+signs in with Ideaflow ID, and sees the same redacted view plus a composer. Jacob sees "Brenda is
+viewing" in the conversation header. Brenda types a prompt; it appears in the chat labelled
+**Brenda**, the agent answers, and Jacob's own prompts stay labelled **Jacob**. As a **commenter**
+she could only leave comments on messages; as a **viewer** she could only read. Jacob removes her
+and the view ends on her side.
+
+**An agent shares its own work (Phase 3).** An orchestrating agent finishes a report and calls a
+Paseo tool to produce a snapshot share link for the owner to forward, or exports the curated
+conversation into a Vision note or the Deep Dialogues gallery.
+
+## Concepts
+
+Terminology follows [glossary.md](../glossary.md). New terms, UI label first:
+
+- **Share link** — A revocable capability URL to a read-only view of one agent session. Stored as a
+  **share record** on the owning daemon. Never called "public link" in UI (it is unlisted, not
+  public).
+- **Snapshot** — A share whose content is fixed at creation time. The default.
+- **Live** — A share that re-reads the conversation on each view and streams new messages. Still
+  read-only.
+- **Redaction profile** — The set of rules deciding what a guest can see. Every share has one. The
+  default profile is the safe one.
+- **Guest** — Anyone viewing a share. In Phase 1 guests are anonymous. In Phase 2 guests may sign in
+  and become **collaborators** with a **role**: viewer, commenter, or participant.
+- **Share host** — The HTTP origin that serves share pages. It is a separate listener in the same
+  daemon process, exposing nothing but share routes.
+
+## Architecture
+
+### Where a guest connects
+
+Guests are not paired, often have no Paseo app, and must get nothing beyond the shared view. Three
+options were weighed:
+
+| Option                                                                           | Verdict                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Serve shares from the daemon's main listener and expose it publicly              | Rejected. The main listener carries every daemon API and the WebSocket. Host allowlist and CORS are localhost defenses, not an authorization layer.                                                                                                                                                                                                         |
+| A `viewer` principal from a pairing invitation                                   | Rejected. Permissions are daemon-wide today, so `workspace.read` exposes every workspace, timeline, file and terminal, with no redaction. A future agent-scoped grant (`{ kind: "agent", ids }`) could express "read this one conversation, redacted" and the share listener would then be one consumer of it; the redaction pipeline is needed either way. |
+| Guest relay sessions reusing the pairing identity (`#offer=` style)              | Rejected for now. The relay session id is the `serverId` and the offer's public key is the trust anchor; any guest link carrying them is a full pairing offer. A guest path over the relay needs a second daemon identity (guest keypair + guest session id) and grant-scoped sessions. Viable for Phase 2 live transport, not for Phase 1.                 |
+| **A share-only HTTP listener inside the daemon** (mirrors `serviceProxy.listen`) | **Chosen.** Serves `/s/<token>` and nothing else. Reads only share records and their stored snapshots. Published through a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel on an origin the owner configures.                                                                                                                                         |
+
+The share listener is deliberately a separate `http.Server` with its own Express app. It mounts no
+daemon routes, no WebSocket upgrade, no web UI, no MCP. The only state it can read is
+`$PASEO_HOME/shares/`. A bug in the share surface therefore cannot reach timelines, files, or
+agents.
+
+```
+Owner (paired client)                       Guest (any browser)
+   │ share.link.create.request                  │ GET https://<shareHost>/s/<token>
+   ▼                                            ▼
+Daemon main listener ──► ShareService ──► $PASEO_HOME/shares/{id}.json
+                               │                 {id}.snapshot.json
+                               └── RedactionPipeline(timeline rows) ──► ShareListener (separate port)
+```
+
+### Configuration
+
+```json
+{
+  "daemon": {
+    "sharing": {
+      "listen": "127.0.0.1:8443",
+      "publicBaseUrl": "https://m4-mini.tailb2a35c.ts.net:8443",
+      "ownerDisplayName": "Jacob"
+    }
+  }
+}
+```
+
+- `listen` starts the share listener. Absent means sharing is off; `share.link.create` fails with
+  `sharing_not_configured` and the app shows how to enable it.
+- `publicBaseUrl` is the origin guests use. The daemon never guesses it from request headers.
+- `ownerDisplayName` labels the owner's messages for guests. Defaults to the OS user name.
+- Env equivalents: `PASEO_SHARING_LISTEN`, `PASEO_SHARING_PUBLIC_BASE_URL`,
+  `PASEO_SHARING_OWNER_NAME`.
+
+Publishing the listener is an operator step outside the daemon (Tailscale Funnel, Cloudflare Tunnel,
+nginx). The M4 already has Funnel enabled for `:8443` with no handler attached, so the first
+deployment is one `tailscale serve` line; see Open decisions.
+
+## Data model
+
+### Share record — `$PASEO_HOME/shares/{shareId}.json`
+
+Written atomically with `writeJsonFileAtomic`, validated with Zod, optional fields with defaults, no
+migrations (per [data-model.md](../data-model.md)).
+
+| Field            | Type                   | Notes                                                                                 |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `id`             | `string`               | `shr_<16 hex>`. Internal id, shown in Manage shares, never in the URL.                |
+| `agentId`        | `string`               | The shared agent session.                                                             |
+| `workspaceId`    | `string?`              | Copied at creation for listing. Never used for access.                                |
+| `tokenHash`      | `string`               | SHA-256 of the URL capability. The plaintext token is returned once and never stored. |
+| `mode`           | `"snapshot" \| "live"` | Default `snapshot`.                                                                   |
+| `title`          | `string`               | Owner-editable; defaults to the agent title.                                          |
+| `redaction`      | `RedactionProfile`     | See below.                                                                            |
+| `createdAt`      | `string` (ISO 8601)    |                                                                                       |
+| `expiresAt`      | `string \| null`       | `null` = never.                                                                       |
+| `revokedAt`      | `string \| null`       | Soft revoke. Revoked records stay listed until deleted.                               |
+| `snapshotSeqEnd` | `number?`              | For snapshots: last source `seq` included.                                            |
+| `viewCount`      | `number`               | Incremented on successful render. Best effort.                                        |
+| `lastViewedAt`   | `string \| null`       |                                                                                       |
+| `collaborators`  | `Collaborator[]`       | Phase 2. Default `[]`.                                                                |
+
+### Snapshot — `$PASEO_HOME/shares/{shareId}.snapshot.json`
+
+The **already-redacted** projection, stored at creation. The share listener serves this file and
+never re-reads the source timeline for snapshot shares. Live shares re-run the pipeline on each
+request and are bounded to the most recent 500 projected items with "earlier messages omitted" at
+the top.
+
+```ts
+interface ShareSnapshot {
+  v: 1;
+  title: string;
+  owner: { name: string };
+  agent: { provider: string; model?: string };
+  createdAt: string;
+  messages: SharedMessage[];
+  redactionSummary: {
+    hiddenToolCalls: number;
+    hiddenReasoning: number;
+    secretsMasked: number;
+    pathsCollapsed: number;
+    contactsMasked: number;
+    messagesExcluded: number;
+  };
+}
+type SharedMessage =
+  | {
+      kind: "user";
+      id: string;
+      at: string;
+      author: { name: string; role: "owner" | "participant" };
+      text: string;
+    }
+  | { kind: "assistant"; id: string; at: string; text: string }
+  | {
+      kind: "omitted";
+      id: string;
+      at: string;
+      reason: "tool_calls" | "reasoning" | "excluded";
+      count: number;
+    };
+```
+
+`omitted` rows exist so the reader sees that work happened between two messages ("12 tool calls
+hidden") instead of a confusing jump. They carry no detail.
+
+### RedactionProfile
+
+```ts
+interface RedactionProfile {
+  include: { toolCalls: boolean; reasoning: boolean; errors: boolean }; // all default false
+  scrub: { secrets: boolean; paths: boolean; contacts: boolean }; // all default true
+  excludedMessageIds: string[]; // per-message curation
+  extraPatterns: string[]; // owner-supplied literal strings to mask
+}
+```
+
+## Auth
+
+### Phase 1: capability token for read-only links
+
+- The URL is `https://<publicBaseUrl>/s/<token>`. `token` is 32 random bytes from
+  `crypto.randomBytes`, base64url (43 chars). It is the only credential.
+- The daemon stores `sha256(token)` and compares with `timingSafeEqual`. The plaintext is shown to
+  the owner once at creation (and copied to the clipboard / share sheet) and is otherwise
+  unrecoverable. Losing it means creating a new share.
+- Access checks in order: token hash matches an existing record → not revoked → not expired → render.
+  Every failure returns the same 404 page ("This share isn't available") so the listener leaks
+  nothing about which shares exist.
+- Responses set `Cache-Control: no-store`, `Referrer-Policy: no-referrer`,
+  `X-Robots-Tag: noindex, nofollow`, a strict CSP (`default-src 'none'; style-src 'self'; script-src
+'self'; img-src 'self' data:`), and `X-Content-Type-Options: nosniff`. No cookies in Phase 1.
+- Rate limit: 60 requests per minute per IP on `/s/*`, 10 per minute for unknown tokens, in-memory.
+- Token path is logged hashed only. The daemon log never contains a plaintext share token.
+
+Why not the fragment (`#token`)? The listener must validate before rendering, so the secret has to
+reach the server. The URL path is fine because the page is same-origin, sets `no-referrer`, and the
+share host serves nothing else; the trade-off is that the token appears in the owner's reverse proxy
+access logs, which is accepted and documented.
+
+### Phase 2: identified collaborators via Ideaflow ID
+
+- Collaboration requires identity. The share listener becomes an OIDC relying party against
+  `id.ideaflow.app` (standard code flow with PKCE; client id and secret from daemon config). The
+  owner invites by email; the invitee signs in with any Ideaflow ID whose verified email matches.
+- Session cookie on the share host only: `HttpOnly; Secure; SameSite=Lax`, 7-day lifetime, bound to
+  the share id. No cookie grants anything on the daemon's main listener.
+- Authority is stored as explicit share permissions on the collaborator record, never as a role
+  name, following the daemon's rule that presets are UI and permissions are the persisted truth:
+  `share.read` (view, presence), `share.comment` (comments on messages), `share.prompt` (send
+  prompts). The Manage shares UI offers the presets **Viewer** (`share.read`), **Commenter**
+  (`share.read`, `share.comment`) and **Participant** (all three) and expands them. Permissions are
+  additive allows; missing authority denies. They are per share and per collaborator, and are not
+  daemon permissions: a collaborator is not a daemon principal and holds no daemon credential.
+- Participant prompts enter the daemon through `ShareService`, which calls the same prompt path a
+  trusted client uses, with `author: { name, ideaflowUserId, role: "participant" }` stamped on the
+  user message. They are subject to the agent's normal permission model; a participant cannot
+  approve permissions, change mode, model, or archive. Only the owner sees permission prompts.
+  Inside the daemon the forwarded prompt runs under the owner's authority on that one agent; the
+  share listener is the attenuation boundary, and the authorization module keeps classifying the
+  operation (`workspace.write`) as it does for any client.
+- The guest never holds a daemon credential. All collaborator traffic terminates at the share
+  listener and is forwarded in-process with explicit, narrow service calls (not a `Session` with
+  grants; that stays an option for the relay-transport variant later).
+
+## Redaction and safety model
+
+Shared views are safe by default. The pipeline runs on the daemon, on canonical timeline rows,
+before anything is written to a snapshot or sent to a guest.
+
+### Step 1: item filter
+
+| Timeline item type                                         | Default             | Owner can include?                                                                           |
+| ---------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
+| `user_message`                                             | shown               | per-message exclude                                                                          |
+| `assistant_message`                                        | shown               | per-message exclude                                                                          |
+| `reasoning`                                                | hidden (counted)    | yes, `include.reasoning`                                                                     |
+| `tool_call` (shell, read, edit, write, search, mcp, other) | hidden (counted)    | yes, `include.toolCalls` — shows name and a one-line summary only, never output or arguments |
+| `error`, `notification`                                    | hidden              | yes, `include.errors` — message text only                                                    |
+| `todo`, `compaction`, `plugin`                             | hidden, not counted | no                                                                                           |
+
+Permission requests, usage, mode/model changes, Stream entries, attachments, and uploaded images are
+never shared in Phase 1.
+
+### Step 2: text scrubbers (applied to shown text)
+
+- **Secrets** (`scrub.secrets`): high-confidence patterns replaced by `[secret hidden]`: `sk-…`,
+  `sk-ant-…`, `ghp_`/`gho_`/`github_pat_`, `AKIA[0-9A-Z]{16}`, `xox[abprs]-…`, `AIza…`, JWTs
+  (`eyJ…\.…\.…`), `-----BEGIN … PRIVATE KEY-----` blocks, `Bearer <token>`, URL query values for
+  `token|key|secret|password|sig|signature|access_token`, `password=`/`passwd:` assignments, and any
+  base64url/hex run ≥ 32 chars adjacent to `key|token|secret|auth` within 20 chars. Patterns live in
+  one module with table-driven tests; false negatives are expected, so this is defense in depth,
+  not the reason tool output is hidden.
+- **Paths** (`scrub.paths`): absolute local paths (`/Users/<u>/…`, `/home/<u>/…`, `/Volumes/…`,
+  `/private/…`, `/tmp/…`, `C:\Users\…`, `~/…`) collapse to `…/<last two segments>`. Paths inside
+  fenced code blocks are collapsed too. Repository-relative paths (no leading `/`, `~` or drive) are
+  kept; they are usually the point of the message.
+- **Contacts** (`scrub.contacts`): emails → `[email]`, E.164-looking phone numbers → `[phone]`,
+  except the owner's own display name and any string in an owner allowlist. Names are not
+  redacted automatically (no reliable rule); per-message exclusion and `extraPatterns` cover them.
+- **Extra patterns**: owner-supplied literal strings, masked everywhere.
+
+### Step 3: summary and preview
+
+The pipeline returns the snapshot plus a `redactionSummary`. The app shows the summary in the share
+sheet ("14 tool calls hidden · 2 secrets masked · 9 paths collapsed") and renders the exact snapshot
+as the preview. What the owner previews is byte-for-byte what the guest gets.
+
+### Invariants (tested)
+
+1. No `tool_call` arguments or output ever appear in a snapshot, in any profile.
+2. With the default profile, a timeline seeded with every secret fixture yields zero fixture
+   matches in the snapshot.
+3. A revoked or expired share returns 404 within one request of the change (no caching layer).
+4. The share listener process path cannot read `agents/`, `config.json`, or any file outside
+   `shares/`: the service is constructed with a `sharesDir` and uses no other path.
+5. Snapshot mode is immutable: later conversation turns never change a snapshot's bytes.
+
+## Protocol and feature gate
+
+New RPCs follow [rpc-namespacing.md](../rpc-namespacing.md). All new fields optional.
+
+| Request → Response                          | Purpose                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `share.link.preview.request` → `.response`  | Run the pipeline for `{ agentId, redaction }`; return `ShareSnapshot` + summary. No record written.                                              |
+| `share.link.create.request` → `.response`   | `{ agentId, mode, title?, expiresAt?, redaction }` → `{ share: ShareRecordPayload, url: string }`. The only time `url` (with token) is returned. |
+| `share.link.list.request` → `.response`     | `{ agentId? }` → records for one agent or the whole daemon. No tokens.                                                                           |
+| `share.link.update.request` → `.response`   | Edit `title`, `expiresAt`, `redaction` (live shares only for redaction), roles (Phase 2).                                                        |
+| `share.link.revoke.request` → `.response`   | Sets `revokedAt`. Idempotent.                                                                                                                    |
+| `share.link.delete.request` → `.response`   | Removes record and snapshot.                                                                                                                     |
+| `share.link.update` (server → client event) | Broadcast on create/update/revoke so every client's Manage shares list agrees.                                                                   |
+
+`server_info.features.conversationSharing: true` with a `// COMPAT(conversationSharing): fork
+feature, added in fork v0.10.0-beta.17, drop the gate after 2027-04-24.` comment at the one gate
+site. The app checks the flag in one place; an older host shows "Update the host to share
+conversations." No fallback path.
+
+Share records on the wire (`ShareRecordPayload`) omit `tokenHash`.
+
+## Surfaces
+
+### App (desktop, web, phone)
+
+- **Share…** in the conversation header actions menu (`workspace-header-menu.tsx`, beside Rename and
+  the copy-link actions from #99) and in the Command Center. Opens a sheet (compact) or dialog
+  (wide):
+  1. Preview of the redacted conversation, scrollable, with the summary line on top.
+  2. **What's included**: Tool calls (off), Reasoning (off), Errors (off). **Hide**: Secrets (on),
+     File paths (on), Emails and phone numbers (on). Changing a toggle re-runs the preview.
+  3. **Mode**: Snapshot (default) / Live (Phase 1b).
+  4. **Expires**: Never / 24 hours / 7 days (default) / 30 days.
+  5. **Create link** → on native, the system share sheet with the URL; on web/desktop, copied to the
+     clipboard with a toast and shown in the dialog with a Copy button.
+- **Manage shares** at the bottom of the same sheet and in host Settings: title, mode, expiry, views,
+  last viewed, **Copy link** (disabled: token not recoverable; shows "Create a new link"), **Revoke**,
+  **Delete**.
+- A small **Shared** badge on the conversation header while at least one unrevoked share exists.
+- All copy localized in the nine locales per [i18n.md](../i18n.md).
+
+### CLI
+
+```
+paseo share create <agent> [--live] [--expires 7d] [--include tool-calls,reasoning] [--no-scrub paths] [--title "…"]
+paseo share ls [<agent>] [--json]
+paseo share revoke <share-id>
+paseo share delete <share-id>
+paseo share preview <agent> [--json]
+```
+
+### Agent tools (Phase 3)
+
+`create_share_link` and `list_share_links` in the Paseo tool catalog, owner-gated like other
+mutating tools, so an orchestrator can hand the owner a link at the end of a job.
+
+### Guest page
+
+Server-rendered HTML from a template in `packages/server/src/server/sharing/view/`, no framework,
+one small script for live updates and relative timestamps. Markdown rendered server-side with the
+same sanitizer the app uses (no raw HTML, links `rel="noopener noreferrer nofollow"`, no images in
+Phase 1). Header: title, owner name, provider and model, created date, "Shared read-only with
+Paseo" footer. Mobile-first typography; respects `prefers-color-scheme`. Visual direction is the
+clean product look from [design.md](../design.md), not the marketing site.
+
+## Collaboration (Phase 2 design)
+
+- **Invite**: owner adds an email and picks a preset in Manage shares. The daemon creates a
+  `Collaborator` `{ email, permissions, invitedAt, acceptedAt?, ideaflowUserId? }` and returns an invite URL
+  (`/s/<token>?invite=<inviteId>`). Jacob sends it himself; Paseo does not email in Phase 2.
+- **Join**: the guest page offers **Sign in with Ideaflow** when the share has collaborators. After
+  OIDC, the verified email must match an invite; the collaborator is bound to that
+  `ideaflowUserId` and the share-host session cookie is issued.
+- **Presence**: the share listener keeps an in-memory set of connected collaborators per share (SSE
+  heartbeats). It publishes `share.presence.update` to paired clients; the app shows avatars/names in
+  the conversation header and in the Stream.
+- **Attribution**: `user_message` gains optional `author?: { name: string; kind: "owner" |
+"participant"; externalId?: string }`. Absent means owner (today's behavior, so old timelines and
+  old clients are unaffected). The app renders participant prompts with the author's name; the guest
+  page does the same. Providers receive the prompt text prefixed with `[From Brenda]` so the model
+  also knows who is speaking; the prefix is stripped from the shared and local rendering by the
+  canonical row's `author` field, never by text matching.
+- **Comments**: `commenter` and above can anchor a comment to a `SharedMessage.id`. Comments store in
+  `shares/{id}.comments.json`, show on the guest page, and surface to the owner as a Stream entry of
+  kind `comment` (new companion entry kind, emitted only to clients that advertise the capability).
+  Owner replies in chat, not in the comment thread, in Phase 2.
+- **Live transport for collaborators**: SSE from the share listener (one-way) plus `POST /s/<token>/prompt`
+  and `/comment` with the session cookie and a CSRF token. WebSocket is unnecessary for this traffic
+  volume and keeps the share host simple. A relay-based guest transport with a second daemon
+  identity stays documented as the path to "collaborate without exposing a listener" if that becomes a
+  requirement.
+- **Safety**: participants cannot see or answer permission prompts, cannot change agent settings,
+  cannot attach files, cannot see tool output (same redaction profile as viewers), and their prompts
+  are rate limited (6 per minute). The owner can downgrade or remove a collaborator instantly; the
+  SSE stream closes on the next heartbeat.
+
+## Other sharing features, ranked
+
+Ranked by value to the first users divided by cost. Phase assignments follow this order.
+
+| Rank | Feature                                                             | Why                                                                                                                                                                               | Phase  |
+| ---- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1    | Default redaction (tool calls, reasoning, secrets, paths, contacts) | The whole reason manual curation exists today. Without it no link is safe to send.                                                                                                | 1      |
+| 2    | Snapshot vs live                                                    | Snapshot is immutable and cheap and covers "look at this". Live is what makes Brenda's view useful while work continues.                                                          | 1 / 1b |
+| 3    | Mobile share sheet + clipboard                                      | Jacob shares from the phone. One tap after Create link.                                                                                                                           | 1      |
+| 4    | Per-message curation (exclude a message)                            | Cheap once the preview exists: a hide toggle per row in the preview. Removes the last reason to copy by hand.                                                                     | 1b     |
+| 5    | Collaborators with roles, presence, attribution                     | The second ask. Needs identity, so it is its own phase.                                                                                                                           | 2      |
+| 6    | Comments and annotations                                            | Natural once collaborators exist; viewer-side value is high, owner-side plumbing (Stream entry) is moderate.                                                                      | 2      |
+| 7    | Export to Ideaflow Vision note                                      | Replace today's manual note with one action that writes the redacted snapshot as Markdown through the existing Vision MCP tools or API. Small, high value for Jacob specifically. | 3      |
+| 8    | Export to Deep Dialogues gallery                                    | Same snapshot, different target. Gallery backend is a paused Supabase project (see tmpworkspace memory `deep-dialogues-supabase-paused`), so this waits on that restore.          | 3      |
+| 9    | Deep links into a share (`/s/<token>#m=<id>`)                       | Link to one message. Trivial on the guest page; included once anchors exist.                                                                                                      | 1b     |
+| 10   | Agent-created share links (MCP tools)                               | Lets orchestrators deliver results as links. Low cost after Phase 1, but owner review of the preview is lost, so default to snapshot + strictest profile.                         | 3      |
+| 11   | Custom redaction rules UI (`extraPatterns`)                         | Needed occasionally; a text field in the sheet.                                                                                                                                   | 1b     |
+| 12   | Owner-visible view log (count, last viewed)                         | Cheap signal that the link was used. No per-viewer identity in Phase 1.                                                                                                           | 1      |
+
+## Phased plan
+
+### Phase 1 — read-only snapshot links with default redaction (`pspin-twk.2`)
+
+Server:
+
+- `packages/server/src/server/sharing/`: `share-store.ts` (Zod schema, atomic JSON, list/get/put),
+  `redaction.ts` (pipeline + pattern table), `share-service.ts` (preview/create/list/update/revoke/
+  delete, token generation + hashing, expiry), `share-listener.ts` (separate Express app and server,
+  routes `GET /s/:token`, `GET /s/:token.json`, 404 page, headers, rate limit), `view/` (template +
+  CSS + Markdown render).
+- Config: `daemon.sharing.{listen,publicBaseUrl,ownerDisplayName}` and env equivalents in
+  `config.ts`/`persisted-config.ts`, mirroring `serviceProxy`.
+- Bootstrap: construct `ShareService` with `agentManager`/timeline store and `sharesDir`; start the
+  listener after the main listener when `sharing.listen` is set; stop it on shutdown; feature flag in
+  `websocket-server.ts` next to `companionStream`.
+- Session: handle the `share.link.*` requests; broadcast `share.link.update`.
+- Protocol: schemas in `packages/protocol/src/messages.ts` (discriminated unions, optional fields),
+  regenerate validation per [protocol-validation.md](../protocol-validation.md).
+
+Client:
+
+- `@getpaseo/client`: typed methods for the five RPCs.
+- App: Share sheet/dialog, Manage shares, header badge, Command Center item, capability gate, i18n
+  in all locales, native share sheet on iOS/Android, clipboard on web/desktop.
+- CLI: `paseo share create|ls|revoke|delete|preview`.
+
+Docs: this file updated with "as built" notes; AGENTS.md docs table row; `docs/fork-features.md`
+row `conversation-share-links`; `public-docs` entry for configuring `daemon.sharing`.
+
+Explicitly out of Phase 1: live mode, per-message exclusion UI (the field exists in the profile and
+the CLI may set it), collaborators, comments, exports, MCP tools, images/attachments in shares.
+
+### Phase 1b — live read-only, curation, deep links
+
+Live mode (re-project on view, SSE for new messages, bounded tail), per-message exclude in the
+preview, `extraPatterns` field, message anchors.
+
+### Phase 2 — collaborators (`pspin-twk.3`)
+
+Ideaflow ID OIDC on the share host, invites, roles, presence, attribution (`author` on
+`user_message`), participant prompting, comments to Stream.
+
+### Phase 3 — exports and agent tools
+
+Export to Vision note; export to Deep Dialogues when its backend is restored; `create_share_link`
+tool; owner-side comment replies.
+
+## Acceptance tests
+
+### Phase 1 (automated unless marked manual)
+
+Redaction (`redaction.test.ts`, table-driven):
+
+1. Default profile on a fixture timeline with 3 user messages, 3 assistant messages, 12 tool calls,
+   4 reasoning rows, 1 error → 6 message rows + `omitted` rows totaling 12 tool calls and 4
+   reasoning; `summary.hiddenToolCalls === 12`; no string from any tool argument or output appears.
+2. Every secret fixture (one per pattern) in user and assistant text → `[secret hidden]`;
+   `summary.secretsMasked` equals fixture count; no fixture substring survives.
+3. Paths: `/Users/jacob/code/paseo-fork/packages/server/src/x.ts` → `…/src/x.ts`; `~/.paseo/config.json`
+   → `…/.paseo/config.json`; `packages/app/src/x.tsx` unchanged; paths inside fenced code collapse.
+4. Contacts: emails and E.164 numbers masked; owner display name untouched.
+5. `include.toolCalls: true` shows `Ran shell command` style summaries only; still no output.
+6. `excludedMessageIds` removes the message and adds one `omitted` row with reason `excluded`.
+7. Idempotent: running the pipeline on an already-redacted snapshot changes nothing.
+
+Store and service (`share-service.test.ts`):
+
+8. Create returns a 43-char base64url token exactly once; the stored record has only `tokenHash`;
+   `list` never returns a token; a second create for the same agent yields a different token.
+9. Snapshot immutability: append new rows to the agent after creation; the served snapshot bytes are
+   unchanged.
+10. Revoke → `revokedAt` set; `revoke` twice is a no-op; `delete` removes both files.
+11. Expiry: a record with `expiresAt` in the past is not served; `expiresAt: null` is served.
+12. `share.link.update` broadcast reaches two connected sessions on create and revoke.
+
+Listener (`share-listener.test.ts`, real HTTP on an ephemeral port):
+
+13. Valid token → 200 HTML containing the title and messages, with the required headers
+    (`no-store`, `no-referrer`, `noindex`, CSP, `nosniff`), no `Set-Cookie`.
+14. Unknown, revoked, expired, and malformed tokens → identical 404 body and headers.
+15. Any other path (`/`, `/api/health`, `/mcp/agents`, `/s/`) → 404; no WebSocket upgrade accepted.
+16. 11th unknown-token request in a minute from one IP → 429.
+17. Starting the daemon with no `sharing.listen` → no listener bound; `share.link.create` →
+    `sharing_not_configured`.
+
+End-to-end (`sharing.e2e.test.ts` with the in-process daemon harness from
+[ad-hoc-daemon-testing.md](../ad-hoc-daemon-testing.md)):
+
+18. Create agent with a mock provider → produce rows including a tool call with a fake API key in
+    its output → `share.link.create` → fetch the URL → page shows prompts and replies, no key, "1
+    tool call hidden" → revoke → fetch → 404.
+
+Client and CLI:
+
+19. `paseo share create <agent> --expires 7d` prints the URL once; `paseo share ls --json` lists
+    the record without a token; `paseo share revoke` flips it.
+20. App: the preview rendered in the Share sheet equals `share.link.preview.response` content; an
+    older host (flag absent) shows the update message and no Share action in the menu.
+
+Manual, on a prepared build (recorded in the PR QA section):
+
+21. Phone: Share… → Create link → system share sheet opens with the URL; paste into Messages; open
+    on a device with no Paseo app; the conversation reads correctly in light and dark mode.
+22. Desktop: Share… → link copied; Manage shares shows views incrementing after opening the link.
+
+### Phase 2 (outline)
+
+Invite/sign-in binding by verified email; role enforcement (viewer cannot POST prompt or comment;
+commenter cannot prompt); participant prompt appears in owner's chat with the author label and
+reaches the provider; presence appears and disappears within one heartbeat; owner removal closes
+the stream; permission prompts never reach guests.
+
+## Open decisions for Jacob
+
+1. **Public origin for shares.** Recommended: Tailscale Funnel on the already-enabled `:8443` of
+   `m4-mini.tailb2a35c.ts.net`, mapped to the share listener (one `tailscale serve` command, no new
+   infra, a long ugly hostname). Alternative: a Cloudflare Tunnel on an Ideaflow domain such as
+   `share.paseo.ideaflow.app` (nicer URL, one more tunnel to run). Phase 1 ships with either; only
+   `publicBaseUrl` changes.
+2. **Owner display name** for guests: "Jacob", "Jacob Cole", or something else.
+3. **Default expiry**: proposed 7 days. "Never" stays available.
+4. **Live mode in Phase 1 or 1b**: proposed 1b to keep the first PR reviewable.
+5. **Phase 2 identity**: Ideaflow ID is assumed. Confirm Brenda can hold an Ideaflow ID account,
+   or whether a per-share magic link (email-verified, no account) should be the first collaborator
+   path instead.
+
+## Risks and mitigations
+
+- **Redaction false negatives.** Pattern scrubbing cannot catch every secret. Mitigation: tool output
+  and reasoning are hidden structurally, not by pattern; the preview is exact; secrets rarely appear
+  in prose. Documented as a known limit on the guest page footer ("shared view, tool activity
+  hidden").
+- **Exposing a listener on the owner's machine.** Mitigated by the separate app with zero daemon
+  routes, 404-for-everything, no cookies in Phase 1, strict headers, rate limiting, and a
+  `sharesDir`-only read path. Still an operator decision (open decision 1).
+- **Token in reverse-proxy logs.** Accepted; documented; revocation is one tap.
+- **Live mode load.** Re-projecting on each view is bounded to 500 items and rate limited; snapshots
+  are the default.
+- **Protocol drift.** All additions optional; one gate; no fallback path; `COMPAT` tagged.

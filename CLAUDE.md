@@ -70,6 +70,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/fork-features.md](docs/fork-features.md) | Fork behavior register, reconciliation matrix, installed-build smoke receipts, and deferred regression coverage |
 | [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
 | [docs/terminal-activity.md](docs/terminal-activity.md)               | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |
+| [docs/design/conversation-sharing.md](docs/design/conversation-sharing.md) | Conversation sharing design — share-only listener, capability tokens, redaction pipeline, collaborator roles, phased plan |
 | [SECURITY.md](SECURITY.md)                                           | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
 | [public-docs/hub/security.md](public-docs/hub/security.md)           | Public Hub guide — trust boundaries, untrusted triggers, provider controls, and output authority                               |
 
