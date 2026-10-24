@@ -62,7 +62,10 @@ for (const width of [390, 1440]) {
       await session.client.waitForFinish(session.agentId, 45_000);
       await page.getByTestId("agent-view-artifacts").click();
       await expect(
-        page.getByTestId("companion-stream").getByText("Turn ended", { exact: true }),
+        page
+          .getByTestId("companion-stream")
+          .getByText(/^Turn ended · /)
+          .first(),
       ).toBeVisible();
       await page.getByTestId("agent-view-chat").click();
       const pin = page.getByRole("button", { name: "Pin to stream", exact: true });
@@ -341,9 +344,13 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
     await feed.getByRole("button", { name: "Checklist", exact: true }).click();
     await feed.getByRole("button", { name: "Show unresolved only", exact: true }).click();
     await expect(feed.getByText("Deliver request 0", { exact: true })).toBeVisible();
-    await expect(feed.getByText("Blocked", { exact: true })).toBeVisible();
+    const blocked = feed.getByTestId("companion-entry-ask:ask-0");
+    // Kind and state share one muted eyebrow; the ask text is the headline.
+    await expect(blocked.getByTestId("companion-entry-eyebrow")).toContainText("Ask · Blocked · ");
+    await expect(blocked.getByTestId("companion-entry-eyebrow")).not.toContainText("explicit");
+    await blocked.getByRole("button", { name: "Read", exact: true }).click();
     await expect(
-      feed.getByText("Remaining: Waiting for acceptance", { exact: true }),
+      blocked.getByText("Remaining: Waiting for acceptance", { exact: true }),
     ).toBeVisible();
     await expect(feed.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
     await page.screenshot({
@@ -366,11 +373,12 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       });
       await expect(completed).toBeInViewport({ timeout: 1_000 });
     }).toPass({ timeout: 30_000, intervals: [500] });
+    await completed.getByRole("button", { name: "Read", exact: true }).click();
     await expect(
       completed.getByText("Completion evidence: Acceptance recorded", { exact: true }),
     ).toBeVisible();
     await completed.getByRole("button", { name: "Open", exact: true }).click();
-    await expect(completed.getByText("Open", { exact: true }).first()).toBeVisible();
+    await expect(completed.getByTestId("companion-entry-eyebrow")).toContainText("Ask · Open · ");
     await page.reload();
     await page.getByTestId("agent-view-artifacts").click();
     await page
@@ -434,7 +442,7 @@ test("per-chat Stream on an older host shows the chat's recent entries instead o
     const feed = page.getByTestId("companion-stream");
     await expect(feed.getByTestId("companion-stream-older-host")).toContainText("runs Paseo");
     await expect(page.getByTestId("companion-stream-unsupported")).toHaveCount(0);
-    await feed.getByRole("button", { name: "Queue", exact: true }).click();
+    await feed.getByRole("button", { name: "Activity", exact: true }).click();
     await expect(feed.getByText("Which host runs this chat?", { exact: true })).toBeVisible();
   } finally {
     await client.removeProject(workspace.projectId);

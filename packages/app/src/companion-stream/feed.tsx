@@ -8,15 +8,15 @@ import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { useSessionStore } from "@/stores/session-store";
 import { Button } from "@/components/ui/button";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
-import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useHostRuntimeConnectionStatus, useHostRuntimeClient } from "@/runtime/host-runtime";
-import { formatMessageTimestamp } from "@/utils/time";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildCompanionFeed, type CompanionFeedItem } from "./model";
 import { useGlobalStream } from "./use-global-stream";
-import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
+import { EntryCard } from "./entry-card";
+
+export { EntryCard } from "./entry-card";
 
 interface CompanionFeedProps {
   serverId: string;
@@ -278,7 +278,7 @@ export function CompanionFeed({
           value={viewTab}
           onValueChange={setViewTab}
           options={[
-            { value: "checklist", label: "Checklist" },
+            { value: "checklist", label: t("agentPanel.stream.checklistTab") },
             { value: "stream", label: t("agentPanel.stream.activityTab") },
             { value: "pinned", label: t("agentPanel.stream.pinnedTab") },
           ]}
@@ -289,7 +289,7 @@ export function CompanionFeed({
           onPress={refresh}
           disabled={query.isFetching || connection !== "online"}
         >
-          Refresh
+          {t("globalStream.refresh")}
         </Button>
         {notices.map((notice) => (
           <Text key={notice} accessibilityRole="alert" style={styles.description}>
@@ -297,10 +297,7 @@ export function CompanionFeed({
           </Text>
         ))}
         {viewTab === "checklist" ? (
-          <Text style={styles.description}>
-            Explicitly tracked asks. Turn endings never mark work done. Ask your agent to record
-            progress, blockers and evidence.
-          </Text>
+          <Text style={styles.description}>{t("agentPanel.stream.checklistDescription")}</Text>
         ) : null}
         {saveError ? (
           <Text accessibilityRole="alert" style={styles.description}>
@@ -334,7 +331,7 @@ export function CompanionFeed({
               onPress={handleToggleOnlyOpen}
               testID="companion-stream-pending"
             >
-              {onlyOpen ? "Show completed too" : "Show unresolved only"}
+              {t(onlyOpen ? "agentPanel.stream.showCompleted" : "agentPanel.stream.showUnresolved")}
             </Button>
           </View>
         )}
@@ -346,7 +343,7 @@ export function CompanionFeed({
               style={styles.pinInput}
               placeholder={
                 viewTab === "checklist"
-                  ? "A request to track…"
+                  ? t("agentPanel.stream.askPlaceholder")
                   : t(
                       viewTab === "pinned"
                         ? "agentPanel.stream.notePlaceholder"
@@ -364,7 +361,7 @@ export function CompanionFeed({
               disabled={saving || connection !== "online" || !pinText.trim()}
             >
               {viewTab === "checklist"
-                ? "Add ask"
+                ? t("agentPanel.stream.addAsk")
                 : t(
                     viewTab === "pinned" ? "agentPanel.stream.addNote" : "globalStream.addQuestion",
                   )}
@@ -404,7 +401,7 @@ export function CompanionFeed({
     () => (
       <View style={styles.empty} testID="companion-stream-empty">
         <Text style={styles.title}>
-          {viewTab === "pinned" ? "No pinned items" : "No items found"}
+          {t(viewTab === "pinned" ? "agentPanel.stream.noPinned" : "agentPanel.stream.noItems")}
         </Text>
         {viewTab === "checklist" ? (
           <>
@@ -427,17 +424,14 @@ export function CompanionFeed({
       <View style={styles.footer}>
         {query.hasNextPage ? (
           <Button onPress={loadMore} disabled={query.isFetching || connection !== "online"}>
-            Load more
+            {t("globalStream.more")}
           </Button>
         ) : null}
         {query.isLoading ? <ActivityIndicator /> : null}
-        <Text style={styles.description}>
-          All captured Stream history is kept. Pages load 50 items at a time. Earlier pruned entries
-          are not restored.
-        </Text>
+        <Text style={styles.description}>{t("agentPanel.stream.historyNote")}</Text>
       </View>
     ),
-    [query.hasNextPage, query.isFetching, query.isLoading, loadMore, connection],
+    [query.hasNextPage, query.isFetching, query.isLoading, loadMore, connection, t],
   );
 
   // Only a known host without the per-chat Stream at all gets the blocking notice.
@@ -481,212 +475,6 @@ function CardSeparator() {
   return <View style={styles.separator} />;
 }
 
-// eslint-disable-next-line complexity
-export function EntryCard({
-  entry,
-  serverId,
-  onReturnToChat,
-  onReplyInChat,
-  onUpdateStatus,
-  onRemovePin,
-  disabled = false,
-}: {
-  entry: CompanionEntry;
-  serverId?: string;
-  disabled?: boolean;
-  onReturnToChat: () => void;
-  onReplyInChat: () => void;
-  onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
-  onRemovePin: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
-  const handleSetOpen = useCallback(
-    () => onUpdateStatus(entry.id, "open"),
-    [onUpdateStatus, entry.id],
-  );
-  const handleSetReviewed = useCallback(
-    () => onUpdateStatus(entry.id, "reviewed"),
-    [onUpdateStatus, entry.id],
-  );
-  const handleSetDone = useCallback(
-    () => onUpdateStatus(entry.id, "done"),
-    [onUpdateStatus, entry.id],
-  );
-  const handleRemovePinLocal = useCallback(() => onRemovePin(entry.id), [onRemovePin, entry.id]);
-  const openDelegated = useCallback(() => {
-    if (serverId && entry.ask?.delegatedAgentId)
-      navigateToAgent({ serverId, agentId: entry.ask.delegatedAgentId });
-  }, [serverId, entry.ask?.delegatedAgentId]);
-  const pending = isCompanionEntryPending(entry);
-  const expandedAccessibilityState = useMemo(() => ({ expanded }), [expanded]);
-
-  let title: string;
-  let status: string = "";
-  if (entry.kind === "question") {
-    title = t("agentPanel.stream.question");
-    if (entry.id.startsWith("turn:")) title = "Question · inferred from text";
-    if (entry.ask) title = "Tracked ask · explicit";
-    status = entry.ask
-      ? { open: "Open", in_progress: "In progress", blocked: "Blocked", done: "Done" }[
-          entry.ask.state
-        ]
-      : entry.status;
-  } else if (entry.kind === "feature_request") {
-    title = "Feature Request";
-    status = entry.status;
-  } else if (entry.kind === "permission") {
-    const titles = {
-      question: "question",
-      plan: "decision",
-      tool: "permission",
-      mode: "permission",
-      other: "permission",
-    } as const;
-    title = t(`agentPanel.stream.${titles[entry.requestKind]}`);
-    status = t(
-      entry.status === "pending"
-        ? "agentPanel.stream.pendingStatus"
-        : `agentPanel.stream.${entry.status}`,
-    );
-  } else if (entry.kind === "pin") {
-    title = "Pinned Note";
-  } else if (entry.kind === "q_and_a") {
-    title = "Q&A";
-  } else {
-    title = t(`agentPanel.stream.${entry.status}`);
-  }
-
-  let body = null;
-  if (entry.text) {
-    body = expanded ? (
-      <View>
-        <MarkdownRenderer text={entry.text} compact enableHtmlish={false} />
-        {entry.kind === "q_and_a" && entry.answer && (
-          <View style={styles.qaAnswerContainer}>
-            <Text style={styles.qaAnswerLabel}>{t("agentPanel.stream.answerLabel")}</Text>
-            <MarkdownRenderer text={entry.answer} compact enableHtmlish={false} />
-          </View>
-        )}
-      </View>
-    ) : (
-      <View>
-        <Text selectable style={styles.body} numberOfLines={6}>
-          {entry.text}
-        </Text>
-        {entry.kind === "q_and_a" && entry.answer && (
-          <View style={styles.qaAnswerContainer}>
-            <Text style={styles.qaAnswerLabel}>{t("agentPanel.stream.answerLabel")}</Text>
-            <Text selectable style={styles.body} numberOfLines={6}>
-              {entry.answer}
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View
-      style={[styles.card, pending && styles.pendingCard]}
-      testID={`companion-entry-${entry.id}`}
-    >
-      <View style={styles.entryHeaderRow}>
-        <Text style={styles.eyebrow}>{formatMessageTimestamp(new Date(entry.timestamp))}</Text>
-        {entry.kind === "pin" ? (
-          <Button variant="ghost" size="sm" onPress={handleRemovePinLocal} disabled={disabled}>
-            <Text style={styles.description}>{t("agentPanel.stream.unpin")}</Text>
-          </Button>
-        ) : null}
-      </View>
-
-      <Text style={styles.title}>{title}</Text>
-      {status ? (
-        <Text style={[styles.description, pending && styles.pendingText]}>{status}</Text>
-      ) : null}
-
-      {body}
-      {entry.ask ? (
-        <View style={styles.notice}>
-          {entry.ask.subtasks?.length ? (
-            <Text style={styles.description}>
-              {entry.ask.subtasks.filter((task) => task.done).length} / {entry.ask.subtasks.length}{" "}
-              subtasks done
-            </Text>
-          ) : null}
-          {entry.ask.subtasks?.map((task) => (
-            <Text key={task.id} style={styles.body}>
-              {task.done ? "✓" : "○"} {task.text}
-            </Text>
-          ))}
-          <Text selectable style={styles.description}>
-            {entry.ask.state === "done" ? "Completion evidence" : "Evidence so far"}:{" "}
-            {entry.ask.evidence || "None recorded"}
-          </Text>
-          {entry.ask.state !== "done" ? (
-            <Text selectable style={styles.body}>
-              Remaining: {entry.ask.remaining || "Not yet specified"}
-            </Text>
-          ) : null}
-          {entry.ask.sourceMessageId ? (
-            <Text selectable style={styles.description}>
-              Source message: {entry.ask.sourceMessageId}
-            </Text>
-          ) : null}
-          {entry.ask.delegatedAgentId && serverId ? (
-            <Button variant="outline" onPress={openDelegated}>
-              Open delegated session
-            </Button>
-          ) : null}
-        </View>
-      ) : null}
-
-      {entry.truncated ? (
-        <Text style={styles.description}>{t("agentPanel.stream.excerpt")}</Text>
-      ) : null}
-
-      <View style={styles.actions}>
-        {entry.text ? (
-          <Button
-            variant="ghost"
-            style={styles.touchTarget}
-            onPress={toggleExpanded}
-            accessibilityState={expandedAccessibilityState}
-          >
-            {t(expanded ? "agentPanel.stream.showLess" : "agentPanel.stream.read")}
-          </Button>
-        ) : null}
-        <Button
-          variant={pending ? "secondary" : "outline"}
-          style={styles.touchTarget}
-          onPress={pending ? onReplyInChat : onReturnToChat}
-        >
-          {t(pending ? "agentPanel.stream.replyInChat" : "agentPanel.stream.backToChat")}
-        </Button>
-
-        {(entry.kind === "question" || entry.kind === "feature_request") && (
-          <View style={styles.statusActionsRow}>
-            <Button variant="outline" onPress={handleSetOpen} disabled={disabled}>
-              Open
-            </Button>
-            <Button variant="outline" onPress={handleSetReviewed} disabled={disabled}>
-              {entry.ask ? "In progress" : "Reviewed"}
-            </Button>
-            <Button
-              variant="outline"
-              onPress={handleSetDone}
-              disabled={disabled || Boolean(entry.ask)}
-            >
-              Done
-            </Button>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   root: { flex: 1, backgroundColor: theme.colors.surface0 },
   feed: {
@@ -708,29 +496,6 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.semibold,
   },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
-  eyebrow: { color: theme.colors.foregroundExtraMuted, fontSize: theme.fontSize.sm },
-  card: {
-    padding: theme.spacing[4],
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.surface1,
-    gap: theme.spacing[2],
-  },
-  pendingCard: { borderLeftWidth: 3, borderLeftColor: theme.colors.accent },
-  pendingText: { color: theme.colors.accent },
-  body: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 22,
-    marginTop: theme.spacing[2],
-  },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing[2],
-    marginTop: theme.spacing[2],
-  },
   touchTarget: { minHeight: 44 },
   empty: { gap: theme.spacing[3], paddingVertical: theme.spacing[6] },
   separator: { height: theme.spacing[3] },
@@ -747,24 +512,5 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
     color: theme.colors.foreground,
-  },
-  qaAnswerContainer: {
-    marginTop: theme.spacing[2],
-    paddingLeft: theme.spacing[2],
-    borderLeftWidth: 2,
-    borderLeftColor: theme.colors.border,
-  },
-  qaAnswerLabel: {
-    fontWeight: "bold",
-    marginBottom: theme.spacing[1],
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
-  },
-  entryHeaderRow: { flexDirection: "row", justifyContent: "space-between" },
-  statusActionsRow: {
-    flexDirection: "row",
-    gap: theme.spacing[2],
-    marginTop: theme.spacing[2],
-    width: "100%",
   },
 }));
