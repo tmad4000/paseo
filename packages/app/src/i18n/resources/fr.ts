@@ -1527,6 +1527,16 @@ export const fr: TranslationResources = {
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
       appName: "Paseo",
+      versions: "Versions",
+      versionsChannel: "Versions (canal {{channel}})",
+      versionStatus: {
+        current: "À jour",
+        update: "Mise à jour disponible",
+        ahead: "Plus récent que la version publiée",
+        unknown: "Vérification impossible",
+        checking: "Vérification…",
+        offline: "Hors ligne",
+      },
     },
     sections: {
       sessions: "Historique",

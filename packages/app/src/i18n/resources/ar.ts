@@ -1485,6 +1485,16 @@ export const ar: TranslationResources = {
       github: "إنشاء مشكلة على GitHub",
       whatsNew: "ما الجديد",
       appName: "Paseo",
+      versions: "الإصدارات",
+      versionsChannel: "الإصدارات (قناة {{channel}})",
+      versionStatus: {
+        current: "محدّث",
+        update: "يتوفر تحديث",
+        ahead: "أحدث من الإصدار المنشور",
+        unknown: "تعذّر التحقق",
+        checking: "جارٍ التحقق…",
+        offline: "غير متصل",
+      },
     },
     sections: {
       sessions: "السجل",
