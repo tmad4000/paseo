@@ -683,13 +683,15 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Focus-history Back/Forward (fork) ---
-  // Upstream owns Cmd+[ / Cmd+] for previous/next workspace, so Back and Forward take the
-  // arrow chords it leaves free.
+  // Cmd+[ / Cmd+] go Back and Forward, as in a browser or Finder. Upstream binds these
+  // chords to previous/next workspace in sidebar order; the fork moves that to
+  // Cmd+Alt+Left/Right below. Binding ids keep their original names: overrides are keyed
+  // by binding id, so each id stays with its action and a customized shortcut survives.
   {
     id: "navigation-back-cmd-alt-left-mac",
     action: "navigation.back",
-    combo: "Cmd+Alt+ArrowLeft",
-    when: { mac: true, commandCenter: false },
+    combo: "Cmd+[",
+    when: { mac: true, desktop: true, commandCenter: false },
     help: {
       id: "navigation-back",
       section: "general",
@@ -699,8 +701,20 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "navigation-back-ctrl-alt-left-non-mac",
     action: "navigation.back",
-    combo: "Ctrl+Alt+ArrowLeft",
-    when: { mac: false, commandCenter: false, terminal: false },
+    combo: "Ctrl+[",
+    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    help: {
+      id: "navigation-back",
+      section: "general",
+      label: "Back",
+    },
+  },
+  // Browsers own Cmd+[ / Ctrl+[ for their own history, so web takes Alt+[ / Alt+].
+  {
+    id: "navigation-back-alt-bracket-web",
+    action: "navigation.back",
+    combo: "Alt+[",
+    when: { desktop: false, commandCenter: false },
     help: {
       id: "navigation-back",
       section: "general",
@@ -710,8 +724,8 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "navigation-forward-cmd-alt-right-mac",
     action: "navigation.forward",
-    combo: "Cmd+Alt+ArrowRight",
-    when: { mac: true, commandCenter: false },
+    combo: "Cmd+]",
+    when: { mac: true, desktop: true, commandCenter: false },
     help: {
       id: "navigation-forward",
       section: "general",
@@ -721,8 +735,19 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "navigation-forward-ctrl-alt-right-non-mac",
     action: "navigation.forward",
-    combo: "Ctrl+Alt+ArrowRight",
-    when: { mac: false, commandCenter: false, terminal: false },
+    combo: "Ctrl+]",
+    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    help: {
+      id: "navigation-forward",
+      section: "general",
+      label: "Forward",
+    },
+  },
+  {
+    id: "navigation-forward-alt-bracket-web",
+    action: "navigation.forward",
+    combo: "Alt+]",
+    when: { desktop: false, commandCenter: false },
     help: {
       id: "navigation-forward",
       section: "general",
@@ -731,11 +756,13 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Workspace relative navigation ---
+  // Previous/next workspace in sidebar order. The ids still name upstream's Cmd+[ / Cmd+]
+  // chords; see the Back/Forward note above.
   {
     id: "workspace-navigate-relative-cmd-left-mac",
     action: "workspace.navigate.relative",
-    combo: "Cmd+[",
-    when: { mac: true, desktop: true, commandCenter: false },
+    combo: "Cmd+Alt+ArrowLeft",
+    when: { mac: true, commandCenter: false },
     payload: { type: "delta", delta: -1 },
     help: {
       id: "workspace-prev",
@@ -746,8 +773,8 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "workspace-navigate-relative-ctrl-left-non-mac",
     action: "workspace.navigate.relative",
-    combo: "Ctrl+[",
-    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    combo: "Ctrl+Alt+ArrowLeft",
+    when: { mac: false, commandCenter: false, terminal: false },
     payload: { type: "delta", delta: -1 },
     help: {
       id: "workspace-prev",
@@ -758,8 +785,8 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "workspace-navigate-relative-cmd-right-mac",
     action: "workspace.navigate.relative",
-    combo: "Cmd+]",
-    when: { mac: true, desktop: true, commandCenter: false },
+    combo: "Cmd+Alt+ArrowRight",
+    when: { mac: true, commandCenter: false },
     payload: { type: "delta", delta: 1 },
     help: {
       id: "workspace-next",
@@ -770,8 +797,8 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "workspace-navigate-relative-ctrl-right-non-mac",
     action: "workspace.navigate.relative",
-    combo: "Ctrl+]",
-    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    combo: "Ctrl+Alt+ArrowRight",
+    when: { mac: false, commandCenter: false, terminal: false },
     payload: { type: "delta", delta: 1 },
     help: {
       id: "workspace-next",
@@ -779,31 +806,6 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       label: "Next workspace",
     },
   },
-  {
-    id: "workspace-navigate-relative-alt-left-web",
-    action: "workspace.navigate.relative",
-    combo: "Alt+[",
-    when: { desktop: false, commandCenter: false },
-    payload: { type: "delta", delta: -1 },
-    help: {
-      id: "workspace-prev",
-      section: "workspaces",
-      label: "Previous workspace",
-    },
-  },
-  {
-    id: "workspace-navigate-relative-alt-right-web",
-    action: "workspace.navigate.relative",
-    combo: "Alt+]",
-    when: { desktop: false, commandCenter: false },
-    payload: { type: "delta", delta: 1 },
-    help: {
-      id: "workspace-next",
-      section: "workspaces",
-      label: "Next workspace",
-    },
-  },
-
   // --- Recent sessions (fork) ---
   // Opens Cmd+K on the recent-sessions list; the header's Recent button shows the same list.
   {
@@ -830,13 +832,14 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Recent workspaces (fork) ---
-  // Hold Control and tap Tab to walk most-recently-used workspaces; release to switch.
-  // Desktop only: browsers own Ctrl+Tab, and Ctrl+` already toggles the right sidebar. On
-  // web, Cmd+K lists recent workspaces first and Back/Forward offer a history menu.
+  // Hold Control and Option/Alt and tap Tab to walk most-recently-used workspaces; release
+  // Control to switch. Desktop only: browsers own Ctrl+Tab. Ctrl+Tab itself cycles tabs
+  // below. Windows and some Linux desktops reserve Ctrl+Alt+Tab for the OS task switcher;
+  // rebind it in Settings there. The ids keep their Ctrl+Tab names so overrides survive.
   {
     id: "workspace-recent-ctrl-tab-desktop",
     action: "workspace.recent.switch",
-    combo: "Ctrl+Tab",
+    combo: "Ctrl+Alt+Tab",
     when: { desktop: true, commandCenter: false },
     payload: { type: "delta", delta: 1 },
     help: {
@@ -848,7 +851,7 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "workspace-recent-ctrl-shift-tab-desktop",
     action: "workspace.recent.switch",
-    combo: "Ctrl+Shift+Tab",
+    combo: "Ctrl+Alt+Shift+Tab",
     when: { desktop: true, commandCenter: false },
     payload: { type: "delta", delta: -1 },
     help: {
@@ -859,6 +862,57 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Tab relative navigation ---
+  // Ctrl+Tab and, on macOS, Cmd+Shift+[ / ] cycle tabs in the focused pane, as browsers
+  // and terminals do. Both are desktop only because the browser owns them on web, where
+  // Alt+Shift+[ / ] remains.
+  {
+    id: "workspace-tab-navigate-relative-ctrl-shift-tab-desktop",
+    action: "workspace.tab.navigate.relative",
+    combo: "Ctrl+Shift+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-tab-prev",
+      section: "tabs-panes",
+      label: "Previous tab",
+    },
+  },
+  {
+    id: "workspace-tab-navigate-relative-ctrl-tab-desktop",
+    action: "workspace.tab.navigate.relative",
+    combo: "Ctrl+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-tab-next",
+      section: "tabs-panes",
+      label: "Next tab",
+    },
+  },
+  {
+    id: "workspace-tab-navigate-relative-cmd-shift-left-mac-desktop",
+    action: "workspace.tab.navigate.relative",
+    combo: "Cmd+Shift+[",
+    when: { mac: true, desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-tab-prev",
+      section: "tabs-panes",
+      label: "Previous tab",
+    },
+  },
+  {
+    id: "workspace-tab-navigate-relative-cmd-shift-right-mac-desktop",
+    action: "workspace.tab.navigate.relative",
+    combo: "Cmd+Shift+]",
+    when: { mac: true, desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-tab-next",
+      section: "tabs-panes",
+      label: "Next tab",
+    },
+  },
   {
     id: "workspace-tab-navigate-relative-alt-shift-left",
     action: "workspace.tab.navigate.relative",
