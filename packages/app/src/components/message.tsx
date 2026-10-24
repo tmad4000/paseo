@@ -1,3 +1,4 @@
+import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TaskListRow } from "@/components/task-list-row";
 import {
@@ -7,7 +8,6 @@ import {
   Pressable,
   type GestureResponderEvent,
   type LayoutChangeEvent,
-  type TextLayoutEvent,
   StyleProp,
   ViewStyle,
   type TextStyle,
@@ -410,15 +410,6 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   trailingRowVisible: {
     opacity: 1,
   },
-  showMoreButton: {
-    marginTop: theme.spacing[2],
-    alignSelf: "flex-start",
-  },
-  showMoreText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "500",
-  },
   timestampText: {
     color: theme.colors.foregroundMuted,
     fontSize: STREAM_METADATA_FONT_SIZE,
@@ -450,67 +441,6 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
 }
 
 const MESSAGE_TEXT_DATASET = { messageText: "true" };
-
-export function ClampedUserMessageText({
-  message,
-  style,
-}: {
-  message: string;
-  style: StyleProp<TextStyle>;
-}) {
-  const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [clampState, setClampState] = useState<"measuring" | "clamped" | "unclamped">("measuring");
-
-  const handleTextLayout = useCallback(
-    (e: TextLayoutEvent) => {
-      if (clampState === "measuring") {
-        if (e.nativeEvent.lines.length > 10) {
-          setClampState("clamped");
-        } else {
-          setClampState("unclamped");
-        }
-      }
-    },
-    [clampState],
-  );
-
-  const toggleExpanded = useCallback(() => {
-    setIsExpanded((prev) => !prev);
-  }, []);
-
-  let currentNumberOfLines: number | undefined;
-  if (clampState === "measuring") {
-    currentNumberOfLines = 11;
-  } else if (clampState === "clamped" && !isExpanded) {
-    currentNumberOfLines = 10;
-  } else {
-    currentNumberOfLines = undefined;
-  }
-
-  return (
-    <View>
-      <Text
-        selectable
-        style={style}
-        dataSet={MESSAGE_TEXT_DATASET}
-        numberOfLines={currentNumberOfLines}
-        onTextLayout={clampState === "measuring" ? handleTextLayout : undefined}
-      >
-        {message}
-      </Text>
-      {clampState === "clamped" && (
-        <Pressable onPress={toggleExpanded} style={userMessageStylesheet.showMoreButton}>
-          <Text style={userMessageStylesheet.showMoreText}>
-            {isExpanded
-              ? t("message.actions.showLess", "Show less")
-              : t("message.actions.showMore", "Show more")}
-          </Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
 
 /**
  * Until the agent has a message, its tick stays visible on every platform;
@@ -728,7 +658,11 @@ export const UserMessage = memo(function UserMessage({
             </View>
           ) : null}
           {hasText ? (
-            <ClampedUserMessageText message={message} style={userMessageStylesheet.text} />
+            <CollapsiblePrompt
+              message={message}
+              textStyle={userMessageStylesheet.text}
+              dataSet={MESSAGE_TEXT_DATASET}
+            />
           ) : null}
         </View>
         {trailing.present ? (

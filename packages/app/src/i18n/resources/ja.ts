@@ -533,6 +533,8 @@ export const ja: TranslationResources = {
       copyCode: "コードをコピー",
       copyTurn: "ターンをコピー",
       copyMessage: "メッセージをコピー",
+      showMore: "もっと見る",
+      showLess: "折りたたむ",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
       forkInNewWorkspace: "新しいワークスペースにフォーク",
