@@ -10,6 +10,7 @@ export interface AppUpdateCheckResult {
   readyToInstall: boolean;
   currentVersion: string;
   latestVersion: string;
+  publishedVersion?: string | null;
   body: string | null;
   date: string | null;
   errorMessage: string | null;
@@ -90,6 +91,7 @@ function buildCheckResult(input: {
   readyToInstall: boolean;
   info?: RuntimeUpdateInfo | null;
   errorMessage?: string | null;
+  publishedVersion?: string | null;
 }): AppUpdateCheckResult {
   const { currentVersion, hasUpdate, readyToInstall, info, errorMessage = null } = input;
 
@@ -98,6 +100,7 @@ function buildCheckResult(input: {
     readyToInstall,
     currentVersion,
     latestVersion: info?.version ?? currentVersion,
+    publishedVersion: input.publishedVersion ?? info?.version ?? null,
     body: typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
     date: typeof info?.releaseDate === "string" ? info.releaseDate : null,
     errorMessage,
@@ -282,6 +285,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
             currentVersion,
             hasUpdate: false,
             readyToInstall: false,
+            publishedVersion: result.updateInfo.version,
           });
         }
 
@@ -310,6 +314,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
           currentVersion,
           hasUpdate: false,
           readyToInstall: false,
+          publishedVersion: info.version,
         });
       } catch (error) {
         deps.reportCheckError?.(error);

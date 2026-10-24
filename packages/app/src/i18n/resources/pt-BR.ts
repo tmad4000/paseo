@@ -1499,6 +1499,16 @@ export const ptBR: TranslationResources = {
       github: "Criar issue no GitHub",
       whatsNew: "Novidades",
       appName: "Paseo",
+      versions: "Versões",
+      versionsChannel: "Versões (canal {{channel}})",
+      versionStatus: {
+        current: "Atualizado",
+        update: "Atualização disponível",
+        ahead: "Mais recente que a versão publicada",
+        unknown: "Não foi possível verificar",
+        checking: "Verificando…",
+        offline: "Offline",
+      },
     },
     sections: {
       sessions: "Histórico",

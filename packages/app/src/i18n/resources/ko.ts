@@ -1479,6 +1479,16 @@ export const ko: TranslationResources = {
       github: "GitHub 이슈 만들기",
       whatsNew: "새로운 소식",
       appName: "Paseo",
+      versions: "버전",
+      versionsChannel: "버전 ({{channel}} 채널)",
+      versionStatus: {
+        current: "최신 버전",
+        update: "업데이트 가능",
+        ahead: "출시 버전보다 최신",
+        unknown: "확인할 수 없음",
+        checking: "확인 중…",
+        offline: "오프라인",
+      },
     },
     sections: {
       sessions: "기록",

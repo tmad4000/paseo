@@ -1454,6 +1454,16 @@ export const zhCN: TranslationResources = {
       github: "创建 GitHub Issue",
       whatsNew: "新功能",
       appName: "Paseo",
+      versions: "版本",
+      versionsChannel: "版本（{{channel}} 渠道）",
+      versionStatus: {
+        current: "已是最新版本",
+        update: "有可用更新",
+        ahead: "比发布版本更新",
+        unknown: "无法检查",
+        checking: "正在检查…",
+        offline: "离线",
+      },
     },
     sections: {
       sessions: "历史",

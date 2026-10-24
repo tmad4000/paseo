@@ -1484,6 +1484,16 @@ export const ja: TranslationResources = {
       github: "GitHub Issueを作成",
       whatsNew: "新着情報",
       appName: "Paseo",
+      versions: "バージョン",
+      versionsChannel: "バージョン（{{channel}} チャンネル）",
+      versionStatus: {
+        current: "最新です",
+        update: "更新があります",
+        ahead: "公開版より新しい",
+        unknown: "確認できませんでした",
+        checking: "確認中…",
+        offline: "オフライン",
+      },
     },
     sections: {
       sessions: "履歴",

@@ -1509,6 +1509,16 @@ export const es: TranslationResources = {
       github: "Crear incidencia en GitHub",
       whatsNew: "Novedades",
       appName: "Paseo",
+      versions: "Versiones",
+      versionsChannel: "Versiones (canal {{channel}})",
+      versionStatus: {
+        current: "Actualizado",
+        update: "Actualización disponible",
+        ahead: "Más reciente que la versión publicada",
+        unknown: "No se pudo comprobar",
+        checking: "Comprobando…",
+        offline: "Sin conexión",
+      },
     },
     sections: {
       sessions: "Historial",
