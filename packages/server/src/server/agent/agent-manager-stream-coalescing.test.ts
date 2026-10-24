@@ -1,5 +1,6 @@
 import { toAgentPayload, toStoredAgentRecord } from "./agent-projections.js";
 import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
+import { StreamTagStore } from "./stream-tag-store.js";
 import { AgentSnapshotPayloadSchema } from "../messages.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -252,6 +253,9 @@ function createHarness(options?: { provider?: AgentProvider; storage?: boolean }
   const manager = new AgentManager({
     registry: options?.storage
       ? new AgentStorage(join(workdir, "agents"), createTestLogger())
+      : undefined,
+    streamTagStore: options?.storage
+      ? new StreamTagStore(join(workdir, "stream-tags.json"))
       : undefined,
     clients: { [client.provider]: client },
     idFactory: createIdFactory(),
@@ -1454,6 +1458,58 @@ test("companion responses survive coalescing and snapshot serialization without 
     expect(getTimelineItems(await harness.manager.getTimelineRows(agentId))).toEqual([
       { type: "assistant_message", text: "Review complete." },
     ]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("Stream tags filter and count per chat and globally, and pinned tags survive snapshots", async () => {
+  const harness = createHarness({ storage: true });
+  try {
+    const { agentId } = await createManagedSession(harness);
+    for (const [entryId, text] of [
+      ["a", "Great line #quotes #ideas"],
+      ["b", "Another #quotes"],
+      ["c", "Untagged note"],
+    ])
+      await harness.manager.updateCompanionEntry({ agentId, action: "add_pin", entryId, text });
+
+    const all = await harness.manager.listGlobalStream({ agentId });
+    expect(all.tagCounts).toEqual([
+      { tag: "quotes", count: 2 },
+      { tag: "ideas", count: 1 },
+    ]);
+    const both = await harness.manager.listGlobalStream({ agentId, tags: ["#Quotes", "ideas"] });
+    expect(both.rows.map((row) => row.item.kind === "entry" && row.item.entry.id)).toEqual([
+      "pin:a",
+    ]);
+    // Counts describe the scope, not the tag selection, so other chips stay toggleable.
+    expect(both.tagCounts).toEqual(all.tagCounts);
+    expect((await harness.manager.listGlobalStream({ tags: ["quotes"] })).rows).toHaveLength(2);
+
+    expect(
+      await harness.manager.setStreamTagPinned({ agentId, tag: "#Ideas", pinned: true }),
+    ).toEqual(["ideas"]);
+    // A live snapshot flush must not drop the stored per-chat pin.
+    await harness.manager.setTitle(agentId, "Renamed after pinning");
+    await harness.manager.updateCompanionEntry({
+      agentId,
+      action: "add_pin",
+      entryId: "d",
+      text: "After the flush #ideas",
+    });
+    expect((await harness.manager.listGlobalStream({ agentId })).pinnedTags).toEqual(["ideas"]);
+    await harness.manager.closeAgent(agentId);
+    expect((await harness.manager.listGlobalStream({ agentId })).pinnedTags).toEqual(["ideas"]);
+
+    expect(await harness.manager.setStreamTagPinned({ tag: "quotes", pinned: true })).toEqual([
+      "quotes",
+    ]);
+    expect((await harness.manager.listGlobalStream({})).pinnedTags).toEqual(["quotes"]);
+    expect(await harness.manager.setStreamTagPinned({ tag: "quotes", pinned: false })).toEqual([]);
+    await expect(
+      harness.manager.setStreamTagPinned({ tag: "not a tag", pinned: true }),
+    ).rejects.toThrow("Tags use letters");
   } finally {
     harness.cleanup();
   }

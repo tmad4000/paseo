@@ -2703,6 +2703,8 @@ export class Session {
         return this.handleStreamListRequest(msg);
       case "stream.entry.update.request":
         return this.handleStreamUpdateRequest(msg);
+      case "stream.tags.pin.request":
+        return this.handleStreamTagPinRequest(msg);
       case "update_companion_entry_request":
         return this.handleUpdateCompanionEntryRequest(msg);
       case "agent.queue.enqueue.request":
@@ -3811,6 +3813,28 @@ export class Session {
       this.emit({
         type: "stream.entry.update.response",
         payload: { requestId: msg.requestId, accepted: false, error: getErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleStreamTagPinRequest(
+    msg: Extract<SessionInboundMessage, { type: "stream.tags.pin.request" }>,
+  ): Promise<void> {
+    try {
+      const pinnedTags = await this.agentManager.setStreamTagPinned(msg);
+      this.emit({
+        type: "stream.tags.pin.response",
+        payload: { requestId: msg.requestId, accepted: true, pinnedTags },
+      });
+    } catch (error) {
+      this.emit({
+        type: "stream.tags.pin.response",
+        payload: {
+          requestId: msg.requestId,
+          accepted: false,
+          error: getErrorMessage(error),
+          pinnedTags: [],
+        },
       });
     }
   }

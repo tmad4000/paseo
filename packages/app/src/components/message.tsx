@@ -1,3 +1,5 @@
+import { MessagePinControl } from "@/companion-stream/message-pin-control";
+import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TaskListRow } from "@/components/task-list-row";
@@ -105,7 +107,7 @@ import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attac
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { isWeb, isNative } from "@/constants/platform";
 import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
-import { Pin, HelpCircle } from "lucide-react-native";
+import { HelpCircle } from "lucide-react-native";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -129,7 +131,7 @@ interface UserMessageProps {
   images?: UserMessageImageAttachment[];
   attachments?: AgentAttachment[];
   timestamp: number;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
   onQAndA?: (text: string, messageId?: string) => void;
   capabilities?: AgentCapabilityFlags;
   client?: DaemonClient | null;
@@ -524,6 +526,14 @@ function UserMessageTrailingRow({
   );
 }
 
+function shouldShowMessageActions(
+  isCompact: boolean,
+  isHovered: boolean,
+  pinActive: boolean,
+): boolean {
+  return isCompact || isNative || isHovered || pinActive;
+}
+
 export const UserMessage = memo(function UserMessage({
   renderFullContent = false,
   serverId,
@@ -548,6 +558,7 @@ export const UserMessage = memo(function UserMessage({
   const isCompact = useIsCompactFormFactor();
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
+  const [pinActive, setPinActive] = useState(false);
   const [lightboxMetadata, setLightboxMetadata] = useState<UserMessageImageAttachment | null>(null);
   const handleLightboxClose = useCallback(() => setLightboxMetadata(null), []);
   const lightboxSource = useMemo<ImageLightboxSource | null>(
@@ -562,7 +573,7 @@ export const UserMessage = memo(function UserMessage({
     deliveryState,
     isPending,
     hasText,
-    isRevealed: isCompact || isNative || isHovered,
+    isRevealed: shouldShowMessageActions(isCompact, isHovered, pinActive),
   });
   const showTrailingRow = trailing.visible;
   const formattedTimestamp = useMemo(
@@ -574,7 +585,6 @@ export const UserMessage = memo(function UserMessage({
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const getMessageContent = useCallback(() => message, [message]);
-  const handlePin = useCallback(() => onPin?.(message), [onPin, message]);
   const handleQAndA = useCallback(
     () => onQAndA?.(message, messageId),
     [onQAndA, message, messageId],
@@ -686,7 +696,13 @@ export const UserMessage = memo(function UserMessage({
               />
             ) : null}
             {onPin ? (
-              <TurnPinButton onPin={handlePin} containerStyle={userMessageStylesheet.copyButton} />
+              <MessagePinControl
+                getContent={getMessageContent}
+                onPin={onPin}
+                onActivityChange={setPinActive}
+                sourceId={messageId ? `msg:${messageId}` : undefined}
+                containerStyle={userMessageStylesheet.copyButton}
+              />
             ) : null}
             {onQAndA ? (
               <TurnQAndAButton
@@ -713,7 +729,7 @@ interface AssistantTurnFooterProps {
   completedAt?: Date;
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -761,6 +777,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   completedAt,
   durationMs,
   onFork,
+  onPin,
 }: AssistantTurnFooterProps) {
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
@@ -810,6 +827,13 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         getContent={getContent}
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
+      {onPin ? (
+        <MessagePinControl
+          getContent={getContent}
+          onPin={onPin}
+          containerStyle={assistantTurnFooterStylesheet.copyButton}
+        />
+      ) : null}
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
       {primaryLabel ? (
         <Pressable
@@ -1152,38 +1176,6 @@ const turnCopyButtonStylesheet = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
   },
 }));
-
-interface TurnPinButtonProps {
-  onPin: () => void;
-  containerStyle?: StyleProp<ViewStyle>;
-}
-
-export const TurnPinButton = memo(function TurnPinButton({
-  onPin,
-  containerStyle,
-}: TurnPinButtonProps) {
-  const { t } = useTranslation();
-  const pressableStyle = useMemo(
-    () => [turnCopyButtonStylesheet.container, containerStyle],
-    [containerStyle],
-  );
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      style={pressableStyle}
-      onPress={onPin}
-      accessibilityLabel={t("agentPanel.stream.pinToStream")}
-    >
-      {({ hovered }) => {
-        const iconColor = hovered
-          ? turnCopyButtonStylesheet.iconHoveredColor.color
-          : turnCopyButtonStylesheet.iconColor.color;
-        return <Pin size={16} color={iconColor} />;
-      }}
-    </Pressable>
-  );
-});
 
 interface TurnQAndAButtonProps {
   onQAndA: () => void;
