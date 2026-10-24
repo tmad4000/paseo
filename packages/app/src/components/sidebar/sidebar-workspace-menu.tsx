@@ -1,3 +1,5 @@
+import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
+import type { ManualStatusTarget } from "@/agent-status/model";
 import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
@@ -215,6 +217,7 @@ function SidebarWorkspaceMenuItems({
           Mark as unread
         </WorkspaceMenuItem>
       ) : null}
+      {serverId && workspaceId ? <AgentStatusMenuTrigger /> : null}
       {onTogglePin ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -295,7 +298,20 @@ export function SidebarWorkspaceMenu({
       serverId && workspaceId ? { serverId, workspaceId, labels: workspaceLabels ?? [] } : null,
     [serverId, workspaceId, workspaceLabels],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      workspaceTarget
+        ? {
+            kind: "workspace",
+            serverId: workspaceTarget.serverId,
+            workspaceId: workspaceTarget.workspaceId,
+          }
+        : null,
+    [workspaceTarget],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
+  const pages = useMemo(() => [...labelPages, ...statusPages], [labelPages, statusPages]);
   return (
     <DropdownMenu compactMode="sheet" open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
@@ -409,7 +425,20 @@ export function SidebarWorkspaceContextMenu({
     }),
     [workspace],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      workspaceTarget
+        ? {
+            kind: "workspace",
+            serverId: workspaceTarget.serverId,
+            workspaceId: workspaceTarget.workspaceId,
+          }
+        : null,
+    [workspaceTarget],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
+  const pages = useMemo(() => [...labelPages, ...statusPages], [labelPages, statusPages]);
 
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>

@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  manualStatus: {
+    title: "状态",
+    needs_input: "需要输入（手动）",
+    ready: "等待审核",
+    in_review: "审核中",
+    changes_requested: "已请求更改",
+    approved: "已批准",
+    clear: "清除手动状态",
+    sessionScope: "将保持设置，直到你更改它。",
+    workspaceScope: "应用于 {{count}} 个会话。",
+    empty: "此工作区没有会话。",
+    failed: "无法更新状态。",
+    partialFailure: "{{total}} 个会话中有 {{failed}} 个更新失败。请重试以完成。",
+    saved: "状态已更新",
+    retry: "重试",
+    updateHost: "更新此主机以使用手动状态。",
+  },
   defaultProject: {
     actions: {
       pin: "固定项目",

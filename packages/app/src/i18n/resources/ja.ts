@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  manualStatus: {
+    title: "ステータス",
+    needs_input: "入力が必要（手動）",
+    ready: "レビュー待ち",
+    in_review: "レビュー中",
+    changes_requested: "変更を依頼済み",
+    approved: "承認済み",
+    clear: "手動ステータスを解除",
+    sessionScope: "変更するまで保持されます。",
+    workspaceScope: "{{count}} 件のセッションに適用します。",
+    empty: "このワークスペースにセッションはありません。",
+    failed: "ステータスを更新できませんでした。",
+    partialFailure: "{{total}} 件中 {{failed}} 件を更新できませんでした。再試行してください。",
+    saved: "ステータスを更新しました",
+    retry: "再試行",
+    updateHost: "手動ステータスを使用するにはホストを更新してください。",
+  },
   defaultProject: {
     actions: {
       pin: "プロジェクトを固定",

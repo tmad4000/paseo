@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  manualStatus: {
+    title: "الحالة",
+    needs_input: "يتطلب إدخالاً (يدوي)",
+    ready: "جاهز للمراجعة",
+    in_review: "قيد المراجعة",
+    changes_requested: "تم طلب تغييرات",
+    approved: "تمت الموافقة",
+    clear: "مسح الحالة اليدوية",
+    sessionScope: "تبقى حتى تغيّرها.",
+    workspaceScope: "ينطبق على {{count}} جلسات.",
+    empty: "لا توجد جلسات في مساحة العمل هذه.",
+    failed: "تعذر تحديث الحالة.",
+    partialFailure: "تعذر تحديث {{failed}} من {{total}} جلسات. أعد المحاولة للإكمال.",
+    saved: "تم تحديث الحالة",
+    retry: "إعادة المحاولة",
+    updateHost: "حدّث هذا المضيف لاستخدام الحالات اليدوية.",
+  },
   defaultProject: {
     actions: {
       pin: "تثبيت المشروع",
