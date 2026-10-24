@@ -231,6 +231,7 @@ function buildAgentManagerSpies() {
     setAgentThinkingOption: vi.fn().mockResolvedValue(undefined),
     setAgentFeature: vi.fn().mockResolvedValue(undefined),
     setLabels: vi.fn().mockResolvedValue(undefined),
+    updateCompanionEntry: vi.fn().mockResolvedValue(undefined),
     setTitle: vi.fn().mockResolvedValue(undefined),
     updateAgentMetadata: vi.fn().mockResolvedValue(undefined),
     archiveAgent: vi.fn().mockResolvedValue({ archivedAt: new Date().toISOString() }),
@@ -1158,6 +1159,38 @@ describe("browser MCP tools", () => {
         retryable: false,
       },
       context: { agentId: "agent-1", cwd: REPO_CWD },
+    });
+  });
+});
+
+describe("Stream quote MCP tool", () => {
+  it("pins a quote with its source and appends tags as hashtags", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger: createTestLogger(),
+    });
+    const response = await registeredTool(server, "pin_stream_quote").handler({
+      pinId: "q1",
+      text: "Less, but better. #design",
+      tags: ["Quotes", "#design"],
+      sourceId: "msg:7",
+    });
+    expect(spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      entryId: "q1",
+      action: "add_pin",
+      text: "Less, but better. #design\n\n#quotes",
+      sourceId: "msg:7",
+    });
+    expect(response.structuredContent).toEqual({
+      agentId: "agent-1",
+      entryId: "pin:q1",
+      tags: ["design", "quotes"],
+      accepted: true,
     });
   });
 });

@@ -1,4 +1,8 @@
-import type { StreamListOptions, StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import type {
+  StreamListOptions,
+  StreamEntryUpdate,
+  StreamTagPin,
+} from "@getpaseo/protocol/global-stream";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
 import {
@@ -3289,6 +3293,16 @@ export class DaemonClient {
       responseType: "stream.entry.update.response",
     });
     if (!payload.accepted) throw new Error(payload.error ?? "Could not save Stream item");
+  }
+
+  /** Pin or unpin a Stream tag for one chat (agentId) or host-wide. Returns the new pinned list. */
+  async setStreamTagPinned(input: StreamTagPin): Promise<string[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "stream.tags.pin.request", ...input },
+      responseType: "stream.tags.pin.response",
+    });
+    if (!payload.accepted) throw new Error(payload.error ?? "Could not pin Stream tag");
+    return payload.pinnedTags;
   }
 
   async updateCompanionEntry(input: {
