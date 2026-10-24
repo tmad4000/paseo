@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import { Activity, CircleHelp, Gift, Keyboard } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -17,9 +17,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
-import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
+import {
+  useHostRuntimeIsConnected,
+  useHostRuntimeSnapshot,
+  useHosts,
+} from "@/runtime/host-runtime";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
-import { useSessionStore } from "@/stores/session-store";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { HostProfile } from "@/types/host-connection";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
@@ -29,6 +32,7 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { resolveVersionStatus, type ReleaseVersionCheck } from "@/desktop/updates/version-status";
+import { useHelpUpdateCheck } from "@/desktop/updates/use-help-update-check";
 
 const DISCORD_URL = "https://discord.gg/jz8T2uahpH";
 const GITHUB_ISSUE_URL = "https://github.com/getpaseo/paseo/issues/new";
@@ -85,9 +89,8 @@ function VersionHint({
 
 function HostVersionHint({ host, check }: { host: HostProfile; check: ReleaseVersionCheck }) {
   const isConnected = useHostRuntimeIsConnected(host.serverId);
-  const daemonVersion = useSessionStore(
-    (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
-  );
+  const runtime = useHostRuntimeSnapshot(host.serverId);
+  const daemonVersion = runtime?.client?.getLastServerInfoMessage()?.version ?? null;
   return (
     <VersionHint
       version={daemonVersion}
@@ -108,29 +111,13 @@ export function SidebarHelpMenu() {
   const version = resolveAppVersion();
   const hosts = useHosts();
   const { settings } = useDesktopSettings();
-  const { isDesktopApp, availableUpdate, isInstalling, checkForUpdates, installUpdate } =
-    useDesktopAppUpdater();
-  const [releaseCheck, setReleaseCheck] = useState<ReleaseVersionCheck>({ state: "unknown" });
-
-  // Refresh on every opening, including after a channel change. A failed check
-  // must replace a previous success rather than leave a stale "Up to date" label.
-  useEffect(() => {
-    if (!open || !isDesktopApp) return;
-    let cancelled = false;
-    setReleaseCheck({ state: "checking" });
-    void checkForUpdates({ intent: "manual" }).then((result) => {
-      if (cancelled) return;
-      setReleaseCheck(
-        result && !result.errorMessage
-          ? { state: "checked", latestVersion: result.publishedVersion ?? null }
-          : { state: "unknown" },
-      );
-      return undefined;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, isDesktopApp, checkForUpdates]);
+  const { isDesktopApp, isInstalling, checkForUpdates, installUpdate } = useDesktopAppUpdater();
+  const { releaseCheck, canInstall } = useHelpUpdateCheck({
+    open,
+    isDesktopApp,
+    releaseChannel: settings.releaseChannel,
+    checkForUpdates,
+  });
 
   const handleInstallUpdate = useCallback(() => {
     void installUpdate();
@@ -230,18 +217,21 @@ export function SidebarHelpMenu() {
             <HostVersionHint key={host.serverId} host={host} check={releaseCheck} />
           ))}
         </View>
-        {isDesktopApp && (availableUpdate?.readyToInstall || isInstalling) ? (
-          <DropdownMenuItem
-            testID="sidebar-help-install-update"
-            disabled={isInstalling}
-            onSelect={handleInstallUpdate}
-          >
-            {t(
-              isInstalling
-                ? "desktop.updates.callout.installingAction"
-                : "desktop.updates.callout.installAndRestart",
-            )}
-          </DropdownMenuItem>
+        {isDesktopApp && (canInstall || isInstalling) ? (
+          <>
+            <Text style={styles.restartWarning}>{t("desktop.updates.callout.restartWarning")}</Text>
+            <DropdownMenuItem
+              testID="sidebar-help-install-update"
+              disabled={isInstalling}
+              onSelect={handleInstallUpdate}
+            >
+              {t(
+                isInstalling
+                  ? "desktop.updates.callout.installingAction"
+                  : "desktop.updates.callout.installAndRestart",
+              )}
+            </DropdownMenuItem>
+          </>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -276,5 +266,11 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     textAlign: "right",
     paddingHorizontal: theme.spacing[3],
+  },
+  restartWarning: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
 }));
