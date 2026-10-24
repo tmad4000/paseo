@@ -79,10 +79,16 @@ function VersionHint({
   const status = resolveVersionStatus(version, check, connected);
   return (
     <View style={styles.versionHint} testID={testID}>
-      <DropdownMenuHint style={styles.versionRow} trailing={formatVersionWithPrefix(version)}>
+      <DropdownMenuHint
+        style={styles.versionRow}
+        trailing={formatVersionWithPrefix(version)}
+        testID={`${testID}-number`}
+      >
         {label}
       </DropdownMenuHint>
-      <Text style={styles.versionStatus}>{t(`sidebar.help.versionStatus.${status}`)}</Text>
+      <Text style={styles.versionStatus} testID={`${testID}-status`}>
+        {t(`sidebar.help.versionStatus.${status}`)}
+      </Text>
     </View>
   );
 }
