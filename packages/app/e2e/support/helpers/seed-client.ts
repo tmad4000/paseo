@@ -38,6 +38,8 @@ export interface SeedDaemonClient {
   ): Promise<{
     rows: import("@getpaseo/protocol/global-stream").StreamRow[];
     nextCursor: string | null;
+    tagCounts?: import("@getpaseo/protocol/global-stream").StreamTagCount[];
+    pinnedTags?: string[];
   }>;
 
   listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot>;

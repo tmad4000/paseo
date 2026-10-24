@@ -84,6 +84,8 @@ const STORED_AGENT_SCHEMA = z.object({
   owner: AgentOwnerSchema.optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
   companionEntries: z.array(CompanionEntrySchema).optional(),
+  // Stream tags pinned in this chat. Not on the live agent: snapshots carry the stored value forward.
+  pinnedStreamTags: z.array(z.string()).optional(),
 });
 
 export type SerializableAgentConfig = Pick<
@@ -268,8 +270,24 @@ export class AgentStorage {
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
       }
+      if (existing?.pinnedStreamTags) record.pinnedStreamTags = existing.pinnedStreamTags;
       return record;
     });
+  }
+
+  /** Change one chat's pinned Stream tags inside its write queue, so snapshots cannot drop it. */
+  async updatePinnedStreamTags(
+    agentId: string,
+    update: (tags: string[]) => string[],
+  ): Promise<string[]> {
+    await this.load();
+    let result: string[] = [];
+    await this.queueRecordMutation(agentId, (existing) => {
+      if (!existing) throw new Error("Conversation no longer exists");
+      result = update(existing.pinnedStreamTags ?? []);
+      return { ...existing, pinnedStreamTags: result };
+    });
+    return result;
   }
 
   async setTitle(agentId: string, title: string): Promise<void> {

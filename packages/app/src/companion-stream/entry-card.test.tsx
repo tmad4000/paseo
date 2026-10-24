@@ -67,6 +67,22 @@ const ask: CompanionEntry = {
   },
 };
 
+const tagged: CompanionEntry = {
+  id: "pin:n",
+  kind: "pin",
+  timestamp: ask.timestamp,
+  text: "Keep this #Design idea",
+  truncated: false,
+};
+const quote: CompanionEntry = {
+  id: "pin:q",
+  kind: "pin",
+  sourceId: "msg:42",
+  timestamp: ask.timestamp,
+  text: "The tension is the teaching.",
+  truncated: false,
+};
+
 function renderCard(entry: CompanionEntry) {
   return render(
     <EntryCard
@@ -99,6 +115,44 @@ describe("EntryCard", () => {
     expect(view.getByText("Ship Stream tags")).toBeTruthy();
     expect(view.getByText("With a tag cloud and filters.")).toBeTruthy();
     expect(view.container.textContent).not.toMatch(/explicit/i);
+  });
+
+  it("renders hashtags as links that set the tag filter", () => {
+    const onTagPress = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={tagged}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+        onTagPress={onTagPress}
+      />,
+    );
+    fireEvent.click(view.getByTestId("stream-hashtag-design"));
+    expect(onTagPress).toHaveBeenCalledWith("design");
+    expect(view.getByTestId("companion-entry-eyebrow").textContent).toBe(
+      "Pinned · Oct 24, 2:10 PM",
+    );
+  });
+
+  it("presents an excerpt pin with a source as a Quote that opens its chat", () => {
+    const onReturnToChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={quote}
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(view.getByTestId("companion-entry-quote").textContent).toBe(
+      "The tension is the teaching.",
+    );
+    expect(view.getByTestId("companion-entry-eyebrow").textContent).toMatch(/^Quote · /);
+    fireEvent.click(view.getByText("Open source chat"));
+    expect(onReturnToChat).toHaveBeenCalled();
   });
 
   it("keeps ask evidence and remaining work behind Read", () => {

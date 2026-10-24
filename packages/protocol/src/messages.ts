@@ -5,6 +5,8 @@ import {
   StreamListResponseSchema,
   StreamUpdateRequestSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinRequestSchema,
+  StreamTagPinResponseSchema,
 } from "./global-stream.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
 export {
@@ -3801,6 +3803,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UpdateCompanionEntryRequestMessageSchema,
   StreamListRequestSchema,
   StreamUpdateRequestSchema,
+  StreamTagPinRequestSchema,
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
@@ -4305,6 +4308,8 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
         globalStream: z.boolean().optional(),
         durableStream: z.boolean().optional(),
+        // COMPAT(streamTags): fork feature; #hashtag filters, tag counts and pinned tags.
+        streamTags: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
@@ -7613,6 +7618,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectRenameResponseSchema,
   StreamListResponseSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
   ProjectPinSetResponseSchema,

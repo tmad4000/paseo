@@ -21,6 +21,9 @@ import { Button } from "@/components/ui/button";
 import type { Theme } from "@/styles/theme";
 import { getMessageSelection } from "./message-selection";
 import { messagePinErrorMessage, type MessagePinHandler } from "./message-pin-operations";
+import { appendStreamTags } from "@getpaseo/protocol/stream-tags";
+import { useStreamTagSuggestions } from "./stream-tag-scope";
+import { TagField } from "./tag-field";
 
 const ThemedPin = withUnistyles(Pin);
 const ThemedCheck = withUnistyles(Check);
@@ -49,6 +52,8 @@ export const MessagePinControl = memo(function MessagePinControl({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const tagSuggestions = useStreamTagSuggestions(draft !== null);
   useEffect(() => {
     onActivityChange?.(open || draft !== null || saving || saved || error !== null);
   }, [open, draft, saving, saved, error, onActivityChange]);
@@ -63,6 +68,7 @@ export const MessagePinControl = memo(function MessagePinControl({
         await onPin(text.trim(), sourceId);
         setSaved(true);
         setDraft(null);
+        setTags([]);
         setOpen(false);
       } catch (failure) {
         setError(messagePinErrorMessage(failure, t("globalStream.saveFailed")));
@@ -101,9 +107,10 @@ export const MessagePinControl = memo(function MessagePinControl({
   const saveSelection = useCallback(() => {
     if (selection) void save(selection);
   }, [save, selection]);
+  const draftWithTags = draft === null ? null : appendStreamTags(draft.trim(), tags);
   const saveDraft = useCallback(() => {
-    if (draft !== null) void save(draft);
-  }, [save, draft]);
+    if (draftWithTags !== null) void save(draftWithTags);
+  }, [save, draftWithTags]);
 
   const Item = children ? ContextMenuItem : DropdownMenuItem;
   const menuItems = (
@@ -184,7 +191,16 @@ export const MessagePinControl = memo(function MessagePinControl({
               testID="message-pin-excerpt-input"
               style={styles.input}
             />
-            <Text style={styles.hint}>{draft.length} / 4000</Text>
+            {tagSuggestions.supported ? (
+              <TagField
+                value={tags}
+                onChange={setTags}
+                known={tagSuggestions.tags}
+                disabled={saving}
+                testID="message-pin-excerpt-tags"
+              />
+            ) : null}
+            <Text style={styles.hint}>{(draftWithTags ?? draft).length} / 4000</Text>
             {error ? (
               <Text accessibilityRole="alert" style={styles.error}>
                 {error}
@@ -196,7 +212,7 @@ export const MessagePinControl = memo(function MessagePinControl({
               </Button>
               <Button
                 loading={saving}
-                disabled={saving || !draft.trim() || draft.trim().length > 4000}
+                disabled={saving || !draft.trim() || (draftWithTags ?? draft).trim().length > 4000}
                 onPress={saveDraft}
               >
                 {t("agentPanel.stream.pinToStream")}

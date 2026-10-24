@@ -1,6 +1,7 @@
 import { MessagePinItem } from "@/companion-stream/message-pin-control";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { useMessagePin } from "@/companion-stream/use-message-pin";
+import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
@@ -112,6 +113,25 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
+
+/** Sheets and Stream tag suggestions for everything rendered inside one chat. */
+function ChatSurfaceProviders({
+  serverId,
+  agentId,
+  children,
+}: {
+  serverId: string;
+  agentId: string;
+  children: ReactNode;
+}) {
+  return (
+    <ToolCallSheetProvider>
+      <StreamTagScopeProvider serverId={serverId} agentId={agentId}>
+        {children}
+      </StreamTagScopeProvider>
+    </ToolCallSheetProvider>
+  );
+}
 
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
@@ -1188,7 +1208,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         revealLoadedMessage={revealLoadedHistory}
         visibleMessageIds={visibleMessageIds}
       >
-        <ToolCallSheetProvider>
+        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId}>
           <AssistantSelectionCopySurface style={stylesheet.container}>
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({
@@ -1235,7 +1255,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               </View>
             )}
           </AssistantSelectionCopySurface>
-        </ToolCallSheetProvider>
+        </ChatSurfaceProviders>
       </ChatFind>
     );
   },

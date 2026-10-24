@@ -3,18 +3,22 @@ import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { useSessionStore } from "@/stores/session-store";
 import { Button } from "@/components/ui/button";
-import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SearchField } from "@/components/ui/search-field";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useHostRuntimeConnectionStatus, useHostRuntimeClient } from "@/runtime/host-runtime";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildCompanionFeed, type CompanionFeedItem } from "./model";
 import { useGlobalStream } from "./use-global-stream";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { EntryCard } from "./entry-card";
+import { TagCloud } from "./tag-cloud";
+import { StreamNoteComposer } from "./note-composer";
+import { useStreamTagFilter } from "./use-stream-tag-filter";
 
 export { EntryCard } from "./entry-card";
 
@@ -33,9 +37,6 @@ interface CompanionFeedProps {
 
 const keyExtractor = (item: CompanionFeedItem) => item.id;
 const NO_NOTICES: readonly string[] = [];
-const NoteInput = withUnistyles(EditingTextInput, (theme) => ({
-  placeholderTextColor: theme.colors.foregroundMuted,
-}));
 
 type ViewTab = "checklist" | "stream" | "pinned";
 type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
@@ -73,15 +74,14 @@ export function CompanionFeed({
   );
   const olderHost = hostKnown && !supportsDurableStream;
   const [saving, setSaving] = useState(false);
-  const draftEntryId = useRef<string | null>(null);
   const artifactPins = useRef(new ArtifactPinOperations());
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [viewTab, setViewTab] = useState<ViewTab>("stream");
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
-  const [pinText, setPinText] = useState("");
-  const noteInput = useRef<EditingTextInputHandle>(null);
+  const [search, setSearch] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
 
   const pendingFilter = onlyOpen ? "pending" : "all";
   const query = useGlobalStream({
@@ -89,9 +89,13 @@ export function CompanionFeed({
     agentId,
     asksOnly: viewTab === "checklist",
     filter: viewTab === "pinned" ? "pinned" : pendingFilter,
+    search: useDebouncedValue(search, 250),
+    tags,
     includeArchived: true,
     enabled: isSupported && supportsDurableStream,
   });
+  const tagFilter = useStreamTagFilter(query, setTags);
+  const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
   const { refetch, fetchNextPage } = query;
   // Global-Stream notices describe the durable query, which older hosts never run.
   const notices = supportsDurableStream ? query.notices : NO_NOTICES;
@@ -212,6 +216,7 @@ export function CompanionFeed({
           onReplyInChat={onReplyInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
+          onTagPress={query.supportsTags ? tagFilter.add : undefined}
           disabled={saving || !supportsWrites || connection !== "online"}
         />
       ),
@@ -227,31 +232,27 @@ export function CompanionFeed({
       saving,
       supportsWrites,
       connection,
+      query.supportsTags,
+      tagFilter.add,
     ],
   );
 
   const handleToggleOnlyOpen = useCallback(() => setOnlyOpen((v) => !v), []);
-  const handleSubmitPin = useCallback(() => {
-    if (!pinText.trim() || saving) return;
-    void save({
-      agentId,
-      action: ({ pinned: "add_pin", checklist: "set_ask", stream: "add_question" } as const)[
-        viewTab
-      ],
-      ...(viewTab === "checklist"
-        ? { expectedRevision: 0, ask: { state: "open" as const, remaining: "", evidence: "" } }
-        : {}),
-      entryId: (draftEntryId.current ??= globalThis.crypto.randomUUID()),
-      text: pinText.trim(),
-    })
-      .then(() => {
-        draftEntryId.current = null;
-        setPinText("");
-        noteInput.current?.replaceText("");
-        return;
-      })
-      .catch(() => undefined);
-  }, [save, agentId, pinText, viewTab, saving]);
+  const handleSubmitNote = useCallback(
+    ({ entryId, text }: { entryId: string; text: string }) =>
+      save({
+        agentId,
+        action: ({ pinned: "add_pin", checklist: "set_ask", stream: "add_question" } as const)[
+          viewTab
+        ],
+        ...(viewTab === "checklist"
+          ? { expectedRevision: 0, ask: { state: "open" as const, remaining: "", evidence: "" } }
+          : {}),
+        entryId,
+        text,
+      }),
+    [save, agentId, viewTab],
+  );
 
   const header = useMemo(
     () => (
@@ -283,6 +284,26 @@ export function CompanionFeed({
             { value: "pinned", label: t("agentPanel.stream.pinnedTab") },
           ]}
         />
+
+        {supportsDurableStream ? (
+          <SearchField
+            value={search}
+            onChangeText={setSearch}
+            placeholder={t("agentPanel.stream.search")}
+            clearAccessibilityLabel={t("globalStream.clearSearch")}
+            testID="companion-stream-search"
+          />
+        ) : null}
+        {query.supportsTags ? (
+          <TagCloud
+            counts={query.tagCounts}
+            pinned={query.pinnedTags}
+            active={tags}
+            onToggle={tagFilter.toggle}
+            onTogglePin={supportsWrites ? tagFilter.setPinned : undefined}
+            error={tagFilter.error}
+          />
+        ) : null}
 
         <Button
           variant="ghost"
@@ -336,38 +357,17 @@ export function CompanionFeed({
           </View>
         )}
 
-        {supportsWrites && (
-          <View style={styles.pinInputContainer}>
-            <NoteInput
-              ref={noteInput}
-              style={styles.pinInput}
-              placeholder={
-                viewTab === "checklist"
-                  ? t("agentPanel.stream.askPlaceholder")
-                  : t(
-                      viewTab === "pinned"
-                        ? "agentPanel.stream.notePlaceholder"
-                        : "globalStream.questionPlaceholder",
-                    )
-              }
-              maxLength={4000}
-              editable={!saving}
-              initialValue=""
-              onChangeText={setPinText}
-              onSubmitEditing={handleSubmitPin}
-            />
-            <Button
-              onPress={handleSubmitPin}
-              disabled={saving || connection !== "online" || !pinText.trim()}
-            >
-              {viewTab === "checklist"
-                ? t("agentPanel.stream.addAsk")
-                : t(
-                    viewTab === "pinned" ? "agentPanel.stream.addNote" : "globalStream.addQuestion",
-                  )}
-            </Button>
-          </View>
-        )}
+        {supportsWrites ? (
+          <StreamNoteComposer
+            key={viewTab}
+            mode={viewTab}
+            saving={saving}
+            online={connection === "online"}
+            supportsTags={query.supportsTags}
+            knownTags={knownTags}
+            onSubmit={handleSubmitNote}
+          />
+        ) : null}
       </View>
     ),
     [
@@ -380,14 +380,23 @@ export function CompanionFeed({
       onlyOpen,
       t,
       handleToggleOnlyOpen,
-      handleSubmitPin,
+      handleSubmitNote,
       supportsWrites,
       saveError,
       saving,
-      pinText,
       olderHost,
       hostName,
       hostVersion,
+      supportsDurableStream,
+      search,
+      tags,
+      knownTags,
+      query.supportsTags,
+      query.tagCounts,
+      query.pinnedTags,
+      tagFilter.toggle,
+      tagFilter.setPinned,
+      tagFilter.error,
     ],
   );
 
@@ -504,13 +513,4 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[6],
   },
   segmentContainer: { gap: theme.spacing[2], marginTop: theme.spacing[2] },
-  pinInputContainer: { flexDirection: "row", gap: theme.spacing[2], marginTop: theme.spacing[2] },
-  pinInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.foreground,
-  },
 }));

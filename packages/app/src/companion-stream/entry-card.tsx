@@ -8,6 +8,7 @@ import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { formatMessageTimestamp } from "@/utils/time";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { describeEntry, splitEntryText } from "./entry-labels";
+import { HashtagText } from "./hashtag-text";
 
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
 
@@ -19,6 +20,8 @@ export interface EntryCardProps {
   onReplyInChat: () => void;
   onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
   onRemovePin: (id: string) => void;
+  /** Tapping a #hashtag in the text adds it to the Stream tag filter. */
+  onTagPress?: (tag: string) => void;
 }
 
 /** Eyebrow (kind · state · time), then the entry text as the headline. Details sit behind Read. */
@@ -29,6 +32,7 @@ export function EntryCard({
   onReplyInChat,
   onUpdateStatus,
   onRemovePin,
+  onTagPress,
   disabled = false,
 }: EntryCardProps) {
   const { t } = useTranslation();
@@ -39,6 +43,9 @@ export function EntryCard({
   const expandedAccessibilityState = useMemo(() => ({ expanded }), [expanded]);
   const eyebrow = describeEntry(entry, t);
   const time = formatMessageTimestamp(new Date(entry.timestamp));
+  const quote = entry.kind === "pin" && Boolean(entry.sourceId);
+  let chatAction = quote ? "agentPanel.stream.openSource" : "agentPanel.stream.backToChat";
+  if (pending) chatAction = "agentPanel.stream.replyInChat";
 
   return (
     <View
@@ -63,7 +70,7 @@ export function EntryCard({
         ) : null}
       </View>
 
-      <EntryBody entry={entry} expanded={expanded} />
+      <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
       {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
 
       {entry.truncated ? (
@@ -86,7 +93,7 @@ export function EntryCard({
           style={styles.touchTarget}
           onPress={pending ? onReplyInChat : onReturnToChat}
         >
-          {t(pending ? "agentPanel.stream.replyInChat" : "agentPanel.stream.backToChat")}
+          {t(chatAction)}
         </Button>
         {entry.kind === "question" || entry.kind === "feature_request" ? (
           <StatusActions
@@ -137,7 +144,17 @@ function StatusActions({
   );
 }
 
-function EntryBody({ entry, expanded }: { entry: CompanionEntry; expanded: boolean }) {
+function EntryBody({
+  entry,
+  expanded,
+  quote,
+  onTagPress,
+}: {
+  entry: CompanionEntry;
+  expanded: boolean;
+  quote: boolean;
+  onTagPress?: (tag: string) => void;
+}) {
   const { t } = useTranslation();
   if (!entry.text) return null;
   const answer =
@@ -161,16 +178,30 @@ function EntryBody({ entry, expanded }: { entry: CompanionEntry; expanded: boole
       </View>
     );
   }
+  if (quote) {
+    // A saved excerpt reads as a quotation: the passage itself is the card.
+    return (
+      <View style={styles.quote} testID="companion-entry-quote">
+        <HashtagText
+          text={entry.text.trim()}
+          style={styles.quoteText}
+          numberOfLines={8}
+          onTagPress={onTagPress}
+        />
+      </View>
+    );
+  }
   const { headline, rest } = splitEntryText(entry.text);
   return (
     <View style={styles.text}>
-      <Text selectable style={styles.headline} numberOfLines={3}>
-        {headline}
-      </Text>
+      <HashtagText
+        text={headline}
+        style={styles.headline}
+        numberOfLines={3}
+        onTagPress={onTagPress}
+      />
       {rest ? (
-        <Text selectable style={styles.body} numberOfLines={5}>
-          {rest}
-        </Text>
+        <HashtagText text={rest} style={styles.body} numberOfLines={5} onTagPress={onTagPress} />
       ) : null}
       {answer}
     </View>
@@ -259,6 +290,13 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 22,
   },
   body: { color: theme.colors.foreground, fontSize: theme.fontSize.sm, lineHeight: 20 },
+  quote: {
+    borderLeftWidth: 2,
+    borderLeftColor: theme.colors.borderAccent,
+    paddingLeft: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+  },
+  quoteText: { color: theme.colors.foreground, fontSize: theme.fontSize.lg, lineHeight: 26 },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   details: {
     padding: theme.spacing[3],
