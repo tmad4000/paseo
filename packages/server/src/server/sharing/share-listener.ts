@@ -35,7 +35,7 @@ export function createShareListener(store: Pick<ShareStore, "view">): http.Serve
       response.set("Retry-After", String(Math.max(1, Math.ceil((window.until - now) / 1000))));
       response.status(429).type("text").send("Too many requests");
     };
-    if (++window.total > 60 || window.unknown >= 10) {
+    if (++window.total > 60) {
       limited();
       return;
     }
@@ -48,7 +48,10 @@ export function createShareListener(store: Pick<ShareStore, "view">): http.Serve
       /* fail closed without exposing storage errors */
     }
     if (!snapshot) {
-      window.unknown++;
+      if (++window.unknown > 10) {
+        limited();
+        return;
+      }
       response.status(404).type("html").send(unavailablePage());
       return;
     }

@@ -30,10 +30,15 @@ export const SECRET_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: "slack", pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/g },
   { name: "google", pattern: /\bAIza[A-Za-z0-9_-]{20,}/g },
   { name: "jwt", pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
-  { name: "labelled", pattern: /\b(?:key|token|secret|auth)\b[^\n]{0,20}?[A-Za-z0-9_-]{32,}/gi },
+  {
+    name: "labelled",
+    pattern:
+      /(?<![A-Za-z0-9])(?:key|token|secret|auth)(?![A-Za-z0-9])[^\n]{0,20}?[A-Za-z0-9_-]{32,}/gi,
+  },
   {
     name: "labelled suffix",
-    pattern: /\b[A-Za-z0-9_-]{32,}[^\n]{0,20}?\b(?:key|token|secret|auth)\b/gi,
+    pattern:
+      /\b[A-Za-z0-9_-]{32,}[^\n]{0,20}?(?<![A-Za-z0-9])(?:key|token|secret|auth)(?![A-Za-z0-9])/gi,
   },
 ];
 const LOCAL_PATH =
@@ -75,18 +80,29 @@ export function redactTimeline(
     }
     if (profile.scrub.secrets)
       for (const { pattern } of SECRET_PATTERNS) {
-        text = text.replace(pattern, (match: string, prefix?: string | number) => {
-          // The query prefix is preserved without retaining its value.
-          if (match.includes("[secret hidden]")) return match;
-          summary.secretsMasked++;
-          return typeof prefix === "string" ? `${prefix}[secret hidden]` : "[secret hidden]";
-        });
+        text = text
+          .split(/(\[secret hidden\]|\[email\]|\[phone\])/g)
+          .map((segment) => {
+            if (["[secret hidden]", "[email]", "[phone]"].includes(segment)) return segment;
+            return segment.replace(pattern, (_match: string, prefix?: string | number) => {
+              // The query prefix is preserved without retaining its value.
+              summary.secretsMasked++;
+              return typeof prefix === "string" ? `${prefix}[secret hidden]` : "[secret hidden]";
+            });
+          })
+          .join("");
       }
-    if (profile.scrub.paths)
-      text = text.replace(LOCAL_PATH, (value) => {
+    if (profile.scrub.paths) {
+      const collapse = (value: string) => {
         summary.pathsCollapsed++;
         return `…/${value.replaceAll("\\", "/").split("/").filter(Boolean).slice(-2).join("/")}`;
-      });
+      };
+      text = text.replace(
+        /([`"'])((?:\/(?:Users|home|Volumes|private|tmp)\/|~\/|[A-Za-z]:\\Users\\)[^`"'<>\r\n]+)\1/g,
+        (_match, quote: string, value: string) => `${quote}${collapse(value)}${quote}`,
+      );
+      text = text.replace(LOCAL_PATH, collapse);
+    }
     if (profile.scrub.contacts)
       text = text.replace(
         /\b[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b|\+[1-9][0-9]{7,14}\b/g,
@@ -98,6 +114,7 @@ export function redactTimeline(
       );
     return text;
   };
+  const ownerName = scrub(metadata.ownerName);
   const messages: SharedMessage[] = [];
   const projection = new TimelineProjection();
   for (const row of rows) projection.append(row);
@@ -123,7 +140,7 @@ export function redactTimeline(
           kind: "user",
           id,
           at,
-          author: { name: metadata.ownerName, role: "owner" },
+          author: { name: ownerName, role: "owner" },
           text: scrub(item.text),
         });
         break;
@@ -154,7 +171,7 @@ export function redactTimeline(
   return {
     v: 1,
     title: scrub(metadata.title),
-    owner: { name: metadata.ownerName },
+    owner: { name: ownerName },
     agent: {
       provider: scrub(metadata.provider),
       ...(metadata.model ? { model: scrub(metadata.model) } : {}),

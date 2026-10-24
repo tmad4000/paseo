@@ -103,7 +103,7 @@ export class ShareService {
       createdAt: source.createdAt,
       expiresAt,
       revokedAt: null,
-      snapshotSeqEnd: rows.at(-1)?.seq ?? 0,
+      snapshotSeqEnd: rows.reduce((max, row) => Math.max(max, row.seq), 0),
       viewCount: 0,
       lastViewedAt: null,
     };

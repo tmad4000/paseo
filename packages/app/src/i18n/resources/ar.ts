@@ -2,6 +2,56 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  sharing: {
+    deleteMessage: "هل تريد حذف هذا الرابط ولقطته؟ لا يمكن التراجع عن ذلك.",
+    action: "مشاركة…",
+    title: "مشاركة المحادثة",
+    snapshot: "لقطة · رابط للقراءة فقط",
+    shared: "تمت المشاركة",
+    include: "المحتوى المضمّن",
+    hide: "إخفاء",
+    expires: "تنتهي الصلاحية",
+    create: "إنشاء رابط",
+    creating: "جارٍ الإنشاء…",
+    copy: "نسخ الرابط",
+    copied: "تم نسخ الرابط",
+    manage: "إدارة المشاركات",
+    empty: "لا توجد روابط مشاركة بعد.",
+    createNew: "إنشاء رابط جديد",
+    revoke: "إلغاء الصلاحية",
+    revoked: "ملغى",
+    delete: "حذف",
+    notViewed: "لم تتم المشاهدة",
+    assistant: "المساعد",
+    loading: "جارٍ تحميل المعاينة…",
+    updateHost: "حدّث المضيف لمشاركة المحادثات.",
+    summary:
+      "المخفي: أدوات {{tools}}، تفكير {{reasoning}} · المحجوب: أسرار {{secrets}}، جهات اتصال {{contacts}} · المسارات المختصرة: {{paths}}",
+    shareMetadata: "لقطة · {{views}} مشاهدة · تنتهي: {{expiry}} · آخر مشاهدة: {{lastViewed}}",
+    fields: {
+      toolCalls: "استدعاءات الأدوات",
+      reasoning: "التفكير",
+      errors: "الأخطاء",
+      secrets: "الأسرار",
+      paths: "مسارات الملفات",
+      contacts: "البريد الإلكتروني وأرقام الهاتف",
+    },
+    expiry: {
+      never: "أبدًا",
+      "24h": "24 ساعة",
+      "7d": "7 أيام",
+      "30d": "30 يومًا",
+    },
+    omitted: {
+      tool_calls_one: "إخفاء {{count}} استدعاء أدوات",
+      tool_calls_other: "إخفاء {{count}} استدعاء أدوات",
+      reasoning_one: "إخفاء {{count}} تفكير",
+      reasoning_other: "إخفاء {{count}} تفكير",
+      excluded_one: "استبعاد {{count}} رسالة",
+      excluded_other: "استبعاد {{count}} رسالة",
+    },
+  },
+
   manualStatus: {
     title: "الحالة",
     needs_input: "يتطلب إدخالاً (يدوي)",

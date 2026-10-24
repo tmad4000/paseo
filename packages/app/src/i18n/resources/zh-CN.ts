@@ -2,6 +2,56 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  sharing: {
+    deleteMessage: "删除此链接及其快照？此操作无法撤销。",
+    action: "分享…",
+    title: "分享对话",
+    snapshot: "快照 · 只读链接",
+    shared: "已分享",
+    include: "包含内容",
+    hide: "隐藏",
+    expires: "有效期",
+    create: "创建链接",
+    creating: "正在创建…",
+    copy: "复制链接",
+    copied: "链接已复制",
+    manage: "管理分享",
+    empty: "暂无分享链接。",
+    createNew: "创建新链接",
+    revoke: "撤销",
+    revoked: "已撤销",
+    delete: "删除",
+    notViewed: "尚未查看",
+    assistant: "助手",
+    loading: "正在加载预览…",
+    updateHost: "请更新主机以分享对话。",
+    summary:
+      "隐藏：工具 {{tools}} 次、推理 {{reasoning}} 条 · 遮盖：密钥 {{secrets}} 处、联系方式 {{contacts}} 处 · 已缩短路径 {{paths}} 处",
+    shareMetadata: "快照 · {{views}} 次查看 · 到期时间：{{expiry}} · 上次查看：{{lastViewed}}",
+    fields: {
+      toolCalls: "工具调用",
+      reasoning: "推理",
+      errors: "错误",
+      secrets: "密钥",
+      paths: "文件路径",
+      contacts: "电子邮箱和电话号码",
+    },
+    expiry: {
+      never: "永不过期",
+      "24h": "24小时",
+      "7d": "7天",
+      "30d": "30天",
+    },
+    omitted: {
+      tool_calls_one: "已隐藏 {{count}} 次工具调用",
+      tool_calls_other: "已隐藏 {{count}} 次工具调用",
+      reasoning_one: "已隐藏 {{count}} 条推理",
+      reasoning_other: "已隐藏 {{count}} 条推理",
+      excluded_one: "已排除 {{count}} 条消息",
+      excluded_other: "已排除 {{count}} 条消息",
+    },
+  },
+
   manualStatus: {
     title: "状态",
     needs_input: "需要输入（手动）",

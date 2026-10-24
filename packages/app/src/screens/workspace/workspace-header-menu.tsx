@@ -10,6 +10,7 @@ import {
   Settings,
   Pencil,
   SquarePen,
+  Share2,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
@@ -42,6 +43,7 @@ const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedShare = withUnistyles(Share2);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -50,6 +52,7 @@ const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping
 const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
 const MENU_RENAME_ICON = <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+const MENU_SHARE_ICON = <ThemedShare size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
 function WorkspaceHeaderMenuTriggerIcon() {
@@ -152,9 +155,13 @@ function workspaceHeaderMenuButtonStyle({
 export interface WorkspaceHeaderTabActions {
   renameTabKind: "agent" | "terminal" | null;
   onRenameCurrentTab: () => void;
+  sharingAvailability?: boolean | null;
+  onShareConversation?: () => void;
 }
 
 function WorkspaceHeaderTabActionItems({
+  sharingAvailability,
+  onShareConversation,
   renameTabKind,
   onRenameCurrentTab,
 }: WorkspaceHeaderTabActions) {
@@ -171,6 +178,18 @@ function WorkspaceHeaderTabActionItems({
           ? t("workspace.tabs.menu.renameAgent")
           : t("workspace.tabs.menu.renameTerminal")}
       </DropdownMenuItem>
+      {sharingAvailability === true ? (
+        <DropdownMenuItem
+          testID="conversation-share-action"
+          leading={MENU_SHARE_ICON}
+          onSelect={onShareConversation}
+        >
+          {t("sharing.action")}
+        </DropdownMenuItem>
+      ) : null}
+      {sharingAvailability === false ? (
+        <DropdownMenuLabel>{t("sharing.updateHost")}</DropdownMenuLabel>
+      ) : null}
       <DropdownMenuSeparator />
     </>
   );
@@ -257,6 +276,8 @@ export function WorkspaceHeaderMenuMobile({
   onCreateBrowser,
   renameTabKind,
   onRenameCurrentTab,
+  sharingAvailability,
+  onShareConversation,
   ...workspaceActions
 }: WorkspaceHeaderMenuMobileProps) {
   const { t } = useTranslation();
@@ -290,6 +311,8 @@ export function WorkspaceHeaderMenuMobile({
       >
         <WorkspaceHeaderTabActionItems
           renameTabKind={renameTabKind}
+          sharingAvailability={sharingAvailability}
+          onShareConversation={onShareConversation}
           onRenameCurrentTab={onRenameCurrentTab}
         />
         <DropdownMenuItem

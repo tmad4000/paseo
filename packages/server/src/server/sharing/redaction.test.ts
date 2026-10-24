@@ -26,6 +26,50 @@ export const secretFixtures = [
   "abcdef0123456789abcdef0123456789 : secret",
 ];
 describe("share redaction", () => {
+  it("does not rescrub marker text adjacent to a labelled key", () => {
+    const first = redactTimeline(
+      rows([
+        { type: "user_message", text: "[secret hidden] API_KEY=abcdef0123456789abcdef0123456789" },
+      ]),
+      metadata,
+    );
+    expect(first.messages[0]).toMatchObject({ text: "[secret hidden] API_[secret hidden]" });
+    const second = redactTimeline(
+      rows([
+        {
+          type: "user_message",
+          text: first.messages[0]!.kind === "user" ? first.messages[0]!.text : "",
+        },
+      ]),
+      metadata,
+    );
+    expect(second.messages).toEqual(first.messages);
+    expect(second.redactionSummary.secretsMasked).toBe(0);
+  });
+  it("collapses quoted local paths containing spaces", () => {
+    const result = redactTimeline(
+      rows([
+        {
+          type: "assistant_message",
+          text: '`/Users/Jacob Cole/private/src/x.ts` "C:\\Users\\Jacob Cole\\private\\src\\x.ts"',
+        },
+      ]),
+      metadata,
+    );
+    expect(result.messages[0]).toMatchObject({ text: '`…/src/x.ts` "…/src/x.ts"' });
+    expect(result.redactionSummary.pathsCollapsed).toBe(2);
+  });
+  it("applies explicit literal rules to the owner label as well as message text", () => {
+    const result = redactTimeline(rows([{ type: "user_message", text: "Hello Jacob" }]), metadata, {
+      ...DEFAULT_REDACTION,
+      extraPatterns: ["Jacob"],
+    });
+    expect(result.owner.name).toBe("[secret hidden]");
+    expect(result.messages[0]).toMatchObject({
+      author: { name: "[secret hidden]" },
+      text: "Hello [secret hidden]",
+    });
+  });
   it("keeps redaction markers stable even when an extra literal matches marker text", () => {
     const profile = { ...DEFAULT_REDACTION, extraPatterns: ["secret", "email"] };
     const first = redactTimeline(
@@ -66,6 +110,9 @@ describe("share redaction", () => {
   );
   it.each([
     "sk-ant-api03-1234567890abcdefghijk",
+    "API_KEY=abcdef0123456789abcdef0123456789",
+    "AWS_SECRET_ACCESS_KEY=abcdef0123456789abcdef0123456789",
+    "auth_token: abcdef0123456789abcdef0123456789",
     "gho_1234567890abcdefghijklmnop",
     "github_pat_1234567890abcdefghijklmnop",
     "passwd: 'my secret'",

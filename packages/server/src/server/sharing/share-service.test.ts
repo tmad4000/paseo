@@ -28,6 +28,24 @@ afterEach(async () => {
 });
 const tokenFrom = (url: string) => url.split("/").at(-1)!;
 describe("share service", () => {
+  it("records the highest source sequence when projected display order differs", async () => {
+    timeline = [
+      {
+        seq: 4,
+        timestamp: source.createdAt,
+        item: {
+          type: "tool_call",
+          callId: "call",
+          name: "tool",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: "", output: "" },
+        },
+      },
+      { seq: 3, timestamp: source.createdAt, item: { type: "assistant_message", text: "reply" } },
+    ];
+    expect((await service.create(source, options)).share.snapshotSeqEnd).toBe(4);
+  });
   it("rejects a changed source after preview and scrubs updated titles", async () => {
     const preview = await service.preview(source);
     timeline.push({
@@ -86,7 +104,9 @@ describe("share service", () => {
     expect(await service.store.view(tokenFrom(expired.url))).toBeNull();
     const never = await service.create(source, { ...options, expiresAt: null });
     expect(await service.store.view(tokenFrom(never.url))).not.toBeNull();
-    expect((await service.list())[1]?.expiresAt ?? null).toBeNull();
+    expect(
+      (await service.list()).find((share) => share.id === never.share.id)?.expiresAt,
+    ).toBeNull();
   });
   it("previews without writes, rejects unconfigured create and snapshot redaction updates", async () => {
     expect((await service.preview(source)).messages).toHaveLength(1);

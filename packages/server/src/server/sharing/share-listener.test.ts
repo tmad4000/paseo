@@ -46,6 +46,15 @@ afterEach(async () => {
 const create = (expiresAt?: string | null) =>
   service.create(source, { configured: true, publicBaseUrl: base, expiresAt });
 describe("share listener", () => {
+  it("enforces the unknown-token limit for concurrent requests without blocking valid links", async () => {
+    const { url } = await create();
+    const responses = await Promise.all(
+      Array.from({ length: 15 }, () => fetch(`${base}/s/${"z".repeat(43)}`)),
+    );
+    expect(responses.filter((response) => response.status === 404)).toHaveLength(10);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(5);
+    expect((await fetch(url)).status).toBe(200);
+  });
   it("renders safe Markdown, security headers and JSON without cookies", async () => {
     const { url } = await create();
     const response = await fetch(url);
