@@ -279,6 +279,7 @@ test("tab review status changes only that session and remains after reading", as
   await page.getByTestId("manual-status-menu").click();
   await page.getByTestId("manual-status-ready").click();
   await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("manual-status-ready")).toHaveAttribute("aria-checked", "true");
   await page.screenshot({ path: "test-results/manual-status-desktop.png" });
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
@@ -308,6 +309,10 @@ test("compact workspace status menu exposes manual input", async ({ page, worksp
   await page.getByTestId("manual-status-menu").click();
   await page.getByTestId("manual-status-needs_input").click();
   await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("manual-status-needs_input")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
   await page.screenshot({ path: "test-results/manual-status-compact.png" });
   expect(
     (await workspaces.subject.client.fetchAgent({ agentId: workspaces.subject.agentId }))?.agent
