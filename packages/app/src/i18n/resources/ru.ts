@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  manualStatus: {
+    title: "Статус",
+    needs_input: "Требуется ввод (вручную)",
+    ready: "Готово к проверке",
+    in_review: "На проверке",
+    changes_requested: "Запрошены изменения",
+    approved: "Одобрено",
+    clear: "Сбросить ручной статус",
+    sessionScope: "Сохраняется, пока вы его не измените.",
+    workspaceScope: "Применяется к {{count}} сеансам.",
+    empty: "В этом рабочем пространстве нет сеансов.",
+    failed: "Не удалось обновить статус.",
+    partialFailure: "Не удалось обновить {{failed}} из {{total}} сеансов. Повторите попытку.",
+    saved: "Статус обновлён",
+    retry: "Повторить",
+    updateHost: "Обновите этот хост для использования ручных статусов.",
+  },
   defaultProject: {
     actions: {
       pin: "Закрепить проект",
@@ -185,6 +202,7 @@ export const ru: TranslationResources = {
       home: "Главная",
       groupByProject: "Группировать по проекту",
       groupByStatus: "Группировать по статусу",
+      groupInOneList: "Показывать чаты одним списком",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -274,6 +292,33 @@ export const ru: TranslationResources = {
       removeBrowserElement: "Удалить вложение с элементом браузера",
       openReview: "Открыть вложение проверки",
       removeReview: "Удалить вложение проверки",
+    },
+    delivery: {
+      pending: "Сохранено на этом устройстве — ожидание хоста",
+      accepted: "Получено хостом",
+      delivered: "Доставлено агенту",
+      attention: "Ещё не доставлено — требуется внимание",
+      attentionShort: "Не доставлено",
+      attentionTitle: "Сообщение ещё не доставлено",
+      rejectedDetail: "Хост отклонил это сообщение: {{error}}",
+      retryingDetail:
+        "Хост не ответил после {{count}} попыток. Сообщение сохранено на этом устройстве и отправляется повторно при каждом подключении хоста.",
+      retryNow: "Повторить сейчас",
+      keepWaiting: "Продолжить ждать",
+      rejectedToast:
+        "Хост отклонил сохранённое сообщение. Откройте чат, чтобы повторить или изменить его.",
+      retryLimitToast:
+        "Сообщение не дошло до хоста. Оно сохранено на этом устройстве и будет отправлено при подключении.",
+      queueAttention: "Ещё не синхронизировано — сохранено здесь, повторные попытки продолжаются",
+      queueOnHost: "На хосте — отправится, когда агент освободится",
+      unsentHeader: "Неотправленные сообщения ({{count}})",
+      unsentPending: "Сохранено на этом устройстве — отправится при подключении хоста",
+      editUnsent: "Вернуть в поле сообщения",
+      discardUnsent: "Удалить неотправленное сообщение",
+      uncertainDetail:
+        "Хост остановился во время отправки этого сообщения, поэтому оно, возможно, уже у него. Повторяйте, только если агент его не получил.",
+      retryUnsupported:
+        "Этот хост не может безопасно повторно отправлять сообщения. Обновите хост или скопируйте текст и отправьте снова.",
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
@@ -514,6 +559,8 @@ export const ru: TranslationResources = {
       copyCode: "Скопировать код",
       copyTurn: "Скопировать ответ",
       copyMessage: "Копировать сообщение",
+      showMore: "Показать больше",
+      showLess: "Показать меньше",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
       forkInNewWorkspace: "Создать форк в новом рабочем пространстве",
@@ -1405,6 +1452,7 @@ export const ru: TranslationResources = {
         label: "Группировка",
         project: "Проект",
         status: "Статус",
+        list: "Один список",
         labels: "Метки",
       },
       titleSource: {
@@ -1469,6 +1517,16 @@ export const ru: TranslationResources = {
       github: "Создать issue на GitHub",
       whatsNew: "Что нового",
       appName: "Paseo",
+      versions: "Версии",
+      versionsChannel: "Версии (канал {{channel}})",
+      versionStatus: {
+        current: "Актуальная версия",
+        update: "Доступно обновление",
+        ahead: "Новее опубликованной версии",
+        unknown: "Не удалось проверить",
+        checking: "Проверка…",
+        offline: "Не в сети",
+      },
     },
     sections: {
       sessions: "История",
@@ -1534,6 +1592,7 @@ export const ru: TranslationResources = {
         rename: "Переименовать рабочее пространство",
         pin: "Закрепить вверху",
         unpin: "Открепить",
+        lastActive: "Последняя активность",
         archive: "Архивировать",
         archiveWorkspace: "Архивировать рабочее пространство",
         hideFromSidebar: "Скрыть на боковой панели",

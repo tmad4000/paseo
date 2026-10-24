@@ -2,6 +2,24 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  manualStatus: {
+    title: "Estado",
+    needs_input: "Necesita respuesta (manual)",
+    ready: "Listo para revisar",
+    in_review: "En revisión",
+    changes_requested: "Cambios solicitados",
+    approved: "Aprobado",
+    clear: "Borrar estado manual",
+    sessionScope: "Se mantiene hasta que lo cambies.",
+    workspaceScope: "Se aplica a {{count}} sesiones.",
+    empty: "No hay sesiones en este espacio de trabajo.",
+    failed: "No se pudo actualizar el estado.",
+    partialFailure:
+      "No se pudieron actualizar {{failed}} de {{total}} sesiones. Reintenta para finalizar.",
+    saved: "Estado actualizado",
+    retry: "Reintentar",
+    updateHost: "Actualiza este host para usar estados manuales.",
+  },
   defaultProject: {
     actions: {
       pin: "Fijar proyecto",
@@ -185,6 +203,7 @@ export const es: TranslationResources = {
       home: "Hogar",
       groupByProject: "Agrupar por proyecto",
       groupByStatus: "Agrupar por estado",
+      groupInOneList: "Mostrar chats en una sola lista",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -274,6 +293,33 @@ export const es: TranslationResources = {
       removeBrowserElement: "Eliminar el archivo adjunto del elemento del navegador",
       openReview: "Abrir archivo adjunto de reseña",
       removeReview: "Eliminar archivo adjunto de reseña",
+    },
+    delivery: {
+      pending: "Guardado en este dispositivo — esperando al host",
+      accepted: "Recibido por el host",
+      delivered: "Entregado al agente",
+      attention: "Aún no entregado — requiere atención",
+      attentionShort: "No entregado",
+      attentionTitle: "Mensaje aún no entregado",
+      rejectedDetail: "El host rechazó este mensaje: {{error}}",
+      retryingDetail:
+        "El host no ha respondido tras {{count}} intentos. El mensaje está guardado en este dispositivo y se reintenta cada vez que el host se reconecta.",
+      retryNow: "Reintentar ahora",
+      keepWaiting: "Seguir esperando",
+      rejectedToast:
+        "El host rechazó un mensaje guardado. Abre su chat para reintentarlo o editarlo.",
+      retryLimitToast:
+        "Un mensaje no pudo llegar al host. Está guardado en este dispositivo y se reintentará al conectarse.",
+      queueAttention: "Aún sin sincronizar — guardado aquí, se sigue reintentando",
+      queueOnHost: "En el host — se envía cuando el agente quede libre",
+      unsentHeader: "Mensajes sin enviar ({{count}})",
+      unsentPending: "Guardado en este dispositivo — se envía cuando el host se reconecte",
+      editUnsent: "Devolver al cuadro de mensaje",
+      discardUnsent: "Descartar mensaje sin enviar",
+      uncertainDetail:
+        "El host se detuvo mientras enviaba este mensaje, así que puede que ya lo tenga. Reintenta solo si el agente no lo recibió.",
+      retryUnsupported:
+        "Este host no puede reenviar mensajes de forma segura. Actualiza el host, o copia el texto y envíalo de nuevo.",
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
@@ -518,6 +564,8 @@ export const es: TranslationResources = {
       copyCode: "Copiar código",
       copyTurn: "Copiar turno",
       copyMessage: "Copiar mensaje",
+      showMore: "Mostrar más",
+      showLess: "Mostrar menos",
       forkMenu: "Bifurcar mensaje",
       forkInNewTab: "Bifurcar en una pestaña nueva",
       forkInNewWorkspace: "Bifurcar en un espacio de trabajo nuevo",
@@ -1427,6 +1475,7 @@ export const es: TranslationResources = {
         label: "Agrupación",
         project: "Proyecto",
         status: "Estado",
+        list: "Una sola lista",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -1490,6 +1539,16 @@ export const es: TranslationResources = {
       github: "Crear incidencia en GitHub",
       whatsNew: "Novedades",
       appName: "Paseo",
+      versions: "Versiones",
+      versionsChannel: "Versiones (canal {{channel}})",
+      versionStatus: {
+        current: "Actualizado",
+        update: "Actualización disponible",
+        ahead: "Más reciente que la versión publicada",
+        unknown: "No se pudo comprobar",
+        checking: "Comprobando…",
+        offline: "Sin conexión",
+      },
     },
     sections: {
       sessions: "Historial",
@@ -1555,6 +1614,7 @@ export const es: TranslationResources = {
         rename: "Cambiar nombre del espacio de trabajo",
         pin: "Anclar arriba",
         unpin: "Desanclar",
+        lastActive: "Última actividad",
         archive: "Archivo",
         archiveWorkspace: "Archivar espacio de trabajo",
         hideFromSidebar: "Ocultar de la barra lateral",

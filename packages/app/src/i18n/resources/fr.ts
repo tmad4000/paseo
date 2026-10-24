@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  manualStatus: {
+    title: "État",
+    needs_input: "Saisie requise (manuel)",
+    ready: "Prêt à être examiné",
+    in_review: "En cours de révision",
+    changes_requested: "Modifications demandées",
+    approved: "Approuvé",
+    clear: "Effacer l’état manuel",
+    sessionScope: "Conservé jusqu’à votre modification.",
+    workspaceScope: "S’applique à {{count}} sessions.",
+    empty: "Aucune session dans cet espace de travail.",
+    failed: "Impossible de modifier l’état.",
+    partialFailure: "Échec pour {{failed}} sessions sur {{total}}. Réessayez pour terminer.",
+    saved: "État mis à jour",
+    retry: "Réessayer",
+    updateHost: "Mettez à jour cet hôte pour utiliser les états manuels.",
+  },
   defaultProject: {
     actions: {
       pin: "Épingler le projet",
@@ -186,6 +203,7 @@ export const fr: TranslationResources = {
       home: "Maison",
       groupByProject: "Grouper par projet",
       groupByStatus: "Grouper par statut",
+      groupInOneList: "Afficher les chats en une seule liste",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -277,6 +295,33 @@ export const fr: TranslationResources = {
       removeBrowserElement: "Supprimer la pièce jointe d'un élément de navigateur",
       openReview: "Ouvrir la pièce jointe de l'avis",
       removeReview: "Supprimer la pièce jointe de l'avis",
+    },
+    delivery: {
+      pending: "Enregistré sur cet appareil — en attente de l’hôte",
+      accepted: "Reçu par l’hôte",
+      delivered: "Remis à l’agent",
+      attention: "Pas encore remis — action requise",
+      attentionShort: "Non remis",
+      attentionTitle: "Message pas encore remis",
+      rejectedDetail: "L’hôte a refusé ce message : {{error}}",
+      retryingDetail:
+        "L’hôte n’a pas répondu après {{count}} tentatives. Le message est enregistré sur cet appareil et réessayé à chaque reconnexion de l’hôte.",
+      retryNow: "Réessayer maintenant",
+      keepWaiting: "Continuer d’attendre",
+      rejectedToast:
+        "L’hôte a refusé un message enregistré. Ouvrez sa conversation pour le réessayer ou le modifier.",
+      retryLimitToast:
+        "Un message n’a pas pu atteindre l’hôte. Il est enregistré sur cet appareil et sera réessayé à la connexion.",
+      queueAttention: "Pas encore synchronisé — enregistré ici, nouvelles tentatives en cours",
+      queueOnHost: "Sur l’hôte — envoyé quand l’agent sera libre",
+      unsentHeader: "Messages non envoyés ({{count}})",
+      unsentPending: "Enregistré sur cet appareil — envoyé à la reconnexion de l’hôte",
+      editUnsent: "Remettre dans la zone de message",
+      discardUnsent: "Supprimer le message non envoyé",
+      uncertainDetail:
+        "L’hôte s’est arrêté pendant l’envoi de ce message ; il l’a peut-être déjà. Réessayez seulement si l’agent ne l’a pas reçu.",
+      retryUnsupported:
+        "Cet hôte ne peut pas renvoyer les messages en toute sécurité. Mettez l’hôte à jour, ou copiez le texte et renvoyez-le.",
     },
     errors: {
       failedToSend: "Échec de l'envoi du message",
@@ -520,6 +565,8 @@ export const fr: TranslationResources = {
       copyCode: "Copier le code",
       copyTurn: "Copier le tour",
       copyMessage: "Copier le message",
+      showMore: "Afficher plus",
+      showLess: "Afficher moins",
       forkMenu: "Dupliquer le message",
       forkInNewTab: "Dupliquer dans un nouvel onglet",
       forkInNewWorkspace: "Dupliquer dans un nouvel espace de travail",
@@ -1427,6 +1474,7 @@ export const fr: TranslationResources = {
         label: "Regroupement",
         project: "Projet",
         status: "Statut",
+        list: "Une seule liste",
         labels: "Libellés",
       },
       titleSource: {
@@ -1491,6 +1539,16 @@ export const fr: TranslationResources = {
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
       appName: "Paseo",
+      versions: "Versions",
+      versionsChannel: "Versions (canal {{channel}})",
+      versionStatus: {
+        current: "À jour",
+        update: "Mise à jour disponible",
+        ahead: "Plus récent que la version publiée",
+        unknown: "Vérification impossible",
+        checking: "Vérification…",
+        offline: "Hors ligne",
+      },
     },
     sections: {
       sessions: "Historique",
@@ -1556,6 +1614,7 @@ export const fr: TranslationResources = {
         rename: "Renommer l'espace de travail",
         pin: "Épingler en haut",
         unpin: "Désépingler",
+        lastActive: "Dernière activité",
         archive: "Archive",
         archiveWorkspace: "Archiver l’espace de travail",
         hideFromSidebar: "Masquer de la barre latérale",

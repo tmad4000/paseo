@@ -1,5 +1,6 @@
 import { MessagePinControl } from "@/companion-stream/message-pin-control";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
+import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TaskListRow } from "@/components/task-list-row";
 import {
@@ -9,7 +10,6 @@ import {
   Pressable,
   type GestureResponderEvent,
   type LayoutChangeEvent,
-  type TextLayoutEvent,
   StyleProp,
   ViewStyle,
   type TextStyle,
@@ -48,6 +48,8 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { DeliveryMark } from "@/components/delivery-mark";
+import type { MessageDeliveryState } from "@/composer/delivery-state";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import Animated, {
   Easing,
@@ -121,6 +123,7 @@ export type { InlinePathTarget } from "@/assistant-file-links";
 export type { AssistantForkTarget };
 
 interface UserMessageProps {
+  renderFullContent?: boolean;
   serverId?: string;
   agentId?: string;
   messageId?: string;
@@ -135,6 +138,11 @@ interface UserMessageProps {
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   isPending?: boolean;
+  /** Delivery tick for the user's own message; omitted where delivery is not tracked. */
+  deliveryState?: MessageDeliveryState;
+  clientMessageId?: string;
+  /** Opens detail and recovery actions for a message that needs attention. */
+  onDeliveryAttentionPress?: (clientMessageId: string) => void;
   disableOuterSpacing?: boolean;
 }
 
@@ -405,17 +413,15 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   trailingRowVisible: {
     opacity: 1,
   },
-  showMoreButton: {
-    marginTop: theme.spacing[2],
-    alignSelf: "flex-start",
-  },
-  showMoreText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "500",
-  },
   timestampText: {
     color: theme.colors.foregroundMuted,
+    fontSize: STREAM_METADATA_FONT_SIZE,
+  },
+  deliveryAttention: {
+    paddingVertical: theme.spacing[1],
+  },
+  deliveryAttentionText: {
+    color: theme.colors.statusWarning,
     fontSize: STREAM_METADATA_FONT_SIZE,
   },
 }));
@@ -439,63 +445,83 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
 
 const MESSAGE_TEXT_DATASET = { messageText: "true" };
 
-export function ClampedUserMessageText({
-  message,
+/**
+ * Until the agent has a message, its tick stays visible on every platform;
+ * once delivered it joins the hover-revealed metadata row.
+ */
+export function resolveUserMessageTrailing(input: {
+  deliveryState: MessageDeliveryState | undefined;
+  isPending: boolean;
+  hasText: boolean;
+  isRevealed: boolean;
+}): { present: boolean; visible: boolean } {
+  const awaitingDelivery = isAwaitingDelivery(input.deliveryState);
+  return {
+    present: awaitingDelivery || input.hasText,
+    visible: awaitingDelivery || (!input.isPending && input.hasText && input.isRevealed),
+  };
+}
+
+function isAwaitingDelivery(
+  state: MessageDeliveryState | undefined,
+): state is MessageDeliveryState {
+  return state !== undefined && state !== "delivered";
+}
+
+function UserMessageTrailingRow({
   style,
+  interactive,
+  deliveryState,
+  timestamp,
+  clientMessageId,
+  onAttentionPress,
+  children,
 }: {
-  message: string;
-  style: StyleProp<TextStyle>;
+  style: StyleProp<ViewStyle>;
+  interactive: boolean;
+  deliveryState: MessageDeliveryState | undefined;
+  timestamp: string;
+  clientMessageId?: string;
+  onAttentionPress?: (clientMessageId: string) => void;
+  children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [clampState, setClampState] = useState<"measuring" | "clamped" | "unclamped">("measuring");
-
-  const handleTextLayout = useCallback(
-    (e: TextLayoutEvent) => {
-      if (clampState === "measuring") {
-        if (e.nativeEvent.lines.length > 10) {
-          setClampState("clamped");
-        } else {
-          setClampState("unclamped");
-        }
-      }
-    },
-    [clampState],
-  );
-
-  const toggleExpanded = useCallback(() => {
-    setIsExpanded((prev) => !prev);
-  }, []);
-
-  let currentNumberOfLines: number | undefined;
-  if (clampState === "measuring") {
-    currentNumberOfLines = 11;
-  } else if (clampState === "clamped" && !isExpanded) {
-    currentNumberOfLines = 10;
-  } else {
-    currentNumberOfLines = undefined;
+  const handlePress = useCallback(() => {
+    if (clientMessageId) onAttentionPress?.(clientMessageId);
+  }, [clientMessageId, onAttentionPress]);
+  if (isAwaitingDelivery(deliveryState)) {
+    return (
+      <View style={style} testID="user-message-trailing-row">
+        {deliveryState === "attention" ? (
+          <Pressable
+            onPress={handlePress}
+            disabled={!clientMessageId || !onAttentionPress}
+            accessibilityRole="button"
+            style={userMessageStylesheet.deliveryAttention}
+            testID="user-message-delivery-attention"
+          >
+            <Text style={userMessageStylesheet.deliveryAttentionText}>
+              {t("composer.delivery.attentionShort")}
+            </Text>
+          </Pressable>
+        ) : null}
+        <DeliveryMark state={deliveryState} testID="user-message-delivery-mark" />
+      </View>
+    );
   }
-
   return (
-    <View>
-      <Text
-        selectable
-        style={style}
-        dataSet={MESSAGE_TEXT_DATASET}
-        numberOfLines={currentNumberOfLines}
-        onTextLayout={clampState === "measuring" ? handleTextLayout : undefined}
-      >
-        {message}
+    <View
+      style={style}
+      pointerEvents={interactive ? "auto" : "none"}
+      testID="user-message-trailing-row"
+    >
+      <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
+        {timestamp}
       </Text>
-      {clampState === "clamped" && (
-        <Pressable onPress={toggleExpanded} style={userMessageStylesheet.showMoreButton}>
-          <Text style={userMessageStylesheet.showMoreText}>
-            {isExpanded
-              ? t("message.actions.showLess", "Show less")
-              : t("message.actions.showMore", "Show more")}
-          </Text>
-        </Pressable>
-      )}
+      {deliveryState === "delivered" ? (
+        <DeliveryMark state="delivered" testID="user-message-delivery-mark" />
+      ) : null}
+      {children}
     </View>
   );
 }
@@ -509,6 +535,7 @@ function shouldShowMessageActions(
 }
 
 export const UserMessage = memo(function UserMessage({
+  renderFullContent = false,
   serverId,
   agentId,
   messageId,
@@ -523,6 +550,9 @@ export const UserMessage = memo(function UserMessage({
   isFirstInGroup = true,
   isLastInGroup = true,
   isPending = false,
+  deliveryState,
+  clientMessageId,
+  onDeliveryAttentionPress,
   disableOuterSpacing,
 }: UserMessageProps) {
   const isCompact = useIsCompactFormFactor();
@@ -539,8 +569,13 @@ export const UserMessage = memo(function UserMessage({
   const hasText = message.trim().length > 0;
   const hasImages = images.length > 0;
   const hasAttachments = attachments.length > 0;
-  const showTrailingRow =
-    !isPending && hasText && shouldShowMessageActions(isCompact, isHovered, pinActive);
+  const trailing = resolveUserMessageTrailing({
+    deliveryState,
+    isPending,
+    hasText,
+    isRevealed: shouldShowMessageActions(isCompact, isHovered, pinActive),
+  });
+  const showTrailingRow = trailing.visible;
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
     [timestamp],
@@ -635,18 +670,23 @@ export const UserMessage = memo(function UserMessage({
             </View>
           ) : null}
           {hasText ? (
-            <ClampedUserMessageText message={message} style={userMessageStylesheet.text} />
+            <CollapsiblePrompt
+              message={message}
+              textStyle={userMessageStylesheet.text}
+              dataSet={MESSAGE_TEXT_DATASET}
+              renderFullContent={renderFullContent}
+            />
           ) : null}
         </View>
-        {hasText ? (
-          <View
+        {trailing.present ? (
+          <UserMessageTrailingRow
             style={trailingRowStyle}
-            pointerEvents={showTrailingRow ? "auto" : "none"}
-            testID="user-message-trailing-row"
+            interactive={showTrailingRow}
+            deliveryState={deliveryState}
+            timestamp={formattedTimestamp}
+            clientMessageId={clientMessageId}
+            onAttentionPress={onDeliveryAttentionPress}
           >
-            <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
-              {formattedTimestamp}
-            </Text>
             {capabilities && messageId ? (
               <RewindMenu
                 capabilities={capabilities}
@@ -675,7 +715,7 @@ export const UserMessage = memo(function UserMessage({
               containerStyle={userMessageStylesheet.copyButton}
               accessibilityLabel={t("message.actions.copyMessage")}
             />
-          </View>
+          </UserMessageTrailingRow>
         ) : null}
       </View>
       <AttachmentLightbox source={lightboxSource} onClose={handleLightboxClose} />

@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  manualStatus: {
+    title: "ステータス",
+    needs_input: "入力が必要（手動）",
+    ready: "レビュー待ち",
+    in_review: "レビュー中",
+    changes_requested: "変更を依頼済み",
+    approved: "承認済み",
+    clear: "手動ステータスを解除",
+    sessionScope: "変更するまで保持されます。",
+    workspaceScope: "{{count}} 件のセッションに適用します。",
+    empty: "このワークスペースにセッションはありません。",
+    failed: "ステータスを更新できませんでした。",
+    partialFailure: "{{total}} 件中 {{failed}} 件を更新できませんでした。再試行してください。",
+    saved: "ステータスを更新しました",
+    retry: "再試行",
+    updateHost: "手動ステータスを使用するにはホストを更新してください。",
+  },
   defaultProject: {
     actions: {
       pin: "プロジェクトを固定",
@@ -185,6 +202,7 @@ export const ja: TranslationResources = {
       home: "ホーム",
       groupByProject: "プロジェクトでグループ化",
       groupByStatus: "ステータスでグループ化",
+      groupInOneList: "チャットを1つのリストで表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
       thinkingGroupLabel: "思考",
@@ -274,6 +292,33 @@ export const ja: TranslationResources = {
       removeBrowserElement: "ブラウザ要素の添付ファイルを削除",
       openReview: "レビュー添付ファイルを開く",
       removeReview: "レビュー添付ファイルを削除",
+    },
+    delivery: {
+      pending: "この端末に保存済み — ホストを待っています",
+      accepted: "ホストが受信しました",
+      delivered: "エージェントに配信済み",
+      attention: "未配信 — 対応が必要です",
+      attentionShort: "未配信",
+      attentionTitle: "メッセージはまだ配信されていません",
+      rejectedDetail: "ホストがこのメッセージを拒否しました: {{error}}",
+      retryingDetail:
+        "{{count}} 回試してもホストから応答がありません。メッセージはこの端末に保存され、ホストが再接続するたびに再送されます。",
+      retryNow: "今すぐ再試行",
+      keepWaiting: "待ち続ける",
+      rejectedToast:
+        "保存済みのメッセージがホストに拒否されました。チャットを開いて再試行または編集してください。",
+      retryLimitToast:
+        "メッセージをホストに届けられませんでした。この端末に保存されており、接続時に再試行します。",
+      queueAttention: "未同期 — この端末に保存、再試行中",
+      queueOnHost: "ホスト上 — エージェントが空いたら送信",
+      unsentHeader: "未送信のメッセージ ({{count}})",
+      unsentPending: "この端末に保存済み — ホストの再接続時に送信",
+      editUnsent: "入力欄に戻す",
+      discardUnsent: "未送信のメッセージを破棄",
+      uncertainDetail:
+        "このメッセージの送信中にホストが停止したため、すでに受信している可能性があります。エージェントが受け取っていない場合のみ再試行してください。",
+      retryUnsupported:
+        "このホストはメッセージを安全に再送できません。ホストを更新するか、テキストをコピーして送り直してください。",
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
@@ -515,6 +560,8 @@ export const ja: TranslationResources = {
       copyCode: "コードをコピー",
       copyTurn: "ターンをコピー",
       copyMessage: "メッセージをコピー",
+      showMore: "もっと見る",
+      showLess: "折りたたむ",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
       forkInNewWorkspace: "新しいワークスペースにフォーク",
@@ -1401,6 +1448,7 @@ export const ja: TranslationResources = {
         label: "グループ化",
         project: "プロジェクト",
         status: "ステータス",
+        list: "1つのリスト",
         labels: "ラベル",
       },
       titleSource: {
@@ -1465,6 +1513,16 @@ export const ja: TranslationResources = {
       github: "GitHub Issueを作成",
       whatsNew: "新着情報",
       appName: "Paseo",
+      versions: "バージョン",
+      versionsChannel: "バージョン（{{channel}} チャンネル）",
+      versionStatus: {
+        current: "最新です",
+        update: "更新があります",
+        ahead: "公開版より新しい",
+        unknown: "確認できませんでした",
+        checking: "確認中…",
+        offline: "オフライン",
+      },
     },
     sections: {
       sessions: "履歴",
@@ -1530,6 +1588,7 @@ export const ja: TranslationResources = {
         rename: "ワークスペースの名前を変更",
         pin: "上部に固定",
         unpin: "固定解除",
+        lastActive: "最終アクティブ",
         archive: "アーカイブ",
         archiveWorkspace: "ワークスペースをアーカイブ",
         hideFromSidebar: "サイドバーから非表示",

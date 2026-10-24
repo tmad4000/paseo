@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  manualStatus: {
+    title: "الحالة",
+    needs_input: "يتطلب إدخالاً (يدوي)",
+    ready: "جاهز للمراجعة",
+    in_review: "قيد المراجعة",
+    changes_requested: "تم طلب تغييرات",
+    approved: "تمت الموافقة",
+    clear: "مسح الحالة اليدوية",
+    sessionScope: "تبقى حتى تغيّرها.",
+    workspaceScope: "ينطبق على {{count}} جلسات.",
+    empty: "لا توجد جلسات في مساحة العمل هذه.",
+    failed: "تعذر تحديث الحالة.",
+    partialFailure: "تعذر تحديث {{failed}} من {{total}} جلسات. أعد المحاولة للإكمال.",
+    saved: "تم تحديث الحالة",
+    retry: "إعادة المحاولة",
+    updateHost: "حدّث هذا المضيف لاستخدام الحالات اليدوية.",
+  },
   defaultProject: {
     actions: {
       pin: "تثبيت المشروع",
@@ -184,6 +201,7 @@ export const ar: TranslationResources = {
       home: "بيت",
       groupByProject: "تجميع حسب المشروع",
       groupByStatus: "تجميع حسب الحالة",
+      groupInOneList: "عرض المحادثات في قائمة واحدة",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
       thinkingGroupLabel: "التفكير",
@@ -273,6 +291,32 @@ export const ar: TranslationResources = {
       removeBrowserElement: "إزالة مرفق عنصر المتصفح",
       openReview: "فتح مرفق المراجعة",
       removeReview: "إزالة مرفق المراجعة",
+    },
+    delivery: {
+      pending: "محفوظة على هذا الجهاز — بانتظار المضيف",
+      accepted: "استلمها المضيف",
+      delivered: "سُلّمت إلى الوكيل",
+      attention: "لم تُسلَّم بعد — تحتاج إلى انتباه",
+      attentionShort: "لم تُسلَّم",
+      attentionTitle: "لم تُسلَّم الرسالة بعد",
+      rejectedDetail: "رفض المضيف هذه الرسالة: {{error}}",
+      retryingDetail:
+        "لم يرد المضيف بعد {{count}} محاولات. الرسالة محفوظة على هذا الجهاز وتُعاد المحاولة كلما أعاد المضيف الاتصال.",
+      retryNow: "أعد المحاولة الآن",
+      keepWaiting: "واصل الانتظار",
+      rejectedToast: "رفض المضيف رسالة محفوظة. افتح محادثتها لإعادة المحاولة أو تعديلها.",
+      retryLimitToast:
+        "تعذّر وصول رسالة إلى المضيف. إنها محفوظة على هذا الجهاز وستُعاد المحاولة عند الاتصال.",
+      queueAttention: "لم تتم المزامنة بعد — محفوظة هنا وما زالت المحاولة جارية",
+      queueOnHost: "لدى المضيف — تُرسل عندما يتفرغ الوكيل",
+      unsentHeader: "رسائل غير مرسلة ({{count}})",
+      unsentPending: "محفوظة على هذا الجهاز — تُرسل عند إعادة اتصال المضيف",
+      editUnsent: "أعدها إلى مربع الرسالة",
+      discardUnsent: "تجاهل الرسالة غير المرسلة",
+      uncertainDetail:
+        "توقف المضيف أثناء إرسال هذه الرسالة، لذا قد تكون لديه بالفعل. أعد المحاولة فقط إذا لم يستلمها الوكيل.",
+      retryUnsupported:
+        "لا يستطيع هذا المضيف إعادة إرسال الرسائل بأمان. حدّث المضيف، أو انسخ النص وأرسله مرة أخرى.",
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
@@ -509,6 +553,8 @@ export const ar: TranslationResources = {
       copyCode: "نسخ الرمز",
       copyTurn: "نسخ بدوره",
       copyMessage: "انسخ الرسالة",
+      showMore: "عرض المزيد",
+      showLess: "عرض أقل",
       forkMenu: "تفريع الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",
       forkInNewWorkspace: "تفريع في مساحة عمل جديدة",
@@ -1387,6 +1433,7 @@ export const ar: TranslationResources = {
         label: "التجميع",
         project: "المشروع",
         status: "الحالة",
+        list: "قائمة واحدة",
         labels: "التسميات",
       },
       titleSource: {
@@ -1450,6 +1497,16 @@ export const ar: TranslationResources = {
       github: "إنشاء مشكلة على GitHub",
       whatsNew: "ما الجديد",
       appName: "Paseo",
+      versions: "الإصدارات",
+      versionsChannel: "الإصدارات (قناة {{channel}})",
+      versionStatus: {
+        current: "محدّث",
+        update: "يتوفر تحديث",
+        ahead: "أحدث من الإصدار المنشور",
+        unknown: "تعذّر التحقق",
+        checking: "جارٍ التحقق…",
+        offline: "غير متصل",
+      },
     },
     sections: {
       sessions: "السجل",
@@ -1515,6 +1572,7 @@ export const ar: TranslationResources = {
         rename: "إعادة تسمية مساحة العمل",
         pin: "تثبيت في الأعلى",
         unpin: "إلغاء التثبيت",
+        lastActive: "آخر نشاط",
         archive: "أرشيف",
         archiveWorkspace: "أرشفة مساحة العمل",
         hideFromSidebar: "إخفاء من الشريط الجانبي",

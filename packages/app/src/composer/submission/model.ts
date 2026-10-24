@@ -1,5 +1,7 @@
 export interface PendingMessageSubmission {
   clientMessageId: string;
+  /** The host answered the send; the provider echo may still be outstanding. */
+  rpcSettled?: boolean;
 }
 
 export type MessageSubmissionRecord = PendingMessageSubmission & {

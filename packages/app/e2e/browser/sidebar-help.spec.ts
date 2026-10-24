@@ -51,7 +51,9 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
     await expect(page.getByText("Help", { exact: true })).toBeVisible();
     await expect(page.getByText("Report an issue", { exact: true })).toBeVisible();
     await expect(page.getByText("What's new", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("sidebar-help-version")).toHaveText(APP_VERSION);
+    await expect(page.getByTestId("sidebar-help-version-number")).toHaveText(APP_VERSION);
+
+    await expect(page.getByTestId("sidebar-help-version-status")).toHaveText("Couldn’t check");
 
     await page.getByTestId("sidebar-help-diagnostics").click();
     await expectDiagnosticReport(page);

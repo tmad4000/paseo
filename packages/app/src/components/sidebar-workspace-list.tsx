@@ -127,6 +127,7 @@ import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-me
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
+  workspaceLastActiveAt,
 } from "@/components/sidebar/workspace-trailing";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -725,6 +726,7 @@ function WorkspaceRowRightGroup({
                 isPinned={isPinned}
                 onTogglePin={onTogglePin}
                 openInFileManagerPath={workspacePath}
+                lastActiveAt={workspaceLastActiveAt(workspace)}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>

@@ -1,4 +1,4 @@
-import type { UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
+import type { AgentSnapshotPayload, UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
@@ -175,9 +175,7 @@ export interface SeedDaemonClient {
   ): Promise<{ status: string; final?: { lastError?: string | null } | null }>;
   archiveAgent(agentId: string): Promise<{ archivedAt: string }>;
   refreshAgent(agentId: string): Promise<unknown>;
-  fetchAgent(options: {
-    agentId: string;
-  }): Promise<{ agent: { id: string; archivedAt?: string | null } } | null>;
+  fetchAgent(options: { agentId: string }): Promise<{ agent: AgentSnapshotPayload } | null>;
   getLastServerInfoMessage(): {
     features?: {
       projectAdd?: boolean;

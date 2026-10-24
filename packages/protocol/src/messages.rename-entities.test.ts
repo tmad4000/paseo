@@ -138,3 +138,15 @@ describe("rename entity message schemas", () => {
     });
   });
 });
+
+test("agent label updates accept deletion without changing other lifecycle fields", () => {
+  const result = SessionInboundMessageSchema.parse({
+    type: "update_agent_request",
+    agentId: "agent-1",
+    requestId: "clear-manual",
+    labels: { "paseo.manual-needs-input": null, "paseo.review-status": null, project: "kept" },
+  });
+  expect(result).toMatchObject({
+    labels: { "paseo.manual-needs-input": null, "paseo.review-status": null, project: "kept" },
+  });
+});

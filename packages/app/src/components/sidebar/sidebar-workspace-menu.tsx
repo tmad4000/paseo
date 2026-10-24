@@ -1,3 +1,5 @@
+import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
+import type { ManualStatusTarget } from "@/agent-status/model";
 import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
@@ -22,7 +24,9 @@ import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuHint,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,6 +37,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
+import { workspaceLastActiveAt } from "@/components/sidebar/workspace-trailing";
+import { formatMessageTimestamp } from "@/utils/time";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
@@ -97,6 +103,8 @@ export interface SidebarWorkspaceMenuProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
+  /** The exact instant behind the sidebar's compact last-active label. */
+  lastActiveAt?: Date | null;
   /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
@@ -145,6 +153,7 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  lastActiveAt,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -208,6 +217,7 @@ function SidebarWorkspaceMenuItems({
           Mark as unread
         </WorkspaceMenuItem>
       ) : null}
+      {serverId && workspaceId ? <AgentStatusMenuTrigger /> : null}
       {onTogglePin ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -245,6 +255,17 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
+      {lastActiveAt ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuHint
+            trailing={formatMessageTimestamp(lastActiveAt)}
+            testID={`sidebar-workspace-menu-last-active-${workspaceKey}`}
+          >
+            {t("sidebar.workspace.actions.lastActive")}
+          </DropdownMenuHint>
+        </>
+      ) : null}
     </>
   );
 }
@@ -267,6 +288,7 @@ export function SidebarWorkspaceMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  lastActiveAt,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -276,7 +298,20 @@ export function SidebarWorkspaceMenu({
       serverId && workspaceId ? { serverId, workspaceId, labels: workspaceLabels ?? [] } : null,
     [serverId, workspaceId, workspaceLabels],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      workspaceTarget
+        ? {
+            kind: "workspace",
+            serverId: workspaceTarget.serverId,
+            workspaceId: workspaceTarget.workspaceId,
+          }
+        : null,
+    [workspaceTarget],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
+  const pages = useMemo(() => [...labelPages, ...statusPages], [labelPages, statusPages]);
   return (
     <DropdownMenu compactMode="sheet" open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
@@ -313,6 +348,7 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          lastActiveAt={lastActiveAt}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -389,7 +425,20 @@ export function SidebarWorkspaceContextMenu({
     }),
     [workspace],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      workspaceTarget
+        ? {
+            kind: "workspace",
+            serverId: workspaceTarget.serverId,
+            workspaceId: workspaceTarget.workspaceId,
+          }
+        : null,
+    [workspaceTarget],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
+  const pages = useMemo(() => [...labelPages, ...statusPages], [labelPages, statusPages]);
 
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
@@ -426,6 +475,7 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          lastActiveAt={workspaceLastActiveAt(workspace)}
         />
       </ContextMenuContent>
     </ContextMenu>

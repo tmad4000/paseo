@@ -129,6 +129,7 @@ export function AdaptiveRenameModal({
           initialValue={initialValue}
           onChangeText={handleChange}
           placeholder={placeholder}
+          autoFocus
           autoCapitalize="none"
           autoCorrect={false}
           editable={!isPending}

@@ -1,3 +1,4 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import { useSyncExternalStore, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import equal from "fast-deep-equal/es6";
@@ -524,6 +525,17 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
         providerSnapshots: "wire",
         ...(host.password ? { password: host.password } : {}),
         localCredential: () => readDesktopManagedLocalCredential(connection),
+        onRequestError: (event) =>
+          recordClientDiagnostic({
+            source: "rpc",
+            // A failed request is not always shown to the person; toasts record what was.
+            severity: "warning",
+            code: event.code ?? event.kind,
+            operation: event.requestType,
+            message: event.message,
+            serverId: host.serverId,
+            appVersion: resolveAppVersion(),
+          }),
       } satisfies Omit<DaemonClientConfig, "url">;
       if (connection.type === "directSocket" || connection.type === "directPipe") {
         return new DaemonClient({
