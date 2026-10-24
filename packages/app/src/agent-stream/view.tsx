@@ -738,8 +738,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "user_message" }>) => {
         return (
           <ChatFindExpansion messageId={getStreamItemMessageId(item)}>
-            {() => (
+            {(renderFullContent) => (
               <UserMessage
+                renderFullContent={renderFullContent}
                 serverId={resolvedServerId}
                 agentId={agentId}
                 messageId={item.messageId}

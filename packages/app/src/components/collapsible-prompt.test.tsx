@@ -29,6 +29,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 vi.stubGlobal("React", React);
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+import { findRenderedMatches } from "../agent-stream/chat-find/ranges.web";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 
 const dataset = { messageText: "true" };
@@ -44,9 +45,16 @@ describe("collapsible sent prompts", () => {
     act(() => root.unmount());
     container.remove();
   });
-  function render(message: string) {
+  function render(message: string, renderFullContent = false) {
     act(() => {
-      root.render(<CollapsiblePrompt message={message} textStyle={textStyle} dataSet={dataset} />);
+      root.render(
+        <CollapsiblePrompt
+          message={message}
+          textStyle={textStyle}
+          dataSet={dataset}
+          renderFullContent={renderFullContent}
+        />,
+      );
     });
   }
   it("expands the full original text and collapses it again", () => {
@@ -74,5 +82,20 @@ describe("collapsible sent prompts", () => {
     render("B".repeat(1000));
     expect(container.querySelector("button")?.textContent).toBe("Show more");
     expect(container.textContent).not.toContain("B".repeat(1000));
+  });
+  it.each([
+    ["character limit", "x".repeat(500) + " UNIQUE_TAIL", "UNIQUE_TAIL", 1],
+    ["line limit", "one\ntwo\nthree\nfour\nfive\nsix\nUNIQUE_TAIL", "UNIQUE_TAIL", 1],
+    ["repeated matches", "NEEDLE " + "x".repeat(500) + " NEEDLE", "NEEDLE", 2],
+  ])("reveals all Find matches beyond the %s", (_label, message, query, count) => {
+    render(message as string);
+    const before = findRenderedMatches(container, query as string).length;
+    expect(before).toBeLessThan(count as number);
+    render(message as string, true);
+    expect(findRenderedMatches(container, query as string)).toHaveLength(count as number);
+    expect(container.querySelector("button")).toBeNull();
+    render(message as string, false);
+    expect(findRenderedMatches(container, query as string)).toHaveLength(before);
+    expect(container.querySelector("button")?.textContent).toBe("Show more");
   });
 });

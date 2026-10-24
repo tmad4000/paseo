@@ -9,10 +9,12 @@ export function CollapsiblePrompt({
   message,
   textStyle,
   dataSet,
+  renderFullContent = false,
 }: {
   message: string;
   textStyle: StyleProp<TextStyle>;
   dataSet: Record<string, string>;
+  renderFullContent?: boolean;
 }) {
   const { t } = useTranslation();
   const preview = useMemo(() => getUserMessagePreview(message), [message]);
@@ -27,9 +29,9 @@ export function CollapsiblePrompt({
   return (
     <View>
       <Text selectable style={textStyle} dataSet={dataSet}>
-        {expanded ? message : preview.text}
+        {expanded || renderFullContent ? message : preview.text}
       </Text>
-      {preview.truncated ? (
+      {preview.truncated && !renderFullContent ? (
         <Button
           variant="ghost"
           size="sm"

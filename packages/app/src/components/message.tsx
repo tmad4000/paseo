@@ -121,6 +121,7 @@ export type { InlinePathTarget } from "@/assistant-file-links";
 export type { AssistantForkTarget };
 
 interface UserMessageProps {
+  renderFullContent?: boolean;
   serverId?: string;
   agentId?: string;
   messageId?: string;
@@ -524,6 +525,7 @@ function UserMessageTrailingRow({
 }
 
 export const UserMessage = memo(function UserMessage({
+  renderFullContent = false,
   serverId,
   agentId,
   messageId,
@@ -662,6 +664,7 @@ export const UserMessage = memo(function UserMessage({
               message={message}
               textStyle={userMessageStylesheet.text}
               dataSet={MESSAGE_TEXT_DATASET}
+              renderFullContent={renderFullContent}
             />
           ) : null}
         </View>
