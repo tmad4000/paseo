@@ -28,6 +28,27 @@ afterEach(async () => {
 });
 const tokenFrom = (url: string) => url.split("/").at(-1)!;
 describe("share service", () => {
+  it("rejects a changed source after preview and scrubs updated titles", async () => {
+    const preview = await service.preview(source);
+    timeline.push({
+      seq: 2,
+      timestamp: source.createdAt,
+      item: { type: "assistant_message", text: "later" },
+    });
+    await expect(
+      service.create(source, { ...options, previewDigest: preview.sourceDigest }),
+    ).rejects.toMatchObject({ code: "sharing_preview_changed" });
+    const current = await service.preview(source);
+    const result = await service.create(source, {
+      ...options,
+      previewDigest: current.sourceDigest,
+    });
+    await service.update(result.share.id, { title: "password=hidden" });
+    expect(await service.store.view(tokenFrom(result.url))).toMatchObject({
+      title: "[secret hidden]",
+      messages: current.messages,
+    });
+  });
   it("returns a unique 256-bit token once and stores only its hash", async () => {
     const first = await service.create(source, options);
     const token = tokenFrom(first.url);

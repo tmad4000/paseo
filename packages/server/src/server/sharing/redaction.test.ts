@@ -26,6 +26,25 @@ export const secretFixtures = [
   "abcdef0123456789abcdef0123456789 : secret",
 ];
 describe("share redaction", () => {
+  it("keeps redaction markers stable even when an extra literal matches marker text", () => {
+    const profile = { ...DEFAULT_REDACTION, extraPatterns: ["secret", "email"] };
+    const first = redactTimeline(
+      rows([{ type: "user_message", text: "secret and email" }]),
+      metadata,
+      profile,
+    );
+    const second = redactTimeline(
+      rows([
+        {
+          type: "user_message",
+          text: first.messages[0]!.kind === "user" ? first.messages[0]!.text : "",
+        },
+      ]),
+      metadata,
+      profile,
+    );
+    expect(second.messages).toEqual(first.messages);
+  });
   it.each(secretFixtures.map((fixture, index) => [SECRET_PATTERNS[index]!.name, fixture]))(
     "masks %s in user and assistant text",
     (_name, fixture) => {

@@ -1,3 +1,11 @@
+import {
+  handleShareRequest,
+  isShareRequest,
+  subscribeShareChanges,
+  type ShareRequest,
+} from "./session/sharing/index.js";
+import os from "node:os";
+import { type SharingSessionOptions } from "./sharing/share-service.js";
 import { createCodexSessionSearchGeneration } from "./agent/providers/codex/session-search-generation.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import {
@@ -534,6 +542,7 @@ export interface SessionOptions {
   providerUsageService: ProviderUsageService;
   hubExecutionAgents?: HubExecutionAgents;
   hubRelationships?: HubRelationshipManagement;
+  sharing?: SharingSessionOptions;
   serviceProxy?: ServiceProxySubsystem;
   scriptRuntimeStore?: WorkspaceScriptRuntimeStore;
   workspaceSetupSnapshots?: Map<string, WorkspaceSetupSnapshot>;
@@ -818,6 +827,8 @@ export class Session {
   private readonly workspaceUpdateTails = new Map<string, Promise<void>>();
   private readonly terminalManager: TerminalManager | null;
   private readonly providerSnapshotManager: ProviderSnapshotManager;
+  private readonly sharing: SharingSessionOptions | undefined;
+  private unsubscribeShares: (() => void) | undefined;
   private readonly serviceProxy: ServiceProxySubsystem | null;
   private readonly scriptRuntimeStore: WorkspaceScriptRuntimeStore | null;
   private readonly getDaemonTcpPort: (() => number | null) | null;
@@ -1193,6 +1204,16 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.providerSnapshotManager = providerSnapshotManager;
+    this.sharing = options.sharing;
+    this.unsubscribeShares = subscribeShareChanges(this.sharing, (share, deletedId) => {
+      // COMPAT(conversationSharingEvents): fork v0.10.0-beta.17; remove after 2027-04-24 once clients accept share events.
+      if (this.clientCapabilities.has(CLIENT_CAPS.conversationSharing)) {
+        this.emit({
+          type: "share.link.update",
+          payload: { ...(share ? { share } : {}), ...(deletedId ? { deletedId } : {}) },
+        });
+      }
+    });
     this.serviceProxy = serviceProxy ?? null;
     this.scriptRuntimeStore = scriptRuntimeStore ?? null;
     this.workspaceSetupSnapshots = workspaceSetupSnapshots ?? new Map();
@@ -2674,6 +2695,7 @@ export class Session {
   }
 
   private dispatchAgentQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (isShareRequest(msg)) return this.handleShareRequest(msg);
     switch (msg.type) {
       case "voice.input.receipts.read.request":
         return this.handleVoiceInputReceiptsRead(msg);
@@ -3732,6 +3754,26 @@ export class Session {
         },
       });
     }
+  }
+
+  private async handleShareRequest(msg: ShareRequest): Promise<void> {
+    const response = await handleShareRequest(this.sharing, msg, async (agentId, title) => {
+      const agent = await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      return {
+        agentId,
+        workspaceId: agent.workspaceId,
+        title: title ?? (await this.agentStorage.get(agentId))?.title ?? "Conversation",
+        provider: agent.provider,
+        model: agent.config.model,
+        ownerName: this.sharing?.config?.ownerDisplayName ?? os.userInfo().username,
+        createdAt: new Date().toISOString(),
+      };
+    });
+    this.emit(response);
   }
 
   private async handleStreamListRequest(
@@ -9358,6 +9400,7 @@ export class Session {
    * Clean up session resources
    */
   public async cleanup(): Promise<void> {
+    this.unsubscribeShares?.();
     this.sessionSearchAbort.abort();
     this.sessionLogger.trace({}, "agent.session.lifecycle.cleanup");
     this.isCleanedUp = true;
@@ -9442,23 +9485,26 @@ function isValidGitHubRepoSegment(value: string): boolean {
   return /^[A-Za-z0-9._-]+$/u.test(value);
 }
 
+const DIRECT_SESSION_EVENTS = new Set<string>([
+  "share.link.update",
+  "project.update",
+  "providers_snapshot_update",
+  "agent_attention_required",
+  "agent_permission_request",
+  "agent_permission_resolved",
+  "checkout_status_update",
+  "script_status_update",
+  "workspace_setup_progress",
+  "agent.provider_subagents.update",
+  "agent.queue.update",
+  "terminal_attention_required",
+  "activity_log",
+  "hub.execution.agent.update",
+  "hub.execution.agent.stream",
+]);
 function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubscription | null {
+  if (DIRECT_SESSION_EVENTS.has(message.type)) return message.type as SessionEventSubscription;
   switch (message.type) {
-    case "project.update":
-    case "providers_snapshot_update":
-    case "agent_attention_required":
-    case "agent_permission_request":
-    case "agent_permission_resolved":
-    case "checkout_status_update":
-    case "script_status_update":
-    case "workspace_setup_progress":
-    case "agent.provider_subagents.update":
-    case "agent.queue.update":
-    case "terminal_attention_required":
-    case "activity_log":
-    case "hub.execution.agent.update":
-    case "hub.execution.agent.stream":
-      return message.type;
     case "status":
       switch (message.payload.status) {
         case "server_info":

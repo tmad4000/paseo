@@ -64,12 +64,14 @@ export function redactTimeline(
     for (const literal of profile.extraPatterns) {
       if (!literal) continue;
       text = text
-        .split(literal)
-        .map((part, index) => {
-          if (index) summary.secretsMasked++;
-          return part;
+        .split(/(\[secret hidden\]|\[email\]|\[phone\])/g)
+        .map((segment) => {
+          if (["[secret hidden]", "[email]", "[phone]"].includes(segment)) return segment;
+          const parts = segment.split(literal);
+          summary.secretsMasked += parts.length - 1;
+          return parts.join("[secret hidden]");
         })
-        .join("[secret hidden]");
+        .join("");
     }
     if (profile.scrub.secrets)
       for (const { pattern } of SECRET_PATTERNS) {
