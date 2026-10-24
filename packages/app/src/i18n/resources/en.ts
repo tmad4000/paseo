@@ -1,4 +1,22 @@
 export const en = {
+  manualStatus: {
+    title: "Status",
+    needs_input: "Needs input (manual)",
+    ready: "Ready for review",
+    in_review: "In review",
+    changes_requested: "Changes requested",
+    approved: "Approved",
+    clear: "Clear manual status",
+    sessionScope: "Stays set until you change it.",
+    workspaceScope: "Applies to {{count}} sessions.",
+    empty: "No sessions in this workspace.",
+    failed: "Could not update status.",
+    partialFailure: "Could not update {{failed}} of {{total}} sessions. Retry to finish.",
+    saved: "Status updated",
+    retry: "Retry",
+    updateHost: "Update this host to use manual statuses.",
+  },
+
   defaultProject: {
     actions: {
       pin: "Pin project",

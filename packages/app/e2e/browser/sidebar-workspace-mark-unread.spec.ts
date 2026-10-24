@@ -1,3 +1,4 @@
+import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 import type { Page } from "@playwright/test";
 import { test as base, expect } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
@@ -66,7 +67,11 @@ async function markAsRead(page: Page, workspaceId: string) {
   await expectStatus(page, workspaceId, "done");
 }
 
-async function expectStatus(page: Page, workspaceId: string, status: "done" | "attention") {
+async function expectStatus(
+  page: Page,
+  workspaceId: string,
+  status: "done" | "attention" | "needs_input",
+) {
   await expect(
     workspaceRow(page, workspaceId).getByTestId(`workspace-status-indicator-${status}`),
   ).toBeVisible();
@@ -226,4 +231,101 @@ test("manual unread survives leaving the current workspace on compact layout", a
   await leaveMarkedWorkspaceAndReopenOnCompact(page, workspaces);
   await markUnreadThenResumeChat(page, workspaces.subject.workspaceId);
   await completeTurnAndLeaveOnCompact(page, workspaces);
+});
+
+async function setWorkspaceManualStatus(page: Page, workspaceId: string, status: string) {
+  await workspaceRow(page, workspaceId).click({ button: "right" });
+  await page.getByTestId("manual-status-menu").click();
+  await page.getByTestId(`manual-status-${status}`).click();
+  await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+}
+
+test("workspace manual Needs input needs no chooser, survives reading/reload and clears explicitly", async ({
+  page,
+  workspaces,
+}) => {
+  await openAgentRoute(page, workspaces.subject);
+  const sibling = await addFinishedAgent(workspaces.subject);
+  await setWorkspaceManualStatus(page, workspaces.subject.workspaceId, "needs_input");
+  await expectStatus(page, workspaces.subject.workspaceId, "needs_input");
+  for (const id of [workspaces.subject.agentId, sibling.id]) {
+    const result = await workspaces.subject.client.fetchAgent({ agentId: id });
+    expect(result?.agent.labels["paseo.manual-needs-input"]).toBe("true");
+    expect(result?.agent.pendingPermissions).toEqual([]);
+  }
+  expect(
+    (await workspaces.other.client.fetchAgent({ agentId: workspaces.other.agentId }))?.agent.labels[
+      "paseo.manual-needs-input"
+    ],
+  ).toBeUndefined();
+  await openWorkspace(page, workspaces.other.workspaceId);
+  await openWorkspace(page, workspaces.subject.workspaceId);
+  await page.reload();
+  await expectStatus(page, workspaces.subject.workspaceId, "needs_input");
+  await setWorkspaceManualStatus(page, workspaces.subject.workspaceId, "clear");
+  await expectStatus(page, workspaces.subject.workspaceId, "done");
+});
+
+test("tab review status changes only that session and remains after reading", async ({
+  page,
+  workspaces,
+}) => {
+  await openAgentRoute(page, workspaces.subject);
+  const sibling = await addFinishedAgent(workspaces.subject);
+  const tab = page.getByTestId(`workspace-tab-agent_${workspaces.subject.agentId}`).first();
+  await tab.click({ button: "right" });
+  await page.getByTestId("manual-status-menu").click();
+  await page.getByTestId("manual-status-ready").click();
+  await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/manual-status-desktop.png" });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expectStatus(page, workspaces.subject.workspaceId, "attention");
+  expect(
+    (await workspaces.subject.client.fetchAgent({ agentId: sibling.id }))?.agent.labels[
+      "paseo.review-status"
+    ],
+  ).toBeUndefined();
+  await openWorkspace(page, workspaces.other.workspaceId);
+  await openWorkspace(page, workspaces.subject.workspaceId);
+  await expectStatus(page, workspaces.subject.workspaceId, "attention");
+  expect(
+    (await workspaces.subject.client.fetchAgent({ agentId: workspaces.subject.agentId }))?.agent
+      .labels["paseo.review-status"],
+  ).toBe("ready");
+  await chooseReadAction(page, workspaces.subject.workspaceId, "unread");
+  await chooseReadAction(page, workspaces.subject.workspaceId, "read");
+  await expectStatus(page, workspaces.subject.workspaceId, "attention");
+});
+
+test("compact workspace status menu exposes manual input", async ({ page, workspaces }) => {
+  await openCompactWorkspace(page, workspaces.subject);
+  await page
+    .getByTestId(`sidebar-workspace-kebab-${getServerId()}:${workspaces.subject.workspaceId}`)
+    .click();
+  await page.getByTestId("manual-status-menu").click();
+  await page.getByTestId("manual-status-needs_input").click();
+  await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/manual-status-compact.png" });
+  expect(
+    (await workspaces.subject.client.fetchAgent({ agentId: workspaces.subject.agentId }))?.agent
+      .labels["paseo.manual-needs-input"],
+  ).toBe("true");
+});
+
+test("older hosts keep unread controls and explain unavailable manual statuses", async ({
+  page,
+  workspaces,
+}) => {
+  await overrideServerInfoFeatures(page, { manualAgentStatus: false });
+  await openAgentRoute(page, workspaces.subject);
+  await workspaceRow(page, workspaces.subject.workspaceId).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Mark as unread", exact: true })).toBeVisible();
+  await page.getByTestId("manual-status-menu").click();
+  await expect(
+    page.getByText("Update this host to use manual statuses.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("manual-status-needs_input")).toHaveCount(0);
 });

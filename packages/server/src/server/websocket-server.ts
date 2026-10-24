@@ -2019,6 +2019,7 @@ export class VoiceAssistantWebSocketServer {
         workspaceMarkUnread: true,
         // COMPAT(agentMarkUnread): fork feature, added in fork v0.10.0-beta.15, drop the gate after 2027-04-17.
         agentMarkUnread: true,
+        manualAgentStatus: true,
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: true,
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
