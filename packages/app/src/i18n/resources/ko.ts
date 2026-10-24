@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  manualStatus: {
+    title: "상태",
+    needs_input: "입력 필요 (수동)",
+    ready: "검토 준비 완료",
+    in_review: "검토 중",
+    changes_requested: "변경 요청됨",
+    approved: "승인됨",
+    clear: "수동 상태 지우기",
+    sessionScope: "직접 변경할 때까지 유지됩니다.",
+    workspaceScope: "세션 {{count}}개에 적용됩니다.",
+    empty: "이 작업 공간에 세션이 없습니다.",
+    failed: "상태를 업데이트하지 못했습니다.",
+    partialFailure: "{{total}}개 중 {{failed}}개 세션을 업데이트하지 못했습니다. 다시 시도하세요.",
+    saved: "상태 업데이트됨",
+    retry: "다시 시도",
+    updateHost: "수동 상태를 사용하려면 호스트를 업데이트하세요.",
+  },
   defaultProject: {
     actions: {
       pin: "프로젝트 고정",
@@ -1481,6 +1498,16 @@ export const ko: TranslationResources = {
       github: "GitHub 이슈 만들기",
       whatsNew: "새로운 소식",
       appName: "Paseo",
+      versions: "버전",
+      versionsChannel: "버전 ({{channel}} 채널)",
+      versionStatus: {
+        current: "최신 버전",
+        update: "업데이트 가능",
+        ahead: "출시 버전보다 최신",
+        unknown: "확인할 수 없음",
+        checking: "확인 중…",
+        offline: "오프라인",
+      },
     },
     sections: {
       sessions: "기록",

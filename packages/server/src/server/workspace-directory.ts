@@ -11,7 +11,11 @@ import {
   getWorkspaceStateBucketPriority,
   type WorkspaceStateBucket,
 } from "@getpaseo/protocol/agent-state-bucket";
-import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
+import {
+  getParentAgentIdFromLabels,
+  getReviewStatus,
+  MANUAL_NEEDS_INPUT_LABEL,
+} from "@getpaseo/protocol/agent-labels";
 import { SortablePager } from "./pagination/sortable-pager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "./workspace-registry.js";
 import { resolveProjectDisplayName } from "./workspace-registry.js";
@@ -374,17 +378,23 @@ export class WorkspaceDirectory {
         continue;
       }
       const isWorkspaceRoot = workspaceAgent.id === agent.id;
-      if (!isWorkspaceRoot && agent.status !== "running") {
+      const review = getReviewStatus(agent.labels);
+      const hasManualAttention =
+        agent.labels[MANUAL_NEEDS_INPUT_LABEL] === "true" ||
+        (review !== null && review !== "approved");
+      if (!isWorkspaceRoot && agent.status !== "running" && !hasManualAttention) {
         continue;
       }
-      const bucket = isWorkspaceRoot
-        ? deriveAgentStateBucket({
-            status: agent.status,
-            pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
-            requiresAttention: agent.requiresAttention,
-            attentionReason: agent.attentionReason ?? null,
-          })
-        : "running";
+      const bucket =
+        isWorkspaceRoot || hasManualAttention
+          ? deriveAgentStateBucket({
+              status: agent.status,
+              pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
+              requiresAttention: agent.requiresAttention,
+              labels: agent.labels,
+              attentionReason: agent.attentionReason ?? null,
+            })
+          : "running";
 
       const workspaceId = workspaceAgent.workspaceId;
       if (!workspaceId) {
@@ -531,6 +541,7 @@ export class WorkspaceDirectory {
           status: agent.status,
           pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
           requiresAttention: agent.requiresAttention,
+          labels: agent.labels,
           attentionReason: agent.attentionReason ?? null,
         });
         return derived === winningBucket;

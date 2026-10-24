@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  manualStatus: {
+    title: "État",
+    needs_input: "Saisie requise (manuel)",
+    ready: "Prêt à être examiné",
+    in_review: "En cours de révision",
+    changes_requested: "Modifications demandées",
+    approved: "Approuvé",
+    clear: "Effacer l’état manuel",
+    sessionScope: "Conservé jusqu’à votre modification.",
+    workspaceScope: "S’applique à {{count}} sessions.",
+    empty: "Aucune session dans cet espace de travail.",
+    failed: "Impossible de modifier l’état.",
+    partialFailure: "Échec pour {{failed}} sessions sur {{total}}. Réessayez pour terminer.",
+    saved: "État mis à jour",
+    retry: "Réessayer",
+    updateHost: "Mettez à jour cet hôte pour utiliser les états manuels.",
+  },
   defaultProject: {
     actions: {
       pin: "Épingler le projet",
@@ -1512,6 +1529,16 @@ export const fr: TranslationResources = {
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
       appName: "Paseo",
+      versions: "Versions",
+      versionsChannel: "Versions (canal {{channel}})",
+      versionStatus: {
+        current: "À jour",
+        update: "Mise à jour disponible",
+        ahead: "Plus récent que la version publiée",
+        unknown: "Vérification impossible",
+        checking: "Vérification…",
+        offline: "Hors ligne",
+      },
     },
     sections: {
       sessions: "Historique",

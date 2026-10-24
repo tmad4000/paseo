@@ -2,6 +2,24 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  manualStatus: {
+    title: "Estado",
+    needs_input: "Necesita respuesta (manual)",
+    ready: "Listo para revisar",
+    in_review: "En revisión",
+    changes_requested: "Cambios solicitados",
+    approved: "Aprobado",
+    clear: "Borrar estado manual",
+    sessionScope: "Se mantiene hasta que lo cambies.",
+    workspaceScope: "Se aplica a {{count}} sesiones.",
+    empty: "No hay sesiones en este espacio de trabajo.",
+    failed: "No se pudo actualizar el estado.",
+    partialFailure:
+      "No se pudieron actualizar {{failed}} de {{total}} sesiones. Reintenta para finalizar.",
+    saved: "Estado actualizado",
+    retry: "Reintentar",
+    updateHost: "Actualiza este host para usar estados manuales.",
+  },
   defaultProject: {
     actions: {
       pin: "Fijar proyecto",
@@ -1511,6 +1529,16 @@ export const es: TranslationResources = {
       github: "Crear incidencia en GitHub",
       whatsNew: "Novedades",
       appName: "Paseo",
+      versions: "Versiones",
+      versionsChannel: "Versiones (canal {{channel}})",
+      versionStatus: {
+        current: "Actualizado",
+        update: "Actualización disponible",
+        ahead: "Más reciente que la versión publicada",
+        unknown: "No se pudo comprobar",
+        checking: "Comprobando…",
+        offline: "Sin conexión",
+      },
     },
     sections: {
       sessions: "Historial",

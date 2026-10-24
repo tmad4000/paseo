@@ -3672,7 +3672,7 @@ export class Session {
   private async handleUpdateAgentRequest(
     agentId: string,
     name: string | undefined,
-    labels: Record<string, string> | undefined,
+    labels: Record<string, string | null> | undefined,
     requestId: string,
   ): Promise<void> {
     this.sessionLogger.info(
@@ -6143,6 +6143,7 @@ export class Session {
         case "status_priority":
           return getAgentStatusPriority({
             status: agent.status,
+            labels: agent.labels,
             pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
             requiresAttention: agent.requiresAttention,
             attentionReason: agent.attentionReason ?? null,

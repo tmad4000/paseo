@@ -962,7 +962,7 @@ export const UpdateAgentRequestMessageSchema = z.object({
   type: z.literal("update_agent_request"),
   agentId: z.string(),
   name: z.string().optional(),
-  labels: z.record(z.string(), z.string()).optional(),
+  labels: z.record(z.string(), z.string().nullable()).optional(),
   requestId: z.string(),
 });
 
@@ -4337,6 +4337,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceMarkUnread: z.boolean().optional(),
         // COMPAT(agentMarkUnread): fork feature, added in fork v0.10.0-beta.15, drop the gate after 2027-04-17.
         agentMarkUnread: z.boolean().optional(),
+        // COMPAT(manualAgentStatus): fork feature, remove gate after 2027-04-24.
+        manualAgentStatus: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: z.boolean().optional(),
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.

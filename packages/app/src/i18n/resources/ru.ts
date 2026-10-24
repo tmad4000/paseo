@@ -2,6 +2,23 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  manualStatus: {
+    title: "Статус",
+    needs_input: "Требуется ввод (вручную)",
+    ready: "Готово к проверке",
+    in_review: "На проверке",
+    changes_requested: "Запрошены изменения",
+    approved: "Одобрено",
+    clear: "Сбросить ручной статус",
+    sessionScope: "Сохраняется, пока вы его не измените.",
+    workspaceScope: "Применяется к {{count}} сеансам.",
+    empty: "В этом рабочем пространстве нет сеансов.",
+    failed: "Не удалось обновить статус.",
+    partialFailure: "Не удалось обновить {{failed}} из {{total}} сеансов. Повторите попытку.",
+    saved: "Статус обновлён",
+    retry: "Повторить",
+    updateHost: "Обновите этот хост для использования ручных статусов.",
+  },
   defaultProject: {
     actions: {
       pin: "Закрепить проект",
@@ -1490,6 +1507,16 @@ export const ru: TranslationResources = {
       github: "Создать issue на GitHub",
       whatsNew: "Что нового",
       appName: "Paseo",
+      versions: "Версии",
+      versionsChannel: "Версии (канал {{channel}})",
+      versionStatus: {
+        current: "Актуальная версия",
+        update: "Доступно обновление",
+        ahead: "Новее опубликованной версии",
+        unknown: "Не удалось проверить",
+        checking: "Проверка…",
+        offline: "Не в сети",
+      },
     },
     sections: {
       sessions: "История",

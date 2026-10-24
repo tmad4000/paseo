@@ -1,3 +1,4 @@
+import { manualStatus, manualStatusPatch } from "@/agent-status/model";
 import { describe, expect, it } from "vitest";
 import {
   aggregateSidebarStateBuckets,
@@ -95,5 +96,29 @@ describe("aggregateSidebarStateBuckets", () => {
     expect(aggregateSidebarStateBuckets(buckets)).toBe(
       aggregateSidebarStateBuckets(buckets.toReversed()),
     );
+  });
+});
+
+describe("manual status changes", () => {
+  it("replaces only manual markers and keeps permission/lifecycle outside the patch", () => {
+    expect(manualStatusPatch("needs_input")).toEqual({
+      "paseo.manual-needs-input": "true",
+      "paseo.review-status": null,
+      "paseo.review-note": null,
+    });
+    expect(manualStatusPatch("ready")).toEqual({
+      "paseo.manual-needs-input": null,
+      "paseo.review-status": "ready",
+    });
+    expect(manualStatusPatch("clear")).toEqual({
+      "paseo.manual-needs-input": null,
+      "paseo.review-status": null,
+      "paseo.review-note": null,
+    });
+    expect(
+      manualStatus({ "paseo.manual-needs-input": "true", "paseo.review-status": "ready" }),
+    ).toBe("needs_input");
+    expect(manualStatus({ "paseo.review-status": "approved" })).toBe("approved");
+    expect(manualStatus({})).toBe("clear");
   });
 });

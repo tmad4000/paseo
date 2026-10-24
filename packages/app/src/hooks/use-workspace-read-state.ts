@@ -1,3 +1,5 @@
+import { useSessionStore } from "@/stores/session-store";
+import { isWorkspaceRootAgent } from "@/subagents/policies";
 import { useCallback, useMemo } from "react";
 import { i18n } from "@/i18n/i18next";
 import { useHostFeature } from "@/runtime/host-features";
@@ -21,8 +23,42 @@ export function useWorkspaceReadState({
 }): WorkspaceReadStateController {
   const status = useWorkspaceFields(serverId, workspaceId, (workspace) => workspace.status);
   const supportsMarkUnread = useHostFeature(serverId, "workspaceMarkUnread");
-  const hasClearableAttention = status === "attention" || status === "failed";
-  const canMarkUnread = supportsMarkUnread && status === "done";
+  const hasEligibleReadAgent = useSessionStore((state) => {
+    if (status === "done") return true;
+    if (status !== "attention" && status !== "needs_input") return false;
+    const agents = state.sessions[serverId]?.agents;
+    if (!agents) return false;
+    for (const agent of agents.values()) {
+      if (agent.archivedAt || agent.workspaceId !== workspaceId) continue;
+      const parent = agent.parentAgentId ? agents.get(agent.parentAgentId) : undefined;
+      const finished = agent.status === "idle" || agent.status === "closed";
+      if (
+        isWorkspaceRootAgent(agent, parent) &&
+        finished &&
+        !agent.requiresAttention &&
+        agent.pendingPermissions.length === 0
+      )
+        return true;
+    }
+    return false;
+  });
+  const hasClearableAttention = useSessionStore((state) => {
+    if (status === "attention" || status === "failed") return true;
+    if (status !== "needs_input") return false;
+    const agents = state.sessions[serverId]?.agents;
+    if (!agents) return false;
+    for (const agent of agents.values()) {
+      const ownedActiveAgent = !agent.archivedAt && agent.workspaceId === workspaceId;
+      if (
+        ownedActiveAgent &&
+        agent.requiresAttention === true &&
+        agent.attentionReason !== "permission"
+      )
+        return true;
+    }
+    return false;
+  });
+  const canMarkUnread = supportsMarkUnread && hasEligibleReadAgent;
 
   const clearAttention = useCallback(async () => {
     if (!hasClearableAttention) {
