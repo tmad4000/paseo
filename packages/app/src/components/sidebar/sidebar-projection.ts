@@ -66,7 +66,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   // One switch decides both what the list groups by and what the keyboard shortcuts walk, so the
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
-  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces, pinnedGroups);
 
   const sections: SidebarShortcutSection[] = [];
   if (!input.pinnedCollapsed) {
@@ -105,12 +105,17 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
   unpinnedWorkspaces: SidebarWorkspaceEntry[],
+  pinnedGroups: PinnedSidebarGroups,
 ): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
       return [];
     case "list":
-      return oneListWorkspaceGroups(unpinnedWorkspaces);
+      return oneListWorkspaceGroups(
+        !input.sortMode || input.sortMode === "manual"
+          ? manualOneListRows(pinnedGroups, input.workspaceEntriesByKey)
+          : unpinnedWorkspaces,
+      );
     case "status": {
       const groups = buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey);
       if (input.sortMode && input.sortMode !== "manual") {
@@ -125,4 +130,22 @@ function buildWorkspaceGroups(
       return statusWorkspaceGroups(groups);
     }
   }
+}
+
+/**
+ * Manual order in one list is the order you arranged the projects in (pinned and dragged), with
+ * each project's rows in its own stored order. The entries map alone only knows the host's model
+ * order, which would ignore every arrangement you made. Rows the filters removed are absent from
+ * the entries map, so they drop out here too.
+ */
+function manualOneListRows(
+  pinnedGroups: PinnedSidebarGroups,
+  entries: ReadonlyMap<string, SidebarWorkspaceEntry>,
+): SidebarWorkspaceEntry[] {
+  return pinnedGroups.unpinnedProjects.flatMap((project) =>
+    project.workspaces.flatMap((workspace) => {
+      const entry = entries.get(workspace.workspaceKey);
+      return entry ? [entry] : [];
+    }),
+  );
 }

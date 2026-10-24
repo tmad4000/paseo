@@ -5,6 +5,7 @@ import type {
   SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
+import type { SidebarSortMode } from "./sidebar-filter-sort";
 import { SIDEBAR_ONE_LIST_GROUP_KEY } from "./sidebar-labels";
 import { buildSidebarProjection } from "./sidebar-projection";
 
@@ -203,6 +204,7 @@ describe("buildSidebarProjection in one-list mode", () => {
     const busy = makeWorkspace("busy", "running", [], "project");
     return {
       ...projectionInput({ groupMode: "list" }),
+      sortMode: "recent" as SidebarSortMode,
       projects: [
         makeProject([pinned.placement, quiet.placement, busy.placement]),
         makeProject([blocked.placement], "other-project"),
@@ -268,5 +270,36 @@ describe("buildSidebarProjection in one-list mode", () => {
     });
 
     expect(projection.workspaceGroups).toEqual([]);
+  });
+
+  it("follows the arranged project order in Manual sort, not the host's model order", () => {
+    const input = oneListInput();
+    const projection = buildSidebarProjection({
+      ...input,
+      sortMode: "manual",
+      // The person dragged Other project above Project.
+      projects: [input.projects[1]!, input.projects[0]!],
+    });
+
+    expect(projection.workspaceGroups[0]?.rows.map((entry) => entry.workspaceId)).toEqual([
+      "blocked",
+      "quiet",
+      "busy",
+    ]);
+  });
+
+  it("keeps the model's sorted order for activity sorts regardless of project order", () => {
+    const input = oneListInput();
+    const projection = buildSidebarProjection({
+      ...input,
+      sortMode: "recent",
+      projects: [input.projects[1]!, input.projects[0]!],
+    });
+
+    expect(projection.workspaceGroups[0]?.rows.map((entry) => entry.workspaceId)).toEqual([
+      "quiet",
+      "blocked",
+      "busy",
+    ]);
   });
 });

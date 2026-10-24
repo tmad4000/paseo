@@ -22,6 +22,13 @@ async function runGroupingEntry(page: Page, label: string, current: string): Pro
   await expect(page.getByTestId("command-center-panel")).not.toBeVisible({ timeout: 30_000 });
 }
 
+// One list shows 20 rows before "Show more", and a fresh seeded workspace has no messages, so the
+// activity sort puts it last. On a daemon that already holds 20+ workspaces it would be hidden.
+async function expandOneList(page: Page): Promise<void> {
+  const showMore = page.getByTestId("sidebar-status-group-show-more-list");
+  if (await showMore.isVisible()) await showMore.click();
+}
+
 test.describe("Command center sidebar grouping", () => {
   test.describe.configure({ timeout: 180_000 });
 
@@ -58,6 +65,8 @@ test.describe("Command center sidebar grouping", () => {
 
       // One list: a single headerless run of rows, no status headers, each row still placed.
       await runGroupingEntry(page, ONE_LIST, GROUP_BY_STATUS);
+      await expect(oneListRows).toBeVisible({ timeout: 30_000 });
+      await expandOneList(page);
       await expect(
         oneListRows.getByTestId(`sidebar-workspace-row-${getServerId()}:${seeded.workspaceId}`),
       ).toBeVisible({
@@ -73,6 +82,7 @@ test.describe("Command center sidebar grouping", () => {
 
       await page.reload();
       await expect(oneListRows).toBeVisible({ timeout: 30_000 });
+      await expandOneList(page);
       await expect(seededRow).toBeVisible({ timeout: 30_000 });
 
       // Grouping persists, so the run must leave the sidebar back in project mode.

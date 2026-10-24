@@ -64,20 +64,51 @@ describe("grouping command center contributions", () => {
   });
 
   it("applies the mode each entry names, with that mode's icon", () => {
-    const fixture = source("project");
-    const contributions = buildGroupingContributions(fixture.value);
-    const list = contributions.find((contribution) => contribution.id === "sidebar-grouping-list");
-
-    expect(list?.presentation).toMatchObject({ icon: ListIcon });
-    list?.run();
-    expect(fixture.applied).toEqual(["list"]);
+    const icons = { project: ProjectIcon, status: StatusIcon, list: ListIcon };
+    for (const current of ["project", "status", "list"] as const) {
+      const fixture = source(current);
+      for (const contribution of buildGroupingContributions(fixture.value)) {
+        contribution.run();
+        const applied = fixture.applied.at(-1)!;
+        expect(applied).not.toBe(current);
+        expect(contribution.id).toBe(`sidebar-grouping-${applied}`);
+        expect(contribution.presentation).toMatchObject({ icon: icons[applied] });
+      }
+    }
   });
 
-  it("keeps each target's id stable across modes so the registry tiebreak never moves", () => {
+  it("gives each target the same id from every mode that offers it", () => {
+    const idsByTarget = new Map<SidebarGroupMode, Set<string>>();
+    for (const current of ["project", "status", "list"] as const) {
+      const fixture = source(current);
+      for (const contribution of buildGroupingContributions(fixture.value)) {
+        contribution.run();
+        const target = fixture.applied.at(-1)!;
+        const ids = idsByTarget.get(target) ?? new Set<string>();
+        ids.add(contribution.id);
+        idsByTarget.set(target, ids);
+      }
+    }
+    expect(Object.fromEntries([...idsByTarget].map(([target, ids]) => [target, [...ids]]))).toEqual(
+      {
+        project: ["sidebar-grouping-project"],
+        status: ["sidebar-grouping-status"],
+        list: ["sidebar-grouping-list"],
+      },
+    );
+  });
+
+  it("keeps each mode's own words on its own entry only", () => {
     const fromProject = buildGroupingContributions(source("project").value);
-    const fromStatus = buildGroupingContributions(source("status").value);
-    expect(fromProject.find((c) => c.id === "sidebar-grouping-list")).toBeDefined();
-    expect(fromStatus.find((c) => c.id === "sidebar-grouping-list")).toBeDefined();
+    const listEntry = fromProject.find((c) => c.id === "sidebar-grouping-list");
+    const statusEntry = fromProject.find((c) => c.id === "sidebar-grouping-status");
+    expect(listEntry?.keywords).toEqual(expect.arrayContaining(["group", "list", "flat"]));
+    expect(listEntry?.keywords).not.toContain("status");
+    expect(statusEntry?.keywords).not.toContain("list");
+    for (const contribution of buildGroupingContributions(source("list").value)) {
+      expect(contribution.keywords).not.toContain("list");
+      expect(contribution.keywords).toContain("group");
+    }
   });
 
   it("stays out of the default empty-query list", () => {
