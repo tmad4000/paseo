@@ -348,11 +348,15 @@ function StatusGroupRows({
     canToggle: canToggleWorkspaces,
     toggleExpanded: toggleWorkspacesExpanded,
   } = useLimitedSidebarGroup(group.rows);
+  // One-list mode's single group has no header, so there is nothing to collapse it with and its
+  // rows sit flush like pinned rows rather than indented under a header.
+  const headed = group.leading.kind !== "none";
+  const isCollapsed = headed && collapsed;
 
   return (
-    <View style={collapsed ? undefined : styles.statusGroupBlockExpanded}>
-      <StatusGroupHeader group={group} collapsed={collapsed} />
-      {!collapsed ? (
+    <View style={isCollapsed ? undefined : styles.statusGroupBlockExpanded}>
+      {headed ? <StatusGroupHeader group={group} collapsed={isCollapsed} /> : null}
+      {!isCollapsed ? (
         <View
           style={styles.statusWorkspaceListContainer}
           testID={`sidebar-status-group-rows-${group.key}`}
@@ -366,6 +370,7 @@ function StatusGroupRows({
                 projectIconByProjectViewKey,
                 hostBadgeByServerId,
               })}
+              inStatusGroup={headed}
               shortcutNumber={shortcutIndex.get(workspace.workspaceKey) ?? null}
               showShortcutBadge={showShortcutBadges}
               canPin={supportsPinningByServerId.get(workspace.serverId) === true}
@@ -377,7 +382,7 @@ function StatusGroupRows({
             <SidebarGroupToggleRow
               expanded={workspacesExpanded}
               onPress={toggleWorkspacesExpanded}
-              indented
+              indented={headed}
               testID={`sidebar-status-group-show-more-${group.key}`}
             />
           ) : null}
@@ -473,6 +478,7 @@ function StatusGroupLeadingVisual({
   collapsed: boolean;
   showChevron: boolean;
 }) {
+  if (leading.kind === "none") return null;
   if (!showChevron) {
     return <StatusGroupIcon bucket={leading.bucket} />;
   }

@@ -4,6 +4,8 @@ import type {
   SidebarWorkspaceEntry,
   SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
+import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
+import { SIDEBAR_ONE_LIST_GROUP_KEY } from "./sidebar-labels";
 import { buildSidebarProjection } from "./sidebar-projection";
 
 function makeWorkspace(
@@ -63,10 +65,7 @@ function makeProject(
   };
 }
 
-function projectionInput(options?: {
-  groupMode?: "project" | "status";
-  pinnedCollapsed?: boolean;
-}) {
+function projectionInput(options?: { groupMode?: SidebarGroupMode; pinnedCollapsed?: boolean }) {
   const pinned = makeWorkspace("pinned", "running");
   const unpinned = makeWorkspace("unpinned", "needs_input");
   return {
@@ -81,7 +80,7 @@ function projectionInput(options?: {
       [unpinned.entry.workspaceKey, unpinned.entry],
     ]),
     projectNamesByViewKey: new Map([["project", "Project"]]),
-    groupMode: options?.groupMode ?? ("project" as const),
+    groupMode: options?.groupMode ?? ("project" as SidebarGroupMode),
     pinnedCollapsed: options?.pinnedCollapsed ?? false,
     collapsedProjectKeys: new Set<string>(),
     collapsedWorkspaceGroupKeys: new Set<string>(),
@@ -92,7 +91,7 @@ function projectionInput(options?: {
  * Two projects, one workspace each, both labelled — so every grouping mode puts rows from more
  * than one project on screen, and a mode that asked for fewer icons than it renders would show it.
  */
-function twoProjectInput(groupMode: "project" | "status") {
+function twoProjectInput(groupMode: SidebarGroupMode) {
   const first = makeWorkspace("first", "running", ["Urgent"], "project");
   const second = makeWorkspace("second", "needs_input", ["Backend"], "other-project");
   return {
@@ -113,7 +112,7 @@ function twoProjectInput(groupMode: "project" | "status") {
 describe("buildSidebarProjection", () => {
   // The rule that outlived the bug it was written for: a project icon is fetched per project, so
   // whatever a mode groups by, the rows it produces can only reference projects already covered.
-  for (const groupMode of ["project", "status"] as const) {
+  for (const groupMode of ["project", "status", "list"] as const) {
     it(`covers every row ${groupMode} grouping renders with a project icon target`, () => {
       const projection = buildSidebarProjection(twoProjectInput(groupMode));
       const covered = new Set(projection.projectIconTargets.map((target) => target.projectViewKey));
@@ -192,5 +191,82 @@ describe("buildSidebarProjection", () => {
       "newer",
       "older",
     ]);
+  });
+});
+
+describe("buildSidebarProjection in one-list mode", () => {
+  /** Three unpinned rows from two projects and three statuses, in a deliberate non-status order. */
+  function oneListInput() {
+    const pinned = makeWorkspace("pinned", "running");
+    const quiet = makeWorkspace("quiet", "done", [], "project");
+    const blocked = makeWorkspace("blocked", "needs_input", [], "other-project");
+    const busy = makeWorkspace("busy", "running", [], "project");
+    return {
+      ...projectionInput({ groupMode: "list" }),
+      projects: [
+        makeProject([pinned.placement, quiet.placement, busy.placement]),
+        makeProject([blocked.placement], "other-project"),
+      ],
+      // The model hands the projection its entries already filtered and sorted; this is that order.
+      workspaceEntriesByKey: new Map([
+        [pinned.entry.workspaceKey, pinned.entry],
+        [quiet.entry.workspaceKey, quiet.entry],
+        [blocked.entry.workspaceKey, blocked.entry],
+        [busy.entry.workspaceKey, busy.entry],
+      ]),
+      projectNamesByViewKey: new Map([
+        ["project", "Project"],
+        ["other-project", "Other project"],
+      ]),
+    };
+  }
+
+  it("puts every unpinned row in one headerless group, keeping the sorted order", () => {
+    const projection = buildSidebarProjection(oneListInput());
+
+    expect(projection.workspaceGroups).toHaveLength(1);
+    const [group] = projection.workspaceGroups;
+    expect(group?.key).toBe(SIDEBAR_ONE_LIST_GROUP_KEY);
+    expect(group?.leading).toEqual({ kind: "none" });
+    // Not regrouped by status (needs_input would lead) and not by project (busy would follow quiet).
+    expect(group?.rows.map((entry) => entry.workspaceId)).toEqual(["quiet", "blocked", "busy"]);
+  });
+
+  it("keeps pinned chats above the list and numbers shortcuts in on-screen order", () => {
+    const projection = buildSidebarProjection(oneListInput());
+
+    expect(projection.pinnedGroups.pinnedChats.map((entry) => entry.workspaceId)).toEqual([
+      "pinned",
+    ]);
+    expect(projection.shortcutModel.shortcutTargets).toEqual([
+      { serverId: "srv", workspaceId: "pinned" },
+      { serverId: "srv", workspaceId: "quiet" },
+      { serverId: "srv", workspaceId: "blocked" },
+      { serverId: "srv", workspaceId: "busy" },
+    ]);
+  });
+
+  it("ignores a collapsed-group key it has no header to toggle", () => {
+    const projection = buildSidebarProjection({
+      ...oneListInput(),
+      collapsedWorkspaceGroupKeys: new Set([SIDEBAR_ONE_LIST_GROUP_KEY]),
+    });
+
+    expect(projection.shortcutModel.shortcutTargets.map((target) => target.workspaceId)).toEqual([
+      "pinned",
+      "quiet",
+      "blocked",
+      "busy",
+    ]);
+  });
+
+  it("renders no group at all when every row is pinned or filtered away", () => {
+    const input = oneListInput();
+    const projection = buildSidebarProjection({
+      ...input,
+      workspaceEntriesByKey: new Map(),
+    });
+
+    expect(projection.workspaceGroups).toEqual([]);
   });
 });

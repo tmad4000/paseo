@@ -184,6 +184,7 @@ export const ko: TranslationResources = {
       home: "홈",
       groupByProject: "프로젝트별 그룹화",
       groupByStatus: "상태별 그룹화",
+      groupInOneList: "채팅을 하나의 목록으로 표시",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -1414,6 +1415,7 @@ export const ko: TranslationResources = {
         label: "그룹화",
         project: "프로젝트",
         status: "상태",
+        list: "하나의 목록",
         labels: "레이블",
       },
       titleSource: {

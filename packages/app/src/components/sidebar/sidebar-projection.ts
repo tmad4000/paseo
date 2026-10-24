@@ -18,7 +18,11 @@ import {
   type SidebarShortcutModel,
   type SidebarShortcutSection,
 } from "@/utils/sidebar-shortcuts";
-import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
+import {
+  oneListWorkspaceGroups,
+  statusWorkspaceGroups,
+  type SidebarWorkspaceGroup,
+} from "./sidebar-labels";
 import { sortSidebarWorkspaces, type SidebarSortMode } from "./sidebar-filter-sort";
 
 export interface SidebarProjection {
@@ -79,7 +83,9 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
     sections.push(
       ...workspaceGroups.map((group) => ({
         workspaces: group.rows,
-        collapsed: input.collapsedWorkspaceGroupKeys.has(group.key),
+        // A headerless group (one-list mode) has no control to collapse it with.
+        collapsed:
+          group.leading.kind !== "none" && input.collapsedWorkspaceGroupKeys.has(group.key),
       })),
     );
   }
@@ -92,7 +98,10 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   };
 }
 
-/** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
+/**
+ * Project mode keeps its project headers and groups nothing; status mode groups the rows; one-list
+ * mode puts every row in a single headerless group, in the sort order the entries arrived in.
+ */
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
   unpinnedWorkspaces: SidebarWorkspaceEntry[],
@@ -100,7 +109,9 @@ function buildWorkspaceGroups(
   switch (input.groupMode) {
     case "project":
       return [];
-    case "status":
+    case "list":
+      return oneListWorkspaceGroups(unpinnedWorkspaces);
+    case "status": {
       const groups = buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey);
       if (input.sortMode && input.sortMode !== "manual") {
         for (const group of groups) {
@@ -112,5 +123,6 @@ function buildWorkspaceGroups(
         }
       }
       return statusWorkspaceGroups(groups);
+    }
   }
 }
