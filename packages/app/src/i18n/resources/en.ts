@@ -180,6 +180,7 @@ export const en = {
       home: "Home",
       groupByProject: "Group by project",
       groupByStatus: "Group by status",
+      groupInOneList: "Show chats in one list",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -1413,6 +1414,7 @@ export const en = {
         label: "Grouping",
         project: "Project",
         status: "Status",
+        list: "One list",
         labels: "Labels",
       },
       titleSource: {

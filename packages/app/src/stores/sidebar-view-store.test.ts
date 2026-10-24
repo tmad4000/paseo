@@ -302,3 +302,10 @@ it("defaults old preferences to activity and round-trips every chosen sort mode"
     expect(migrateSidebarViewState(JSON.parse(JSON.stringify(saved))).sortMode).toBe(mode);
   }
 });
+
+it("keeps one-list mode across a migration and falls back to project for unknown modes", () => {
+  expect(migrateSidebarViewState({ groupMode: "list" }).groupMode).toBe("list");
+  expect(migrateSidebarViewState({ groupMode: "status" }).groupMode).toBe("status");
+  // "label" is a retired persisted mode; it reads back as the default.
+  expect(migrateSidebarViewState({ groupMode: "label" }).groupMode).toBe("project");
+});

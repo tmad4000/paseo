@@ -11,6 +11,7 @@ import {
   Home,
   Import,
   Keyboard,
+  List,
   PanelLeft,
   Plus,
   Settings,
@@ -41,7 +42,7 @@ import {
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
 import { useCommandCenterActions } from "./provider";
-import { buildGroupingContribution } from "./root-contributions";
+import { buildGroupingContributions } from "./root-contributions";
 
 const ThemedPlus = withUnistyles(Plus, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
@@ -66,6 +67,7 @@ const ThemedZap = withUnistyles(Zap, (theme) => ({ color: theme.colors.foregroun
 const ThemedHome = withUnistyles(Home, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedImport = withUnistyles(Import, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedList = withUnistyles(List, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
@@ -115,6 +117,10 @@ function ImportIcon({ size }: CommandCenterIconProps) {
 
 function FolderIcon({ size }: CommandCenterIconProps) {
   return <ThemedFolder size={size} strokeWidth={2.2} />;
+}
+
+function ListIcon({ size }: CommandCenterIconProps) {
+  return <ThemedList size={size} strokeWidth={2.2} />;
 }
 
 function CircleDashedIcon({ size }: CommandCenterIconProps) {
@@ -378,14 +384,15 @@ export function CommandCenterRootActions() {
     }
 
     availableActions.push(
-      buildGroupingContribution({
+      ...buildGroupingContributions({
         groupMode,
         labels: {
           section: t("shell.commandCenter.actions"),
           groupByProject: t("shell.commandCenter.groupByProject"),
           groupByStatus: t("shell.commandCenter.groupByStatus"),
+          groupInOneList: t("shell.commandCenter.groupInOneList"),
         },
-        icons: { project: FolderIcon, status: CircleDashedIcon },
+        icons: { project: FolderIcon, status: CircleDashedIcon, list: ListIcon },
         setGroupMode,
       }),
     );

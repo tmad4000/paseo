@@ -6,7 +6,14 @@ import { z } from "zod";
 import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
-export type SidebarGroupMode = "project" | "status";
+/**
+ * How the sidebar arranges unpinned workspaces: under project headers, under status headers, or
+ * as one flat list in the chosen sort order (Codex's "In one list"), where each row still carries
+ * its project icon, status badge and project name.
+ */
+export type SidebarGroupMode = "project" | "status" | "list";
+
+export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = ["project", "status", "list"];
 
 /**
  * What the sidebar find field searches: names only (projects, workspaces, tab titles), or names
@@ -93,7 +100,7 @@ interface SidebarViewPersistedState {
   filterScope?: SidebarFilterScope;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
@@ -159,7 +166,8 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
   }
 
   return {
-    groupMode: state.groupMode === "status" ? "status" : "project",
+    groupMode:
+      state.groupMode === "status" || state.groupMode === "list" ? state.groupMode : "project",
     sortMode: state.sortMode ?? "recent",
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],

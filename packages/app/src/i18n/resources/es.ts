@@ -185,6 +185,7 @@ export const es: TranslationResources = {
       home: "Hogar",
       groupByProject: "Agrupar por proyecto",
       groupByStatus: "Agrupar por estado",
+      groupInOneList: "Mostrar chats en una sola lista",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -1444,6 +1445,7 @@ export const es: TranslationResources = {
         label: "Agrupación",
         project: "Proyecto",
         status: "Estado",
+        list: "Una sola lista",
         labels: "Etiquetas",
       },
       titleSource: {

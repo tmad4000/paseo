@@ -18,7 +18,11 @@ import {
   type SidebarShortcutModel,
   type SidebarShortcutSection,
 } from "@/utils/sidebar-shortcuts";
-import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
+import {
+  oneListWorkspaceGroups,
+  statusWorkspaceGroups,
+  type SidebarWorkspaceGroup,
+} from "./sidebar-labels";
 import { sortSidebarWorkspaces, type SidebarSortMode } from "./sidebar-filter-sort";
 
 export interface SidebarProjection {
@@ -62,7 +66,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   // One switch decides both what the list groups by and what the keyboard shortcuts walk, so the
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
-  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces, pinnedGroups);
 
   const sections: SidebarShortcutSection[] = [];
   if (!input.pinnedCollapsed) {
@@ -79,7 +83,9 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
     sections.push(
       ...workspaceGroups.map((group) => ({
         workspaces: group.rows,
-        collapsed: input.collapsedWorkspaceGroupKeys.has(group.key),
+        // A headerless group (one-list mode) has no control to collapse it with.
+        collapsed:
+          group.leading.kind !== "none" && input.collapsedWorkspaceGroupKeys.has(group.key),
       })),
     );
   }
@@ -92,15 +98,25 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   };
 }
 
-/** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
+/**
+ * Project mode keeps its project headers and groups nothing; status mode groups the rows; one-list
+ * mode puts every row in a single headerless group, in the sort order the entries arrived in.
+ */
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
   unpinnedWorkspaces: SidebarWorkspaceEntry[],
+  pinnedGroups: PinnedSidebarGroups,
 ): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
       return [];
-    case "status":
+    case "list":
+      return oneListWorkspaceGroups(
+        !input.sortMode || input.sortMode === "manual"
+          ? manualOneListRows(pinnedGroups, input.workspaceEntriesByKey)
+          : unpinnedWorkspaces,
+      );
+    case "status": {
       const groups = buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey);
       if (input.sortMode && input.sortMode !== "manual") {
         for (const group of groups) {
@@ -112,5 +128,24 @@ function buildWorkspaceGroups(
         }
       }
       return statusWorkspaceGroups(groups);
+    }
   }
+}
+
+/**
+ * Manual order in one list is the order you arranged the projects in (pinned and dragged), with
+ * each project's rows in its own stored order. The entries map alone only knows the host's model
+ * order, which would ignore every arrangement you made. Rows the filters removed are absent from
+ * the entries map, so they drop out here too.
+ */
+function manualOneListRows(
+  pinnedGroups: PinnedSidebarGroups,
+  entries: ReadonlyMap<string, SidebarWorkspaceEntry>,
+): SidebarWorkspaceEntry[] {
+  return pinnedGroups.unpinnedProjects.flatMap((project) =>
+    project.workspaces.flatMap((workspace) => {
+      const entry = entries.get(workspace.workspaceKey);
+      return entry ? [entry] : [];
+    }),
+  );
 }
