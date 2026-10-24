@@ -307,12 +307,17 @@ test("compact workspace status menu exposes manual input", async ({ page, worksp
     .getByTestId(`sidebar-workspace-kebab-${getServerId()}:${workspaces.subject.workspaceId}`)
     .click();
   await page.getByTestId("manual-status-menu").click();
+  const clearRow = page.getByTestId("manual-status-clear");
+  await expect(clearRow).toBeInViewport();
+  const mountedRow = await clearRow.elementHandle();
   await page.getByTestId("manual-status-needs_input").click();
   await expect(page.getByText("Status updated", { exact: true })).toBeVisible();
   await expect(page.getByTestId("manual-status-needs_input")).toHaveAttribute(
     "aria-checked",
     "true",
   );
+  expect(await mountedRow?.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(clearRow).toBeInViewport();
   await page.screenshot({ path: "test-results/manual-status-compact.png" });
   expect(
     (await workspaces.subject.client.fetchAgent({ agentId: workspaces.subject.agentId }))?.agent

@@ -29,19 +29,31 @@ export function useAgentStatusMenuPages(
   target: ManualStatusTarget | null,
 ): readonly MenuPageDefinition[] {
   const { t } = useTranslation();
-  return useMemo(
-    () =>
-      target
-        ? [
-            {
-              id: STATUS_PAGE,
-              title: t("manualStatus.title"),
-              content: <AgentStatusPage target={target} />,
-            },
-          ]
-        : [],
-    [t, target],
-  );
+  const serverId = target?.serverId;
+  const agentId = target?.kind === "agent" ? target.agentId : undefined;
+  const workspaceId = target?.kind === "workspace" ? target.workspaceId : undefined;
+  const stableTarget = useMemo<ManualStatusTarget | null>(() => {
+    if (!serverId) return null;
+    if (agentId) return { kind: "agent", serverId, agentId };
+    if (workspaceId) return { kind: "workspace", serverId, workspaceId };
+    return null;
+  }, [serverId, agentId, workspaceId]);
+  return useMemo(() => {
+    return stableTarget
+      ? [
+          {
+            id: STATUS_PAGE,
+            title: t("manualStatus.title"),
+            content: (
+              <AgentStatusPage
+                key={`${serverId}:${stableTarget.kind}:${agentId ?? workspaceId}`}
+                target={stableTarget}
+              />
+            ),
+          },
+        ]
+      : [];
+  }, [t, stableTarget, serverId, agentId, workspaceId]);
 }
 
 type TargetState =
@@ -59,7 +71,8 @@ function AgentStatusPage({ target }: { target: ManualStatusTarget }) {
   useEffect(() => {
     if (!supported) return;
     let cancelled = false;
-    setState({ kind: "loading" });
+    // Keep the menu's rows mounted during a save refresh so compact sheets do not collapse.
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
     const client = getHostRuntimeStore().getClient(target.serverId);
     if (!client) {
       setState({ kind: "error", message: t("workspace.terminal.hostDisconnected") });
