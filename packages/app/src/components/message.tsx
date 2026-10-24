@@ -1,4 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { CollapsiblePrompt } from "@/components/collapsible-prompt";
 import { TaskListRow } from "@/components/task-list-row";
 import {
   View,
@@ -542,9 +543,11 @@ export const UserMessage = memo(function UserMessage({
             </View>
           ) : null}
           {hasText ? (
-            <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-              {message}
-            </Text>
+            <CollapsiblePrompt
+              message={message}
+              textStyle={userMessageStylesheet.text}
+              dataSet={MESSAGE_TEXT_DATASET}
+            />
           ) : null}
         </View>
         {hasText ? (
