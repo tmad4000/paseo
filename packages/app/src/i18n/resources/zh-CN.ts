@@ -13,6 +13,10 @@ export const zhCN: TranslationResources = {
       default: "默认项目",
       pinned: "已固定的项目",
     },
+    picker: {
+      pinnedSection: "已固定",
+      otherSection: "项目",
+    },
     commandCenter: {
       goToDefault: "前往默认项目",
       pinCurrent: "固定当前项目",
@@ -1547,6 +1551,7 @@ export const zhCN: TranslationResources = {
   },
   newWorkspace: {
     title: "新建 workspace",
+    close: "关闭新建 workspace",
     create: "创建",
     isolation: {
       local: "本地",

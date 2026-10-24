@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComboboxOption as ComboboxOptionType } from "@/components/ui/combobox";
+import { orderProjectsWithPins, type ProjectPinState } from "@/default-project/model";
 import { isWorkspaceArchivePending } from "@/contexts/session-workspace-upserts";
 import {
   filterWorkspaceProjectsForHost,
@@ -27,6 +28,11 @@ interface NewWorkspaceProjectPickerInput {
   routeProjectContextViewKey: string | null;
   lastActiveProject: HostProjectListItem | null;
   allowAllProjects: boolean;
+  /** Pinned projects are listed first; without it the picker keeps the given order. */
+  pinOrdering?: {
+    pinStates: ReadonlyMap<string, ProjectPinState>;
+    pinnedProjectOrder: readonly string[];
+  };
 }
 
 interface NewWorkspaceProjectPickerState {
@@ -34,6 +40,8 @@ interface NewWorkspaceProjectPickerState {
   selectedSourceDirectory: string | null;
   projectPickerOptions: ComboboxOptionType[];
   projectByOptionId: Map<string, HostProjectListItem>;
+  /** Option ids of pinned and Default projects, which lead the option list. */
+  pinnedOptionIds: ReadonlySet<string>;
   selectedProjectOptionId: string;
   projectTriggerLabel: string;
   handleSelectProjectOption: (id: string) => void;
@@ -43,14 +51,30 @@ function projectOptionId(projectId: string): string {
   return `${PROJECT_OPTION_PREFIX}${projectId}`;
 }
 
-function computeProjectOptionData(projects: readonly HostProjectListItem[]) {
+const NO_PINNED_OPTION_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * Picker options in display order. Pins only reorder the list: the initial selection still comes
+ * from the route or the last active project, never from whichever project is pinned first.
+ */
+export function computeProjectOptionData(
+  projects: readonly HostProjectListItem[],
+  pinOrdering?: NewWorkspaceProjectPickerInput["pinOrdering"],
+) {
+  const ordered = pinOrdering
+    ? orderProjectsWithPins({ projects, ...pinOrdering })
+    : { projects, pinnedViewKeys: NO_PINNED_OPTION_IDS };
   const projectByOptionId = new Map<string, HostProjectListItem>();
-  const options = projects.map((project) => {
+  const options = ordered.projects.map((project) => {
     const id = projectOptionId(project.viewKey);
     projectByOptionId.set(id, project);
     return { id, label: project.projectName };
   });
-  return { options, projectByOptionId };
+  const pinnedOptionIds =
+    ordered.pinnedViewKeys.size === 0
+      ? NO_PINNED_OPTION_IDS
+      : new Set(Array.from(ordered.pinnedViewKeys, projectOptionId));
+  return { options, projectByOptionId, pinnedOptionIds };
 }
 
 function resolveWorkspaceIdFromProjectWorkspaceKey(input: {
@@ -88,6 +112,7 @@ export function useNewWorkspaceProjectPicker({
   routeProjectContextViewKey,
   lastActiveProject,
   allowAllProjects,
+  pinOrdering,
 }: NewWorkspaceProjectPickerInput): NewWorkspaceProjectPickerState {
   const selectableProjects = useMemo(
     () =>
@@ -159,9 +184,13 @@ export function useNewWorkspaceProjectPicker({
 
   const activeSelection = reconcileProjectSelection(projectSelection, selectionContext);
   const selectedProject = resolveProjectSelection(activeSelection, selectionContext);
-  const { options: projectPickerOptions, projectByOptionId } = useMemo(
-    () => computeProjectOptionData(selectableProjects),
-    [selectableProjects],
+  const {
+    options: projectPickerOptions,
+    projectByOptionId,
+    pinnedOptionIds,
+  } = useMemo(
+    () => computeProjectOptionData(selectableProjects, pinOrdering),
+    [pinOrdering, selectableProjects],
   );
   const handleSelectProjectOption = useCallback(
     (id: string) => {
@@ -189,6 +218,7 @@ export function useNewWorkspaceProjectPicker({
       : null,
     projectPickerOptions,
     projectByOptionId,
+    pinnedOptionIds,
     selectedProjectOptionId: selectedProject ? projectOptionId(selectedProject.viewKey) : "",
     projectTriggerLabel: selectedProject?.projectName ?? "Choose project",
     handleSelectProjectOption,

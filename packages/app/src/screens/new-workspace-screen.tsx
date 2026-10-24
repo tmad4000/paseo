@@ -14,7 +14,7 @@ import type { PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Folder, FolderPlus, GitBranch, GitPullRequest } from "lucide-react-native";
+import { ChevronDown, Folder, FolderPlus, GitBranch, GitPullRequest, X } from "lucide-react-native";
 import { Composer } from "@/composer";
 import { ComposerDock } from "@/composer/dock";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -24,6 +24,14 @@ import {
 } from "@/composer/attachments/submit";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { HostPicker } from "@/components/hosts/host-picker";
+import {
+  ProjectPickerPinToggle,
+  ProjectPickerSectionHeader,
+  resolveProjectPickerSectionStarts,
+  useProjectPickerPinOrdering,
+  type HostProjectRef,
+  type ProjectPickerSection,
+} from "@/default-project";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { Combobox, ComboboxItem } from "@/components/ui/combobox";
 import type { ComboboxOption as ComboboxOptionType, ComboboxProps } from "@/components/ui/combobox";
@@ -33,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { ScreenHeader } from "@/components/headers/screen-header";
+import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
@@ -134,12 +143,49 @@ import {
   type WorkspaceCreationResult,
 } from "./new-workspace/create-workspace";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
+import { leaveNewWorkspaceScreen } from "./new-workspace/leave";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const addProjectIcon = (
   <ThemedFolderPlus size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
+const ThemedX = withUnistyles(X);
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+
+/** Leaves the screen the way Cmd/Ctrl+W does: back to where the user was. */
+function CloseNewWorkspaceButton() {
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const closeKeys = useShortcutKeys("workspace-tab-close-current");
+  const tooltipKeys = useMemo(
+    () => (isCompact || !closeKeys ? [] : (closeKeys[0] ?? [])),
+    [closeKeys, isCompact],
+  );
+  const handlePress = useCallback(() => {
+    leaveNewWorkspaceScreen({ isCompact });
+  }, [isCompact]);
+  return (
+    <HeaderToggleButton
+      testID="new-workspace-close"
+      onPress={handlePress}
+      tooltipLabel={t("common.actions.close")}
+      tooltipKeys={tooltipKeys}
+      tooltipSide="bottom"
+      accessibilityRole="button"
+      accessibilityLabel={t("newWorkspace.close")}
+    >
+      {({ hovered, pressed }) => (
+        <ThemedX
+          size={16}
+          uniProps={hovered || pressed ? foregroundColorMapping : foregroundMutedColorMapping}
+        />
+      )}
+    </HeaderToggleButton>
+  );
+}
+
+const closeNewWorkspaceButton = <CloseNewWorkspaceButton />;
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
   draftId: string | undefined;
@@ -205,6 +251,8 @@ const metaChevron = <MetaChevron />;
 
 // Stable reference so the keyboard-action handler doesn't re-register each render.
 const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pick"];
+// This screen has no tabs, so the close-tab shortcut (Cmd/Ctrl+W) closes the screen instead.
+const CLOSE_SCREEN_ACTIONS: readonly KeyboardActionId[] = ["workspace.tab.close-current"];
 // Height of a single picker-trigger badge. The Base-row spacer reserves exactly
 // this so toggling Isolation to Local hides the row without shifting the form.
 const BADGE_HEIGHT = 28;
@@ -464,6 +512,7 @@ function ProjectOptionItem({
   active,
   disabled,
   onPress,
+  pinHosts,
 }: {
   testID: string;
   projectViewKey: string;
@@ -474,7 +523,17 @@ function ProjectOptionItem({
   active: boolean;
   disabled: boolean;
   onPress: () => void;
+  pinHosts: readonly HostProjectRef[];
 }) {
+  const trailingSlot = useMemo(
+    () => (
+      <ProjectPickerPinToggle
+        hosts={pinHosts}
+        testID={`new-workspace-project-picker-pin-${projectViewKey}`}
+      />
+    ),
+    [pinHosts, projectViewKey],
+  );
   const placeholderLabel = projectIconPlaceholderLabelFromDisplayName(label);
   const placeholderInitial = placeholderLabel.charAt(0).toUpperCase() || "?";
   const leadingSlot = useMemo(
@@ -502,6 +561,7 @@ function ProjectOptionItem({
       disabled={disabled}
       onPress={onPress}
       leadingSlot={leadingSlot}
+      trailingSlot={trailingSlot}
     />
   );
 }
@@ -563,6 +623,7 @@ function NewWorkspaceProjectPickerOption({
   selectedServerId,
   isPending,
   supportsWorkspaceMultiplicity,
+  sectionStart,
 }: {
   option: ComboboxOptionType;
   selected: boolean;
@@ -573,13 +634,14 @@ function NewWorkspaceProjectPickerOption({
   selectedServerId: string;
   isPending: boolean;
   supportsWorkspaceMultiplicity: boolean;
+  sectionStart: ProjectPickerSection | undefined;
 }) {
   const project = projectByOptionId.get(option.id);
   if (!project) return <View key={option.id} />;
   const sourceDirectory =
     getHostProjectSourceDirectory(project, selectedServerId) ?? project.iconWorkingDir;
 
-  return (
+  const item = (
     <ProjectOptionItem
       testID={`new-workspace-project-picker-option-${project.viewKey}`}
       projectViewKey={project.viewKey}
@@ -594,7 +656,15 @@ function NewWorkspaceProjectPickerOption({
           !project.hosts.some((host) => host.worktreeSupport !== "unsupported"))
       }
       onPress={onPress}
+      pinHosts={project.hosts}
     />
+  );
+  if (!sectionStart) return item;
+  return (
+    <View>
+      <ProjectPickerSectionHeader section={sectionStart} />
+      {item}
+    </View>
   );
 }
 
@@ -1313,6 +1383,7 @@ interface NewWorkspaceFormStackInput {
     selectedOptionId: string;
     onSelect: (id: string) => void;
     onAddProject: () => void;
+    onSearchQueryChange: (query: string) => void;
     renderOption: RefPickerRenderOption;
   };
   host: FormPickerControl & {
@@ -1405,6 +1476,7 @@ function useNewWorkspaceFormStack(input: NewWorkspaceFormStackInput): ReactEleme
         desktopMinWidth={360}
         anchorRef={project.anchorRef}
         emptyText="No projects available."
+        onSearchQueryChange={project.onSearchQueryChange}
         renderOption={project.renderOption}
         footer={addProjectAction}
       />
@@ -1657,11 +1729,13 @@ export function NewWorkspaceScreen({
   const { workspace } = creationResult;
   const client = useHostRuntimeClient(selectedServerId);
   const isConnected = useHostRuntimeIsConnected(selectedServerId);
+  const projectPinOrdering = useProjectPickerPinOrdering(projects);
   const {
     selectedProject,
     selectedSourceDirectory,
     projectPickerOptions,
     projectByOptionId,
+    pinnedOptionIds,
     selectedProjectOptionId,
     projectTriggerLabel,
     handleSelectProjectOption: selectProjectOption,
@@ -1672,7 +1746,18 @@ export function NewWorkspaceScreen({
     routeProjectContextViewKey,
     lastActiveProject,
     allowAllProjects: supportsWorkspaceMultiplicity,
+    pinOrdering: projectPinOrdering,
   });
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const projectSectionStarts = useMemo(
+    () =>
+      resolveProjectPickerSectionStarts({
+        optionIds: projectPickerOptions.map((option) => option.id),
+        pinnedOptionIds,
+        searchQuery: projectSearchQuery,
+      }),
+    [pinnedOptionIds, projectPickerOptions, projectSearchQuery],
+  );
   const projectIconTargets = useMemo(
     () => buildNewWorkspaceProjectIconTargets(projects, selectedServerId),
     [projects, selectedServerId],
@@ -1880,6 +1965,20 @@ export function NewWorkspaceScreen({
     openProjectPicker();
     return true;
   }, [openProjectPicker]);
+  const handleCloseScreen = useCallback(() => {
+    leaveNewWorkspaceScreen({ isCompact });
+    return true;
+  }, [isCompact]);
+  useKeyboardActionHandler({
+    handlerId: "new-workspace-close",
+    actions: CLOSE_SCREEN_ACTIONS,
+    enabled: true,
+    priority: 0,
+    // A route pushed on top keeps this screen mounted underneath; only the visible one closes.
+    isActive: isStillOnCreateScreen,
+    handle: handleCloseScreen,
+  });
+
   useKeyboardActionHandler({
     handlerId: "new-workspace-project-pick",
     actions: PROJECT_PICK_ACTIONS,
@@ -2221,12 +2320,14 @@ export function NewWorkspaceScreen({
         selectedServerId={selectedServerId}
         isPending={isPending}
         supportsWorkspaceMultiplicity={supportsWorkspaceMultiplicity}
+        sectionStart={projectSectionStarts.get(props.option.id)}
       />
     ),
     [
       isPending,
       projectByOptionId,
       projectIconDataByProjectViewKey,
+      projectSectionStarts,
       selectedServerId,
       supportsWorkspaceMultiplicity,
     ],
@@ -2261,6 +2362,7 @@ export function NewWorkspaceScreen({
       selectedOptionId: selectedProjectOptionId,
       onSelect: handleSelectProjectOption,
       onAddProject: handleAddProject,
+      onSearchQueryChange: setProjectSearchQuery,
       openState: projectPickerOpen,
       onOpenChange: handleProjectPickerOpenChange,
       renderOption: renderProjectOption,
@@ -2373,7 +2475,7 @@ export function NewWorkspaceScreen({
   );
   return (
     <FileDropZone style={styles.container}>
-      <ScreenHeader left={screenHeaderLeft} borderless />
+      <ScreenHeader left={screenHeaderLeft} right={closeNewWorkspaceButton} borderless />
       <View style={styles.content}>
         <TitlebarDragRegion />
         <NewWorkspaceLayout

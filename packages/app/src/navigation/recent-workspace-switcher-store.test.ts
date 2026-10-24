@@ -44,7 +44,7 @@ describe("recent workspace switcher", () => {
     closeRecentWorkspaceSwitcher();
   });
 
-  it("switches to the previous workspace on a quick Ctrl+Tab tap", () => {
+  it("switches to the previous workspace on a quick Ctrl+Alt+Tab tap", () => {
     expect(openRecentWorkspaceSwitcher({ direction: 1, current, hold: true })).toBe(true);
     expect(useRecentWorkspaceSwitcherStore.getState()).toMatchObject({ open: true, index: 1 });
 
@@ -61,6 +61,19 @@ describe("recent workspace switcher", () => {
     handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false, ctrlKey: true });
     expect(useRecentWorkspaceSwitcherStore.getState().index).toBe(0);
     handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: true, ctrlKey: true });
+
+    handleRecentWorkspaceSwitcherKeyUp({ key: "Control" });
+
+    expect(navigateToWorkspace).toHaveBeenCalledWith({ serverId: "s", workspaceId: "older" });
+  });
+
+  it("keeps the gesture open while Alt is held for Ctrl+Alt+Tab", () => {
+    openRecentWorkspaceSwitcher({ direction: 1, current, hold: true });
+    expect(
+      handleRecentWorkspaceSwitcherKeyDown({ key: "Alt", shiftKey: false, ctrlKey: true }),
+    ).toBe(true);
+    handleRecentWorkspaceSwitcherKeyDown({ key: "Tab", shiftKey: false, ctrlKey: true });
+    expect(useRecentWorkspaceSwitcherStore.getState()).toMatchObject({ open: true, index: 2 });
 
     handleRecentWorkspaceSwitcherKeyUp({ key: "Control" });
 

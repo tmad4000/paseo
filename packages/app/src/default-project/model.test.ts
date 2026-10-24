@@ -3,6 +3,7 @@ import {
   orderProjectsWithPins,
   resolveDefaultProjectPlacements,
   resolveDefaultProjectWorkspaceId,
+  resolveProjectPickerSectionStarts,
   resolveProjectPinState,
   selectHostDefaultProject,
   splitPinnedProjects,
@@ -125,6 +126,46 @@ describe("orderProjectsWithPins", () => {
       pinned: [{ viewKey: "b" }, { viewKey: "d" }],
       rest: [{ viewKey: "a" }, { viewKey: "c" }, { viewKey: "e" }],
     });
+  });
+});
+
+describe("resolveProjectPickerSectionStarts", () => {
+  const optionIds = ["project:a", "project:b", "project:c"];
+
+  it("opens Pinned at the first pinned row and Projects at the first other row", () => {
+    const starts = resolveProjectPickerSectionStarts({
+      optionIds,
+      pinnedOptionIds: new Set(["project:a", "project:b"]),
+      searchQuery: "",
+    });
+    expect([...starts]).toEqual([
+      ["project:a", "pinned"],
+      ["project:c", "other"],
+    ]);
+  });
+
+  it("shows no headers while searching, since ranking reorders the rows", () => {
+    expect(
+      resolveProjectPickerSectionStarts({
+        optionIds,
+        pinnedOptionIds: new Set(["project:a"]),
+        searchQuery: "b",
+      }).size,
+    ).toBe(0);
+  });
+
+  it("shows no headers when every row or no row is pinned", () => {
+    expect(
+      resolveProjectPickerSectionStarts({
+        optionIds,
+        pinnedOptionIds: new Set(optionIds),
+        searchQuery: "",
+      }).size,
+    ).toBe(0);
+    expect(
+      resolveProjectPickerSectionStarts({ optionIds, pinnedOptionIds: new Set(), searchQuery: "" })
+        .size,
+    ).toBe(0);
   });
 });
 

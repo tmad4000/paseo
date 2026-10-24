@@ -12,6 +12,7 @@ import {
   useContextMenu,
 } from "@/components/ui/context-menu";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import {
   navigateInFocusHistory,
   useCanNavigateBackInFocusHistory,
@@ -35,13 +36,13 @@ const DIRECTIONS = {
   back: {
     testID: "navigation-back-button",
     labelKey: "common.actions.navigateBack",
-    shortcutKeys: ["mod", "alt", "ArrowLeft"],
+    shortcutHelpId: "navigation-back",
     Icon: ThemedArrowLeft,
   },
   forward: {
     testID: "navigation-forward-button",
     labelKey: "common.actions.navigateForward",
-    shortcutKeys: ["mod", "alt", "ArrowRight"],
+    shortcutHelpId: "navigation-forward",
     Icon: ThemedArrowRight,
   },
 } as const satisfies Record<
@@ -49,7 +50,7 @@ const DIRECTIONS = {
   {
     testID: string;
     labelKey: string;
-    shortcutKeys: readonly ShortcutKey[];
+    shortcutHelpId: string;
     Icon: typeof ThemedArrowLeft;
   }
 >;
@@ -155,9 +156,11 @@ function NavigationHistoryPressable({
   const { t } = useTranslation();
   const menu = useContextMenu();
   const isCompact = useIsCompactFormFactor();
-  const { testID, labelKey, shortcutKeys, Icon } = DIRECTIONS[direction];
+  const { testID, labelKey, shortcutHelpId, Icon } = DIRECTIONS[direction];
+  // The effective binding, so a rebound Back/Forward advertises what it now does.
+  const shortcutKeys = useShortcutKeys(shortcutHelpId);
   const tooltipKeys = useMemo<ShortcutKey[]>(
-    () => (isCompact ? [] : [...shortcutKeys]),
+    () => (isCompact || !shortcutKeys ? [] : (shortcutKeys[0] ?? [])),
     [isCompact, shortcutKeys],
   );
   const accessibilityState = useMemo(() => ({ disabled: !available }), [available]);

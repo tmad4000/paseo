@@ -64,7 +64,7 @@ function switchToEntry(entry: RecentWorkspaceEntry | undefined): void {
 }
 
 /**
- * Ctrl+Tab. With `hold`, the switcher stays open while Control is held and commits
+ * Ctrl+Alt+Tab by default. With `hold`, the switcher stays open while Control is held and commits
  * on release, so a quick tap lands on the previous workspace and holding cycles.
  * Without it (the keystroke came from an embedded browser page, whose key-up the
  * app never sees) it switches straight away.
@@ -151,7 +151,9 @@ export function handleRecentWorkspaceSwitcherKeyDown(event: {
     case "Escape":
       closeRecentWorkspaceSwitcher();
       return true;
+    // Ctrl+Alt+Tab opens the switcher, so Alt is held (or pressed again) mid-gesture.
     case "Control":
+    case "Alt":
     case "Shift":
       return true;
     default:

@@ -59,7 +59,7 @@ function SwitcherRow({
 }
 
 /**
- * The Ctrl+Tab overlay: most recent workspaces first, highlighted row follows Tab /
+ * The Ctrl+Alt+Tab overlay: most recent workspaces first, highlighted row follows Tab /
  * Shift+Tab / arrows, releasing Control switches. Keys are handled by the global
  * keyboard hook so the gesture works wherever focus is.
  */
