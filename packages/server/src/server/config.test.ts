@@ -10,6 +10,45 @@ import { loadPersistedConfig } from "./persisted-config.js";
 const roots: string[] = [];
 
 describe("server config", () => {
+  test("sharing is opt-in, persisted and overridable by environment", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-sharing-"));
+    roots.push(paseoHome);
+    expect(loadConfig(paseoHome, { env: {} }).sharing).toMatchObject({
+      listen: null,
+      publicBaseUrl: null,
+      ownerDisplayName: expect.any(String),
+    });
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        daemon: {
+          sharing: {
+            listen: "127.0.0.1:8443",
+            publicBaseUrl: "https://share.example",
+            ownerDisplayName: "Jacob",
+          },
+        },
+      }),
+    );
+    expect(loadConfig(paseoHome, { env: {} }).sharing).toEqual({
+      listen: "127.0.0.1:8443",
+      publicBaseUrl: "https://share.example",
+      ownerDisplayName: "Jacob",
+    });
+    const config = loadConfig(paseoHome, {
+      env: {
+        PASEO_SHARING_LISTEN: "127.0.0.1:9443",
+        PASEO_SHARING_PUBLIC_BASE_URL: "https://other.example",
+        PASEO_SHARING_OWNER_NAME: "Owner",
+      },
+    });
+    expect(config.sharing).toEqual({
+      listen: "127.0.0.1:9443",
+      publicBaseUrl: "https://other.example",
+      ownerDisplayName: "Owner",
+    });
+  });
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });

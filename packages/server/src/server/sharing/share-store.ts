@@ -1,0 +1,113 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { z } from "zod";
+import {
+  ShareRecordPayloadSchema,
+  ShareSnapshotSchema,
+  type ShareRecordPayload,
+  type ShareSnapshot,
+} from "@getpaseo/protocol/sharing";
+import { writeJsonFileAtomic } from "../atomic-file.js";
+
+export const ShareRecordSchema = ShareRecordPayloadSchema.extend({
+  tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type ShareRecord = z.infer<typeof ShareRecordSchema>;
+export function sharePayload(record: ShareRecord): ShareRecordPayload {
+  const { tokenHash: _tokenHash, ...payload } = record;
+  return payload;
+}
+export const hashToken = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
+export const shareIsActive = (record: ShareRecordPayload, now = Date.now()): boolean =>
+  record.revokedAt === null && (record.expiresAt === null || Date.parse(record.expiresAt) > now);
+
+/** All guest access is confined to this store. It has no timeline or daemon capability. */
+export class ShareStore {
+  private pending: Promise<unknown> = Promise.resolve();
+  constructor(private readonly sharesDir: string) {}
+  private file(id: string, snapshot = false): string {
+    if (!/^shr_[a-f0-9]{16}$/.test(id)) throw new Error("Invalid share id");
+    return path.join(this.sharesDir, `${id}${snapshot ? ".snapshot" : ""}.json`);
+  }
+  private serial<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.pending.then(operation);
+    this.pending = result.catch(() => undefined);
+    return result;
+  }
+  private async read(id: string): Promise<ShareRecord | null> {
+    try {
+      return ShareRecordSchema.parse(JSON.parse(await fs.readFile(this.file(id), "utf8")));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+  }
+  private async readAll(): Promise<ShareRecord[]> {
+    let names: string[];
+    try {
+      names = await fs.readdir(this.sharesDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    const records: ShareRecord[] = [];
+    for (const name of names) {
+      if (!/^shr_[a-f0-9]{16}\.json$/.test(name)) continue;
+      const record = await this.read(name.slice(0, -5));
+      if (record) records.push(record);
+    }
+    return records;
+  }
+  list(agentId?: string): Promise<ShareRecord[]> {
+    return this.serial(async () =>
+      (await this.readAll()).filter((r) => !agentId || r.agentId === agentId),
+    );
+  }
+  create(record: ShareRecord, snapshot: ShareSnapshot): Promise<void> {
+    return this.serial(async () => {
+      const value = ShareRecordSchema.parse(record);
+      if (await this.read(value.id)) throw new Error("Share already exists");
+      // Publish the capability only after its complete snapshot is durable.
+      await writeJsonFileAtomic(this.file(value.id, true), ShareSnapshotSchema.parse(snapshot));
+      await writeJsonFileAtomic(this.file(value.id), value);
+    });
+  }
+  update(id: string, change: (record: ShareRecord) => ShareRecord): Promise<ShareRecord> {
+    return this.serial(async () => {
+      const record = await this.read(id);
+      if (!record) throw new Error("Share not found");
+      const next = ShareRecordSchema.parse(change(record));
+      await writeJsonFileAtomic(this.file(id), next);
+      return next;
+    });
+  }
+  delete(id: string): Promise<void> {
+    return this.serial(async () => {
+      // Remove authority first; a leftover snapshot can never be served.
+      await fs.rm(this.file(id), { force: true });
+      await fs.rm(this.file(id, true), { force: true });
+    });
+  }
+  view(token: string): Promise<ShareSnapshot | null> {
+    return this.serial(async () => {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+      const digest = Buffer.from(hashToken(token), "hex");
+      const record = (await this.readAll()).find((r) =>
+        timingSafeEqual(digest, Buffer.from(r.tokenHash, "hex")),
+      );
+      if (!record || !shareIsActive(record)) return null;
+      const snapshot = ShareSnapshotSchema.parse(
+        JSON.parse(await fs.readFile(this.file(record.id, true), "utf8")),
+      );
+      // View accounting must not prevent reading an otherwise valid immutable snapshot.
+      await writeJsonFileAtomic(this.file(record.id), {
+        ...record,
+        viewCount: record.viewCount + 1,
+        lastViewedAt: new Date().toISOString(),
+      }).catch(() => undefined);
+      return { ...snapshot, title: record.title };
+    });
+  }
+}

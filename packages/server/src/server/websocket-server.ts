@@ -1,3 +1,4 @@
+import type { SharingSessionOptions } from "./sharing/share-service.js";
 import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
@@ -683,6 +684,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     agentQueueService?: AgentQueueService | null,
+    private readonly sharing?: SharingSessionOptions,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -1574,6 +1576,7 @@ export class VoiceAssistantWebSocketServer {
       hubRelationships: options.hubRelationships,
       broadcastToClients: options.broadcastToClients,
       serviceProxy: this.serviceProxy ?? undefined,
+      sharing: this.sharing,
       scriptRuntimeStore: this.scriptRuntimeStore ?? undefined,
       workspaceSetupSnapshots: this.workspaceSetupSnapshots,
       workspaceSetupRuntime: this.workspaceSetupRuntime,
@@ -1986,6 +1989,8 @@ export class VoiceAssistantWebSocketServer {
         clientDiagnostics: true,
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: true,
+        // COMPAT(conversationSharing): fork feature, added in fork v0.10.0-beta.17, drop the gate after 2027-04-24.
+        conversationSharing: true,
         globalStream: true,
         durableStream: true,
         queueEdit: this.agentQueueService !== null,

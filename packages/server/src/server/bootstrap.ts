@@ -1,3 +1,6 @@
+import { promisify } from "node:util";
+import { ShareService } from "./sharing/share-service.js";
+import { createConfiguredShareListener } from "./sharing/share-listener.js";
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
@@ -423,6 +426,7 @@ export interface PaseoDaemonConfig {
   relayPublicEndpoint?: string;
   relayUseTls?: boolean;
   relayPublicUseTls?: boolean;
+  sharing?: { listen: string | null; publicBaseUrl: string | null; ownerDisplayName: string };
   serviceProxy?: {
     publicBaseUrl: string | null;
     standaloneListen: string | null;
@@ -473,6 +477,7 @@ export interface PaseoDaemon {
   browserToolsBroker: BrowserToolsBroker;
   start(): Promise<void>;
   stop(): Promise<void>;
+  getShareAddress(): ReturnType<import("node:http").Server["address"]>;
   getListenTarget(): ListenTarget | null;
   getServerId(): string;
 }
@@ -943,6 +948,16 @@ export async function createPaseoDaemon(
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     logger,
   });
+  const shareService = new ShareService(
+    { getCommittedRows: (agentId) => agentManager.getTimelineRows(agentId) },
+    path.join(config.paseoHome, "shares"),
+  );
+  const shareListener = createConfiguredShareListener(config.sharing, shareService.store);
+  const stopShareListener = async () => {
+    if (!shareListener?.listening) return;
+    shareListener.closeAllConnections();
+    await promisify(shareListener.close.bind(shareListener))();
+  };
   const syncPluginProviders = () => {
     agentManager.updateProviderRegistry(
       providerSnapshotManager.replacePluginProviders(pluginRuntime.getProviderRegistrations()),
@@ -1744,6 +1759,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               agentQueueService,
+              { service: shareService, config: config.sharing },
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -1785,6 +1801,24 @@ export async function createPaseoDaemon(
         }
       });
 
+      if (shareListener && config.sharing?.listen) {
+        const target = parseListenString(config.sharing.listen);
+        await new Promise<void>((resolve, reject) => {
+          const onError = (error: Error) => {
+            shareListener.off("listening", onListening);
+            reject(error);
+          };
+          const onListening = () => {
+            shareListener.off("error", onError);
+            resolve();
+          };
+          shareListener.once("error", onError);
+          shareListener.once("listening", onListening);
+          if (target.type === "tcp") shareListener.listen(target.port, target.host);
+          else shareListener.listen(target.path);
+        });
+        logger.info({ listen: shareListener.address() }, "Conversation share listener started");
+      }
       // Start speech service after listening so synchronous Sherpa native
       // model loading doesn't block the server from accepting connections.
       speechService.start();
@@ -1794,6 +1828,7 @@ export async function createPaseoDaemon(
       await deleteLocalCredential(config.paseoHome);
       unsubscribePluginProviders();
       await pluginRuntime.stopAllPlugins().catch(() => undefined);
+      await stopShareListener().catch(() => undefined);
       await serviceProxy.stopStandalone().catch(() => undefined);
       await agentProviderRuntime.shutdown().catch(() => undefined);
       if (mainStarted) {
@@ -1832,6 +1867,7 @@ export async function createPaseoDaemon(
     if (wsServer) {
       await wsServer.close();
     }
+    await stopShareListener();
     await serviceProxy.stopStandalone();
     // Force-drop remaining sockets so httpServer.close() resolves promptly.
     // We've already closed wsServer (which sent ws-layer close frames) and
@@ -1860,6 +1896,7 @@ export async function createPaseoDaemon(
     browserToolsBroker,
     start,
     stop,
+    getShareAddress: () => shareListener?.address() ?? null,
     getListenTarget: () => boundListenTarget,
     getServerId: () => serverId,
   };

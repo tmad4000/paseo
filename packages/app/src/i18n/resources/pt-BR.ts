@@ -2,6 +2,57 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  sharing: {
+    deleteMessage: "Excluir este link e seu instantâneo? Esta ação não pode ser desfeita.",
+    action: "Compartilhar…",
+    title: "Compartilhar conversa",
+    snapshot: "Instantâneo · Link somente leitura",
+    shared: "Compartilhada",
+    include: "Conteúdo incluído",
+    hide: "Ocultar",
+    expires: "Expira",
+    create: "Criar link",
+    creating: "Criando…",
+    copy: "Copiar link",
+    copied: "Link copiado",
+    manage: "Gerenciar compartilhamentos",
+    empty: "Nenhum link de compartilhamento.",
+    createNew: "Criar um novo link",
+    revoke: "Revogar",
+    revoked: "Revogado",
+    delete: "Excluir",
+    notViewed: "Sem visualizações",
+    assistant: "Assistente",
+    loading: "Carregando prévia…",
+    updateHost: "Atualize o host para compartilhar conversas.",
+    summary:
+      "Ocultos: ferramentas {{tools}}, raciocínios {{reasoning}} · Mascarados: segredos {{secrets}}, contatos {{contacts}} · Caminhos abreviados: {{paths}}",
+    shareMetadata:
+      "Instantâneo · {{views}} visualizações · Expira: {{expiry}} · Última visualização: {{lastViewed}}",
+    fields: {
+      toolCalls: "Chamadas de ferramentas",
+      reasoning: "Raciocínio",
+      errors: "Erros",
+      secrets: "Segredos",
+      paths: "Caminhos de arquivos",
+      contacts: "E-mails e telefones",
+    },
+    expiry: {
+      never: "Nunca",
+      "24h": "24 horas",
+      "7d": "7 dias",
+      "30d": "30 dias",
+    },
+    omitted: {
+      tool_calls_one: "{{count}} chamada oculta",
+      tool_calls_other: "{{count}} chamadas ocultas",
+      reasoning_one: "{{count}} raciocínio oculto",
+      reasoning_other: "{{count}} raciocínios ocultos",
+      excluded_one: "{{count}} mensagem excluída",
+      excluded_other: "{{count}} mensagens excluídas",
+    },
+  },
+
   manualStatus: {
     title: "Status",
     needs_input: "Precisa de resposta (manual)",
