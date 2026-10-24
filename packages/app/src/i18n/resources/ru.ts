@@ -2,6 +2,57 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  sharing: {
+    deleteMessage: "Удалить ссылку и снимок? Это действие нельзя отменить.",
+    action: "Поделиться…",
+    title: "Поделиться беседой",
+    snapshot: "Снимок · Ссылка только для чтения",
+    shared: "Опубликовано",
+    include: "Включить",
+    hide: "Скрыть",
+    expires: "Срок действия",
+    create: "Создать ссылку",
+    creating: "Создание…",
+    copy: "Копировать ссылку",
+    copied: "Ссылка скопирована",
+    manage: "Управление ссылками",
+    empty: "Ссылок пока нет.",
+    createNew: "Создать новую ссылку",
+    revoke: "Отозвать",
+    revoked: "Отозвана",
+    delete: "Удалить",
+    notViewed: "Нет просмотров",
+    assistant: "Ассистент",
+    loading: "Загрузка предпросмотра…",
+    updateHost: "Обновите хост, чтобы делиться беседами.",
+    summary:
+      "Скрыто: инструменты {{tools}}, рассуждения {{reasoning}} · Секреты {{secrets}}, контакты {{contacts}} · Сокращено путей: {{paths}}",
+    shareMetadata:
+      "Снимок · Просмотры: {{views}} · Срок: {{expiry}} · Последний просмотр: {{lastViewed}}",
+    fields: {
+      toolCalls: "Вызовы инструментов",
+      reasoning: "Рассуждения",
+      errors: "Ошибки",
+      secrets: "Секреты",
+      paths: "Пути файлов",
+      contacts: "Адреса почты и телефоны",
+    },
+    expiry: {
+      never: "Никогда",
+      "24h": "24 часа",
+      "7d": "7 дней",
+      "30d": "30 дней",
+    },
+    omitted: {
+      tool_calls_one: "Скрыто вызовов: {{count}}",
+      tool_calls_other: "Скрыто вызовов: {{count}}",
+      reasoning_one: "Скрыто рассуждений: {{count}}",
+      reasoning_other: "Скрыто рассуждений: {{count}}",
+      excluded_one: "Исключено сообщений: {{count}}",
+      excluded_other: "Исключено сообщений: {{count}}",
+    },
+  },
+
   manualStatus: {
     title: "Статус",
     needs_input: "Требуется ввод (вручную)",

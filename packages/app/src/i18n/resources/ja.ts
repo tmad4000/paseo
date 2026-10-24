@@ -2,6 +2,57 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sharing: {
+    deleteMessage: "このリンクとスナップショットを削除しますか？元に戻せません。",
+    action: "共有…",
+    title: "会話を共有",
+    snapshot: "スナップショット · 読み取り専用リンク",
+    shared: "共有中",
+    include: "含める内容",
+    hide: "非表示",
+    expires: "有効期限",
+    create: "リンクを作成",
+    creating: "作成中…",
+    copy: "リンクをコピー",
+    copied: "リンクをコピーしました",
+    manage: "共有を管理",
+    empty: "共有リンクはありません。",
+    createNew: "新しいリンクを作成",
+    revoke: "無効化",
+    revoked: "無効化済み",
+    delete: "削除",
+    notViewed: "未閲覧",
+    assistant: "アシスタント",
+    loading: "プレビューを読み込み中…",
+    updateHost: "会話を共有するにはホストを更新してください。",
+    summary:
+      "非表示: ツール {{tools}} 件、推論 {{reasoning}} 件 · マスク: 秘密情報 {{secrets}} 件、連絡先 {{contacts}} 件 · 短縮パス {{paths}} 件",
+    shareMetadata:
+      "スナップショット · 閲覧 {{views}} 回 · 有効期限: {{expiry}} · 最終閲覧: {{lastViewed}}",
+    fields: {
+      toolCalls: "ツール呼び出し",
+      reasoning: "推論",
+      errors: "エラー",
+      secrets: "秘密情報",
+      paths: "ファイルパス",
+      contacts: "メールアドレスと電話番号",
+    },
+    expiry: {
+      never: "なし",
+      "24h": "24時間",
+      "7d": "7日間",
+      "30d": "30日間",
+    },
+    omitted: {
+      tool_calls_one: "ツール呼び出し {{count}} 件を非表示",
+      tool_calls_other: "ツール呼び出し {{count}} 件を非表示",
+      reasoning_one: "推論 {{count}} 件を非表示",
+      reasoning_other: "推論 {{count}} 件を非表示",
+      excluded_one: "メッセージ {{count}} 件を除外",
+      excluded_other: "メッセージ {{count}} 件を除外",
+    },
+  },
+
   manualStatus: {
     title: "ステータス",
     needs_input: "入力が必要（手動）",

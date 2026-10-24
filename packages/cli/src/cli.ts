@@ -1,3 +1,4 @@
+import { createShareCommand } from "./commands/share.js";
 import { pairCommand } from "./commands/daemon/pair.js";
 import { Command, Option } from "commander";
 import { createAgentCommand } from "./commands/agent/index.js";
@@ -141,6 +142,7 @@ export function createCli(): Command {
   // Terminal commands
   program.addCommand(createTerminalCommand());
   program.addCommand(createQueueCommand());
+  program.addCommand(createShareCommand());
   program.addCommand(createDiagnosticsCommand());
 
   // UI commands

@@ -1,4 +1,9 @@
 import type {
+  RedactionProfile,
+  ShareRecordPayload,
+  ShareSnapshot,
+} from "@getpaseo/protocol/sharing";
+import type {
   StreamListOptions,
   StreamEntryUpdate,
   StreamTagPin,
@@ -1003,6 +1008,7 @@ type SetDaemonConfigResponse = Extract<
   { type: "set_daemon_config_response" }
 >;
 type CorrelatedResponseMessage =
+  | Extract<SessionOutboundMessage, { type: `share.link.${string}.response` }>
   | Extract<SessionOutboundMessage, { payload: { requestId: string } }>
   | Extract<SessionOutboundMessage, { type: "terminals_changed" }>
   | GetDaemonConfigResponse
@@ -3276,6 +3282,62 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "updateAgent rejected");
     }
+  }
+
+  async previewShareLink(agentId: string, redaction?: RedactionProfile): Promise<ShareSnapshot> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.preview.request", agentId, redaction },
+      responseType: "share.link.preview.response",
+    });
+    if (!payload.snapshot) throw new Error("Missing share preview");
+    return payload.snapshot;
+  }
+  async createShareLink(input: {
+    previewDigest?: string;
+    agentId: string;
+    title?: string;
+    expiresAt?: string | null;
+    redaction?: RedactionProfile;
+  }): Promise<{ share: ShareRecordPayload; url: string }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.create.request", ...input, mode: "snapshot" },
+      responseType: "share.link.create.response",
+    });
+    if (!payload.share || !payload.url) throw new Error("Missing share link");
+    return { share: payload.share, url: payload.url };
+  }
+  async listShareLinks(agentId?: string): Promise<ShareRecordPayload[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.list.request", agentId },
+      responseType: "share.link.list.response",
+    });
+    if (!payload.shares) throw new Error("Missing share records");
+    return payload.shares;
+  }
+  async updateShareLink(
+    shareId: string,
+    patch: { title?: string; expiresAt?: string | null },
+  ): Promise<ShareRecordPayload> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.update.request", shareId, ...patch },
+      responseType: "share.link.update.response",
+    });
+    if (!payload.share) throw new Error("Missing share record");
+    return payload.share;
+  }
+  async revokeShareLink(shareId: string): Promise<ShareRecordPayload> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.revoke.request", shareId },
+      responseType: "share.link.revoke.response",
+    });
+    if (!payload.share) throw new Error("Missing share record");
+    return payload.share;
+  }
+  async deleteShareLink(shareId: string): Promise<void> {
+    await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.delete.request", shareId },
+      responseType: "share.link.delete.response",
+    });
   }
 
   async listGlobalStream(options: StreamListOptions = {}) {

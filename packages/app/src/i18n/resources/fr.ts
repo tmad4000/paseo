@@ -2,6 +2,57 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sharing: {
+    deleteMessage: "Supprimer ce lien et son instantané ? Cette action est irréversible.",
+    action: "Partager…",
+    title: "Partager la conversation",
+    snapshot: "Instantané · Lien en lecture seule",
+    shared: "Partagée",
+    include: "Contenu inclus",
+    hide: "Masquer",
+    expires: "Expiration",
+    create: "Créer le lien",
+    creating: "Création…",
+    copy: "Copier le lien",
+    copied: "Lien copié",
+    manage: "Gérer les partages",
+    empty: "Aucun lien de partage.",
+    createNew: "Créer un nouveau lien",
+    revoke: "Révoquer",
+    revoked: "Révoqué",
+    delete: "Supprimer",
+    notViewed: "Aucune visite",
+    assistant: "Assistant",
+    loading: "Chargement de l’aperçu…",
+    updateHost: "Mettez l’hôte à jour pour partager des conversations.",
+    summary:
+      "Masqués : outils {{tools}}, raisonnements {{reasoning}} · Secrets {{secrets}}, contacts {{contacts}} · Chemins abrégés : {{paths}}",
+    shareMetadata:
+      "Instantané · {{views}} visites · Expiration : {{expiry}} · Dernière visite : {{lastViewed}}",
+    fields: {
+      toolCalls: "Appels d’outils",
+      reasoning: "Raisonnement",
+      errors: "Erreurs",
+      secrets: "Secrets",
+      paths: "Chemins des fichiers",
+      contacts: "E-mails et numéros de téléphone",
+    },
+    expiry: {
+      never: "Jamais",
+      "24h": "24 heures",
+      "7d": "7 jours",
+      "30d": "30 jours",
+    },
+    omitted: {
+      tool_calls_one: "{{count}} appel d’outil masqué",
+      tool_calls_other: "{{count}} appels d’outils masqués",
+      reasoning_one: "{{count}} raisonnement masqué",
+      reasoning_other: "{{count}} raisonnements masqués",
+      excluded_one: "{{count}} message exclu",
+      excluded_other: "{{count}} messages exclus",
+    },
+  },
+
   manualStatus: {
     title: "État",
     needs_input: "Saisie requise (manuel)",

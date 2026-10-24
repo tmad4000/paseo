@@ -6,6 +6,13 @@ type OutboundOperation = SessionOutboundMessage["type"];
 export type PermissionRequirement = DaemonPermission | readonly DaemonPermission[] | null;
 
 const INBOUND_PERMISSION = {
+  "share.link.preview.request": "workspace.read",
+  "share.link.create.request": "workspace.write",
+  "share.link.list.request": "workspace.read",
+  "share.link.update.request": "workspace.write",
+  "share.link.revoke.request": "workspace.write",
+  "share.link.delete.request": "workspace.write",
+
   abort_request: "workspace.write",
   "agent.artifacts.scan.request": "workspace.read",
   "agent.config.apply.request": ["workspace.write", "hub.execute"],
@@ -238,6 +245,13 @@ const INBOUND_PERMISSION = {
 } as const satisfies Record<InboundOperation, PermissionRequirement>;
 
 const OUTBOUND_PERMISSION = {
+  "share.link.preview.response": "workspace.read",
+  "share.link.create.response": "workspace.write",
+  "share.link.list.response": "workspace.read",
+  "share.link.update.response": "workspace.write",
+  "share.link.revoke.response": "workspace.write",
+  "share.link.delete.response": "workspace.write",
+  "share.link.update": "workspace.read",
   "agent.create.response": ["workspace.write", "hub.execute"],
   "agent.create.update": ["workspace.write", "hub.execute"],
   "workspace.create.update": "workspace.manage",

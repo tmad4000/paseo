@@ -2,6 +2,56 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  sharing: {
+    deleteMessage: "이 링크와 스냅샷을 삭제할까요? 되돌릴 수 없습니다.",
+    action: "공유…",
+    title: "대화 공유",
+    snapshot: "스냅샷 · 읽기 전용 링크",
+    shared: "공유됨",
+    include: "포함할 내용",
+    hide: "숨기기",
+    expires: "만료",
+    create: "링크 만들기",
+    creating: "만드는 중…",
+    copy: "링크 복사",
+    copied: "링크를 복사했습니다",
+    manage: "공유 관리",
+    empty: "공유 링크가 없습니다.",
+    createNew: "새 링크 만들기",
+    revoke: "취소",
+    revoked: "취소됨",
+    delete: "삭제",
+    notViewed: "조회 없음",
+    assistant: "어시스턴트",
+    loading: "미리보기 불러오는 중…",
+    updateHost: "대화를 공유하려면 호스트를 업데이트하세요.",
+    summary:
+      "숨김: 도구 {{tools}}개, 추론 {{reasoning}}개 · 가림: 비밀 {{secrets}}개, 연락처 {{contacts}}개 · 축약 경로 {{paths}}개",
+    shareMetadata: "스냅샷 · 조회 {{views}}회 · 만료: {{expiry}} · 마지막 조회: {{lastViewed}}",
+    fields: {
+      toolCalls: "도구 호출",
+      reasoning: "추론",
+      errors: "오류",
+      secrets: "비밀 정보",
+      paths: "파일 경로",
+      contacts: "이메일 및 전화번호",
+    },
+    expiry: {
+      never: "없음",
+      "24h": "24시간",
+      "7d": "7일",
+      "30d": "30일",
+    },
+    omitted: {
+      tool_calls_one: "도구 호출 {{count}}개 숨김",
+      tool_calls_other: "도구 호출 {{count}}개 숨김",
+      reasoning_one: "추론 {{count}}개 숨김",
+      reasoning_other: "추론 {{count}}개 숨김",
+      excluded_one: "메시지 {{count}}개 제외",
+      excluded_other: "메시지 {{count}}개 제외",
+    },
+  },
+
   manualStatus: {
     title: "상태",
     needs_input: "입력 필요 (수동)",

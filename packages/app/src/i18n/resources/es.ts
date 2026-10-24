@@ -2,6 +2,57 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  sharing: {
+    deleteMessage: "¿Eliminar este enlace y su instantánea? Esta acción no se puede deshacer.",
+    action: "Compartir…",
+    title: "Compartir conversación",
+    snapshot: "Instantánea · Enlace de solo lectura",
+    shared: "Compartida",
+    include: "Contenido incluido",
+    hide: "Ocultar",
+    expires: "Caduca",
+    create: "Crear enlace",
+    creating: "Creando…",
+    copy: "Copiar enlace",
+    copied: "Enlace copiado",
+    manage: "Gestionar enlaces",
+    empty: "Aún no hay enlaces.",
+    createNew: "Crear un enlace nuevo",
+    revoke: "Revocar",
+    revoked: "Revocado",
+    delete: "Eliminar",
+    notViewed: "Sin visitas",
+    assistant: "Asistente",
+    loading: "Cargando vista previa…",
+    updateHost: "Actualiza el host para compartir conversaciones.",
+    summary:
+      "Ocultos: herramientas {{tools}}, razonamiento {{reasoning}} · Protegidos: secretos {{secrets}}, contactos {{contacts}} · Rutas abreviadas: {{paths}}",
+    shareMetadata:
+      "Instantánea · {{views}} visitas · Caduca: {{expiry}} · Última visita: {{lastViewed}}",
+    fields: {
+      toolCalls: "Llamadas a herramientas",
+      reasoning: "Razonamiento",
+      errors: "Errores",
+      secrets: "Secretos",
+      paths: "Rutas de archivos",
+      contacts: "Correos y teléfonos",
+    },
+    expiry: {
+      never: "Nunca",
+      "24h": "24 horas",
+      "7d": "7 días",
+      "30d": "30 días",
+    },
+    omitted: {
+      tool_calls_one: "{{count}} llamada oculta",
+      tool_calls_other: "{{count}} llamadas ocultas",
+      reasoning_one: "{{count}} razonamiento oculto",
+      reasoning_other: "{{count}} razonamientos ocultos",
+      excluded_one: "{{count}} mensaje excluido",
+      excluded_other: "{{count}} mensajes excluidos",
+    },
+  },
+
   manualStatus: {
     title: "Estado",
     needs_input: "Necesita respuesta (manual)",
