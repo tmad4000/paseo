@@ -1354,7 +1354,7 @@ export const en = {
       findWithAi: "Find with AI",
       sendToBestMatch: "Send to best match",
       backToSearch: "Back to search",
-      sendToChat: "Send to an existing chat",
+      sendToChat: "Send this text to a chat you pick",
       sendToTitle: "Send to {{title}}",
       promptPlaceholder: "What do you want to work on?",
       pickPlaceholder: "Find a project or chat…",
