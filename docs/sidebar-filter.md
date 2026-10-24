@@ -70,6 +70,11 @@ registration.
 | Mod+Shift+Enter            | Quick launch with Start and open preselected                                                                                   |
 | Send (row or ➤)            | Send state: the text becomes the prompt for a chosen chat                                                                      |
 | Scope menu (filter icon)   | **Names** (tree and tab titles) or **Names + messages** (default)                                                              |
+| ✕ in the field             | Clears the text and keeps focus in the field, so the next query can be typed at once                                           |
+
+On desktop and web, ✕, ➤, the scope menu and the sort menu each show a hover tooltip naming what
+they do (➤: "Send this text to a chat you pick"); a menu's tooltip hides while that menu is open.
+Compact layouts show no tooltips. Clear prompt in the send state likewise keeps focus in the prompt.
 
 The scope is per device (`filterScope` in the sidebar view store). When no host in the sidebar
 advertises `sessionTextSearch`, the Names + messages item says that messages need a host update; the
