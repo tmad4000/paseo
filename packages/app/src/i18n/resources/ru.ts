@@ -13,6 +13,10 @@ export const ru: TranslationResources = {
       default: "Проект по умолчанию",
       pinned: "Закреплённый проект",
     },
+    picker: {
+      pinnedSection: "Закреплённые",
+      otherSection: "Проекты",
+    },
     commandCenter: {
       goToDefault: "Перейти к проекту по умолчанию",
       pinCurrent: "Закрепить текущий проект",
@@ -1584,6 +1588,7 @@ export const ru: TranslationResources = {
   },
   newWorkspace: {
     title: "Новое рабочее пространство",
+    close: "Закрыть новое рабочее пространство",
     create: "Создать",
     isolation: {
       local: "Локально",
