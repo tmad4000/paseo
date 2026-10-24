@@ -1163,6 +1163,16 @@ export const en = {
       github: "Create GitHub issue",
       whatsNew: "What's new",
       appName: "Paseo",
+      versions: "Versions",
+      versionsChannel: "Versions ({{channel}} channel)",
+      versionStatus: {
+        current: "Up to date",
+        update: "Update available",
+        ahead: "Newer than release",
+        unknown: "Couldn’t check",
+        checking: "Checking…",
+        offline: "Offline",
+      },
     },
     sections: {
       sessions: "History",

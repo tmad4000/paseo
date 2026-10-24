@@ -1173,6 +1173,16 @@ export const ru: TranslationResources = {
       github: "Создать issue на GitHub",
       whatsNew: "Что нового",
       appName: "Paseo",
+      versions: "Версии",
+      versionsChannel: "Версии (канал {{channel}})",
+      versionStatus: {
+        current: "Актуальная версия",
+        update: "Доступно обновление",
+        ahead: "Новее опубликованной версии",
+        unknown: "Не удалось проверить",
+        checking: "Проверка…",
+        offline: "Не в сети",
+      },
     },
     sections: {
       sessions: "История",

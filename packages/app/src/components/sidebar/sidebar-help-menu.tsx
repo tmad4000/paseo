@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { Activity, CircleHelp, Gift, Keyboard } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,9 @@ import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
+import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
+import { resolveVersionStatus, type ReleaseVersionCheck } from "@/desktop/updates/version-status";
 
 const DISCORD_URL = "https://discord.gg/jz8T2uahpH";
 const GITHUB_ISSUE_URL = "https://github.com/getpaseo/paseo/issues/new";
@@ -55,24 +58,44 @@ const changelogLeadingIcon = (
   <ThemedGift size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
 
-function HostVersionHint({ host }: { host: HostProfile }) {
+function VersionHint({
+  version,
+  check,
+  connected = true,
+  label,
+  testID,
+}: {
+  version: string | null;
+  check: ReleaseVersionCheck;
+  connected?: boolean;
+  label: string;
+  testID: string;
+}) {
   const { t } = useTranslation();
+  const status = resolveVersionStatus(version, check, connected);
+  return (
+    <View style={styles.versionHint} testID={testID}>
+      <DropdownMenuHint style={styles.versionRow} trailing={formatVersionWithPrefix(version)}>
+        {label}
+      </DropdownMenuHint>
+      <Text style={styles.versionStatus}>{t(`sidebar.help.versionStatus.${status}`)}</Text>
+    </View>
+  );
+}
+
+function HostVersionHint({ host, check }: { host: HostProfile; check: ReleaseVersionCheck }) {
   const isConnected = useHostRuntimeIsConnected(host.serverId);
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
-  const version = isConnected
-    ? formatVersionWithPrefix(daemonVersion)
-    : t("settings.about.offline");
-
   return (
-    <DropdownMenuHint
-      style={styles.versionHint}
-      trailing={version}
+    <VersionHint
+      version={daemonVersion}
+      check={check}
+      connected={isConnected}
+      label={host.label}
       testID={`sidebar-help-host-version-${host.serverId}`}
-    >
-      {host.label}
-    </DropdownMenuHint>
+    />
   );
 }
 
@@ -82,8 +105,36 @@ export function SidebarHelpMenu() {
   const openAppDiagnostic = useAppDiagnosticStore((state) => state.open);
   const setShortcutsDialogOpen = useKeyboardShortcutsStore((state) => state.setShortcutsDialogOpen);
   const [open, setOpen] = useState(false);
-  const version = formatVersionWithPrefix(resolveAppVersion());
+  const version = resolveAppVersion();
   const hosts = useHosts();
+  const { settings } = useDesktopSettings();
+  const { isDesktopApp, availableUpdate, isInstalling, checkForUpdates, installUpdate } =
+    useDesktopAppUpdater();
+  const [releaseCheck, setReleaseCheck] = useState<ReleaseVersionCheck>({ state: "unknown" });
+
+  // Refresh on every opening, including after a channel change. A failed check
+  // must replace a previous success rather than leave a stale "Up to date" label.
+  useEffect(() => {
+    if (!open || !isDesktopApp) return;
+    let cancelled = false;
+    setReleaseCheck({ state: "checking" });
+    void checkForUpdates({ intent: "manual" }).then((result) => {
+      if (cancelled) return;
+      setReleaseCheck(
+        result && !result.errorMessage
+          ? { state: "checked", latestVersion: result.publishedVersion ?? null }
+          : { state: "unknown" },
+      );
+      return undefined;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isDesktopApp, checkForUpdates]);
+
+  const handleInstallUpdate = useCallback(() => {
+    void installUpdate();
+  }, [installUpdate]);
 
   const openKeyboardShortcuts = useCallback(() => {
     setShortcutsDialogOpen(true);
@@ -163,18 +214,35 @@ export function SidebarHelpMenu() {
           {t("sidebar.help.github")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuLabel>
+          {isDesktopApp
+            ? t("sidebar.help.versionsChannel", { channel: settings.releaseChannel })
+            : t("sidebar.help.versions")}
+        </DropdownMenuLabel>
         <View style={styles.versionList}>
-          <DropdownMenuHint
-            style={styles.versionHint}
-            trailing={version}
+          <VersionHint
+            version={version}
+            check={releaseCheck}
+            label={t("sidebar.help.appName")}
             testID="sidebar-help-version"
-          >
-            {t("sidebar.help.appName")}
-          </DropdownMenuHint>
+          />
           {hosts.map((host) => (
-            <HostVersionHint key={host.serverId} host={host} />
+            <HostVersionHint key={host.serverId} host={host} check={releaseCheck} />
           ))}
         </View>
+        {isDesktopApp && (availableUpdate?.readyToInstall || isInstalling) ? (
+          <DropdownMenuItem
+            testID="sidebar-help-install-update"
+            disabled={isInstalling}
+            onSelect={handleInstallUpdate}
+          >
+            {t(
+              isInstalling
+                ? "desktop.updates.callout.installingAction"
+                : "desktop.updates.callout.installAndRestart",
+            )}
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -198,6 +266,15 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
   },
   versionHint: {
+    paddingVertical: theme.spacing[1],
+  },
+  versionRow: {
     paddingVertical: 0,
+  },
+  versionStatus: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+    textAlign: "right",
+    paddingHorizontal: theme.spacing[3],
   },
 }));
