@@ -30,6 +30,11 @@ async function create(
       "sharing_not_configured",
       "Configure daemon.sharing.listen and daemon.sharing.publicBaseUrl to share conversations.",
     );
+  if (sharing.isListening && !sharing.isListening())
+    throw new SharingError(
+      "share_listener_unavailable",
+      `The share listener is not running on ${config.listen}. Check the daemon log and restart the daemon with a free address.`,
+    );
   const source = await load(required(msg.agentId, "agentId"), msg.title);
   return {
     type: "share.link.create.response",

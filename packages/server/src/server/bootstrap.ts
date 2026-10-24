@@ -133,6 +133,7 @@ import type { LocalSpeechProviderConfig } from "./speech/providers/local/config.
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { createSpeechService, type SpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
+import { StreamTagStore } from "./agent/stream-tag-store.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
@@ -939,6 +940,7 @@ export async function createPaseoDaemon(
     clients: initialAgentManagerState.clients,
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
+    streamTagStore: new StreamTagStore(path.join(config.paseoHome, "stream-tags.json")),
     appendSystemPrompt: config.appendSystemPrompt,
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
@@ -1759,7 +1761,11 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               agentQueueService,
-              { service: shareService, config: config.sharing },
+              {
+                service: shareService,
+                config: config.sharing,
+                isListening: () => shareListener?.listening === true,
+              },
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -1802,22 +1808,31 @@ export async function createPaseoDaemon(
       });
 
       if (shareListener && config.sharing?.listen) {
-        const target = parseListenString(config.sharing.listen);
-        await new Promise<void>((resolve, reject) => {
-          const onError = (error: Error) => {
-            shareListener.off("listening", onListening);
-            reject(error);
-          };
-          const onListening = () => {
-            shareListener.off("error", onError);
-            resolve();
-          };
-          shareListener.once("error", onError);
-          shareListener.once("listening", onListening);
-          if (target.type === "tcp") shareListener.listen(target.port, target.host);
-          else shareListener.listen(target.path);
-        });
-        logger.info({ listen: shareListener.address() }, "Conversation share listener started");
+        // A busy or invalid share address must not take the whole daemon down: every
+        // agent runs under this process. Log it and let share.link.create report it.
+        try {
+          const target = parseListenString(config.sharing.listen);
+          await new Promise<void>((resolve, reject) => {
+            const onError = (error: Error) => {
+              shareListener.off("listening", onListening);
+              reject(error);
+            };
+            const onListening = () => {
+              shareListener.off("error", onError);
+              resolve();
+            };
+            shareListener.once("error", onError);
+            shareListener.once("listening", onListening);
+            if (target.type === "tcp") shareListener.listen(target.port, target.host);
+            else shareListener.listen(target.path);
+          });
+          logger.info({ listen: shareListener.address() }, "Conversation share listener started");
+        } catch (error) {
+          logger.error(
+            { err: error, listen: config.sharing.listen },
+            "Conversation share listener failed to start; sharing stays unavailable until the daemon restarts with a free address",
+          );
+        }
       }
       // Start speech service after listening so synchronous Sherpa native
       // model loading doesn't block the server from accepting connections.

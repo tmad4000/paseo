@@ -165,6 +165,8 @@ function validateExpiry(value: string | null): void {
 export interface SharingSessionOptions {
   service: ShareService;
   config?: { listen: string | null; publicBaseUrl: string | null; ownerDisplayName: string };
+  /** False when the configured share listener failed to bind; create must refuse. */
+  isListening?: () => boolean;
 }
 
 function snapshotDigest(snapshot: ShareSnapshot): string {

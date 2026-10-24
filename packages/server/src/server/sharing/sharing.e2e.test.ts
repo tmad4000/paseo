@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import type { AddressInfo } from "node:net";
+import net, { type AddressInfo } from "node:net";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
@@ -88,6 +88,35 @@ describe("snapshot sharing through the daemon", () => {
     } finally {
       for (const client of clients) await client.close();
       await daemon.close();
+    }
+  }, 60000);
+  it("starts without sharing when the share address is busy and reports share_listener_unavailable", async () => {
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+    const busyPort = (blocker.address() as AddressInfo).port;
+    const daemon = await createTestPaseoDaemon({
+      mcpEnabled: false,
+      sharing: {
+        listen: `127.0.0.1:${busyPort}`,
+        publicBaseUrl: "https://share.example.com",
+        ownerDisplayName: "Jacob",
+      },
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.10.0-beta.17",
+    });
+    try {
+      await client.connect();
+      await client.fetchAgents({});
+      expect(daemon.daemon.getShareAddress()).toBeNull();
+      await expect(client.createShareLink({ agentId: "unused" })).rejects.toMatchObject({
+        code: "share_listener_unavailable",
+      });
+    } finally {
+      await client.close();
+      await daemon.close();
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
   }, 60000);
   it("leaves sharing unbound by default and returns sharing_not_configured", async () => {
