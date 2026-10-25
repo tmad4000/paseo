@@ -39,6 +39,18 @@ describe("server config", () => {
         adminToken: "fixture-admin",
       },
     });
+    const tokenOnly = loadConfig(paseoHome, {
+      env: { PASEO_SHARING_PUBLISHER_TOKEN: "env-admin" },
+    });
+    expect(tokenOnly.configReload?.overrideControlledPaths).toContain(
+      "daemon.sharing.publisher.adminTokenFile",
+    );
+    expect(tokenOnly.configReload?.overrideControlledPaths).not.toContain(
+      "daemon.sharing.publisher",
+    );
+    expect(tokenOnly.configReload?.overrideControlledPaths).not.toContain(
+      "daemon.sharing.publisher.baseUrl",
+    );
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await chmod(tokenFile, 0o644);

@@ -27,18 +27,18 @@ generated src/generated/validation/ws-outbound.aot.ts from codegen/ws-outbound.c
 > @getpaseo/protocol@0.10.0-beta.17 build
 > tsc -p tsconfig.json --incremental false
 
-[plugin] 
-[plugin] > paseo@0.10.0-beta.17 build:plugin
-[plugin] > npm run build --workspace=@getpaseo/plugin
-[plugin] 
-[relay] 
-[relay] > paseo@0.10.0-beta.17 build:relay
-[relay] > npm run build --workspace=@getpaseo/relay
-[relay] 
 [highlight] 
 [highlight] > paseo@0.10.0-beta.17 build:highlight
 [highlight] > npm run build --workspace=@getpaseo/highlight
 [highlight] 
+[relay] 
+[relay] > paseo@0.10.0-beta.17 build:relay
+[relay] > npm run build --workspace=@getpaseo/relay
+[relay] 
+[plugin] 
+[plugin] > paseo@0.10.0-beta.17 build:plugin
+[plugin] > npm run build --workspace=@getpaseo/plugin
+[plugin] 
 [highlight] 
 [highlight] > @getpaseo/highlight@0.10.0-beta.17 build
 [highlight] > tsc -p tsconfig.json --incremental false

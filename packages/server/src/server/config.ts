@@ -760,7 +760,8 @@ function resolveServiceAndWebUiOverridePaths(
     paths.push("daemon.sharing.publisher.baseUrl");
   if (env.PASEO_SHARING_PUBLISHER_TOKEN_FILE !== undefined)
     paths.push("daemon.sharing.publisher.adminTokenFile");
-  if (env.PASEO_SHARING_PUBLISHER_TOKEN !== undefined) paths.push("daemon.sharing.publisher");
+  if (env.PASEO_SHARING_PUBLISHER_TOKEN !== undefined)
+    paths.push("daemon.sharing.publisher.adminTokenFile");
   if (env.PASEO_SHARING_LISTEN !== undefined) paths.push("daemon.sharing.listen");
   if (env.PASEO_SHARING_PUBLIC_BASE_URL !== undefined) paths.push("daemon.sharing.publicBaseUrl");
   if (env.PASEO_SHARING_OWNER_NAME !== undefined) paths.push("daemon.sharing.ownerDisplayName");
