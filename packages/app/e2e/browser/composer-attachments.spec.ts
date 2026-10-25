@@ -67,6 +67,13 @@ function waitForQueuedEditResponse(page: Page): Promise<void> {
   });
 }
 
+type RunningMockAgent = Awaited<ReturnType<typeof startRunningMockAgent>>;
+
+async function queuedTexts(agent: RunningMockAgent): Promise<string[]> {
+  const queue = await agent.client.listQueuedAgentMessages(agent.agentId);
+  return queue.items.map((item) => item.text);
+}
+
 function waitForTwoAnimationFrames(): Promise<void> {
   return new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -288,6 +295,38 @@ test.describe("Composer attachments", () => {
         "Second queued text",
       ]);
       expect(after.items[0]?.images).toEqual(before.items[0]?.images);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("saving an emptied queued message removes it", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-empty-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while a disposable queued message is emptied.",
+    });
+    try {
+      await fillComposerDraft(page, "Delete me by clearing");
+      await sendDraftToQueue(page);
+      await fillComposerDraft(page, "Keep me queued");
+      await sendDraftToQueue(page);
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(2);
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("");
+      const editingRow = page
+        .locator('[data-testid^="queued-message-"]')
+        .filter({ has: queuedEditor });
+      await editingRow.getByRole("button", { name: "Remove queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expect(page.getByText("A queued message cannot be empty.")).toHaveCount(0);
+
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Keep me queued"]);
     } finally {
       await agent.cleanup();
     }
