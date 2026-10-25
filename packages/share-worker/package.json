@@ -1,0 +1,15 @@
+{
+  "name": "@getpaseo/share-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.6",
+    "wrangler": "4.90.0"
+  }
+}

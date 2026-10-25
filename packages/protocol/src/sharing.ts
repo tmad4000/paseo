@@ -61,6 +61,10 @@ export const ShareRecordPayloadSchema = z.object({
   agentId: z.string(),
   workspaceId: z.string().optional(),
   mode: z.literal("snapshot"),
+  published: z
+    .object({ kind: z.literal("cloudflare-worker"), baseUrl: z.string(), at: z.string() })
+    .optional(),
+  publishState: z.literal("unpublish_pending").optional(),
   title: z.string(),
   redaction: RedactionProfileSchema,
   createdAt: z.string(),

@@ -128,6 +128,10 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(desktop, /npm run test --workspace=@getpaseo\/desktop/);
   assert.ok(!jobs.has("desktop-browser-bridge"));
   assert.ok(!jobs.has("playwright-desktop"));
+  assert.match(
+    jobs.get("relay-tests")?.join("\n") ?? "",
+    /npm run test --workspace=@getpaseo\/share-worker/,
+  );
 });
 
 test("server builds exclude test utilities at every domain depth", () => {
@@ -200,7 +204,7 @@ test("PR routing declares stable behavior ownership", () => {
       "packages/app/*config.{cjs,js,ts}",
       "packages/app/package.json",
     ],
-    relay: ["packages/relay/**"],
+    relay: ["packages/relay/**", "packages/share-worker/**"],
     cli: ["packages/cli/**"],
   });
 });

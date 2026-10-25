@@ -1,3 +1,5 @@
+import type { ShareRecordPayload } from "@getpaseo/protocol/sharing";
+import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import net from "node:net";
 import { expect } from "@playwright/test";
 import { test as base } from "../support/fixtures";
@@ -47,6 +49,39 @@ for (const width of [1440, 390]) {
         (agent) => agent.status === "idle",
         60000,
       );
+      // The real local daemon proves revoke behavior; decorate its records to exercise
+      // the external host's eventual revocation copy and pending state on both layouts.
+      await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
+        const serverSocket = browserSocket.connectToServer();
+        browserSocket.onMessage((message) => serverSocket.send(message));
+        serverSocket.onMessage((message) => {
+          if (typeof message !== "string") {
+            browserSocket.send(message);
+            return;
+          }
+          const envelope = JSON.parse(message) as {
+            message?: {
+              type?: string;
+              payload?: { share?: ShareRecordPayload; shares?: ShareRecordPayload[] };
+            };
+          };
+          const payload = envelope.message?.payload;
+          if (envelope.message?.type?.startsWith("share.link.") && payload) {
+            const decorate = (share: ShareRecordPayload) => ({
+              ...share,
+              published: {
+                kind: "cloudflare-worker" as const,
+                baseUrl: "https://shares.example",
+                at: share.createdAt,
+              },
+              ...(share.revokedAt ? { publishState: "unpublish_pending" as const } : {}),
+            });
+            if (payload.share) payload.share = decorate(payload.share);
+            if (payload.shares) payload.shares = payload.shares.map(decorate);
+          }
+          browserSocket.send(JSON.stringify(envelope));
+        });
+      });
       await page.setViewportSize({ width, height: 960 });
       await openAgentRoute(page, fixture);
       await page.getByTestId("workspace-header-menu-trigger").click();
@@ -115,7 +150,15 @@ for (const width of [1440, 390]) {
         fullPage: true,
       });
       await guest.close();
+      await expect(
+        sheet.getByText("Revocation at the host completes within about a minute."),
+      ).toBeVisible();
       await sheet.getByRole("button", { name: "Revoke", exact: true }).click();
+      await expect(sheet.getByText("Revoke pending at the host")).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath(`share-revoke-pending-${width}.png`),
+        fullPage: true,
+      });
       await expect.poll(async () => (await page.request.get(url)).status()).toBe(404);
       await expect(page.getByTestId("conversation-shared-badge")).toHaveCount(0);
       await overrideServerInfoFeatures(page, { conversationSharing: false });

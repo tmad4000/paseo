@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import http from "node:http";
 import net, { type AddressInfo } from "node:net";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
@@ -148,3 +149,197 @@ describe("snapshot sharing through the daemon", () => {
     }
   }, 60000);
 });
+
+describe("external snapshot publishing through the daemon", () => {
+  it("prefers publisher URLs while the local listener serves the same artifacts", async () => {
+    const artifacts = new Map<string, { html: string; json: string; expiresAt: string | null }>();
+    const worker = fakeWorker(
+      artifacts,
+      () => false,
+      () => false,
+      () => {},
+    );
+    await new Promise<void>((resolve) => worker.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(worker.address() as AddressInfo).port}`;
+    const daemon = await createTestPaseoDaemon({
+      mcpEnabled: false,
+      sharing: {
+        listen: "127.0.0.1:0",
+        publicBaseUrl: "https://local.example",
+        ownerDisplayName: "Jacob",
+        publisher: { kind: "cloudflare-worker", baseUrl, adminToken: "fixture-admin" },
+      },
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.10.0-beta.17",
+    });
+    try {
+      await client.connect();
+      await client.fetchAgents({});
+      const agent = await daemon.daemon.agentManager.createAgent(
+        { provider: "codex", cwd: path.dirname(daemon.paseoHome) },
+        undefined,
+        { workspaceId: undefined },
+      );
+      const result = await client.createShareLink({ agentId: agent.id });
+      expect(result.url.startsWith(`${baseUrl}/s/`)).toBe(true);
+      const address = daemon.daemon.getShareAddress() as AddressInfo;
+      const local = await fetch(`http://127.0.0.1:${address.port}${new URL(result.url).pathname}`);
+      expect(local.status).toBe(200);
+      expect(await local.text()).toBe([...artifacts.values()][0]!.html);
+      await client.revokeShareLink(result.share.id);
+      expect(artifacts.size).toBe(0);
+    } finally {
+      await client.close();
+      await daemon.close();
+      worker.closeAllConnections();
+      await new Promise<void>((resolve) => worker.close(() => resolve()));
+    }
+  });
+  it("publishes redacted artifacts without a listener, updates host TTL/title, retries revoke, and fails create without persistence", async () => {
+    const artifacts = new Map<string, { html: string; json: string; expiresAt: string | null }>();
+    let failPut = false;
+    let failDelete = false;
+    let deleteRequests = 0;
+    const worker = fakeWorker(
+      artifacts,
+      () => failPut,
+      () => failDelete,
+      () => {
+        deleteRequests++;
+      },
+    );
+    await new Promise<void>((resolve) => worker.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(worker.address() as AddressInfo).port}`;
+    const daemon = await createTestPaseoDaemon({
+      mcpEnabled: false,
+      sharing: {
+        listen: null,
+        publicBaseUrl: null,
+        ownerDisplayName: "Jacob",
+        publisher: { kind: "cloudflare-worker", baseUrl, adminToken: "fixture-admin" },
+      },
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.10.0-beta.17",
+    });
+    try {
+      await client.connect();
+      await client.fetchAgents({});
+      const agent = await daemon.daemon.agentManager.createAgent(
+        { provider: "codex", cwd: path.dirname(daemon.paseoHome) },
+        undefined,
+        { workspaceId: undefined },
+      );
+      await daemon.daemon.agentManager.appendTimelineItem(agent.id, {
+        type: "user_message",
+        text: "password=fixture-secret-value",
+      });
+      expect(daemon.daemon.getShareAddress()).toBeNull();
+      const result = await client.createShareLink({ agentId: agent.id });
+      expect(result.url).toMatch(new RegExp(`^${baseUrl}/s/[A-Za-z0-9_-]{43}$`));
+      expect(result.share.published).toMatchObject({
+        kind: "cloudflare-worker",
+        baseUrl,
+        at: expect.any(String),
+      });
+      const [key, bytes] = [...artifacts][0]!;
+      expect(bytes.html).not.toContain("fixture-secret-value");
+      expect(bytes.html).toContain("[secret hidden]");
+      expect(bytes.html).toBe(
+        await readFile(
+          path.join(daemon.paseoHome, "shares", `${result.share.id}.snapshot.html`),
+          "utf8",
+        ),
+      );
+      expect(bytes.json).toBe(
+        await readFile(
+          path.join(daemon.paseoHome, "shares", `${result.share.id}.snapshot.json`),
+          "utf8",
+        ),
+      );
+      await client.updateShareLink(result.share.id, { title: "New title", expiresAt: null });
+      expect(artifacts.get(key)).toMatchObject({
+        expiresAt: null,
+        html: expect.stringContaining("<h1>New title</h1>"),
+      });
+      failPut = true;
+      await expect(client.createShareLink({ agentId: agent.id })).rejects.toMatchObject({
+        code: "share_publish_failed",
+        message: expect.stringContaining("base URL and admin token"),
+      });
+      expect(await client.listShareLinks()).toHaveLength(1);
+      expect(
+        (await readdir(path.join(daemon.paseoHome, "shares"))).filter((name) =>
+          name.startsWith("shr_"),
+        ),
+      ).toHaveLength(3);
+      failPut = false;
+      failDelete = true;
+      const revoked = await client.revokeShareLink(result.share.id);
+      expect(revoked).toMatchObject({
+        revokedAt: expect.any(String),
+        publishState: "unpublish_pending",
+      });
+      expect(artifacts.size).toBe(1);
+      const queue = JSON.parse(
+        await readFile(path.join(daemon.paseoHome, "shares", "unpublish-queue.json"), "utf8"),
+      );
+      expect(queue).toMatchObject([{ id: result.share.id, tokenHash: key, attempts: 1 }]);
+      failDelete = false;
+      await expect.poll(() => deleteRequests, { timeout: 75_000, interval: 500 }).toBe(2);
+      await expect
+        .poll(async () => (await client.listShareLinks())[0]?.publishState)
+        .toBeUndefined();
+      expect(artifacts.size).toBe(0);
+      await client.deleteShareLink(result.share.id);
+      expect(await client.listShareLinks()).toEqual([]);
+    } finally {
+      await client.close();
+      await daemon.close();
+      worker.closeAllConnections();
+      await new Promise<void>((resolve) => worker.close(() => resolve()));
+    }
+  }, 120_000);
+});
+
+function fakeWorker(
+  artifacts: Map<string, { html: string; json: string; expiresAt: string | null }>,
+  failPut: () => boolean,
+  failDelete: () => boolean,
+  onDelete: () => void,
+): http.Server {
+  return http.createServer((request, response) => {
+    if (
+      request.headers.authorization !== "Bearer fixture-admin" ||
+      !/^\/admin\/shares\/[a-f0-9]{64}$/.test(request.url ?? "")
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
+    const key = request.url!.split("/").at(-1)!;
+    if (request.method === "DELETE") {
+      onDelete();
+      if (failDelete()) response.writeHead(503).end();
+      else {
+        artifacts.delete(key);
+        response.writeHead(204).end();
+      }
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      if (failPut()) {
+        response.writeHead(404).end();
+        return;
+      }
+      artifacts.set(key, JSON.parse(body));
+      response.writeHead(204).end();
+    });
+  });
+}

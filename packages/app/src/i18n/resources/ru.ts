@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
   sharing: {
+    unpublishPending: "Отзыв на хосте ожидается",
+    revokeDelay: "Отзыв на хосте завершится примерно в течение минуты.",
     deleteMessage: "Удалить ссылку и снимок? Это действие нельзя отменить.",
     action: "Поделиться…",
     title: "Поделиться беседой",

@@ -111,6 +111,10 @@ function ShareRecordRow({
             : t("sharing.notViewed"),
         })}
       </Text>
+      {share.publishState === "unpublish_pending" ? (
+        <Text style={styles.muted}>{t("sharing.unpublishPending")}</Text>
+      ) : null}
+      {share.published ? <Text style={styles.muted}>{t("sharing.revokeDelay")}</Text> : null}
       <View style={styles.actions}>
         <Button variant="ghost" size="sm" disabled>
           {t("sharing.copy")}

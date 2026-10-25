@@ -1,4 +1,5 @@
 import { promisify } from "node:util";
+import type { SharingPublisherConfig } from "./sharing/share-host.js";
 import { ShareService } from "./sharing/share-service.js";
 import { createConfiguredShareListener } from "./sharing/share-listener.js";
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
@@ -427,7 +428,12 @@ export interface PaseoDaemonConfig {
   relayPublicEndpoint?: string;
   relayUseTls?: boolean;
   relayPublicUseTls?: boolean;
-  sharing?: { listen: string | null; publicBaseUrl: string | null; ownerDisplayName: string };
+  sharing?: {
+    listen: string | null;
+    publicBaseUrl: string | null;
+    ownerDisplayName: string;
+    publisher?: SharingPublisherConfig;
+  };
   serviceProxy?: {
     publicBaseUrl: string | null;
     standaloneListen: string | null;
@@ -950,12 +956,12 @@ export async function createPaseoDaemon(
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     logger,
   });
-  const shareService = new ShareService(
-    { getCommittedRows: (agentId) => agentManager.getTimelineRows(agentId) },
-    path.join(config.paseoHome, "shares"),
-  );
+  const shareService = await createSharingService(config, {
+    getCommittedRows: (agentId) => agentManager.getTimelineRows(agentId),
+  });
   const shareListener = createConfiguredShareListener(config.sharing, shareService.store);
   const stopShareListener = async () => {
+    await shareService.stop();
     if (!shareListener?.listening) return;
     shareListener.closeAllConnections();
     await promisify(shareListener.close.bind(shareListener))();
@@ -1940,4 +1946,17 @@ async function closeAllAgents(logger: Logger, agentManager: AgentManager): Promi
       }
     }),
   );
+}
+
+async function createSharingService(
+  config: PaseoDaemonConfig,
+  timeline: ConstructorParameters<typeof ShareService>[0],
+): Promise<ShareService> {
+  const service = new ShareService(
+    timeline,
+    path.join(config.paseoHome, "shares"),
+    config.sharing?.publisher,
+  );
+  await service.start();
+  return service;
 }

@@ -1,4 +1,53 @@
-# Conversation sharing Phase 1 QA
+# Conversation sharing QA
+
+## Phase 1c publisher — 2026-10-24
+
+M4 macOS, `feat/sharing-publisher`, Beads `pspin-twk.13`, source version
+`0.10.0-beta.17`. No deployment, installation, main-daemon access or restart was performed.
+
+| Focused test file                                          | Passed | Output                                       |
+| ---------------------------------------------------------- | -----: | -------------------------------------------- |
+| `packages/share-worker/src/index.test.ts`                  |     18 | [Worker](publisher/worker-tests.txt)         |
+| `packages/server/src/server/sharing/share-host.test.ts`    |      4 | [Host](publisher/host-tests.txt)             |
+| `packages/server/src/server/sharing/share-service.test.ts` |     19 | [Service](publisher/service-tests.txt)       |
+| `packages/server/src/server/sharing/sharing.e2e.test.ts`   |      5 | [Daemon e2e](publisher/e2e-tests.txt)        |
+| `packages/server/src/server/config.test.ts`                |     12 | [Config](publisher/config-tests.txt)         |
+| `packages/cli/src/commands/share.test.ts`                  |      4 | [CLI](publisher/cli-tests.txt)               |
+| `packages/app/src/i18n/resources.test.ts`                  |     36 | [Nine locales](publisher/i18n-tests.txt)     |
+| `scripts/ci-workflow.test.mjs` (Node)                      |      9 | [CI routing](publisher/ci-routing-tests.txt) |
+| `packages/app/e2e/browser/conversation-sharing.spec.ts`    |      3 | [Browser](publisher/browser-tests.txt)       |
+
+Vitest files used `npx vitest run <file> --bail=1`, with output redirected to individual
+`/tmp/sharing-*-tests.txt` files. No full local suite ran. The Worker file also passes
+through its own workspace script, matching the reused `relay-tests` CI job.
+
+Observed in the isolated daemon harness with an HTTP fake Worker: create with no share listener;
+redacted HTML/JSON equal stored artifacts; external URL construction; title and expiry republish;
+failed PUT reports `share_publish_failed` with no extra record/artifacts; failed DELETE retains
+local revocation and a durable pending job; the real one-minute timer retries successfully and
+clears pending state. A second test proves publisher URL precedence with a working local listener.
+Service tests cover delete-job recovery after restart, crash recovery before enqueue, all backoff
+steps, host-config changes, failed metadata publication, and refusal to republish revoked shares.
+Worker tests cover native Request handling, local-listener 404/body/security-header parity, expiry
+metadata, TTL bounds, malformed bodies and 3 MiB rejection, authentication, methods and rate limits.
+
+The browser spec ran from `packages/app` with
+`TMPDIR="$PWD/../../artifacts/sharing-publisher/tmp" npm run test:e2e -- e2e/browser/conversation-sharing.spec.ts`.
+At 1440px and 390px, it exercises preview → create → guest → revoke and older-host gating.
+The real local daemon's share records are decorated on the browser socket with publisher metadata
+and pending state to verify the external-host copy; the daemon e2e above proves actual host failure
+and recovery. Screenshots were inspected: [desktop layout](publisher/revoke-pending-1440.png),
+[compact layout](publisher/revoke-pending-390.png). Native iOS/Android and installed Electron were
+not exercised. The harness stopped its own browser, worker daemon and Metro server.
+
+Required checks passed: [build:server](publisher/build-server.txt),
+[typecheck](publisher/typecheck.txt), [lint](publisher/lint.txt), [format](publisher/format.txt).
+The final PR CI remains the full-suite authority. New workspace dependencies reuse the lockfile's
+Wrangler 4.90.0 (npm publication: 2026-05-07T18:57:37.909Z) and existing Vitest; no resolved package
+version changed. Live Cloudflare consistency, permissions and deployment remain operator checks;
+[the deployment guide](../../../packages/share-worker/README.md) lists prerequisites.
+
+## Phase 1 — earlier evidence
 
 2026-10-24 · M4 macOS · branch `feat/conversation-sharing-phase1` · Beads `pspin-twk.2`.
 The source version remains `0.10.0-beta.16`; the release owner owns the version bump.

@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
   sharing: {
+    unpublishPending: "Revocación pendiente en el servidor",
+    revokeDelay: "La revocación en el servidor se completa en aproximadamente un minuto.",
     deleteMessage: "¿Eliminar este enlace y su instantánea? Esta acción no se puede deshacer.",
     action: "Compartir…",
     title: "Compartir conversación",

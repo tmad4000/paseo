@@ -169,6 +169,27 @@
                 },
                 "ownerDisplayName": {
                   "type": "string"
+                },
+                "publisher": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind", "baseUrl"],
+                      "properties": {
+                        "kind": {
+                          "const": "cloudflare-worker"
+                        },
+                        "baseUrl": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "adminTokenFile": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
                 }
               },
               "additionalProperties": false
