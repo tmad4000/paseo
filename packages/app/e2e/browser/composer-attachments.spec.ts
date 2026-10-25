@@ -324,7 +324,7 @@ test.describe("Composer attachments", () => {
         .filter({ has: queuedEditor });
       await editingRow.getByRole("button", { name: "Remove queued message" }).click();
       await expect(queuedEditor).toHaveCount(0);
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByText("A queued message cannot be empty.")).toHaveCount(0);
 
       await expect.poll(() => queuedTexts(agent)).toEqual(["Keep me queued"]);
     } finally {
