@@ -17,6 +17,11 @@ interface RealtimeVoiceOverlayProps {
   isMuteSwitching: boolean;
   muteError: string | null;
   failure: VoiceFailureKind | null;
+  /** Present when GPT realtime carries this session; host verbal-command hints do not apply. */
+  realtime?: {
+    connection: "connecting" | "connected" | "unavailable" | "off";
+    error: string | null;
+  } | null;
   lastInputStatus?: "queued" | "sent" | "removed" | "unknown" | null;
   isAgentRunning?: boolean;
   isCancellingAgent?: boolean;
@@ -53,6 +58,31 @@ const inputStatusLabels = {
   unknown: { key: "realtimeVoice.inputUnknown", defaultValue: "Speech delivery uncertain" },
 } as const;
 
+function resolveOverlayStatus(input: {
+  t: (key: string) => string;
+  isMuted: boolean;
+  failure: VoiceFailureKind | null;
+  realtime: RealtimeVoiceOverlayProps["realtime"];
+  voiceCommandsEnabled: boolean;
+}): { notListening: boolean; statusLabel: string; hint: string | null } {
+  const { t, isMuted, failure, realtime, voiceCommandsEnabled } = input;
+  const notListening =
+    (failure !== null && isVoiceFailureBlocking(failure)) ||
+    (realtime != null && realtime.connection === "unavailable");
+  let statusLabel = t("realtimeVoice.listening");
+  if (realtime?.connection === "connecting") statusLabel = t("realtimeVoice.connecting");
+  else if (notListening) statusLabel = t("realtimeVoice.notListening");
+  else if (isMuted) statusLabel = t("realtimeVoice.muted");
+  // Host verbal-command hints describe local recognition; GPT sessions have none.
+  let hint: string | null = null;
+  if (!notListening && !realtime) {
+    hint = voiceCommandsEnabled
+      ? t(isMuted ? "realtimeVoice.mutedHint" : "realtimeVoice.commandHint")
+      : t("realtimeVoice.commandsUnavailable");
+  }
+  return { notListening, statusLabel, hint };
+}
+
 export function RealtimeVoiceOverlay({
   isMuted,
   isSwitching,
@@ -60,6 +90,7 @@ export function RealtimeVoiceOverlay({
   isMuteSwitching,
   muteError,
   failure,
+  realtime,
   lastInputStatus,
   isAgentRunning,
   isCancellingAgent,
@@ -90,26 +121,28 @@ export function RealtimeVoiceOverlay({
     () => [styles.actionButton, styles.stopButton, isSwitching ? styles.buttonDisabled : undefined],
     [isSwitching],
   );
-  const notListening = failure !== null && isVoiceFailureBlocking(failure);
-  let statusLabel = t("realtimeVoice.listening");
-  if (notListening) statusLabel = t("realtimeVoice.notListening");
-  else if (isMuted) statusLabel = t("realtimeVoice.muted");
+  const { notListening, statusLabel, hint } = resolveOverlayStatus({
+    t,
+    isMuted,
+    failure,
+    realtime,
+    voiceCommandsEnabled,
+  });
   return (
     <View style={styles.panel}>
       <View accessibilityLiveRegion="polite" style={styles.status}>
         <Text style={isMuted || notListening ? styles.mutedLabel : styles.label}>
           {statusLabel}
         </Text>
-        {!notListening && (
-          <Text style={styles.hint}>
-            {voiceCommandsEnabled
-              ? t(isMuted ? "realtimeVoice.mutedHint" : "realtimeVoice.commandHint")
-              : t("realtimeVoice.commandsUnavailable")}
-          </Text>
-        )}
+        {hint !== null && <Text style={styles.hint}>{hint}</Text>}
         {failure && (
           <Text accessibilityRole="alert" style={styles.error}>
             {t(`realtimeVoice.failure.${failure}`)}
+          </Text>
+        )}
+        {realtime?.error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {realtime.error}
           </Text>
         )}
         {muteError && (

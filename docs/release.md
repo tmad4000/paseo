@@ -135,8 +135,10 @@ target version with the changelog for approval. Agents never select a major
 version autonomously. A major release requires an explicit user instruction and
 approval; Paseo remains on major version zero until that deliberate decision.
 
-Version bumps are never used to retry a failed build. Retry the existing version
-as described in **Fixing a failed release build**.
+Version bumps are made once for a release candidate after its related code is
+integrated, not in each feature or follow-up fix PR. They are never used to retry
+a failed build. Retry the existing version as described in **Fixing a failed
+release build**.
 
 ## Standard release (stable)
 

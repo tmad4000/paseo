@@ -8,6 +8,7 @@ import {
   filterAndSortSidebarProjects,
   normalizeSidebarQuery,
   sortSidebarWorkspaces,
+  workspaceMatchesSidebarFilter,
   workspaceMatchesSidebarQuery,
 } from "./sidebar-filter-sort";
 
@@ -65,6 +66,22 @@ describe("sidebar local filtering and sorting", () => {
         mode: "manual",
       }).map(projectWorkspaceKeys),
     ).toEqual([["ideaflow", ["newer"]]]);
+  });
+
+  it("keeps workspaces whose tab titles match even when their own names do not", () => {
+    const query = normalizeSidebarQuery("heartbeat");
+    const tabMatched = new Set(["older"]);
+    expect(workspaceMatchesSidebarFilter(older.entry, query, tabMatched)).toBe(true);
+    expect(workspaceMatchesSidebarFilter(newer.entry, query, tabMatched)).toBe(false);
+    expect(
+      filterAndSortSidebarProjects({
+        projects,
+        entries,
+        query,
+        mode: "manual",
+        tabMatchedWorkspaceKeys: tabMatched,
+      }).map(projectWorkspaceKeys),
+    ).toEqual([["ideaflow", ["older"]]]);
   });
 
   it("sorts by agent activity or title without mutating the manual order", () => {

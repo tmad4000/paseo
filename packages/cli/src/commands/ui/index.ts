@@ -16,13 +16,21 @@ export function createUiCommand(): Command {
       .option("--subagent-of <id>", "Parent agent ID for --subagent")
       .option("--terminal <id>", "Open a terminal tab")
       .option("--browser <id>", "Open a browser tab")
+      .option(
+        "--url <url>",
+        "Show an http(s) page in a browser tab (desktop app); repeats reuse it",
+      )
       .option("--file <path>", "Open a file tab")
       .option("--line <n>", "Line to focus when used with --file")
       .option("--diff", "Open the working diff tab")
       .option("--commit <sha>", "Open a commit diff tab")
       .option("--setup", "Open the workspace setup tab")
       .option("--draft", "Open a new draft tab")
-      .option("--no-focus", "Open the tab without focusing it or navigating to the workspace"),
+      .option("--no-focus", "Open the tab without focusing it or navigating to the workspace")
+      .option(
+        "--side",
+        "Open beside what the user is looking at (workspace side pane); never navigates or moves focus",
+      ),
   ).action(withOutput(runOpenTabCommand));
 
   return ui;

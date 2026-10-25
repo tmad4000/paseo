@@ -4300,7 +4300,9 @@ export class CodexAppServerAgentSession implements AgentSession {
         hasCodexConfig: turnStart.hasCodexConfig,
       });
       if (pendingStart.cancelRequested) {
-        throw new Error("Codex turn start was interrupted before reaching Codex");
+        throw Object.assign(new Error("Codex turn start was interrupted before reaching Codex"), {
+          code: "AGENT_PROMPT_NOT_SUBMITTED",
+        });
       }
       await this.client.request("turn/start", turnStart.params, TURN_START_TIMEOUT_MS);
       return { turnId };

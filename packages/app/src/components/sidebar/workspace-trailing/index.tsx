@@ -23,6 +23,15 @@ export function useSidebarWorkspaceTrailing(): SidebarWorkspaceTrailing {
   return sidebarWorkspaceTrailing;
 }
 
+/**
+ * When anyone last did anything in the workspace: the newest message from the user or an agent,
+ * falling back to agent activity, then to when the workspace entered its current status (a
+ * workspace with no agents yet). Viewing a workspace never moves it.
+ */
+export function workspaceLastActiveAt(workspace: SidebarWorkspaceEntry): Date | null {
+  return workspace.lastMessageAt ?? workspace.lastActivityAt ?? workspace.statusEnteredAt ?? null;
+}
+
 /** Whether the slot has anything to draw for this workspace under the current preference. */
 export function hasSidebarWorkspaceTrailing({
   workspace,
@@ -32,7 +41,7 @@ export function hasSidebarWorkspaceTrailing({
   trailing: SidebarWorkspaceTrailing;
 }): boolean {
   if (trailing === "diff") return workspace.diffStat !== null;
-  if (trailing === "timestamp") return workspace.statusEnteredAt !== null;
+  if (trailing === "timestamp") return workspaceLastActiveAt(workspace) !== null;
   return false;
 }
 
@@ -48,8 +57,9 @@ export function SidebarWorkspaceTrailingContent({
       <DiffStat additions={workspace.diffStat.additions} deletions={workspace.diffStat.deletions} />
     );
   }
-  if (trailing === "timestamp" && workspace.statusEnteredAt) {
-    return <WorkspaceTimestamp enteredAt={workspace.statusEnteredAt} />;
+  const lastActiveAt = trailing === "timestamp" ? workspaceLastActiveAt(workspace) : null;
+  if (lastActiveAt) {
+    return <WorkspaceTimestamp lastActiveAt={lastActiveAt} />;
   }
   return null;
 }
@@ -59,8 +69,8 @@ export function SidebarWorkspaceTrailingContent({
  * re-renders the component that owns it — keeping that component down to a single `<Text>` is
  * what stops a minute tick from reaching the row, the list, or the diff stat next door.
  */
-function WorkspaceTimestamp({ enteredAt }: { enteredAt: Date }) {
-  const label = useCompactTimeAgo(enteredAt);
+function WorkspaceTimestamp({ lastActiveAt }: { lastActiveAt: Date }) {
+  const label = useCompactTimeAgo(lastActiveAt);
   return (
     <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
       {label}
@@ -79,5 +89,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
     flexShrink: 0,
+    // Digits keep one width, so the column lines up down the list.
+    fontVariant: ["tabular-nums"],
   },
 }));

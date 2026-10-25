@@ -12,7 +12,9 @@ import {
 } from "react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronRight, Folder, X } from "lucide-react-native";
+import { parseSessionIdQuery } from "@getpaseo/protocol/search/session-id";
+import { usePathname } from "expo-router";
+import { Check, ChevronRight, Clock, Folder, MessageSquare, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   BottomSheetBackdrop,
@@ -46,6 +48,17 @@ import {
   type CommandCenterScope,
 } from "@/stores/keyboard-shortcuts-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { useRecentVisitsStore } from "@/stores/recent-visits-store";
+import {
+  createRecentWorkspaceComparator,
+  recentSessionKey,
+  recentSessionsFromVisits,
+  recentWorkspaceKey,
+  recentWorkspacesFromVisits,
+} from "@/navigation/recent-workspaces";
+import { orderRowsByRecentSessions } from "@/navigation/recent-sessions";
+import { useFocusedAgent } from "@/navigation/use-recent-session-rows";
+import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import {
   clearCommandCenterFocusRestoreElement,
@@ -74,6 +87,11 @@ import {
   type CommandCenterWorkspaceResult,
 } from "./results";
 import { useWorkspaceFileSearch } from "./workspace-file-search";
+import { buildMessageSearchSection } from "./message-search-section";
+import { getCommandCenterIcon } from "./icon";
+import { openSidebarMessageSearch } from "@/components/sidebar/sidebar-filter-request";
+
+const MessageSearchIcon = getCommandCenterIcon(MessageSquare);
 
 const ThemedBottomSheetTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
@@ -82,6 +100,7 @@ const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedClock = withUnistyles(Clock, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCheck = withUnistyles(Check, (theme) => ({ color: theme.colors.foreground }));
 const ThemedChevronRight = withUnistyles(ChevronRight, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -120,6 +139,23 @@ function compareWorkspacesByTitle(
 /** `cwd` is not rendered, so a path match must never outrank a match on text the user can see. */
 function agentSearchFields(result: CommandCenterAgentResult): CommandCenterSearchFields {
   return { visible: [result.title, result.subtitle], hidden: [result.agent.cwd] };
+}
+
+/**
+ * A pasted session id (full or its short prefix) is a match on the session itself, as strong as
+ * its title. Only id-shaped queries look at ids, so ordinary words never fuzzy-match hex.
+ */
+function agentSearchFieldsFor(
+  query: string,
+): (result: CommandCenterAgentResult) => CommandCenterSearchFields {
+  const idPrefix = parseSessionIdQuery(query);
+  if (!idPrefix) return agentSearchFields;
+  return (result) => {
+    const fields = agentSearchFields(result);
+    return result.agent.id.toLowerCase().startsWith(idPrefix)
+      ? { visible: [...fields.visible, idPrefix], hidden: fields.hidden }
+      : fields;
+  };
 }
 
 /**
@@ -194,31 +230,121 @@ function useBuiltInRows(open: boolean): {
   }, [agents, open, projects, showHost, t]);
 }
 
-function useBuiltInSections(open: boolean, query: string): CommandCenterResultSection[] {
+function workspaceResultKey(result: CommandCenterWorkspaceResult): string {
+  return result.id.slice("workspace:".length);
+}
+
+/** Workspaces you visited most recently come first; ties and unvisited ones fall back to title. */
+function useCompareWorkspacesByRecency() {
+  const visits = useRecentVisitsStore((state) => state.visits);
+  const pathname = usePathname();
+  return useMemo(() => {
+    const recent = recentWorkspacesFromVisits(visits);
+    const current = parseHostWorkspaceRouteFromPathname(pathname);
+    const byRecency = createRecentWorkspaceComparator(
+      recent,
+      current ? recentWorkspaceKey(current) : null,
+    );
+    return {
+      hasRecent: recent.length > 0,
+      compare: (left: CommandCenterWorkspaceResult, right: CommandCenterWorkspaceResult) =>
+        byRecency(workspaceResultKey(left), workspaceResultKey(right)) ||
+        compareWorkspacesByTitle(left, right),
+    };
+  }, [pathname, visits]);
+}
+
+/** Agent rows for sessions you focused recently, most recent first; Cmd+K's "recent" scope. */
+function useRecentSessionAgentRows(
+  agents: readonly CommandCenterAgentResult[],
+  enabled: boolean,
+): CommandCenterAgentResult[] {
+  const visits = useRecentVisitsStore((state) => state.visits);
+  const focused = useFocusedAgent();
+  return useMemo(
+    () =>
+      enabled
+        ? orderRowsByRecentSessions({
+            rows: agents,
+            sessionKeyOf: (row) =>
+              recentSessionKey({ serverId: row.agent.serverId, agentId: row.agent.id }),
+            sessions: recentSessionsFromVisits(visits),
+            currentKey: focused ? recentSessionKey(focused) : null,
+          })
+        : [],
+    [agents, enabled, focused, visits],
+  );
+}
+
+function useBuiltInSections(
+  open: boolean,
+  query: string,
+  scope: CommandCenterScope,
+): CommandCenterResultSection[] {
   const { t } = useTranslation();
   const rows = useBuiltInRows(open);
+  const recency = useCompareWorkspacesByRecency();
+  const recentSessionRows = useRecentSessionAgentRows(rows.agents, open && scope === "recent");
+  const hasQuery = query.trim().length > 0;
+  // An empty query shows only the first few rows, so they have to arrive in recency order.
+  const workspaceRows = useMemo(
+    () => (hasQuery ? rows.workspaces : [...rows.workspaces].sort(recency.compare)),
+    [hasQuery, recency, rows.workspaces],
+  );
 
   return useMemo(() => {
     if (!open) return [];
+    if (scope === "recent") {
+      return [
+        {
+          id: "recent-sessions",
+          band: PINNED_SECTION_BAND,
+          rank: 1,
+          title: t("shell.recentSessions.title"),
+          // Every recent session, not the usual first few: this scope is the full list.
+          results: hasQuery
+            ? filterAndRankBuiltInResults(
+                recentSessionRows,
+                query,
+                agentSearchFieldsFor(query),
+                () => 0,
+              )
+            : recentSessionRows,
+        },
+        {
+          id: "workspaces",
+          band: PINNED_SECTION_BAND,
+          rank: 2,
+          title: t("shell.recentWorkspaces.title"),
+          results: filterAndRankWorkspaces(workspaceRows, query, recency.compare),
+        },
+      ];
+    }
     return [
       {
         id: "workspaces",
         band: PINNED_SECTION_BAND,
         rank: 2,
-        title: t("shell.commandCenter.workspaces"),
-        results: filterAndRankWorkspaces(rows.workspaces, query, compareWorkspacesByTitle),
+        title:
+          !hasQuery && recency.hasRecent
+            ? t("shell.recentWorkspaces.title")
+            : t("shell.commandCenter.workspaces"),
+        results: filterAndRankWorkspaces(workspaceRows, query, recency.compare),
       },
       {
         id: "agents",
         band: PINNED_SECTION_BAND,
         rank: 3,
         title: t("shell.commandCenter.agents"),
-        results: filterAndRankBuiltInResults(rows.agents, query, agentSearchFields, (left, right) =>
-          sortAgents(left.agent, right.agent),
+        results: filterAndRankBuiltInResults(
+          rows.agents,
+          query,
+          agentSearchFieldsFor(query),
+          (left, right) => sortAgents(left.agent, right.agent),
         ),
       },
     ];
-  }, [open, query, rows, t]);
+  }, [hasQuery, open, query, recency, recentSessionRows, rows.agents, scope, t, workspaceRows]);
 }
 
 interface CommandCenterState {
@@ -252,7 +378,7 @@ function useCommandCenterState(): CommandCenterState {
   const previousOpenRef = useRef(open);
   const [query, setQueryState] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const builtInSections = useBuiltInSections(open, query);
+  const builtInSections = useBuiltInSections(open, query, scope);
   const {
     entries: fileSearchEntries,
     loading: fileSearchLoading,
@@ -288,15 +414,38 @@ function useCommandCenterState(): CommandCenterState {
     () => buildContributionSections(snapshot.contributions, query),
     [query, snapshot.contributions],
   );
-  const projection = useMemo(
+  const isCompactLayout = useIsCompactFormFactor();
+  // Message search is offered from the default scope only. The Files and Recent scopes are
+  // focused lists; a query there narrows that list rather than asking for something else.
+  // Recent-session and agent title hits do not suppress it: searching message text is the next
+  // step after a title failed to find the chat.
+  const messageSearchSection = useMemo(
     () =>
-      projectCommandCenterRows(
-        scope === "files"
-          ? fileSections
-          : [...contributionSections, ...fileSections, ...builtInSections],
-      ),
-    [builtInSections, contributionSections, fileSections, scope],
+      scope === "files" || scope === "recent"
+        ? null
+        : buildMessageSearchSection({
+            query,
+            sections: [...contributionSections, ...builtInSections],
+            title: t("sidebar.filterSidebar.matches.searchMessages", { query: query.trim() }),
+            icon: MessageSearchIcon,
+            run: (text) => {
+              // The sidebar's find field takes focus; returning it to the old element would undo that.
+              clearCommandCenterFocusRestoreElement();
+              openSidebarMessageSearch(text, { isCompact: isCompactLayout });
+            },
+          }),
+    [builtInSections, contributionSections, isCompactLayout, query, scope, t],
   );
+  const projection = useMemo(() => {
+    if (scope === "files") return projectCommandCenterRows(fileSections);
+    if (scope === "recent") return projectCommandCenterRows(builtInSections);
+    return projectCommandCenterRows([
+      ...contributionSections,
+      ...fileSections,
+      ...builtInSections,
+      ...(messageSearchSection ? [messageSearchSection] : []),
+    ]);
+  }, [builtInSections, contributionSections, fileSections, messageSearchSection, scope]);
   const resolvedActiveId = preserveActiveResultId(activeId, projection.selectableResults);
 
   // Editing the query re-ranks everything, so an arrow-key selection made under the previous
@@ -310,11 +459,25 @@ function useCommandCenterState(): CommandCenterState {
   const close = useCallback(() => setOpen(false), [setOpen]);
   const select = useCallback(
     (result: CommandCenterResult) => {
-      setOpen(false);
+      if (!(result.kind === "contribution" && result.contribution.keepOpen)) {
+        setOpen(false);
+      }
       void result.run();
     },
     [setOpen],
   );
+
+  // Switching scope while open (the "Recent sessions…" action) starts the new scope from an
+  // empty query, as opening into it would.
+  const previousScopeRef = useRef(scope);
+  useEffect(() => {
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = scope;
+    if (!open || previousScope === scope || scope === null) return;
+    setQueryState("");
+    setActiveId(null);
+    inputRef.current?.reset();
+  }, [open, scope]);
   const key = useCallback(
     (pressed: string): boolean => {
       if (!open) return false;
@@ -588,6 +751,15 @@ export function CommandCenter() {
   const bottomSheetListRef = useRef<BottomSheetFlatListMethods>(null);
   const bottomSheetInputRef = useRef<EditingTextInputHandle>(null);
   const scrollMetricsRef = useRef({ offset: 0, visibleLength: 0 });
+  const previousScopeRef = useRef(state.scope);
+  useEffect(() => {
+    // The sheet's input is its own editor; clear it too when the scope switches in place.
+    const previousScope = previousScopeRef.current;
+    previousScopeRef.current = state.scope;
+    if (state.open && previousScope !== state.scope && state.scope !== null) {
+      bottomSheetInputRef.current?.reset();
+    }
+  }, [state.open, state.scope]);
   const { sheetRef, handleSheetChange, handleSheetDismiss } = useIsolatedBottomSheetVisibility({
     visible: state.open,
     isEnabled: showBottomSheet,
@@ -744,8 +916,12 @@ export function CommandCenter() {
         accessible={false}
       >
         <View style={[styles.bottomSheetHeader, styles.searchRow]} testID="command-center-header">
-          {state.scope === "files" ? (
-            <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+          {state.scope ? (
+            <ScopeChip
+              scope={state.scope}
+              label={scopeLabel(state.scope, t)}
+              onRemove={state.clearScope}
+            />
           ) : null}
           <ThemedBottomSheetTextInput
             testID="command-center-input"
@@ -755,11 +931,7 @@ export function CommandCenter() {
             onChangeText={state.setQuery}
             onKeyPress={keyPress}
             onSubmitEditing={submit}
-            placeholder={
-              state.scope === "files"
-                ? t("shell.commandCenter.filePlaceholder")
-                : t("shell.commandCenter.placeholder")
-            }
+            placeholder={scopePlaceholder(state.scope, t)}
             style={[styles.input, styles.growingInput]}
             autoCapitalize="none"
             autoCorrect={false}
@@ -783,19 +955,19 @@ export function CommandCenter() {
           <Pressable style={styles.backdrop} onPress={state.close} />
           <View ref={setWebOverlayScope} testID="command-center-panel" style={styles.panel}>
             <View style={[styles.header, styles.searchRow]} testID="command-center-header">
-              {state.scope === "files" ? (
-                <ScopeChip label={t("shell.commandCenter.files")} onRemove={state.clearScope} />
+              {state.scope ? (
+                <ScopeChip
+                  scope={state.scope}
+                  label={scopeLabel(state.scope, t)}
+                  onRemove={state.clearScope}
+                />
               ) : null}
               <ThemedTextInput
                 testID="command-center-input"
                 ref={state.inputRef}
                 initialValue={state.query}
                 onChangeText={state.setQuery}
-                placeholder={
-                  state.scope === "files"
-                    ? t("shell.commandCenter.filePlaceholder")
-                    : t("shell.commandCenter.placeholder")
-                }
+                placeholder={scopePlaceholder(state.scope, t)}
                 style={[styles.input, styles.growingInput]}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -813,6 +985,16 @@ export function CommandCenter() {
       </Modal>
     </OverlayLayerProvider>
   );
+}
+
+function scopeLabel(scope: Exclude<CommandCenterScope, null>, t: (key: string) => string): string {
+  return scope === "files" ? t("shell.commandCenter.files") : t("shell.recentSessions.title");
+}
+
+function scopePlaceholder(scope: CommandCenterScope, t: (key: string) => string): string {
+  if (scope === "files") return t("shell.commandCenter.filePlaceholder");
+  if (scope === "recent") return t("shell.recentSessions.placeholder");
+  return t("shell.commandCenter.placeholder");
 }
 
 function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; label: string }) {
@@ -834,16 +1016,28 @@ function FileSearchLoadingIndicator({ loading, label }: { loading: boolean; labe
 // The chip sits at the input's own height and type size so it reads as the scope of the field
 // rather than a badge dropped into the query. Its 28px matches the input's line box, so showing or
 // dropping the scope cannot resize the header.
-function ScopeChip({ label, onRemove }: { label: string; onRemove(): void }) {
+function ScopeChip({
+  scope,
+  label,
+  onRemove,
+}: {
+  scope: Exclude<CommandCenterScope, null>;
+  label: string;
+  onRemove(): void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onRemove}
       style={styles.scopeChip}
-      testID="command-center-files-scope"
+      testID={`command-center-${scope}-scope`}
     >
-      <ThemedFolder size={14} strokeWidth={2.2} />
+      {scope === "files" ? (
+        <ThemedFolder size={14} strokeWidth={2.2} />
+      ) : (
+        <ThemedClock size={14} strokeWidth={2.2} />
+      )}
       <Text style={styles.scopeChipLabel}>{label}</Text>
       <ThemedX size={12} strokeWidth={2.2} />
     </Pressable>

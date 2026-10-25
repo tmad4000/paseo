@@ -1,3 +1,4 @@
+import { PinnedSessions } from "@/session-pins/sidebar";
 import { router } from "expo-router";
 import {
   ArrowDownUp,
@@ -5,6 +6,7 @@ import {
   GitBranch,
   Import,
   Search,
+  Send,
   Server,
   Settings,
   X,
@@ -17,7 +19,9 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type NativeSyntheticEvent,
   type PressableStateCallbackType,
+  type TextInputKeyPressEventData,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -31,7 +35,13 @@ import {
   SIDEBAR_RESIZE_FAIL_OFFSET,
 } from "@/components/sidebar-resize-handle-layout";
 import { HostPicker } from "@/components/hosts/host-picker";
-import { SessionRoutingComposer } from "@/components/sidebar/session-routing/composer";
+import {
+  SessionRoutingComposer,
+  type FindFieldActions,
+} from "@/components/sidebar/session-routing/composer";
+import { useRoutingBridge } from "@/components/sidebar/find-or-start";
+import { useUniqueSessionForQuery } from "@/components/sidebar/sidebar-filter-context";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import {
   EditingTextInput as TextInput,
@@ -39,6 +49,9 @@ import {
 } from "@/components/ui/text-input";
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
+import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
+import { useSidebarFilterRequestFocus } from "@/components/sidebar/sidebar-filter-request";
+import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -626,7 +639,12 @@ function MobileSidebar({
             onImportSession={handleImportSession}
             parentGestureRef={closeGestureRef}
             dragGestureHostActive={active}
-            listHeaderComponent={workspacesSectionHeaderElement}
+            listHeaderComponent={
+              <>
+                <PinnedSessions onNavigate={closeSidebar} />
+                {workspacesSectionHeaderElement}
+              </>
+            }
           />
         )}
 
@@ -804,7 +822,12 @@ function DesktopSidebar({
             onRefresh={handleRefresh}
             onAddProject={handleOpenProject}
             onImportSession={handleImportSession}
-            listHeaderComponent={workspacesSectionHeaderElement}
+            listHeaderComponent={
+              <>
+                <PinnedSessions />
+                {workspacesSectionHeaderElement}
+              </>
+            }
           />
         )}
 
@@ -859,107 +882,246 @@ const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = [
   "title",
 ];
 
+function lockedSendTriggerStyle() {
+  return [styles.sidebarSortTrigger, styles.sidebarSendTriggerLocked];
+}
+
 function SidebarSearchControls() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const { searchQuery, setSearchQuery, sortMode, setSortMode, messageSortAvailability } =
+  const { searchQuery, setSearchQuery, sortMode, setSortMode, olderMessageSortHosts } =
     useSidebarModel();
   const searchInputRef = useRef<EditingTextInputHandle>(null);
   useEffect(() => {
     if (!searchQuery && searchInputRef.current?.getText()) searchInputRef.current.reset();
   }, [searchQuery]);
+  // A command center "Search messages for …" request: show its text and take focus, once.
+  useSidebarFilterRequestFocus(searchInputRef);
+  const startChat = useStartChatFromFilterQuery();
+  // One field (docs/sidebar-filter.md): Enter starts a new chat with the text (Quick launch,
+  // prefilled), unless the text is a session id naming exactly one chat, which Enter opens.
+  // Mod+Enter runs Find with AI; Mod+Shift+Enter starts the chat and opens it. Preventing the
+  // default keeps the web input from also submitting.
+  const uniqueSession = useUniqueSessionForQuery();
+  const handleEnter = useCallback(() => {
+    if (uniqueSession) {
+      navigateToAgent({
+        serverId: uniqueSession.serverId,
+        agentId: uniqueSession.agentId,
+        workspaceId: uniqueSession.workspaceId,
+      });
+      return;
+    }
+    startChat(false);
+  }, [startChat, uniqueSession]);
+  const handleFindKeyPress = useCallback(
+    (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+      const native = event.nativeEvent as TextInputKeyPressEventData & {
+        metaKey?: boolean;
+        ctrlKey?: boolean;
+        shiftKey?: boolean;
+        repeat?: boolean;
+        isComposing?: boolean;
+      };
+      if (native.key !== "Enter" || !(native.metaKey || native.ctrlKey)) return;
+      // Confirming an IME composition is not a command.
+      if (native.isComposing) return;
+      event.preventDefault();
+      // A held Mod+Enter auto-repeats; only the first press acts.
+      if (native.repeat) return;
+      if (native.shiftKey === true) startChat(true);
+      else useRoutingBridge.getState().entry?.findWithAi();
+    },
+    [startChat],
+  );
   const renderFindField = useCallback(
-    (submit: () => void, clear: () => void) => (
-      <View style={styles.sidebarSearchControls}>
-        <View style={styles.sidebarSearchField}>
-          <Search size={15} color={theme.colors.foregroundMuted} />
-          <TextInput
-            ref={searchInputRef}
-            initialValue={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={t("sidebar.filterSidebar.placeholder")}
-            placeholderTextColor={theme.colors.foregroundMuted}
-            accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-            onSubmitEditing={submit}
-            testID="sidebar-title-project-filter"
-            style={styles.sidebarSearchInput}
-          />
-          {searchQuery ? (
-            <Pressable
-              onPress={clear}
-              accessibilityRole="button"
-              accessibilityLabel={t("sidebar.filterSidebar.clear")}
-              testID="sidebar-title-project-filter-clear"
-            >
-              <X size={14} color={theme.colors.foregroundMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-        <DropdownMenu compactMode="sheet">
-          <DropdownMenuTrigger
-            style={styles.sidebarSortTrigger}
-            accessibilityRole="button"
-            accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
-              value: t(`sidebar.filterSidebar.sort.${sortMode}`),
-            })}
-            testID="sidebar-sort-trigger"
-          >
-            <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            width={280}
-            sheetTitle={t("sidebar.filterSidebar.sortHeading")}
-          >
-            {messageSortAvailability === "unsupported" ? (
-              <DropdownMenuItem disabled>
-                {t("sidebar.filterSidebar.sortUpdateHost")}
-              </DropdownMenuItem>
+    ({ clear, enterSend, locked }: FindFieldActions) => {
+      return (
+        <View style={styles.sidebarSearchControls}>
+          <View style={styles.sidebarSearchField}>
+            <Search size={15} color={theme.colors.foregroundMuted} />
+            <TextInput
+              ref={searchInputRef}
+              initialValue={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={t("sidebar.filterSidebar.placeholder")}
+              placeholderTextColor={theme.colors.foregroundMuted}
+              accessibilityLabel={t("sidebar.filterSidebar.placeholder")}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="go"
+              onKeyPress={handleFindKeyPress}
+              onSubmitEditing={handleEnter}
+              testID="sidebar-title-project-filter"
+              style={styles.sidebarSearchInput}
+            />
+            {searchQuery ? (
+              <SidebarFilterClearButton clear={clear} inputRef={searchInputRef} />
             ) : null}
-            {SIDEBAR_SORT_MODES.map((mode) => (
-              <SidebarSortItem
-                key={mode}
-                mode={mode}
-                selected={sortMode === mode}
-                disabled={
-                  (mode === "recent" || mode === "user" || mode === "assistant") &&
-                  messageSortAvailability !== "ready"
-                }
-                onSelectMode={setSortMode}
-              />
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </View>
-    ),
-    [theme, searchQuery, setSearchQuery, sortMode, setSortMode, messageSortAvailability, t],
+          </View>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <Pressable
+                onPress={enterSend}
+                disabled={locked}
+                accessibilityRole="button"
+                accessibilityLabel={t("sidebar.routing.sendToChat")}
+                style={locked ? lockedSendTriggerStyle : styles.sidebarSortTrigger}
+                testID="routing-send-mode"
+              >
+                <Send size={14} color={theme.colors.foregroundMuted} />
+              </Pressable>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              align="center"
+              offset={8}
+              testID="routing-send-mode-tooltip"
+            >
+              <IconTooltipContent label={t("sidebar.routing.sendToChat")} />
+            </TooltipContent>
+          </Tooltip>
+          <SidebarFilterScopeMenu />
+          <SidebarSortMenu
+            sortMode={sortMode}
+            setSortMode={setSortMode}
+            olderMessageSortHosts={olderMessageSortHosts}
+          />
+        </View>
+      );
+    },
+    [
+      theme,
+      searchQuery,
+      setSearchQuery,
+      sortMode,
+      setSortMode,
+      olderMessageSortHosts,
+      handleFindKeyPress,
+      handleEnter,
+      t,
+    ],
   );
   return <SessionRoutingComposer>{renderFindField}</SessionRoutingComposer>;
+}
+
+/**
+ * ✕ in the find field. It empties the field and keeps the caret in it, so the next query can be
+ * typed at once. The reset effect in SidebarSearchControls keeps that focus (web only rewrites the
+ * value; native carries focus into the swapped input), and this button unmounts once the query is
+ * empty.
+ */
+function SidebarFilterClearButton({
+  clear,
+  inputRef,
+}: {
+  clear: () => void;
+  inputRef: RefObject<EditingTextInputHandle | null>;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const clearAndRefocus = useCallback(() => {
+    clear();
+    inputRef.current?.focus();
+  }, [clear, inputRef]);
+  const label = t("sidebar.filterSidebar.clear");
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <Pressable
+          onPress={clearAndRefocus}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          testID="sidebar-title-project-filter-clear"
+        >
+          <X size={14} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="center"
+        offset={8}
+        testID="sidebar-title-project-filter-clear-tooltip"
+      >
+        <IconTooltipContent label={label} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarSortMenu({
+  sortMode,
+  setSortMode,
+  olderMessageSortHosts,
+}: {
+  sortMode: SidebarSortMode;
+  setSortMode: (mode: SidebarSortMode) => void;
+  olderMessageSortHosts: readonly string[];
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  // Controlled so the hover tooltip stays hidden while the menu is open (sidebar-help-menu.tsx).
+  const [open, setOpen] = useState(false);
+  const label = t("sidebar.filterSidebar.sortBy", {
+    value: t(`sidebar.filterSidebar.sort.${sortMode}`),
+  });
+  return (
+    <DropdownMenu compactMode="sheet" open={open} onOpenChange={setOpen}>
+      <Tooltip delayDuration={300} enabledOnDesktop={!open}>
+        <TooltipTrigger asChild>
+          <View collapsable={false}>
+            <DropdownMenuTrigger
+              style={styles.sidebarSortTrigger}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              testID="sidebar-sort-trigger"
+            >
+              <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
+            </DropdownMenuTrigger>
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="center" offset={8} testID="sidebar-sort-tooltip">
+          <IconTooltipContent label={label} />
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent
+        align="end"
+        width={280}
+        sheetTitle={t("sidebar.filterSidebar.sortHeading")}
+      >
+        {olderMessageSortHosts.length > 0 ? (
+          <DropdownMenuItem disabled testID="sidebar-sort-older-hosts">
+            {t("sidebar.filterSidebar.sortOlderHosts", {
+              hosts: olderMessageSortHosts.join(", "),
+            })}
+          </DropdownMenuItem>
+        ) : null}
+        {SIDEBAR_SORT_MODES.map((mode) => (
+          <SidebarSortItem
+            key={mode}
+            mode={mode}
+            selected={sortMode === mode}
+            onSelectMode={setSortMode}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function SidebarSortItem({
   mode,
   selected,
-  disabled,
   onSelectMode,
 }: {
   mode: SidebarSortMode;
   selected: boolean;
-  disabled: boolean;
   onSelectMode: (mode: SidebarSortMode) => void;
 }) {
   const { t } = useTranslation();
   const selectMode = useCallback(() => onSelectMode(mode), [mode, onSelectMode]);
   return (
-    <DropdownMenuItem
-      selected={selected}
-      disabled={disabled}
-      onSelect={selectMode}
-      testID={`sidebar-sort-${mode}`}
-    >
+    <DropdownMenuItem selected={selected} onSelect={selectMode} testID={`sidebar-sort-${mode}`}>
       {t(`sidebar.filterSidebar.sort.${mode}`)}
     </DropdownMenuItem>
   );
@@ -1031,6 +1193,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.borderRadius.md,
   },
+  sidebarSendTriggerLocked: { opacity: theme.opacity[50] },
   workspacesSectionHeader: {
     flexDirection: "row",
     alignItems: "center",

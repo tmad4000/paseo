@@ -20,6 +20,7 @@ import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
+import { isUncertainSendOutcome, type PendingDirectSend } from "@/stores/send-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
 
 export interface QueuedComposerMessage {
@@ -58,7 +59,7 @@ export interface ComposerSendClient {
       attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
       interrupt?: boolean;
     },
-  ) => Promise<unknown>;
+  ) => Promise<{ queued: boolean } | void>;
   uploadFile: (input: { fileName: string; mimeType: string; bytes: Uint8Array }) => Promise<{
     requestId: string;
     file: {
@@ -202,6 +203,59 @@ export interface DispatchComposerAgentMessageInput {
   submission: MessageSubmissionWriter;
   activeTurnBehavior?: ActiveTurnBehavior;
   activeTurnId?: string;
+  /** When present, the send is stored on the device first and retried until the host answers. */
+  outbox?: DirectSendOutbox;
+}
+
+/**
+ * The durable path for direct sends. `flush` resends un-acknowledged entries for
+ * one agent in order and reports acceptance through the submission writer.
+ * See docs/queue-mirroring.md, "Direct sends".
+ */
+export interface DirectSendOutbox {
+  serverId: string;
+  add: (entry: Omit<PendingDirectSend, "createdAt" | "attempts">) => Promise<void>;
+  flush: (agentId: string) => Promise<void>;
+  get: (clientMessageId: string) => PendingDirectSend | undefined;
+  remove: (clientMessageId: string) => Promise<void>;
+}
+
+async function dispatchDurableComposerAgentMessage(
+  input: DispatchComposerAgentMessageInput & { outbox: DirectSendOutbox },
+  clientMessageId: string,
+  wirePayload: ReturnType<typeof splitComposerAttachmentsForSubmit>,
+): Promise<void> {
+  try {
+    const imagesData = await input.encodeImages(wirePayload.images);
+    if (wirePayload.images.length > 0 && imagesData?.length !== wirePayload.images.length) {
+      throw new Error(i18n.t("composer.errors.failedToSend"));
+    }
+    await input.outbox.add({
+      serverId: input.outbox.serverId,
+      agentId: input.agentId,
+      clientMessageId,
+      text: input.text,
+      images: imagesData ?? [],
+      attachments: wirePayload.attachments,
+      ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
+      ...(input.interrupt ? { interrupt: true } : {}),
+    });
+  } catch (error) {
+    // Nothing was stored, so the composer must keep the text.
+    input.submission.reject(input.agentId, clientMessageId);
+    throw error;
+  }
+  await input.outbox.flush(input.agentId);
+  const entry = input.outbox.get(clientMessageId);
+  if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
+    // The host refused this message while the author is still here: hand the
+    // text back to the composer instead of parking it.
+    await input.outbox.remove(clientMessageId);
+    input.submission.reject(input.agentId, clientMessageId);
+    throw new Error(entry.rejectedError);
+  }
+  // Accepted (the flush removed it), saved for retry on reconnect, or parked
+  // with an uncertain outcome for the user to judge.
 }
 
 export async function dispatchComposerAgentMessage(
@@ -223,16 +277,30 @@ export async function dispatchComposerAgentMessage(
       : {}),
   });
   input.submission.begin(input.agentId, userMessage);
+  if (input.outbox) {
+    await dispatchDurableComposerAgentMessage(
+      { ...input, outbox: input.outbox },
+      clientMessageId,
+      wirePayload,
+    );
+    return;
+  }
   try {
     const imagesData = await input.encodeImages(wirePayload.images);
-    await input.client.sendAgentMessage(input.agentId, input.text, {
+    const result = await input.client.sendAgentMessage(input.agentId, input.text, {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
       images: imagesData ?? [],
       attachments: wirePayload.attachments,
       ...(input.interrupt ? { interrupt: true } : {}),
     });
-    input.submission.accept(input.agentId, clientMessageId);
+    if (result?.queued) {
+      // Queue admission is not provider submission. Retire only the optimistic
+      // bubble; reject preserves a canonical echo that raced the RPC response.
+      input.submission.reject(input.agentId, clientMessageId);
+    } else {
+      input.submission.accept(input.agentId, clientMessageId);
+    }
   } catch (error) {
     input.submission.reject(input.agentId, clientMessageId);
     throw error;

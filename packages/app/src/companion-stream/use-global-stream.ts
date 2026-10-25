@@ -1,14 +1,30 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
-import type { StreamListOptions, StreamRow } from "@getpaseo/protocol/global-stream";
+import type {
+  StreamListOptions,
+  StreamRow,
+  StreamTagCount,
+} from "@getpaseo/protocol/global-stream";
+import { normalizeStreamTags, streamEntryTags } from "@getpaseo/protocol/stream-tags";
 import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { useFetchQueries } from "@/data/query";
+import { mergeTagCounts } from "./tag-model";
 
 export type GlobalStreamRow = StreamRow & { serverId: string; serverLabel: string };
 interface HostPage {
   rows: StreamRow[];
   hasMore: boolean;
+  tagCounts?: StreamTagCount[];
+  pinnedTags?: string[];
+}
+const NO_TAGS: string[] = [];
+
+/** Hosts without server-side tag filtering still get the AND filter applied to returned rows. */
+function rowHasTags(row: StreamRow, tags: readonly string[]): boolean {
+  if (row.item.kind !== "entry") return false;
+  const entryTags = streamEntryTags(row.item.entry);
+  return tags.every((tag) => entryTags.includes(tag));
 }
 
 export function useGlobalStream(
@@ -24,21 +40,35 @@ export function useGlobalStream(
   );
   const sessions = useSessionStore((state) => state.sessions);
   const [depth, setDepth] = useState(1);
+  const tags = useMemo(() => normalizeStreamTags(options.tags ?? []), [options.tags]);
+  const tagKey = tags.join(" ");
   const selected = hosts.filter((host) => !options.serverId || host.serverId === options.serverId);
   const availability = selected.map((host) => {
     if (!isHostRuntimeConnected(runtime.getSnapshot(host.serverId))) return "offline";
     // COMPAT(globalStream): fork beta.11; remove after 2027-04-06.
-    if (!sessions[host.serverId]?.serverInfo?.features?.globalStream) return "upgrade";
+    if (
+      !(options.agentId
+        ? sessions[host.serverId]?.serverInfo?.features?.durableStream
+        : sessions[host.serverId]?.serverInfo?.features?.globalStream)
+    )
+      return "upgrade";
     return "online";
   });
+  // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
+  const tagHosts = selected.map(
+    (host) => sessions[host.serverId]?.serverInfo?.features?.streamTags === true,
+  );
   const results = useFetchQueries<HostPage>(
     selected.map((host, index) => ({
       queryKey: [
         "global-stream",
         host.serverId,
+        options.agentId,
+        options.asksOnly,
         options.filter,
         options.search,
         options.includeArchived,
+        tagKey,
         depth,
       ],
       dataShape: "value",
@@ -50,19 +80,31 @@ export function useGlobalStream(
         if (!client) throw new Error("Host disconnected");
         const rows: StreamRow[] = [];
         let cursor: string | undefined;
+        let tagCounts: StreamTagCount[] | undefined;
+        let pinnedTags: string[] | undefined;
         for (let page = 0; page < depth; page++) {
           const result = await client.listGlobalStream({
+            agentId: options.agentId,
+            asksOnly: options.asksOnly,
             filter: options.filter,
             search: options.search,
             includeArchived: options.includeArchived,
+            ...(tagHosts[index] && tags.length ? { tags } : {}),
             cursor,
             limit: 50,
           });
           rows.push(...result.rows);
+          tagCounts ??= result.tagCounts;
+          pinnedTags ??= result.pinnedTags;
           cursor = result.nextCursor ?? undefined;
           if (!cursor) break;
         }
-        return { rows, hasMore: Boolean(cursor) };
+        return {
+          rows: tags.length ? rows.filter((row) => rowHasTags(row, tags)) : rows,
+          hasMore: Boolean(cursor),
+          tagCounts,
+          pinnedTags,
+        };
       },
     })),
   );
@@ -75,9 +117,12 @@ export function useGlobalStream(
         data = queryClient.getQueryData<HostPage>([
           "global-stream",
           host.serverId,
+          options.agentId,
+          options.asksOnly,
           options.filter,
           options.search,
           options.includeArchived,
+          tagKey,
           prior,
         ]);
       }
@@ -98,10 +143,41 @@ export function useGlobalStream(
     selected,
     depth,
     queryClient,
+    options.agentId,
+    options.asksOnly,
     options.filter,
     options.search,
     options.includeArchived,
+    tagKey,
   ]);
+  const tagCounts = useMemo(
+    () => mergeTagCounts(results.map((result) => result.data?.tagCounts ?? [])),
+    [results],
+  );
+  const pinnedTags = useMemo(() => {
+    const merged: string[] = [];
+    for (const result of results)
+      for (const tag of result.data?.pinnedTags ?? NO_TAGS)
+        if (!merged.includes(tag)) merged.push(tag);
+    return merged;
+  }, [results]);
+  const supportsTags = tagHosts.some(
+    (supported, index) => supported && availability[index] === "online",
+  );
+  /** Pin on every selected online host that supports tags; a single chat lives on one host. */
+  const setTagPinned = useCallback(
+    async (tag: string, pinned: boolean) => {
+      const writes = selected.flatMap((host, index) => {
+        const client = runtime.getClient(host.serverId);
+        if (!client || !tagHosts[index] || availability[index] !== "online") return [];
+        return [client.setStreamTagPinned({ agentId: options.agentId, tag, pinned })];
+      });
+      if (!writes.length) throw new Error("No connected host supports Stream tags");
+      await Promise.all(writes);
+      await Promise.all(results.map((result) => result.refetch()));
+    },
+    [selected, runtime, tagHosts, availability, options.agentId, results],
+  );
   const notices = selected.flatMap((host, index) => {
     if (availability[index] === "offline")
       return [`${host.label}: offline — cached items may be out of date`];
@@ -124,6 +200,10 @@ export function useGlobalStream(
     rows,
     notices,
     refetch,
+    tagCounts,
+    pinnedTags,
+    supportsTags,
+    setTagPinned,
     fetchNextPage,
     isLoading: results.some((result) => result.isLoading),
     isFetching: results.some((result) => result.isFetching),

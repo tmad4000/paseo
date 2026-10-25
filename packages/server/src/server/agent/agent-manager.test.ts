@@ -12237,3 +12237,72 @@ test("message activity imports only original dated messages and preserves clocks
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("durable Stream pages and asks survive manager recreation with bounded wire snapshots", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "durable-stream-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {});
+  try {
+    for (let i = 0; i < 63; i++)
+      await manager.updateCompanionEntry({
+        agentId: agent.id,
+        action: "set_ask",
+        entryId: `request-${i}`,
+        expectedRevision: 0,
+        text: `Request ${i}`,
+        ask: {
+          state: i === 0 ? "blocked" : "done",
+          remaining: i === 0 ? "Awaiting approval" : "",
+          evidence: i === 0 ? "" : "Verified",
+        },
+      });
+    expect(toAgentPayload(manager.getAgent(agent.id)!).companionEntries).toHaveLength(50);
+    await manager.closeAgent(agent.id);
+    await manager.flush();
+    const stored = await storage.get(agent.id);
+    expect(stored?.companionEntries).toHaveLength(63);
+    const restored = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: new AgentStorage(join(workdir, "agents"), logger),
+      logger,
+    });
+    const first = await restored.listGlobalStream({ agentId: agent.id, asksOnly: true, limit: 50 });
+    const second = await restored.listGlobalStream({
+      agentId: agent.id,
+      asksOnly: true,
+      limit: 50,
+      cursor: first.nextCursor!,
+    });
+    expect(first.rows).toHaveLength(50);
+    expect(second.rows).toHaveLength(13);
+    expect(second.nextCursor).toBeNull();
+    expect(new Set([...first.rows, ...second.rows].map((row) => row.id)).size).toBe(63);
+    expect(
+      (await restored.listGlobalStream({ agentId: agent.id, asksOnly: true, filter: "pending" }))
+        .rows,
+    ).toHaveLength(1);
+    await restored.updateCompanionEntry({
+      agentId: agent.id,
+      action: "set_ask",
+      entryId: "request-0",
+      expectedRevision: 1,
+      text: "Request 0",
+      ask: { state: "in_progress", remaining: "Finish rollout", evidence: "Approved" },
+    });
+    expect(
+      (
+        await new AgentStorage(join(workdir, "agents"), logger).get(agent.id)
+      )?.companionEntries?.find((entry) => entry.id === "ask:request-0")?.ask?.state,
+    ).toBe("in_progress");
+    expect(restored.getAgent(agent.id)).toBeNull();
+    await restored.flush();
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

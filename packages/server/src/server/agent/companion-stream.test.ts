@@ -371,7 +371,7 @@ it("bounds stored output and records failure independently of an assistant succe
     );
   }
   expect(entries.map((entry) => entry.id)).toEqual(
-    Array.from({ length: COMPANION_ENTRY_LIMIT }, (_, i) => `turn:${i + 2}`),
+    Array.from({ length: COMPANION_ENTRY_LIMIT + 2 }, (_, i) => `turn:${i}`),
   );
 });
 
@@ -408,7 +408,7 @@ it("retains pins and each unanswered question beyond the recent outcome window",
     );
   }
   expect(entries.slice(0, 4).map((entry) => entry.id)).toEqual(["q1", "q2", "pin", "permission"]);
-  expect(entries.filter((entry) => entry.kind === "outcome")).toHaveLength(50);
+  expect(entries.filter((entry) => entry.kind === "outcome")).toHaveLength(60);
 });
 
 it("captures each explicitly labelled needed input even without a final question mark", () => {
@@ -663,4 +663,220 @@ it("expires canceled approvals without reviving them as questions", () => {
       timestamp,
     ),
   ).toEqual([{ ...pending[0], status: "expired" }]);
+});
+
+it("tracks partial, blocked, done and reopened asks without deriving success from turn end", () => {
+  const input = {
+    agentId: "parent",
+    entryId: "deploy",
+    action: "set_ask" as const,
+    expectedRevision: 0,
+    text: "Ship the requested feature",
+    ask: {
+      state: "in_progress" as const,
+      remaining: "Review and install",
+      evidence: "Tests pass",
+      sourceMessageId: "user:12",
+      delegatedAgentId: "worker",
+      subtasks: [
+        { id: "code", text: "Implement", done: true },
+        { id: "ship", text: "Install", done: false },
+      ],
+    },
+  };
+  let entries = applyStreamEntryUpdate([], input);
+  expect(entries[0].ask?.revision).toBe(1);
+  expect(applyStreamEntryUpdate(entries, input)).toBe(entries);
+  entries = restoreCompanionEntries({ companionEntries: JSON.parse(JSON.stringify(entries)) });
+  expect(applyStreamEntryUpdate(entries, input)).toBe(entries);
+  expect(() => applyStreamEntryUpdate(entries, { ...input, text: "Stale replacement" })).toThrow(
+    "revision conflict",
+  );
+  entries = new CompanionStreamCollector().observe(
+    "parent",
+    entries,
+    { type: "turn_completed", provider: "codex", turnId: "end" },
+    timestamp,
+  );
+  expect(entries[0].ask?.state).toBe("in_progress");
+  entries = applyStreamEntryUpdate(entries, {
+    ...input,
+    expectedRevision: 1,
+    ask: { ...input.ask, state: "blocked", remaining: "Waiting for review" },
+  });
+  expect(entries[0].ask?.state).toBe("blocked");
+  expect(() =>
+    applyStreamEntryUpdate(entries, {
+      ...input,
+      expectedRevision: 2,
+      ask: { ...input.ask, state: "done" },
+    }),
+  ).toThrow("Done requires evidence");
+  const finished = {
+    ...input.ask,
+    state: "done" as const,
+    remaining: "",
+    evidence: "Installed build verified",
+    subtasks: input.ask.subtasks.map((task) => ({ ...task, done: true })),
+  };
+  entries = applyStreamEntryUpdate(entries, { ...input, expectedRevision: 2, ask: finished });
+  expect(entries[0].ask).toMatchObject({ state: "done", revision: 3 });
+  entries = applyStreamEntryUpdate(entries, {
+    ...input,
+    expectedRevision: 3,
+    ask: { ...finished, state: "open", remaining: "Correction: installation failed" },
+  });
+  expect(entries[0]).toMatchObject({
+    id: "ask:deploy",
+    status: "open",
+    ask: { revision: 4, state: "open", delegatedAgentId: "worker" },
+  });
+  expect(entries.filter((entry) => entry.ask)).toHaveLength(1);
+});
+
+it("paginates every retained entry beyond 50 across reload and isolates the conversation", () => {
+  const collector = new CompanionStreamCollector();
+  let entries: CompanionEntry[] = [];
+  for (let i = 0; i < 137; i++)
+    entries = collector.observe(
+      "parent",
+      entries,
+      { type: "turn_completed", provider: "codex", turnId: `turn-${i}` },
+      timestamp,
+    );
+  const sources = [
+    {
+      id: "parent",
+      cwd: "/project",
+      companionEntries: restoreCompanionEntries({
+        companionEntries: JSON.parse(JSON.stringify(entries)),
+      }),
+    },
+    { id: "other", cwd: "/project", companionEntries: entries },
+  ];
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = listStreamRows(sources, { agentId: "parent", limit: 17, cursor });
+    expect(page.rows.length).toBeLessThanOrEqual(17);
+    expect(page.rows.every((row) => row.agentId === "parent")).toBe(true);
+    ids.push(...page.rows.map((row) => row.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(new Set(ids).size).toBe(137);
+  expect(ids).toHaveLength(137);
+  expect(listStreamRows(sources, { agentId: "parent", asksOnly: true }).rows).toEqual([]);
+  expect(
+    listStreamRows(sources, { agentId: "parent", limit: 17 }).rows.map((row) => row.id),
+  ).toEqual(ids.slice(0, 17));
+});
+
+it("orders unresolved asks before completed asks across cursor pages and rejects stale status updates", () => {
+  let entries: CompanionEntry[] = [];
+  for (let i = 0; i < 4; i++)
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "parent",
+      entryId: String(i),
+      action: "set_ask",
+      expectedRevision: 0,
+      text: String(i),
+      ask: { state: i % 2 === 0 ? "done" : "open", remaining: "", evidence: "Checked" },
+    });
+  const sources = [{ id: "parent", cwd: "/project", companionEntries: entries }];
+  const first = listStreamRows(sources, { asksOnly: true, limit: 2 });
+  expect(first.rows.map((row) => row.item.kind === "entry" && row.item.entry.ask?.state)).toEqual([
+    "open",
+    "open",
+  ]);
+  const second = listStreamRows(sources, { asksOnly: true, limit: 2, cursor: first.nextCursor! });
+  expect(second.rows.map((row) => row.item.kind === "entry" && row.item.entry.ask?.state)).toEqual([
+    "done",
+    "done",
+  ]);
+  expect(second.nextCursor).toBeNull();
+  entries = applyStreamEntryUpdate(entries, {
+    agentId: "parent",
+    entryId: "ask:0",
+    action: "update_status",
+    expectedRevision: 1,
+    status: "open",
+  });
+  expect(entries[0].ask?.state).toBe("open");
+  expect(() =>
+    applyStreamEntryUpdate(entries, {
+      agentId: "parent",
+      entryId: "ask:0",
+      action: "update_status",
+      expectedRevision: 1,
+      status: "reviewed",
+    }),
+  ).toThrow("revision conflict");
+  expect(() =>
+    applyStreamEntryUpdate(entries, {
+      agentId: "parent",
+      entryId: "ask:0",
+      action: "update_status",
+      status: "done",
+    }),
+  ).toThrow("completion evidence");
+});
+
+it("stores parsed tags on written notes and asks", () => {
+  const pin = applyStreamEntryUpdate([], {
+    agentId: "a",
+    action: "add_pin",
+    entryId: "p",
+    text: "Quote this #Ideas `#code`",
+  });
+  expect(pin[0]?.tags).toEqual(["ideas"]);
+  const ask = applyStreamEntryUpdate([], {
+    agentId: "a",
+    action: "set_ask",
+    entryId: "x",
+    expectedRevision: 0,
+    text: "Ship #tags",
+    ask: { state: "open", remaining: "", evidence: "" },
+  });
+  expect(ask[0]?.tags).toEqual(["tags"]);
+  expect(
+    applyStreamEntryUpdate([], { agentId: "a", action: "add_pin", entryId: "n", text: "None" })[0],
+  ).not.toHaveProperty("tags");
+});
+
+it("filters by every requested tag, parses legacy entries on read and keeps artifacts out", () => {
+  const legacy: CompanionEntry = {
+    id: "pin:old",
+    kind: "pin",
+    text: "Old note #launch #ideas",
+    timestamp,
+    truncated: false,
+  };
+  const inferred: CompanionEntry = {
+    id: "turn:q",
+    kind: "question",
+    status: "open",
+    text: "Should we #launch?",
+    timestamp,
+    truncated: false,
+  };
+  const sources = [
+    {
+      id: "a",
+      cwd: "/a",
+      companionEntries: [legacy, inferred],
+      artifacts: [{ path: "/a/f.md", updatedAt: timestamp } as never],
+    },
+  ];
+  const page = listStreamRows(sources, { tags: ["launch"] });
+  expect(page.rows.map((row) => row.id)).toEqual([JSON.stringify(["a", "entry", "pin:old"])]);
+  expect(page.rows[0]?.item.kind === "entry" && page.rows[0].item.entry.tags).toEqual([
+    "launch",
+    "ideas",
+  ]);
+  expect(page.tagCounts).toEqual([
+    { tag: "ideas", count: 1 },
+    { tag: "launch", count: 1 },
+  ]);
+  expect(listStreamRows(sources, { tags: ["launch", "missing"] }).rows).toEqual([]);
+  expect(listStreamRows(sources, { search: "nothing matches" }).tagCounts).toEqual([]);
 });

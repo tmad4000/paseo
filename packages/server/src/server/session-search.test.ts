@@ -214,3 +214,25 @@ test("result schema accepts old hosts without timestamp metadata", () => {
     }),
   ).toMatchObject({ excerptSource: "queued_message" });
 });
+test("a pasted session id answers without the ranking model, within scope", async () => {
+  const id = "9b8394eb-de93-4c1a-8f3e-0123456789ab";
+  const input = fixture([]);
+  input.query = " 9b8394eb ";
+  input.candidates = [
+    { ...candidate, agentId: id, title: "Release orchestrator" },
+    { ...candidate, agentId: "9b8394eb-0000-4000-8000-000000000000", workspaceId: "other" },
+    { ...candidate, agentId: "aaaaaaaa-1111-4111-8111-111111111111" },
+  ];
+  const result = await searchExistingSessions(input);
+  expect(result.results.map((entry) => entry.agentId)).toEqual([id]);
+  expect(result.results[0]).toMatchObject({ confidence: 1, title: "Release orchestrator" });
+  expect(SessionSearchResultSchema.safeParse(result.results[0]).success).toBe(true);
+  expect(input.generate).not.toHaveBeenCalled();
+  expect(input.readContext).not.toHaveBeenCalled();
+});
+test("an id-shaped query that names nothing falls through to ranking", async () => {
+  const input = fixture([]);
+  input.query = "12345678";
+  await searchExistingSessions(input);
+  expect(input.generate).toHaveBeenCalledTimes(1);
+});

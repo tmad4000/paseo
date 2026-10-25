@@ -1,11 +1,7 @@
 import { useRef } from "react";
-import {
-  Keyboard,
-  TextInput,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useKeyboardShift } from "@/keyboard/shift";
+import { dismissSoftwareKeyboard } from "@/keyboard/software-keyboard-dismiss";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import {
   beginDrag,
@@ -44,13 +40,7 @@ export function useScrollKeyboardDismiss() {
       return;
     }
 
-    // Keep blur and dismiss paired: this exact sequence was validated on a
-    // physical Android device to clear both input focus and the IME inset.
-    const focusedInput = TextInput.State.currentlyFocusedInput();
-    if (focusedInput) {
-      TextInput.State.blurTextInput(focusedInput);
-    }
-    Keyboard.dismiss();
+    dismissSoftwareKeyboard();
   });
 
   return { onScroll, onScrollBeginDrag, onScrollEndDrag };

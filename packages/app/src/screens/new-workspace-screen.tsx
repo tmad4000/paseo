@@ -36,9 +36,9 @@ import { ScreenHeader } from "@/components/headers/screen-header";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
+import { buildDraftAgentConfig } from "@/composer/draft/create-agent-request";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
-import { ensureCheckoutStatus } from "@/git/checkout-status-cache";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { resolveTerminalProfiles } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
@@ -59,7 +59,7 @@ import {
   navigateToWorkspace,
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
-import { normalizeWorkspaceDescriptor, type WorkspaceDescriptor } from "@/stores/session-store";
+import { normalizeWorkspaceDescriptor } from "@/stores/session-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -77,7 +77,6 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
   getHostProjectSourceDirectory,
-  getHostProjectId,
   getWorktreeSupportForHostProject,
   hostProjectFromRoute,
   hostProjectFromWorkspace,
@@ -95,7 +94,11 @@ import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messag
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
-import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
+import { runCreateEmptyWorkspace } from "./new-workspace-empty";
+import {
+  createNewWorkspaceAgentForVoice,
+  resolveNewWorkspaceSubmissionKind,
+} from "./new-workspace-voice";
 import {
   getWorkspaceNamingAttachments,
   remapDraftCwdToWorkspace,
@@ -104,9 +107,7 @@ import {
   buildPickerOptionData,
   defaultBasePickerItem,
   pickerItemLabel,
-  pickerItemToCheckoutRequest,
   type BranchPickerDetail,
-  type PickerCheckoutRequest,
   type PickerItem,
   type PickerOptionData,
 } from "./new-workspace-picker-item";
@@ -128,6 +129,10 @@ import {
   upsertCreatedTerminalPayload,
 } from "./workspace/terminals/state";
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
+import {
+  createProjectWorkspace,
+  type WorkspaceCreationResult,
+} from "./new-workspace/create-workspace";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
@@ -165,21 +170,6 @@ function isNewWorkspacePending(input: {
   isDraftHandoffActive: boolean;
 }): boolean {
   return input.pendingAction !== null || input.isDraftHandoffActive;
-}
-
-function buildFirstAgentContext(input: {
-  prompt: string;
-  attachments: AgentAttachment[];
-}): { prompt?: string; attachments?: AgentAttachment[] } | undefined {
-  const trimmedPrompt = input.prompt.trim();
-  if (!trimmedPrompt && input.attachments.length === 0) {
-    return undefined;
-  }
-
-  return {
-    ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
-    attachments: input.attachments,
-  };
 }
 
 interface NewWorkspaceScreenProps {
@@ -757,6 +747,11 @@ function normalizeBranchDetails(
  */
 type SubmitOutcome = "navigated" | "background";
 
+interface CreateChatAgentResult {
+  outcome: SubmitOutcome;
+  agentId: string;
+}
+
 interface SubmitDraftInput {
   clearConsumedDraft: () => void;
   agentCreation?: {
@@ -792,68 +787,6 @@ interface WorkspaceDraftSubmissionConfig {
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown> | undefined;
   target: WorkspaceTabTarget;
-}
-
-interface WorkspaceCreationResult {
-  workspace: ReturnType<typeof normalizeWorkspaceDescriptor>;
-  agent?: AgentSnapshotPayload;
-}
-
-async function createMultiplicityWorkspace(input: {
-  idempotencyKey: string;
-  worktreeSlug: string;
-  client: NonNullable<ReturnType<typeof useHostRuntimeClient>>;
-  isolation: "local" | "worktree";
-  project: HostProjectListItem;
-  sourceDirectory: string;
-  checkoutRequest: PickerCheckoutRequest | undefined;
-  withInitialAgent: boolean;
-  agent?: CreateWorkspaceRequestOptions["agent"];
-  onEvent?: (snapshot: CreationSnapshot) => void;
-  prompt: string;
-  attachments: AgentAttachment[];
-  mergeWorkspaces: (
-    serverId: string,
-    workspaces: ReturnType<typeof normalizeWorkspaceDescriptor>[],
-  ) => void;
-  serverId: string;
-  createFailedMessage: string;
-}): Promise<WorkspaceCreationResult> {
-  const projectId = getHostProjectId(input.project, input.serverId);
-  if (!projectId) throw new Error("Project is not available on the selected host");
-  const isWorktree = input.isolation === "worktree";
-  const firstAgentContext = buildFirstAgentContext({
-    prompt: input.prompt,
-    attachments: input.attachments,
-  });
-  const payload = await input.client.createWorkspace({
-    idempotencyKey: input.idempotencyKey,
-    agent: input.agent,
-    onEvent: input.onEvent,
-    source: isWorktree
-      ? {
-          kind: "worktree",
-          cwd: input.sourceDirectory,
-          projectId,
-          worktreeSlug: input.worktreeSlug,
-          ...input.checkoutRequest,
-        }
-      : {
-          kind: "directory",
-          path: input.sourceDirectory,
-          projectId,
-        },
-    ...(firstAgentContext ? { firstAgentContext } : {}),
-  });
-  if (payload.error || !payload.workspace) {
-    throw new Error(payload.error ?? input.createFailedMessage);
-  }
-  const normalizedWorkspace = normalizeWorkspaceDescriptor(payload.workspace);
-  const workspaceForInitialMerge = input.withInitialAgent
-    ? { ...normalizedWorkspace, status: "running" as const, statusEnteredAt: new Date() }
-    : normalizedWorkspace;
-  input.mergeWorkspaces(input.serverId, [workspaceForInitialMerge]);
-  return { workspace: normalizedWorkspace, agent: payload.agent };
 }
 
 interface CreateChatAgentInput {
@@ -931,8 +864,8 @@ function buildComposerInitialValues(input: {
   return undefined;
 }
 
-const pendingWorkspaceSubmissions = new Map<string, Promise<SubmitOutcome>>();
-function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
+const pendingWorkspaceSubmissions = new Map<string, Promise<CreateChatAgentResult>>();
+function runCreateChatAgent(input: CreateChatAgentInput): Promise<CreateChatAgentResult> {
   const key = JSON.stringify([input.serverId, input.draftId]);
   const pending = pendingWorkspaceSubmissions.get(key);
   if (pending) return pending;
@@ -942,7 +875,9 @@ function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome>
   return submission;
 }
 
-async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
+async function createWorkspaceChatAgent(
+  input: CreateChatAgentInput,
+): Promise<CreateChatAgentResult> {
   const { payload, composerState, ensureWorkspace, serverId, clearDraft } = input;
   const clearConsumedDraft = captureWorkspaceDraftCleanup(input);
   const { text, attachments, cwd } = payload;
@@ -967,14 +902,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   let navigated = false;
   let outcome: SubmitOutcome = "background";
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
-    config: {
-      provider,
-      cwd,
-      modeId: composerState.selectedMode || undefined,
-      model: composerState.effectiveModelId || undefined,
-      thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
-      featureValues: composerState.featureValues,
-    },
+    config: buildDraftAgentConfig({ provider, cwd, selection: composerState }),
     initialPrompt: text,
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
@@ -1037,9 +965,9 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         attachments: request.attachments,
       }),
   };
-  await agentCreation.result;
+  const agent = await agentCreation.result;
   if (outcome === "background") clearConsumedDraft();
-  return outcome;
+  return { outcome, agentId: agent.id };
 }
 
 function buildComposerConfig(input: {
@@ -1635,12 +1563,6 @@ export function NewWorkspaceScreen({
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const toast = useToast();
-  const mergeWorkspaces = useCallback(
-    (targetServerId: string, workspaces: Iterable<WorkspaceDescriptor>) => {
-      getHostRuntimeStore().acceptWorkspaceSnapshots(targetServerId, Array.from(workspaces));
-    },
-    [],
-  );
   const {
     allHosts,
     selectedServerId,
@@ -2051,36 +1973,21 @@ export function NewWorkspaceScreen({
       if (!selectedSourceDirectory) {
         throw new Error("Choose a host for this project");
       }
-      const connectedClient = withConnectedClient();
-      const createsWorktree = !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree";
-      const checkoutStatusForCreate = createsWorktree
-        ? await ensureCheckoutStatus({
-            queryClient,
-            client: connectedClient,
-            serverId: selectedServerId,
-            cwd: selectedSourceDirectory,
-          })
-        : null;
-      const checkoutRequest = checkoutStatusForCreate
-        ? pickerItemToCheckoutRequest(
-            selectedItem ?? defaultBasePickerItem(checkoutStatusForCreate),
-          )
-        : undefined;
-      const normalizedWorkspace = await createMultiplicityWorkspace({
-        idempotencyKey: creationIdentity.draftId,
-        worktreeSlug: creationIdentity.worktreeSlug,
-        client: connectedClient,
-        isolation: createsWorktree ? "worktree" : "local",
+      const normalizedWorkspace = await createProjectWorkspace({
+        client: withConnectedClient(),
+        queryClient,
+        serverId: selectedServerId,
         project: selectedProject,
         sourceDirectory: selectedSourceDirectory,
-        checkoutRequest,
+        createsWorktree: !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree",
+        baseItem: selectedItem,
+        idempotencyKey: creationIdentity.draftId,
+        worktreeSlug: creationIdentity.worktreeSlug,
         withInitialAgent: input.withInitialAgent,
         prompt: input.prompt,
         attachments: input.attachments,
         agent: input.agent,
         onEvent: input.onEvent,
-        mergeWorkspaces,
-        serverId: selectedServerId,
         createFailedMessage: t("newWorkspace.errors.createWorktreeFailed"),
       });
       setCreationResult(normalizedWorkspace);
@@ -2090,7 +1997,6 @@ export function NewWorkspaceScreen({
       creationIdentity,
       creationResult,
       effectiveIsolation,
-      mergeWorkspaces,
       queryClient,
       selectedItem,
       selectedProject,
@@ -2102,37 +2008,14 @@ export function NewWorkspaceScreen({
     ],
   );
 
-  const handleSubmitNewWorkspace = useCallback(
-    async (payload: MessagePayload) => {
+  const submitChatAgent = useCallback(
+    async (payload: MessagePayload): Promise<CreateChatAgentResult | null> => {
       try {
         setErrorMessage(null);
         await composerState?.persistFormPreferences();
         await updateFormPreferences({ launchTarget });
-        if (isEmptyWorkspaceSubmission(payload)) {
-          setPendingAction("empty");
-          let outcome: SubmitOutcome = "background";
-          await runCreateEmptyWorkspace({
-            payload,
-            ensureWorkspace: async (request) => (await ensureWorkspace(request)).workspace,
-            serverId: selectedServerId,
-            navigate: (targetServerId, workspaceId) => {
-              if (!isStillOnCreateScreen()) {
-                return;
-              }
-              outcome = "navigated";
-              navigateToWorkspace({ serverId: targetServerId, workspaceId });
-            },
-          });
-          // Nothing navigated, so this screen may still be mounted under another route. Release
-          // the pending lock it would otherwise keep forever.
-          if (outcome === "background") {
-            setPendingAction(null);
-          }
-          return;
-        }
-
         setPendingAction("chat");
-        const outcome = await runCreateChatAgent({
+        const result = await runCreateChatAgent({
           payload,
           composerState,
           forkDraftSetup,
@@ -2150,14 +2033,16 @@ export function NewWorkspaceScreen({
             selectModel: t("newWorkspace.errors.selectModel"),
           },
         });
-        if (outcome === "background") {
+        if (result.outcome === "background") {
           setPendingAction(null);
         }
+        return result;
       } catch (error) {
         const message = toErrorMessage(error);
         setPendingAction(null);
         setErrorMessage(message);
         toast.error(message);
+        return null;
       }
     },
     [
@@ -2177,6 +2062,65 @@ export function NewWorkspaceScreen({
       updateFormPreferences,
       withConnectedClient,
     ],
+  );
+
+  const handleSubmitNewWorkspace = useCallback(
+    async (payload: MessagePayload) => {
+      if (resolveNewWorkspaceSubmissionKind(payload, { forVoice: false }) === "chat-agent") {
+        await submitChatAgent(payload);
+        return;
+      }
+      try {
+        setErrorMessage(null);
+        await composerState?.persistFormPreferences();
+        await updateFormPreferences({ launchTarget });
+        setPendingAction("empty");
+        let outcome: SubmitOutcome = "background";
+        await runCreateEmptyWorkspace({
+          payload,
+          ensureWorkspace: async (request) => (await ensureWorkspace(request)).workspace,
+          serverId: selectedServerId,
+          navigate: (targetServerId, workspaceId) => {
+            if (!isStillOnCreateScreen()) {
+              return;
+            }
+            outcome = "navigated";
+            navigateToWorkspace({ serverId: targetServerId, workspaceId });
+          },
+        });
+        // Nothing navigated, so this screen may still be mounted under another route. Release
+        // the pending lock it would otherwise keep forever.
+        if (outcome === "background") {
+          setPendingAction(null);
+        }
+      } catch (error) {
+        const message = toErrorMessage(error);
+        setPendingAction(null);
+        setErrorMessage(message);
+        toast.error(message);
+      }
+    },
+    [
+      composerState,
+      ensureWorkspace,
+      isStillOnCreateScreen,
+      launchTarget,
+      selectedServerId,
+      submitChatAgent,
+      toast,
+      updateFormPreferences,
+    ],
+  );
+
+  // A brand-new session has no agent until its first message. The voice button creates the
+  // workspace and its agent with no prompt (no turn starts), so the session can begin by talking.
+  const createAgentForVoice = useCallback(
+    () =>
+      createNewWorkspaceAgentForVoice({
+        cwd: selectedSourceDirectory,
+        createChatAgent: submitChatAgent,
+      }),
+    [selectedSourceDirectory, submitChatAgent],
   );
 
   const handleSubmitTerminalLaunch = useCallback(async () => {
@@ -2424,6 +2368,7 @@ export function NewWorkspaceScreen({
       autoFocusKey={launchFocusKey}
       commandDraftConfig={composerState?.commandDraftConfig}
       agentControls={agentControlsWithDisabled}
+      createAgentForVoice={createAgentForVoice}
     />
   );
   return (

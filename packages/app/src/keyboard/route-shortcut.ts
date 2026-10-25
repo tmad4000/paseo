@@ -24,7 +24,8 @@ export type ShortcutCallbackName =
   | "toggle-agent-list"
   | "toggle-both-sidebars"
   | "cycle-theme"
-  | "navigate-back";
+  | "navigate-back"
+  | "navigate-forward";
 
 export type ShortcutAction =
   | { kind: "none" }
@@ -36,8 +37,9 @@ export type ShortcutAction =
   | { kind: "router-push"; route: string }
   | { kind: "open-project-picker" }
   | { kind: "callback"; name: ShortcutCallbackName }
-  | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" }
-  | { kind: "shortcuts-dialog-toggle"; nextOpen: boolean };
+  | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" | "recent" }
+  | { kind: "shortcuts-dialog-toggle"; nextOpen: boolean }
+  | { kind: "recent-workspace-switch"; direction: 1 | -1 };
 
 const NONE: ShortcutAction = { kind: "none" };
 
@@ -50,6 +52,8 @@ const PASSTHROUGH_DISPATCH: Record<string, KeyboardActionDefinition> = {
   "workspace.tab.target.changes": { id: "workspace.tab.target.changes", scope: "workspace" },
   "workspace.tab.target.files": { id: "workspace.tab.target.files", scope: "workspace" },
   "workspace.new": { id: "workspace.new", scope: "sidebar" },
+  "quick-launch.open": { id: "quick-launch.open", scope: "global" },
+  "agent.subthreads.toggle": { id: "agent.subthreads.toggle", scope: "workspace" },
   "workspace.project.pick": { id: "workspace.project.pick", scope: "workspace" },
   "workspace.archive": { id: "workspace.archive", scope: "sidebar" },
   "workspace.pin": { id: "workspace.pin", scope: "sidebar" },
@@ -74,6 +78,7 @@ const PASSTHROUGH_DISPATCH: Record<string, KeyboardActionDefinition> = {
 const SIMPLE_CALLBACKS: Record<string, ShortcutCallbackName> = {
   "sidebar.toggle.left": "toggle-agent-list",
   "navigation.back": "navigate-back",
+  "navigation.forward": "navigate-forward",
   "sidebar.toggle.both": "toggle-both-sidebars",
   "theme.cycle": "cycle-theme",
 };
@@ -206,6 +211,10 @@ export function routeKeyboardShortcut(
       return routeWorkspaceNavigateIndex(input.payload, ctx);
     case "workspace.navigate.relative":
       return routeWorkspaceNavigateRelative(input.payload, ctx);
+    case "workspace.recent.switch":
+      return hasPayloadKey(input.payload, "delta")
+        ? { kind: "recent-workspace-switch", direction: input.payload.delta }
+        : NONE;
     case "message-input.action":
       return routeMessageInputAction(input.payload);
     case "agent.new":
@@ -214,6 +223,8 @@ export function routeKeyboardShortcut(
       return routeSettingsToggle(ctx);
     case "command-center.toggle":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen };
+    case "recent-sessions.open":
+      return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen, scope: "recent" };
     case "command-center.files":
       if (parseHostWorkspaceRouteFromPathname(ctx.pathname)) {
         return { kind: "command-center-toggle", nextOpen: true, scope: "files" };

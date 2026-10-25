@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SessionSearchResult } from "@getpaseo/protocol/messages";
+import { matchesSessionIdQuery, parseSessionIdQuery } from "@getpaseo/protocol/search/session-id";
 
 export interface SessionSearchCandidate extends Omit<
   SessionSearchResult,
@@ -106,6 +107,36 @@ export interface SessionSearchInput {
 export async function searchExistingSessions(input: SessionSearchInput) {
   const workspaceIds = new Set(input.workspaceIds);
   const scoped = input.candidates.filter((candidate) => workspaceIds.has(candidate.workspaceId));
+  // A pasted session id (or its short prefix) names the conversation outright: answer from the
+  // ids, without the ranking model. An id-shaped query that names nothing falls through.
+  if (parseSessionIdQuery(input.query)) {
+    const byId = scoped.filter((candidate) =>
+      matchesSessionIdQuery(candidate.agentId, input.query),
+    );
+    if (byId.length > 0) {
+      const results: SessionSearchResult[] = byId
+        .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map((candidate) => {
+          const excerpt = candidate.excerpts[0] ?? {
+            text: candidate.title,
+            source: "title" as const,
+          };
+          return {
+            agentId: candidate.agentId,
+            workspaceId: candidate.workspaceId,
+            projectId: candidate.projectId,
+            projectName: candidate.projectName,
+            title: candidate.title,
+            excerpt: excerpt.text,
+            excerptTimestamp: excerpt.timestamp,
+            excerptSource: excerpt.source,
+            updatedAt: candidate.updatedAt,
+            confidence: byId.length === 1 ? 1 : 0.9,
+          };
+        });
+      return { results, searchedCount: byId.length, totalCount: scoped.length };
+    }
+  }
   const words =
     input.query
       .normalize("NFKC")

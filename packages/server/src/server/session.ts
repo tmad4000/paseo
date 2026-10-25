@@ -1,3 +1,11 @@
+import {
+  handleShareRequest,
+  isShareRequest,
+  subscribeShareChanges,
+  type ShareRequest,
+} from "./session/sharing/index.js";
+import os from "node:os";
+import { type SharingSessionOptions } from "./sharing/share-service.js";
 import { createCodexSessionSearchGeneration } from "./agent/providers/codex/session-search-generation.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import {
@@ -5,6 +13,8 @@ import {
   selectSessionSearchExcerpts,
   type SessionSearchCandidate,
 } from "./session-search.js";
+import { searchSessionText, type SessionTextSearchCandidate } from "./session-text-search.js";
+import { getSharedPersistedConversationReader } from "./session-text-history.js";
 import type { StructuredTextGeneration } from "./session/checkout/git-metadata-generator.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -164,6 +174,7 @@ import {
   type WorkspaceMutation,
   type WorkspaceRegistry,
 } from "./workspace-registry.js";
+import { setProjectDefault, setProjectPinned } from "./project-pins.js";
 import { isVoicePermissionAllowed } from "./voice-permission-policy.js";
 import {
   ProjectIconReader,
@@ -227,6 +238,7 @@ import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
 import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
+import type { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import {
   createGitHubService,
@@ -473,6 +485,7 @@ export interface SessionOptions {
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
   agentQueueService?: AgentQueueService | null;
+  clientDiagnostics?: ClientDiagnosticsStore | null;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -529,6 +542,7 @@ export interface SessionOptions {
   providerUsageService: ProviderUsageService;
   hubExecutionAgents?: HubExecutionAgents;
   hubRelationships?: HubRelationshipManagement;
+  sharing?: SharingSessionOptions;
   serviceProxy?: ServiceProxySubsystem;
   scriptRuntimeStore?: WorkspaceScriptRuntimeStore;
   workspaceSetupSnapshots?: Map<string, WorkspaceSetupSnapshot>;
@@ -656,6 +670,10 @@ function describeRegistryTransition(record: ArchivedRecordSnapshot | null): Regi
  */
 function resolveAgentQueueService(options: SessionOptions): AgentQueueService | null {
   return options.agentQueueService ?? null;
+}
+
+function resolveClientDiagnostics(options: SessionOptions): ClientDiagnosticsStore | null {
+  return options.clientDiagnostics ?? null;
 }
 
 type AgentQueueRequestMessage = Extract<
@@ -809,6 +827,8 @@ export class Session {
   private readonly workspaceUpdateTails = new Map<string, Promise<void>>();
   private readonly terminalManager: TerminalManager | null;
   private readonly providerSnapshotManager: ProviderSnapshotManager;
+  private readonly sharing: SharingSessionOptions | undefined;
+  private unsubscribeShares: (() => void) | undefined;
   private readonly serviceProxy: ServiceProxySubsystem | null;
   private readonly scriptRuntimeStore: WorkspaceScriptRuntimeStore | null;
   private readonly getDaemonTcpPort: (() => number | null) | null;
@@ -826,9 +846,11 @@ export class Session {
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
   private readonly agentQueueService: AgentQueueService | null;
+  private readonly clientDiagnostics: ClientDiagnosticsStore | null;
   private readonly sessionSearchGeneration: StructuredTextGeneration;
   private readonly sessionSearchAbort = new AbortController();
   private sessionSearchActive: AbortController | null = null;
+  private sessionTextSearchActive: AbortController | null = null;
   private unsubscribeAgentQueue: (() => void) | null = null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -1012,6 +1034,7 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.agentQueueService = resolveAgentQueueService(options);
+    this.clientDiagnostics = resolveClientDiagnostics(options);
     this.unsubscribeAgentQueue = this.subscribeToAgentQueueMutations();
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
@@ -1181,6 +1204,16 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.providerSnapshotManager = providerSnapshotManager;
+    this.sharing = options.sharing;
+    this.unsubscribeShares = subscribeShareChanges(this.sharing, (share, deletedId) => {
+      // COMPAT(conversationSharingEvents): fork v0.10.0-beta.17; remove after 2027-04-24 once clients accept share events.
+      if (this.clientCapabilities.has(CLIENT_CAPS.conversationSharing)) {
+        this.emit({
+          type: "share.link.update",
+          payload: { ...(share ? { share } : {}), ...(deletedId ? { deletedId } : {}) },
+        });
+      }
+    });
     this.serviceProxy = serviceProxy ?? null;
     this.scriptRuntimeStore = scriptRuntimeStore ?? null;
     this.workspaceSetupSnapshots = workspaceSetupSnapshots ?? new Map();
@@ -1221,6 +1254,7 @@ export class Session {
 
     this.voiceSessions = new VoiceSessions(
       {
+        realtimeHome: this.paseoHome,
         host: {
           emit: (msg) => this.emit(msg),
           loadAgent: (agentId) =>
@@ -1243,6 +1277,8 @@ export class Session {
               voiceOwner: options.voiceOwner,
             });
           },
+          reportDiagnostic: (input) =>
+            this.clientDiagnostics?.recordHost({ ...input, clientId: this.clientId }),
         },
         logger: this.sessionLogger,
         sessionId: this.sessionId,
@@ -2613,6 +2649,7 @@ export class Session {
       case "voice_audio_chunk":
       case "abort_request":
       case "audio_played":
+      case "voice.realtime.control.request":
       case "set_voice_mode":
       case "voice.input.set_muted.request":
       case "dictation_stream_start":
@@ -2658,6 +2695,7 @@ export class Session {
   }
 
   private dispatchAgentQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (isShareRequest(msg)) return this.handleShareRequest(msg);
     switch (msg.type) {
       case "voice.input.receipts.read.request":
         return this.handleVoiceInputReceiptsRead(msg);
@@ -2665,6 +2703,8 @@ export class Session {
         return this.handleStreamListRequest(msg);
       case "stream.entry.update.request":
         return this.handleStreamUpdateRequest(msg);
+      case "stream.tags.pin.request":
+        return this.handleStreamTagPinRequest(msg);
       case "update_companion_entry_request":
         return this.handleUpdateCompanionEntryRequest(msg);
       case "agent.queue.enqueue.request":
@@ -2676,6 +2716,14 @@ export class Session {
         return this.handleAgentQueueRequest(msg);
       case "agent.queue.get_item_images.request":
         return this.handleAgentQueueGetItemImagesRequest(msg);
+      case "agent.queue.inspect.request":
+        return this.handleAgentQueueInspectRequest(msg);
+      case "client.outbox.report.request":
+        return this.handleClientOutboxReportRequest(msg);
+      case "client.diagnostics.report.request":
+        return this.handleClientDiagnosticsReportRequest(msg);
+      case "client.diagnostics.list.request":
+        return this.handleClientDiagnosticsListRequest(msg);
       default:
         return undefined;
     }
@@ -2793,6 +2841,8 @@ export class Session {
         return this.handleAgentTimelineAppendRequest(msg);
       case "session.search.request":
         return this.handleSessionSearchRequest(msg, source);
+      case "session.text_search.request":
+        return this.handleSessionTextSearchRequest(msg, source);
       case "agent.timeline.search.request":
         return this.handleAgentTimelineSearchRequest(msg, source);
       case "agent.timeline.list_prompts.request":
@@ -3076,6 +3126,10 @@ export class Session {
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
+      case "project.pin.set.request":
+        return this.handleProjectPinSetRequest(msg);
+      case "project.default.set.request":
+        return this.handleProjectDefaultSetRequest(msg);
       default:
         return undefined;
     }
@@ -3642,7 +3696,7 @@ export class Session {
   private async handleUpdateAgentRequest(
     agentId: string,
     name: string | undefined,
-    labels: Record<string, string> | undefined,
+    labels: Record<string, string | null> | undefined,
     requestId: string,
   ): Promise<void> {
     this.sessionLogger.info(
@@ -3704,6 +3758,26 @@ export class Session {
     }
   }
 
+  private async handleShareRequest(msg: ShareRequest): Promise<void> {
+    const response = await handleShareRequest(this.sharing, msg, async (agentId, title) => {
+      const agent = await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      return {
+        agentId,
+        workspaceId: agent.workspaceId,
+        title: title ?? (await this.agentStorage.get(agentId))?.title ?? "Conversation",
+        provider: agent.provider,
+        model: agent.config.model,
+        ownerName: this.sharing?.config?.ownerDisplayName ?? os.userInfo().username,
+        createdAt: new Date().toISOString(),
+      };
+    });
+    this.emit(response);
+  }
+
   private async handleStreamListRequest(
     msg: Extract<SessionInboundMessage, { type: "stream.list.request" }>,
   ): Promise<void> {
@@ -3739,6 +3813,28 @@ export class Session {
       this.emit({
         type: "stream.entry.update.response",
         payload: { requestId: msg.requestId, accepted: false, error: getErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleStreamTagPinRequest(
+    msg: Extract<SessionInboundMessage, { type: "stream.tags.pin.request" }>,
+  ): Promise<void> {
+    try {
+      const pinnedTags = await this.agentManager.setStreamTagPinned(msg);
+      this.emit({
+        type: "stream.tags.pin.response",
+        payload: { requestId: msg.requestId, accepted: true, pinnedTags },
+      });
+    } catch (error) {
+      this.emit({
+        type: "stream.tags.pin.response",
+        payload: {
+          requestId: msg.requestId,
+          accepted: false,
+          error: getErrorMessage(error),
+          pinnedTags: [],
+        },
       });
     }
   }
@@ -4087,6 +4183,78 @@ export class Session {
           error: getErrorMessageOr(error, "Failed to set workspace title"),
         },
       });
+    }
+  }
+
+  private async handleProjectPinSetRequest(
+    request: Extract<SessionInboundMessage, { type: "project.pin.set.request" }>,
+  ): Promise<void> {
+    const { projectId, pinned, requestId } = request;
+    const logContext = { projectId, pinned, requestId };
+    this.sessionLogger.info(logContext, "session: project.pin.set.request");
+    const emitResponse = (accepted: boolean, pinnedAt: string | null, error: string | null) => {
+      this.emit({
+        type: "project.pin.set.response",
+        payload: { requestId, projectId, accepted, pinnedAt, error },
+      });
+    };
+    try {
+      const updated = await setProjectPinned({
+        registry: this.projectRegistry,
+        projectId,
+        pinned,
+        now: new Date().toISOString(),
+      });
+      if (!updated) {
+        emitResponse(false, null, "Project not found");
+        return;
+      }
+      emitResponse(true, updated.pinnedAt ?? null, null);
+      // The registry mutation also broadcasts to every client; this keeps the requester current
+      // even when it is the only observer, matching project rename.
+      await this.emitProjectUpdate({ kind: "upsert", project: updated });
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: project.pin.set.request error",
+      );
+      emitResponse(false, null, getErrorMessageOr(error, "Failed to pin project"));
+    }
+  }
+
+  private async handleProjectDefaultSetRequest(
+    request: Extract<SessionInboundMessage, { type: "project.default.set.request" }>,
+  ): Promise<void> {
+    const { projectId, isDefault, requestId } = request;
+    const logContext = { projectId, isDefault, requestId };
+    this.sessionLogger.info(logContext, "session: project.default.set.request");
+    const emitResponse = (accepted: boolean, defaultAt: string | null, error: string | null) => {
+      this.emit({
+        type: "project.default.set.response",
+        payload: { requestId, projectId, accepted, defaultAt, error },
+      });
+    };
+    try {
+      const result = await setProjectDefault({
+        registry: this.projectRegistry,
+        projectId,
+        isDefault,
+        now: new Date().toISOString(),
+      });
+      if (!result.project) {
+        emitResponse(false, null, "Project not found");
+        return;
+      }
+      emitResponse(true, result.project.defaultAt ?? null, null);
+      for (const project of result.changed) {
+        await this.emitProjectUpdate({ kind: "upsert", project });
+      }
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: project.default.set.request error",
+      );
+      emitResponse(false, null, getErrorMessageOr(error, "Failed to set the default project"));
     }
   }
 
@@ -5055,6 +5223,116 @@ export class Session {
     }
   }
 
+  private async handleAgentQueueInspectRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.inspect.request" }>,
+  ): Promise<void> {
+    const emit = (
+      agentId: string,
+      result: Awaited<ReturnType<AgentQueueService["inspect"]>> | null,
+      error: string | null,
+    ) => {
+      this.emit({
+        type: "agent.queue.inspect.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          queue: result?.queue ?? null,
+          drained: result?.drained ?? [],
+          receipts: result?.receipts ?? [],
+          deviceReports: result?.deviceReports ?? [],
+          error,
+        },
+      });
+    };
+    const service = this.agentQueueService;
+    if (!service) {
+      emit(msg.agentId, null, "This daemon does not support queued agent messages.");
+      return;
+    }
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) {
+      emit(msg.agentId, null, resolved.error);
+      return;
+    }
+    try {
+      emit(resolved.agentId, await service.inspect(resolved.agentId), null);
+    } catch (error) {
+      emit(resolved.agentId, null, errorToFriendlyMessage(error));
+    }
+  }
+
+  private async handleClientDiagnosticsReportRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.diagnostics.report.request" }>,
+  ): Promise<void> {
+    if (!this.clientDiagnostics) {
+      this.emit({
+        type: "client.diagnostics.report.response",
+        payload: {
+          requestId: msg.requestId,
+          acknowledgedIds: [],
+          deferredIds: [],
+          error: "This daemon does not record client diagnostics.",
+        },
+      });
+      return;
+    }
+    const result = this.clientDiagnostics.record(
+      {
+        clientId: this.clientId,
+        deviceLabel: msg.deviceLabel ?? null,
+        platform: msg.platform ?? null,
+        appVersion: this.appVersion,
+      },
+      msg.events,
+    );
+    this.emit({
+      type: "client.diagnostics.report.response",
+      payload: { requestId: msg.requestId, ...result, error: null },
+    });
+  }
+
+  private async handleClientDiagnosticsListRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.diagnostics.list.request" }>,
+  ): Promise<void> {
+    const store = this.clientDiagnostics;
+    this.emit({
+      type: "client.diagnostics.list.response",
+      payload: {
+        requestId: msg.requestId,
+        events: store?.list({ limit: msg.limit, since: msg.since, source: msg.source }) ?? [],
+        rateLimited: store?.rateLimitedCount ?? 0,
+        retention: store?.retention ?? { maxEvents: 1, maxAgeDays: 1 },
+        error: store ? null : "This daemon does not record client diagnostics.",
+      },
+    });
+  }
+
+  private async handleClientOutboxReportRequest(
+    msg: Extract<SessionInboundMessage, { type: "client.outbox.report.request" }>,
+  ): Promise<void> {
+    this.agentQueueService?.recordOutboxReport({
+      clientId: this.clientId,
+      deviceLabel: msg.deviceLabel ?? null,
+      platform: msg.platform ?? null,
+      reportedAt: new Date().toISOString(),
+      agents: msg.agents.map((entry) => ({
+        agentId: entry.agentId,
+        unsentQueued: entry.unsentQueued,
+        unsentDirect: entry.unsentDirect,
+        oldestCreatedAt: entry.oldestCreatedAt ?? null,
+      })),
+    });
+    this.emit({
+      type: "client.outbox.report.response",
+      payload: {
+        requestId: msg.requestId,
+        error: this.agentQueueService
+          ? null
+          : "This daemon does not support queued agent messages.",
+      },
+    });
+  }
+
   private async handleAgentQueueGetItemImagesRequest(
     msg: Extract<SessionInboundMessage, { type: "agent.queue.get_item_images.request" }>,
   ): Promise<void> {
@@ -5931,6 +6209,7 @@ export class Session {
         case "status_priority":
           return getAgentStatusPriority({
             status: agent.status,
+            labels: agent.labels,
             pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
             requiresAttention: agent.requiresAttention,
             attentionReason: agent.attentionReason ?? null,
@@ -6252,6 +6531,9 @@ export class Session {
       projectIconRevision: icon.revision,
       projectRootPath: project.rootPath,
       projectKind: project.kind,
+      // Omitted rather than null when unset so pre-pinning clients see an unchanged payload.
+      ...(project.pinnedAt ? { projectPinnedAt: project.pinnedAt } : {}),
+      ...(project.defaultAt ? { projectDefaultAt: project.defaultAt } : {}),
     };
   }
 
@@ -7966,7 +8248,7 @@ export class Session {
   private async handleWorkspaceMarkUnreadRequest(
     request: Extract<SessionInboundMessage, { type: "workspace.mark_unread.request" }>,
   ): Promise<void> {
-    const { requestId, workspaceId } = request;
+    const { requestId, workspaceId, agentId } = request;
     let markedAgentId: string | null = null;
     try {
       const workspace = await this.workspaceRegistry.get(workspaceId);
@@ -7978,6 +8260,20 @@ export class Session {
         this.isProviderVisibleToClient(agent.provider),
       );
       const agentsById = new Map(agents.map((agent) => [agent.id, agent] as const));
+      if (agentId) {
+        const target = agentsById.get(agentId);
+        if (!target || target.archivedAt || target.workspaceId !== workspace.workspaceId) {
+          throw new Error(`Agent not found in workspace: ${agentId}`);
+        }
+        // markAgentUnread enforces finished, read and permission-free.
+        await this.agentManager.markAgentUnread(target.id);
+        markedAgentId = target.id;
+        this.emit({
+          type: "workspace.mark_unread.response",
+          payload: { requestId, workspaceId, markedAgentId, success: true, error: null },
+        });
+        return;
+      }
       const candidates = agents
         .filter((agent) => !agent.archivedAt && agent.workspaceId === workspace.workspaceId)
         .filter((agent) => resolveWorkspaceRootAgent(agent, agentsById)?.id === agent.id)
@@ -8302,6 +8598,97 @@ export class Session {
       );
     } finally {
       if (this.sessionSearchActive === active) this.sessionSearchActive = null;
+    }
+  }
+
+  /**
+   * The sidebar filter's message tier. Lexical and bounded (see `session-text-search.ts`); a newer
+   * request from this client aborts the older one, which still answers so its caller settles.
+   */
+  private async handleSessionTextSearchRequest(
+    msg: Extract<SessionInboundMessage, { type: "session.text_search.request" }>,
+    source?: object,
+  ): Promise<void> {
+    this.sessionTextSearchActive?.abort();
+    const active = new AbortController();
+    this.sessionTextSearchActive = active;
+    const signal = AbortSignal.any([active.signal, this.sessionSearchAbort.signal]);
+    try {
+      const [records, workspaces, projects] = await Promise.all([
+        this.agentStorage.list(),
+        this.workspaceRegistry.list(),
+        this.projectRegistry.list(),
+      ]);
+      const workspaceById = new Map(
+        workspaces.map((workspace) => [workspace.workspaceId, workspace]),
+      );
+      const projectById = new Map(projects.map((project) => [project.projectId, project]));
+      const allowed = msg.workspaceIds ? new Set(msg.workspaceIds) : null;
+      const candidates: SessionTextSearchCandidate[] = [];
+      const recordsById = new Map<string, (typeof records)[number]>();
+      for (const record of records) {
+        const workspace = record.workspaceId ? workspaceById.get(record.workspaceId) : undefined;
+        const project = workspace ? projectById.get(workspace.projectId) : undefined;
+        if (!workspace || !project || workspace.archivedAt || project.archivedAt) continue;
+        if (allowed && !allowed.has(workspace.workspaceId)) continue;
+        // Same exclusions as intelligent Find: archived, internal, and child sessions.
+        if (record.internal || record.archivedAt || record.labels["paseo.parent-agent-id"])
+          continue;
+        const workspaceTitle = resolveWorkspaceDisplayName(workspace);
+        recordsById.set(record.id, record);
+        candidates.push({
+          agentId: record.id,
+          workspaceId: workspace.workspaceId,
+          workspaceTitle,
+          projectName: resolveProjectDisplayName(project),
+          title: record.title || workspaceTitle,
+          provider: record.provider,
+          activityAt: record.lastActivityAt ?? record.updatedAt,
+        });
+      }
+      const result = await searchSessionText({
+        query: msg.query,
+        candidates,
+        // Loaded agents answer from the daemon's timeline. Everything else is read, never resumed,
+        // from the provider transcript its record points to (see session-text-history.ts).
+        readMessages: async (agentId) => {
+          const live = await this.agentManager.readRecentConversationMessages(agentId);
+          const record = recordsById.get(agentId);
+          if (live.length > 0 || !record) return live;
+          return getSharedPersistedConversationReader().read({
+            agentId,
+            provider: record.provider,
+            cwd: record.cwd,
+            persistence: record.persistence,
+            activityStamp: `${record.lastActivityAt ?? ""}|${record.updatedAt}`,
+          });
+        },
+        signal,
+      });
+      this.emitForSource(
+        {
+          type: "session.text_search.response",
+          payload: { requestId: msg.requestId, ...result, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "session.text_search.response",
+          payload: {
+            requestId: msg.requestId,
+            hits: [],
+            searchedCount: 0,
+            totalCount: 0,
+            truncated: false,
+            error: signal.aborted ? "Superseded by a newer search" : errorToFriendlyMessage(error),
+          },
+        },
+        source,
+      );
+    } finally {
+      if (this.sessionTextSearchActive === active) this.sessionTextSearchActive = null;
     }
   }
 
@@ -9037,6 +9424,7 @@ export class Session {
    * Clean up session resources
    */
   public async cleanup(): Promise<void> {
+    this.unsubscribeShares?.();
     this.sessionSearchAbort.abort();
     this.sessionLogger.trace({}, "agent.session.lifecycle.cleanup");
     this.isCleanedUp = true;
@@ -9121,23 +9509,26 @@ function isValidGitHubRepoSegment(value: string): boolean {
   return /^[A-Za-z0-9._-]+$/u.test(value);
 }
 
+const DIRECT_SESSION_EVENTS = new Set<string>([
+  "share.link.update",
+  "project.update",
+  "providers_snapshot_update",
+  "agent_attention_required",
+  "agent_permission_request",
+  "agent_permission_resolved",
+  "checkout_status_update",
+  "script_status_update",
+  "workspace_setup_progress",
+  "agent.provider_subagents.update",
+  "agent.queue.update",
+  "terminal_attention_required",
+  "activity_log",
+  "hub.execution.agent.update",
+  "hub.execution.agent.stream",
+]);
 function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubscription | null {
+  if (DIRECT_SESSION_EVENTS.has(message.type)) return message.type as SessionEventSubscription;
   switch (message.type) {
-    case "project.update":
-    case "providers_snapshot_update":
-    case "agent_attention_required":
-    case "agent_permission_request":
-    case "agent_permission_resolved":
-    case "checkout_status_update":
-    case "script_status_update":
-    case "workspace_setup_progress":
-    case "agent.provider_subagents.update":
-    case "agent.queue.update":
-    case "terminal_attention_required":
-    case "activity_log":
-    case "hub.execution.agent.update":
-    case "hub.execution.agent.stream":
-      return message.type;
     case "status":
       switch (message.payload.status) {
         case "server_info":

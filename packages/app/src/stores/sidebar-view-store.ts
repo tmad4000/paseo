@@ -6,7 +6,20 @@ import { z } from "zod";
 import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
-export type SidebarGroupMode = "project" | "status";
+/**
+ * How the sidebar arranges unpinned workspaces: under project headers, under status headers, or
+ * as one flat list in the chosen sort order (Codex's "In one list"), where each row still carries
+ * its project icon, status badge and project name.
+ */
+export type SidebarGroupMode = "project" | "status" | "list";
+
+export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = ["project", "status", "list"];
+
+/**
+ * What the sidebar find field searches: names only (projects, workspaces, tab titles), or names
+ * plus message text through the host's `session.text_search`. See docs/sidebar-filter.md.
+ */
+export type SidebarFilterScope = "names" | "messages";
 
 const SIDEBAR_VIEW_STORAGE_KEY = "sidebar-view";
 const LEGACY_SIDEBAR_GROUP_MODE_STORAGE_KEY = "sidebar-group-mode";
@@ -63,6 +76,8 @@ interface SidebarViewStoreState {
    */
   projectFilters: string[];
   labelFilter: SidebarLabelFilter;
+  filterScope: SidebarFilterScope;
+  setFilterScope: (scope: SidebarFilterScope) => void;
   setSortMode: (mode: SidebarSortMode) => void;
   setGroupMode: (mode: SidebarGroupMode) => void;
   toggleHostFilter: (serverId: string) => void;
@@ -81,9 +96,11 @@ interface SidebarViewPersistedState {
   hostFilters: string[];
   projectFilters: string[];
   labelFilter: SidebarLabelFilter;
+  /** Absent in state written before the scope control existed; the store default applies. */
+  filterScope?: SidebarFilterScope;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
@@ -95,6 +112,7 @@ const SidebarViewPersistedStateSchema = z.strictObject({
   projectFilters: z.array(z.string()).optional(),
   groupModeByServerId: z.record(z.string(), PersistedSidebarGroupModeSchema).optional(),
   labelFilter: SidebarLabelFilterSchema.optional(),
+  filterScope: z.enum(["names", "messages"]).optional(),
 });
 
 type SidebarViewStorageState = z.infer<typeof SidebarViewPersistedStateSchema>;
@@ -148,7 +166,8 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
   }
 
   return {
-    groupMode: state.groupMode === "status" ? "status" : "project",
+    groupMode:
+      state.groupMode === "status" || state.groupMode === "list" ? state.groupMode : "project",
     sortMode: state.sortMode ?? "recent",
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],
@@ -191,6 +210,9 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       hostFilters: [],
       projectFilters: [],
       labelFilter: emptyLabelFilter(),
+      // Per device, like the rest of this store. Messages are on unless turned off here.
+      filterScope: "messages",
+      setFilterScope: (scope) => set({ filterScope: scope }),
       setGroupMode: (mode) => set({ groupMode: mode }),
       setSortMode: (mode) => set({ sortMode: mode }),
       toggleHostFilter: (serverId) =>
@@ -237,12 +259,13 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
         createSidebarViewStorage(),
         SidebarViewPersistedStateSchema,
       ),
-      partialize: (state) => ({
+      partialize: (state): SidebarViewPersistedState => ({
         groupMode: state.groupMode,
         sortMode: state.sortMode,
         hostFilters: state.hostFilters,
         projectFilters: state.projectFilters,
         labelFilter: state.labelFilter,
+        filterScope: state.filterScope,
       }),
       migrate: migrateSidebarViewState,
     },

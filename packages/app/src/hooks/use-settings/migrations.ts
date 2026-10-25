@@ -19,6 +19,12 @@ const STEER_DEFAULT_MIGRATION = "steer-default";
  */
 const SUMMARY_TOOL_CALLS_MIGRATION = "summary-tool-calls";
 
+/**
+ * The sidebar slot defaulted to the diff stat, and that default was materialized into storage.
+ * Last-active time is the new default; switch a stored "diff" once, and later choices stick.
+ */
+const LAST_ACTIVE_TRAILING_MIGRATION = "sidebar-trailing-last-active";
+
 /** Existing mobile installs materialized the old 15px content default in storage. */
 const MOBILE_CONTENT_16_MIGRATION = "mobile-content-16";
 
@@ -56,6 +62,15 @@ export async function migrateAppSettings(
         ? { ...migrated, toolCallDetailLevel: "overview" }
         : migrated;
     applied.add(SUMMARY_TOOL_CALLS_MIGRATION);
+    addedMigration = true;
+  }
+
+  if (!applied.has(LAST_ACTIVE_TRAILING_MIGRATION)) {
+    migrated =
+      migrated.sidebarWorkspaceTrailing === "diff"
+        ? { ...migrated, sidebarWorkspaceTrailing: "timestamp" }
+        : migrated;
+    applied.add(LAST_ACTIVE_TRAILING_MIGRATION);
     addedMigration = true;
   }
 

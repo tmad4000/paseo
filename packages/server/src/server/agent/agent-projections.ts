@@ -145,7 +145,7 @@ export function toAgentPayload(
     title: options?.title ?? null,
     labels: agent.labels,
     artifacts: agent.artifacts ?? [],
-    companionEntries: agent.companionEntries ?? [],
+    companionEntries: (agent.companionEntries ?? []).slice(-50),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -257,7 +257,7 @@ export function buildStoredAgentPayload(
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],
-    companionEntries: restoreCompanionEntries(record),
+    companionEntries: restoreCompanionEntries(record).slice(-50),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

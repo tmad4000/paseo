@@ -215,8 +215,14 @@ async function expectPendingSubmission(page: Page, userMessage: Locator): Promis
   await expect(page.getByTestId("turn-working-indicator")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message agent..." }).first()).toHaveValue("");
   await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
-  await expect(userMessage.getByTestId("user-message-timestamp")).toBeAttached();
-  await expect(userMessage.getByTestId("user-message-trailing-row")).toHaveCSS("opacity", "0");
+  // Until the host answers, the row shows only the pending delivery mark (clock),
+  // visible on every platform; the hover metadata row returns once delivered.
+  await expect(userMessage.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+    "aria-label",
+    "Saved on this device — waiting for the host",
+  );
+  await expect(userMessage.getByTestId("user-message-trailing-row")).toHaveCSS("opacity", "1");
+  await expect(userMessage.getByTestId("user-message-timestamp")).toHaveCount(0);
   await expect(userMessage).toHaveAttribute("aria-busy", "true");
   await expect(userMessage.getByRole("button", { name: "Open image attachment" })).toBeVisible();
 }
@@ -382,12 +388,6 @@ async function expectQueuedSendFailuresRestored(page: Page, prompts: string[]): 
   for (const prompt of prompts) {
     await expect(page.getByTestId("user-message").filter({ hasText: prompt })).toHaveCount(0);
   }
-}
-
-async function expectFailedSubmissionRestored(page: Page, prompt: string): Promise<void> {
-  await expectComposerDraft(page, prompt);
-  await expectComposerEditable(page);
-  await expect(page.getByTestId("user-message").filter({ hasText: prompt })).toHaveCount(0);
 }
 
 async function expectInterruptedTurnOrderAfterReconnect(
@@ -1362,22 +1362,39 @@ test.describe("Agent message submission", () => {
     }
   });
 
-  test("does not accept a failed submission from an unrelated running turn", async ({
+  test("does not accept a dropped submission from an unrelated running turn and resends it once", async ({
     page,
     unrelatedRunningScenario,
   }) => {
-    const prompt = "Restore this unsent prompt.";
+    const { gate, agent } = unrelatedRunningScenario;
+    const prompt = "Keep this unsent prompt.";
     await submitMessageThatWillBeRejected(page, prompt);
-    await unrelatedRunningScenario.gate.waitForRequest();
-    await unrelatedRunningScenario.agent.client.sendAgentMessage(
-      unrelatedRunningScenario.agent.agentId,
-      "Start an unrelated turn.",
-    );
+    const original = await gate.waitForRequest();
+    await agent.client.sendAgentMessage(agent.agentId, "Start an unrelated turn.");
     await expect(
       page.getByTestId("user-message").filter({ hasText: "Start an unrelated turn." }),
     ).toBeVisible();
-    await unrelatedRunningScenario.gate.disconnect();
-    await expectFailedSubmissionRestored(page, prompt);
+    await gate.disconnect();
+
+    // A dropped connection says nothing about delivery: the message stays saved
+    // and pending, is not handed back to the composer, and the unrelated turn
+    // does not mark it accepted. See docs/queue-mirroring.md, "Direct sends".
+    const userMessage = page.getByTestId("user-message").filter({ hasText: prompt });
+    await expect(userMessage).toHaveCount(1);
+    await expect(userMessage).toHaveAttribute("aria-busy", "true");
+    await expect(userMessage.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+      "aria-label",
+      "Saved on this device — waiting for the host",
+    );
+    await expectComposerDraft(page, "");
+
+    // The reconnect resends the identical request, so the host can dedupe it.
+    const retry = await gate.waitForRequest(2);
+    expect(retry.messageId).toBe(original.messageId);
+    expect(retry.text).toBe(original.text);
+    gate.accept(1);
+    await expect(userMessage).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+    await expect(userMessage).toHaveCount(1);
   });
 
   test("keeps a submitted prompt before its response when canonical history arrives", async ({

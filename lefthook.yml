@@ -11,4 +11,5 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx}"
       run: npm run lint -- {staged_files}
     - name: typecheck
+      glob: "*.{cjs,js,json,jsonc,jsx,mjs,mts,ts,tsx}"
       run: npm run typecheck

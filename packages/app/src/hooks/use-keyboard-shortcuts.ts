@@ -33,7 +33,7 @@ import { isNative } from "@/constants/platform";
 import { keyboardShortcutsAvailable } from "@/keyboard/availability";
 import { getDesktopHost, isElectronRuntime } from "@/desktop/host";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
-import { buildOpenProjectRoute } from "@/utils/host-routes";
+import { buildOpenProjectRoute, parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import { hasActiveWebOverlay } from "@/lib/overlay-root";
 import {
   type ActiveWorkspaceSelection,
@@ -41,7 +41,16 @@ import {
   useActiveWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { dispatchTopWebOverlayKeyDown } from "@/lib/overlay-root";
-import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
+import {
+  navigateBackInFocusHistory,
+  navigateForwardInFocusHistory,
+} from "@/navigation/focus-history-runtime";
+import {
+  closeRecentWorkspaceSwitcher,
+  handleRecentWorkspaceSwitcherKeyDown,
+  handleRecentWorkspaceSwitcherKeyUp,
+  openRecentWorkspaceSwitcher,
+} from "@/navigation/recent-workspace-switcher-store";
 
 export function useKeyboardShortcuts({
   enabled,
@@ -163,6 +172,9 @@ export function useKeyboardShortcuts({
       }
       navigateToLastWorkspace();
     },
+    "navigate-forward": () => {
+      navigateForwardInFocusHistory({ isCompact: isMobile });
+    },
     "toggle-agent-list": toggleAgentList,
     "toggle-both-sidebars": toggleBothSidebars,
     "cycle-theme": cycleTheme,
@@ -222,6 +234,12 @@ export function useKeyboardShortcuts({
       case "shortcuts-dialog-toggle":
         useKeyboardShortcutsStore.getState().setShortcutsDialogOpen(action.nextOpen);
         return true;
+      case "recent-workspace-switch":
+        return openRecentWorkspaceSwitcher({
+          direction: action.direction,
+          current: parseHostWorkspaceRouteFromPathname(pathname),
+          hold: event !== null,
+        });
     }
   };
 
@@ -328,6 +346,18 @@ export function useKeyboardShortcuts({
       return;
     }
 
+    if (
+      handleRecentWorkspaceSwitcherKeyDown({
+        key: event.key ?? "",
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+      })
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (dispatchTopWebOverlayKeyDown(event)) {
       return;
     }
@@ -378,6 +408,9 @@ export function useKeyboardShortcuts({
     if (key === badgeModifierKey) {
       setBadgeModifierDown(false);
     }
+    if (handleRecentWorkspaceSwitcherKeyUp({ key })) {
+      event.preventDefault();
+    }
   });
 
   const handleBrowserShortcutInput = useStableEvent((payload: unknown) => {
@@ -399,6 +432,7 @@ export function useKeyboardShortcuts({
 
     const handleBlurOrHide = () => {
       resetModifiers();
+      closeRecentWorkspaceSwitcher();
     };
 
     window.addEventListener("keydown", handleKeyDown, true);

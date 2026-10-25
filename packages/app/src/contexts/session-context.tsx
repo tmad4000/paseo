@@ -37,7 +37,20 @@ import {
   type SessionState,
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
-import { flushQueueOutboxForServer } from "@/stores/queue-outbox-store";
+import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
+import {
+  flushSendOutboxForServer,
+  supportsDurableDirectSend,
+  useSendOutboxStore,
+} from "@/stores/send-outbox-store";
+import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
+import { startOutboxReconnectFlush } from "@/contexts/session-outbox-flush";
+import { buildOutboxReportAgents, describeThisDevice } from "@/contexts/outbox-report";
+import {
+  flushClientDiagnosticsForServer,
+  onClientDiagnosticQueued,
+} from "@/diagnostics/client-errors/store";
+import { createClientDiagnosticsFlushScheduler } from "@/diagnostics/client-errors/scheduler";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -347,6 +360,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         }
         return client.setVoiceMode(enabled, agentId, input);
       },
+      controlRealtimeVoice: (input) => client.controlRealtimeVoice(input),
       setVoiceInputMuted: async (muted, transport) => {
         if (!client) throw new Error(t("common.errors.daemonUnavailable"));
         return client.setVoiceInputMuted(muted, transport);
@@ -585,6 +599,76 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       useSessionStore.getState().applyAgentQueueSnapshot(serverId, message.payload);
     });
 
+    // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+    let hostRecordsDiagnostics = false;
+    // New diagnostics reach a connected host within a few seconds; a rate-limited or failed
+    // report is retried with backoff while connected, even if nothing new happens.
+    const diagnosticsScheduler = createClientDiagnosticsFlushScheduler({
+      flush: async () => {
+        if (!hostRecordsDiagnostics || !client.isConnected) return "skipped";
+        return flushClientDiagnosticsForServer({ serverId, client, device: describeThisDevice() });
+      },
+      onError: (error) => console.warn("[Session] Failed to report client diagnostics", error),
+    });
+    const unsubDiagnosticsQueued = onClientDiagnosticQueued(() => diagnosticsScheduler.trigger());
+
+    const unsubRawStatus = startOutboxReconnectFlush({
+      client,
+      subscribeStatus: (handler) =>
+        client.on("status", (message) => {
+          if (message.type === "status") handler(message.payload);
+        }),
+      flush: (features) => {
+        hostRecordsDiagnostics = features?.clientDiagnostics === true;
+        // Diagnostics saved while offline go out on every reconnect.
+        if (hostRecordsDiagnostics) diagnosticsScheduler.flushNow();
+        const flushes: Promise<void>[] = [];
+        if (features?.agentMessageQueue === true) {
+          flushes.push(
+            flushQueueOutboxForServer({
+              serverId,
+              client,
+              applySnapshot: (snapshot) =>
+                useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
+              onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
+            }).catch((error) => console.warn("[Session] Failed to flush queue outbox", error)),
+          );
+        }
+        const durableDirectSend = supportsDurableDirectSend(features);
+        void useSendOutboxStore
+          .getState()
+          .rememberHostSupport(serverId, durableDirectSend)
+          .catch((error) => console.warn("[Session] Failed to remember host support", error));
+        if (durableDirectSend) {
+          flushes.push(
+            flushSendOutboxForServer({
+              serverId,
+              client,
+              onAccepted: createDirectSendAcceptanceHandler(serverId),
+              onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
+              onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
+            }).catch((error) => console.warn("[Session] Failed to flush send outbox", error)),
+          );
+        }
+        // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
+        if (features?.deliveryInspect === true) {
+          // Report what is still unsent once this reconnect's retries settle.
+          void Promise.all(flushes)
+            .then(() =>
+              client.reportOutbox({
+                ...describeThisDevice(),
+                agents: buildOutboxReportAgents({
+                  serverId,
+                  queued: Object.values(useQueueOutboxStore.getState().entries),
+                  direct: Object.values(useSendOutboxStore.getState().entries),
+                }),
+              }),
+            )
+            .catch((error) => console.warn("[Session] Failed to report unsent messages", error));
+        }
+      },
+    });
+
     const unsubCheckoutStatusUpdate = onFeed("checkout_status_update", (message) => {
       if (message.type !== "checkout_status_update") return;
       applyCheckoutStatusUpdateFromEvent({ queryClient, serverId, message });
@@ -609,17 +693,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
           ...(serverInfo.features ? { features: serverInfo.features } : {}),
         });
-        if (serverInfo.features?.agentMessageQueue === true) {
-          // Server info arrives on every (re)connect, which is exactly when an
-          // enqueue the daemon never acknowledged should be retried.
-          void flushQueueOutboxForServer({
-            serverId,
-            client,
-            applySnapshot: (snapshot) =>
-              useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-            onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
-          });
-        }
         return;
       }
     });
@@ -743,6 +816,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     const unsubVoiceInputState = client.on("voice_input_state", (message) => {
       if (message.type !== "voice_input_state") return;
       if (voiceRuntime && !voiceRuntime.acceptsVoiceTransport(serverId, message.payload)) return;
+      if (message.payload.realtime)
+        voiceRuntime?.onRealtimeState(serverId, message.payload.realtime);
       if (message.payload.isMuted !== undefined) {
         voiceRuntime?.onInputMutedChanged(serverId, message.payload.isMuted);
       }
@@ -786,6 +861,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubCheckoutStatusUpdate();
       unsubWorkspaceSetupProgress();
       unsubStatus();
+      unsubRawStatus();
+      unsubDiagnosticsQueued();
+      diagnosticsScheduler.stop();
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();

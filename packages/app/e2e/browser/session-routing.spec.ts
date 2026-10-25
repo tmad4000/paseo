@@ -33,9 +33,6 @@ test("manual routing restores its draft and delivers to an existing chat without
     await findInput.fill("Routing destination");
     await composer.getByTestId("sidebar-title-project-filter-clear").click();
     await expect(findInput).toHaveValue("");
-    await findInput.fill("Source chat");
-    await composer.getByRole("button", { name: "Clear search" }).click();
-    await expect(findInput).toHaveValue("");
     await composer.getByTestId("routing-send-mode").click();
     await composer.getByTestId("routing-send-draft").fill(prompt);
     await page.reload();

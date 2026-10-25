@@ -6,10 +6,51 @@ export interface Recipient extends SessionSearchResult {
   hostLabel: string;
 }
 
+/**
+ * "Route to best match" auto-selects the top search result only when it is
+ * near-certain on its own AND decisively ahead of the runner-up. The host
+ * matcher reserves 0.90+ for a conversation the user clearly identifies, so
+ * 0.85 admits only near-certain matches; vague prompts rank lower and fall
+ * back to the candidate list. Passive Find/Send matching never auto-selects.
+ */
+export const ROUTE_AUTO_SELECT_MIN_CONFIDENCE = 0.85;
+/**
+ * Minimum confidence lead the top match must hold over the second-best result
+ * before the route verb delivers without a manual choice. A missing runner-up
+ * counts as confidence 0.
+ */
+export const ROUTE_AUTO_SELECT_MIN_MARGIN = 0.2;
+
+export interface RouteAutoSelectThresholds {
+  minConfidence: number;
+  minMargin: number;
+}
+
+export const routeAutoSelectDefaults: RouteAutoSelectThresholds = {
+  minConfidence: ROUTE_AUTO_SELECT_MIN_CONFIDENCE,
+  minMargin: ROUTE_AUTO_SELECT_MIN_MARGIN,
+};
+
+/**
+ * Pick the recipient the route verb may deliver to without a manual choice,
+ * or null when the result set is empty, uncertain, or ambiguous. Order of the
+ * input does not matter; confidence alone decides.
+ */
+export function selectRouteBestMatch(
+  recipients: readonly Recipient[],
+  thresholds: RouteAutoSelectThresholds = routeAutoSelectDefaults,
+): Recipient | null {
+  const ranked = [...recipients].sort((a, b) => b.confidence - a.confidence);
+  const [top, second] = ranked;
+  if (!top || top.confidence < thresholds.minConfidence) return null;
+  if (top.confidence - (second?.confidence ?? 0) < thresholds.minMargin) return null;
+  return top;
+}
+
 export type RoutingPhase =
   | { status: "idle" }
   | { status: "handoff" }
-  | { status: "matching"; requestId: string; mode: "find" | "send"; text: string }
+  | { status: "matching"; requestId: string; mode: "find" | "send"; text: string; route?: boolean }
   | {
       status: "results";
       requestId: string;
@@ -17,6 +58,7 @@ export type RoutingPhase =
       text: string;
       recipients: Recipient[];
       notice: string;
+      route?: boolean;
     }
   | {
       status: "sending";
@@ -25,6 +67,7 @@ export type RoutingPhase =
       itemId: string;
       draftVersion: number;
       draftUpdatedAt?: number;
+      route?: boolean;
     }
   | {
       status: "pending";
@@ -34,8 +77,15 @@ export type RoutingPhase =
       draftVersion: number;
       draftUpdatedAt?: number;
       error: string;
+      route?: boolean;
     }
-  | { status: "acknowledged"; recipient: Recipient; queued: boolean; warning?: string }
+  | {
+      status: "acknowledged";
+      recipient: Recipient;
+      queued: boolean;
+      warning?: string;
+      route?: { text: string };
+    }
   | { status: "error"; message: string };
 
 export interface NewConversationWorkspace {
@@ -231,7 +281,12 @@ function acknowledgeRoutingState(
   return {
     ...state,
     sendDraft,
-    phase: { status: "acknowledged", recipient: phase.recipient, queued: action.queued },
+    phase: {
+      status: "acknowledged",
+      recipient: phase.recipient,
+      queued: action.queued,
+      route: phase.route ? { text: phase.text } : undefined,
+    },
   };
 }
 
@@ -300,6 +355,7 @@ function applyRoutingMatches(
       text: state.phase.text,
       recipients,
       notice: action.notice,
+      route: state.phase.route,
     },
   };
 }

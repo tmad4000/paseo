@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { CompanionEntrySchema } from "./companion-stream.js";
 import { describe, expect, it } from "vitest";
 import {
   AgentSnapshotPayloadSchema,
@@ -107,4 +109,60 @@ describe("agent artifact snapshots", () => {
       snapshot,
     );
   });
+});
+
+it("keeps tracked asks readable by the previous question schema", () => {
+  const oldQuestion = z.object({
+    id: z.string(),
+    timestamp: z.string(),
+    text: z.string(),
+    truncated: z.boolean(),
+    kind: z.literal("question"),
+    status: z.enum(["open", "reviewed", "done", "reply_sent"]),
+  });
+  const entry = {
+    id: "ask:deploy",
+    timestamp: "2026-10-07T12:00:00Z",
+    text: "Deploy",
+    truncated: false,
+    kind: "question",
+    status: "open",
+    ask: {
+      state: "blocked",
+      evidence: "Tests passed",
+      remaining: "Approval",
+      revision: 1,
+      provenance: "explicit",
+    },
+  };
+  expect(oldQuestion.parse(entry)).toEqual({
+    id: entry.id,
+    timestamp: entry.timestamp,
+    text: "Deploy",
+    truncated: false,
+    kind: "question",
+    status: "open",
+  });
+  expect(CompanionEntrySchema.parse(oldQuestion.parse(entry)).ask).toBeUndefined();
+  expect(
+    SessionInboundMessageSchema.parse({
+      type: "stream.list.request",
+      requestId: "page",
+      agentId: "parent",
+      asksOnly: true,
+      limit: 50,
+    }),
+  ).toMatchObject({ agentId: "parent", asksOnly: true });
+  expect(
+    SessionInboundMessageSchema.parse({
+      type: "stream.entry.update.request",
+      requestId: "write",
+      agentId: "parent",
+      entryId: "deploy",
+      action: "set_ask",
+      text: "Deploy",
+      expectedRevision: 0,
+      ask: entry.ask,
+    }),
+  ).toMatchObject({ action: "set_ask", ask: { state: "blocked" } });
 });

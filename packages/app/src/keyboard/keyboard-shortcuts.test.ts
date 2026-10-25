@@ -150,6 +150,18 @@ describe("keyboard-shortcuts", () => {
       action: "workspace.new",
     },
     {
+      name: "matches Cmd+Shift+L to open Quick launch from a chat composer on mac",
+      event: { key: "L", code: "KeyL", metaKey: true, shiftKey: true },
+      context: { isMac: true, isDesktop: true, focusScope: "message-input" },
+      action: "quick-launch.open",
+    },
+    {
+      name: "matches Ctrl+Shift+L to open Quick launch on non-mac",
+      event: { key: "L", code: "KeyL", ctrlKey: true, shiftKey: true },
+      context: { isMac: false, focusScope: "message-input" },
+      action: "quick-launch.open",
+    },
+    {
       name: "matches Cmd+P to search workspace files on mac",
       event: { key: "p", code: "KeyP", metaKey: true },
       context: { isMac: true, commandCenterOpen: false },
@@ -221,6 +233,32 @@ describe("keyboard-shortcuts", () => {
       event: { key: "ArrowLeft", code: "ArrowLeft", ctrlKey: true, altKey: true },
       context: { isDesktop: true },
       action: "navigation.back",
+    },
+    {
+      name: "matches the recent-workspace switcher on desktop via Ctrl+Tab",
+      event: { key: "Tab", code: "Tab", ctrlKey: true },
+      context: { isDesktop: true },
+      action: "workspace.recent.switch",
+      payload: { delta: 1 },
+    },
+    {
+      name: "matches the reverse recent-workspace switcher on desktop via Ctrl+Shift+Tab",
+      event: { key: "Tab", code: "Tab", ctrlKey: true, shiftKey: true },
+      context: { isDesktop: true },
+      action: "workspace.recent.switch",
+      payload: { delta: -1 },
+    },
+    {
+      name: "matches recent sessions via Mod+Alt+R",
+      event: { key: "r", code: "KeyR", ctrlKey: true, altKey: true },
+      context: { isDesktop: true },
+      action: "recent-sessions.open",
+    },
+    {
+      name: "matches navigation forward via Mod+Alt+ArrowRight",
+      event: { key: "ArrowRight", code: "ArrowRight", ctrlKey: true, altKey: true },
+      context: { isDesktop: true },
+      action: "navigation.forward",
     },
     {
       name: "matches workspace relative navigation on desktop via Mod+]",
@@ -730,6 +768,7 @@ describe("keyboard-shortcut help sections", () => {
       expectedKeys: {
         "new-agent": ["mod", "O"],
         "new-workspace": ["mod", "N"],
+        "quick-launch": ["mod", "shift", "L"],
         "workspace-tab-new": ["mod", "T"],
         "workspace-jump-index": ["mod", "1-9"],
         "workspace-tab-jump-index": ["mod", "alt", "1-9"],

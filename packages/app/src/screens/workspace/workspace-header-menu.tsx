@@ -8,7 +8,9 @@ import {
   Globe,
   Import as ImportIcon,
   Settings,
+  Pencil,
   SquarePen,
+  Share2,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
@@ -35,11 +37,13 @@ import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
+const ThemedPencil = withUnistyles(Pencil);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedShare = withUnistyles(Share2);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -47,6 +51,8 @@ const MENU_NEW_AGENT_ICON = <ThemedSquarePen size={16} uniProps={mutedColorMappi
 const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
+const MENU_RENAME_ICON = <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+const MENU_SHARE_ICON = <ThemedShare size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
 function WorkspaceHeaderMenuTriggerIcon() {
@@ -146,10 +152,55 @@ function workspaceHeaderMenuButtonStyle({
   return iconButtonChromeStyle({ size: "large", state: { hovered, pressed, open } });
 }
 
+export interface WorkspaceHeaderTabActions {
+  renameTabKind: "agent" | "terminal" | null;
+  onRenameCurrentTab: () => void;
+  sharingAvailability?: boolean | null;
+  onShareConversation?: () => void;
+}
+
+function WorkspaceHeaderTabActionItems({
+  sharingAvailability,
+  onShareConversation,
+  renameTabKind,
+  onRenameCurrentTab,
+}: WorkspaceHeaderTabActions) {
+  const { t } = useTranslation();
+  if (!renameTabKind) return null;
+  return (
+    <>
+      <DropdownMenuItem
+        testID="workspace-header-rename-tab"
+        leading={MENU_RENAME_ICON}
+        onSelect={onRenameCurrentTab}
+      >
+        {renameTabKind === "agent"
+          ? t("workspace.tabs.menu.renameAgent")
+          : t("workspace.tabs.menu.renameTerminal")}
+      </DropdownMenuItem>
+      {sharingAvailability === true ? (
+        <DropdownMenuItem
+          testID="conversation-share-action"
+          leading={MENU_SHARE_ICON}
+          onSelect={onShareConversation}
+        >
+          {t("sharing.action")}
+        </DropdownMenuItem>
+      ) : null}
+      {sharingAvailability === false ? (
+        <DropdownMenuLabel>{t("sharing.updateHost")}</DropdownMenuLabel>
+      ) : null}
+      <DropdownMenuSeparator />
+    </>
+  );
+}
+
 /**
- * Wide layouts make tabs from the tab strip's `+` menu, so this one carries workspace actions only.
+ * Wide layouts make tabs from the tab strip's `+` menu; the header keeps current-tab and workspace actions.
  */
-export function WorkspaceHeaderMenuDesktop(props: WorkspaceHeaderWorkspaceActions) {
+export function WorkspaceHeaderMenuDesktop(
+  props: WorkspaceHeaderWorkspaceActions & WorkspaceHeaderTabActions,
+) {
   const { t } = useTranslation();
   return (
     <DropdownMenu>
@@ -162,6 +213,7 @@ export function WorkspaceHeaderMenuDesktop(props: WorkspaceHeaderWorkspaceAction
         <WorkspaceHeaderMenuTriggerIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" width={220} testID="workspace-header-menu">
+        <WorkspaceHeaderTabActionItems {...props} />
         <WorkspaceHeaderWorkspaceActionItems {...props} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -199,7 +251,8 @@ function HeaderMenuProfileItem({
   );
 }
 
-export interface WorkspaceHeaderMenuMobileProps extends WorkspaceHeaderWorkspaceActions {
+export interface WorkspaceHeaderMenuMobileProps
+  extends WorkspaceHeaderWorkspaceActions, WorkspaceHeaderTabActions {
   normalizedServerId: string;
   showCreateBrowserTab: boolean;
   createTerminalDisabled: boolean;
@@ -221,6 +274,10 @@ export function WorkspaceHeaderMenuMobile({
   onCreateTerminal,
   onCreateTerminalWithProfile,
   onCreateBrowser,
+  renameTabKind,
+  onRenameCurrentTab,
+  sharingAvailability,
+  onShareConversation,
   ...workspaceActions
 }: WorkspaceHeaderMenuMobileProps) {
   const { t } = useTranslation();
@@ -252,6 +309,12 @@ export function WorkspaceHeaderMenuMobile({
         testID="workspace-header-menu"
         sheetTitle={t("workspace.header.actions.workspaceActions")}
       >
+        <WorkspaceHeaderTabActionItems
+          renameTabKind={renameTabKind}
+          sharingAvailability={sharingAvailability}
+          onShareConversation={onShareConversation}
+          onRenameCurrentTab={onRenameCurrentTab}
+        />
         <DropdownMenuItem
           testID="workspace-header-new-agent"
           leading={MENU_NEW_AGENT_ICON}

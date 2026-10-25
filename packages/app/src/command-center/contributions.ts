@@ -14,6 +14,8 @@ interface CommandCenterContributionBase {
   rank: number;
   keywords: readonly string[];
   visibility: "always" | "query";
+  /** Run without closing Cmd+K, for actions that change what Cmd+K shows (e.g. its scope). */
+  keepOpen?: boolean;
   run(): void | Promise<void>;
 }
 

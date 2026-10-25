@@ -58,7 +58,7 @@ const ABSOLUTE_AFTER_MS = 7 * DAY_MS;
 /**
  * The same instant with the prose removed, for somewhere with no room for it — a dense list
  * where the column is understood to be a timestamp and "ago" is the only word on the line.
- * Examples: "now", "5m", "2h", "3d", "Jan 15".
+ * Examples: "now", "5m", "2h", "3d", "Jan 15", and "Sep '24" for an earlier year.
  *
  * Deliberately never sub-minute. A seconds label is only correct for the second it was rendered,
  * so it either lies or forces a once-a-second re-render of a list that has nothing new to say.
@@ -83,22 +83,16 @@ export function describeCompactTimeAgo(date: Date, now: Date = new Date()): Comp
     return { label: `${Math.floor(elapsedMs / DAY_MS)}d`, resolution: "day" };
   }
 
+  // A bare "Sep 23" would read as this year, so an earlier year keeps a two-digit tail.
   const month = date.toLocaleDateString("en-US", { month: "short" });
+  if (date.getFullYear() !== now.getFullYear()) {
+    return { label: `${month} '${String(date.getFullYear()).slice(-2)}`, resolution: "static" };
+  }
   return { label: `${month} ${date.getDate()}`, resolution: "static" };
 }
 
 export function formatCompactTimeAgo(date: Date, now: Date = new Date()): string {
   return describeCompactTimeAgo(date, now).label;
-}
-
-/**
- * How many local midnights lie between two instants: 0 for the same day, 1 for yesterday.
- * Counted on the calendar rather than in elapsed time, so six days and 23 hours ago on
- * today's weekday is 7, and rounded so a DST day of 23 or 25 hours still counts as one.
- */
-function localCalendarDaysBetween(earlier: Date, later: Date): number {
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  return Math.round((startOfDay(later).getTime() - startOfDay(earlier).getTime()) / DAY_MS);
 }
 
 // Cached Intl formatter. Explicitly carrying `hourCycle` from the resolved
@@ -120,28 +114,21 @@ function getTimeFormatter(): Intl.DateTimeFormat {
 }
 
 /**
- * Format a chat-message timestamp for hover-revealed UI.
- * - Same day: "10:11 PM" or "22:11" depending on user preference
- * - The previous 6 calendar days: "Wednesday 10:11 PM"
- * - Older, including today's weekday last week: "14 May 2026, 10:11 PM"
+ * Format a chat-message timestamp (message footers, feed eyebrows).
+ * - This year, including today: "14 May, 10:11 PM" (locale-ordered short date;
+ *   time honors the OS 12/24-hour preference)
+ * - A different year: "14 May 2025, 10:11 PM"
+ *
+ * The date is always present — a weekday or a bare time used to stand in for
+ * it on recent messages, which left the actual date a guess; the short date
+ * stays compact and never ambiguous. Only the year is elided while current.
  */
 export function formatMessageTimestamp(date: Date, now: Date = new Date()): string {
   const time = getTimeFormatter().format(date);
-  const daysAgo = localCalendarDaysBetween(date, now);
-
-  if (daysAgo === 0) {
-    return time;
-  }
-
-  if (daysAgo > 0 && daysAgo < 7) {
-    const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
-    return `${weekday} ${time}`;
-  }
-
   const dateLabel = date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
-    year: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   });
   return `${dateLabel}, ${time}`;
 }

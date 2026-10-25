@@ -43,6 +43,63 @@ describe("new conversation destination", () => {
     ).toBeNull();
     expect(defaultNewConversationWorkspace({ ...base, serverIds: ["other"] })).toBeNull();
   });
+  it("prefers the host's Default project over the tmpworkspace heuristic", () => {
+    const home = {
+      ...project,
+      workspaceId: "home",
+      projectViewKey: "home",
+      projectName: "Home",
+      workspaceDirectory: "/home",
+      projectRootPath: "/home",
+    };
+    expect(
+      defaultNewConversationWorkspace({
+        ...base,
+        workspaces: [scratch, project, home],
+        defaultProjects: [{ serverId: "host", projectViewKey: "home" }],
+      }),
+    ).toEqual(home);
+  });
+  it("picks inside a Default project with many workspaces instead of giving up", () => {
+    const nested = { ...scratch, workspaceId: "nested", workspaceDirectory: "/x/tmpworkspace/a" };
+    const first = { ...scratch, workspaceId: "first" };
+    const second = { ...scratch, workspaceId: "second" };
+    const defaultProjects = [{ serverId: "host", projectViewKey: "tmp" }];
+    expect(
+      defaultNewConversationWorkspace({
+        ...base,
+        workspaces: [nested, first, second],
+        defaultProjects,
+      }),
+    ).toEqual(first);
+    expect(
+      defaultNewConversationWorkspace({
+        ...base,
+        workspaces: [nested, first, second],
+        active: { serverId: "host", workspaceId: "second" },
+        defaultProjects,
+      }),
+    ).toEqual(second);
+  });
+  it("requires a choice when the Default project has no workspace", () => {
+    expect(
+      defaultNewConversationWorkspace({
+        ...base,
+        defaultProjects: [{ serverId: "host", projectViewKey: "empty" }],
+      }),
+    ).toBeNull();
+  });
+  it("ignores another host's Default project and keeps the explicit scope", () => {
+    const defaultProjects = [{ serverId: "other", projectViewKey: "project" }];
+    expect(defaultNewConversationWorkspace({ ...base, defaultProjects })).toEqual(scratch);
+    expect(
+      defaultNewConversationWorkspace({
+        ...base,
+        scope: "project",
+        defaultProjects: [{ serverId: "host", projectViewKey: "tmp" }],
+      }),
+    ).toEqual(project);
+  });
   it("does not guess a host when multiple hosts are selected without context", () => {
     expect(
       defaultNewConversationWorkspace({ ...base, active: null, serverIds: ["host", "other"] }),

@@ -1,10 +1,16 @@
 # Find and route to existing chats
 
-The project sidebar combines its immediate project/title filter with deliberate intelligent Find
-and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
-host/session, switches to Send, and restores the independent, persisted send draft. The destination
-chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Enter/Search in the
-filter field or choose Find to submit intelligent matching; typing alone keeps the ordinary filter.
+The project sidebar combines its immediate [filter](sidebar-filter.md) (projects, workspaces, tab
+titles, and message text) with deliberate intelligent Find and Send prompt actions. Find and Open chat never deliver the query. Use this chat pins an exact
+host/session and switches to Send with the persisted send draft (the field's text fills it only
+when it is empty). The destination
+chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Mod+Enter in the
+filter field or choose **Find with AI** to submit intelligent matching; typing alone keeps the ordinary filter,
+and Enter starts a new chat (see [One field](sidebar-filter.md#one-field-2026-10-11)). Entering Send
+from the field (➤, or Send on a matched tab row) carries the field's text into an empty send draft;
+a saved draft is never overwritten. **Send to best match** under the field is Route to best match
+with the field's text as the prompt; when a different draft is saved it opens Send on that draft
+instead of routing it.
 
 Choose All projects, Current project, or a named project in the scope menu. A project scope is a
 sidebar project view identity, including its host/clone grouping. Search sends only that scope's
@@ -13,29 +19,69 @@ host changes invalidate matching successes and failures in either mode. Editing 
 Send draft keeps the previous results visible until an explicit new lookup replaces them. Those
 results describe the submitted lookup, not a live search of the edited text. A new lookup captures
 its query or durable draft revision; later edits cancel that request's ownership so its late response
-cannot replace a newer lookup. Explicit Clear removes the active input and its results, while leaving
-the other mode's independent input intact. Cancellation releases only the canceled request's loading
+cannot replace a newer lookup. The field's ✕ clears the find text and its results; Clear in the send state clears the
+prompt and its results. Each leaves the other text intact. Cancellation releases only the canceled request's loading
 state, even if a newer lookup has started. Host changes
 also clear excluded results and editable recipients; a pending delivery keeps its original destination
 and item ID until acknowledgement or rejection. Explicit recipient selection
 bypasses matching. In Send mode, **Find first** only presents candidate chats, including when one
-match has high confidence. Delivery requires an explicit destination choice and uses the current
-saved draft. Once a destination is selected, the main action names its actual delivery mode: Queue,
+match has high confidence. Passive matching never selects a destination; delivery through Find
+first requires an explicit destination choice and uses the current saved draft. The one exception
+is the explicit **Route to best match** verb below: invoking it is itself the destination decision,
+and it may deliver without a per-candidate choice only under its documented threshold-and-margin
+gate. Once a destination is selected, the main action names its actual delivery mode: Queue,
 Steer, or Interrupt. Find remains search-only.
 In Find results, Open chat navigates and Use this chat selects without sending. In Send results,
 the Queue here, Steer here, or Interrupt here action delivers the current saved prompt to that chat. Choose an existing chat opens the manual
 picker when matching returns no results. Routing requires a host advertising `sessionSearch`;
 delivery also requires `agentMessageQueue`. Update an older host when prompted.
 
+## Route to best match
+
+**Route to best match** is an explicit verb on a drafted Send prompt — a keyboard-accessible
+button beside the main Send action — that chains one search, one selection decision, and one
+delivery. It is user-invoked every time; typing, editing, or passive Find/Send matching never
+triggers it. It is available only while no recipient is pinned and New conversation is not
+selected: explicit recipient selection already bypasses matching, so the verb disables rather
+than silently re-routing a pinned destination.
+
+The verb auto-selects the top match only when both configurable gates hold
+(`ROUTE_AUTO_SELECT_MIN_CONFIDENCE` and `ROUTE_AUTO_SELECT_MIN_MARGIN` in
+`packages/app/src/components/sidebar/session-routing/model.ts`): the top result's confidence must
+reach **0.85**, and it must lead the runner-up by at least **0.2** (a missing runner-up counts as
+0). The matcher reserves 0.90+ for a conversation the user clearly identifies, so these defaults
+are deliberately conservative; vague prompts fall back to a choice. A search with any failed or
+unhydrated host never auto-selects, because the missing host could hold the real destination.
+When the gate does not clear, the verb falls back to the existing candidate-choice UI with the
+draft preserved and nothing sent; when there is no match at all, it additionally offers starting
+a new conversation with the same draft through the existing New conversation handoff.
+
+Route delivery is **queue-mode only** (`deliverRoutedPrompt`): the verb never steers or
+interrupts a running agent, regardless of the currently selected delivery mode, and it keeps the
+durable outbox contract, atomic destination guard, and retry idempotency unchanged. The
+post-route receipt names the destination project and chat and offers **Wrong chat? Move draft**,
+which restores the routed text as the editable draft (never overwriting a newer edit) and reopens
+the manual chooser. Moving the draft does not recall the already-queued item; cancel it from the
+destination's queue if it should not run.
+
+The verb submits the search with the composer's current scope. The default scope is All
+projects — deliberately, because a project scope excludes chats whose workspaces live elsewhere
+(for example tmpworkspace scratch chats, per the project-identity rule below) — and an explicitly
+chosen scope is respected exactly like any other lookup.
+
 ## New conversation and delivery mode
 
 Send mode offers **New conversation** directly, independently of intelligent matching.
 Its visible workspace picker identifies the project, workspace, and host. Under All projects,
-the default is the selected host's uniquely identified `tmpworkspace` root. An explicit project
-scope uses the active workspace within that project, or its sole workspace. Missing scratch
-workspaces, ambiguous choices, or multiple hosts without host context require a selection; the
-UI never guesses an unrelated workspace. Manual choice survives toggling destinations until
-scope or host selection excludes it.
+the default is a workspace in the selected host's [Default project](glossary.md): the active
+workspace when it is in that project, else its first root checkout in sidebar order, else its
+first workspace. A Default project often holds many workspaces on one root (tmpworkspace does),
+so picking inside the project the user named is not a guess. Without a Default project, the
+default is that host's uniquely identified `tmpworkspace` root. An explicit project scope uses
+the active workspace within that project, or its sole workspace. A Default project without
+workspaces, missing or ambiguous scratch workspaces, or multiple hosts without host context
+require a selection; the UI never guesses an unrelated workspace. Manual choice survives
+toggling destinations until scope or host selection excludes it.
 
 **Continue in new conversation** saves an independent draft, waits for durable persistence,
 then opens the chosen workspace's ordinary new-chat composer. The user chooses the provider/model
@@ -43,6 +89,10 @@ and sends there using the established composer. Neither selecting a workspace no
 sends the prompt. The original dispatcher draft is retained as a copy; editing the new draft
 does not change it. Controls lock during handoff, and the captured destination is revalidated
 after persistence. A failure preserves the source prompt.
+
+**Start without leaving** sends the same prompt and destination to [Quick launch](quick-launch.md)
+instead, which starts the agent in a new tab of that workspace while the user stays put. The
+prompt moves into Quick launch and is cleared here, so it cannot also be continued.
 
 Existing-chat delivery offers **Queue** (default), **Steer**, and **Interrupt**. Queue retains
 the durable outbox contract below. Steer and Interrupt use the ordinary chat composer submission

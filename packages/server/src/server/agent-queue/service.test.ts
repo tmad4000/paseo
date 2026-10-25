@@ -548,6 +548,37 @@ describe("AgentQueueService", () => {
     expect(harness.sent[0]?.prompt).toBe("latest");
   });
 
+  test("a cancelled pre-submission start does not poison the queue receipt", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.failSends(
+      Object.assign(new Error("cancelled before submission"), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      }),
+    );
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "notice", text: "notification" });
+    await harness.service.flushDrains();
+    expect(await receipts.get(AGENT_ID, "notice")).toBe("absent");
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual(["notice"]);
+
+    harness.agents.emitLifecycle("running");
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "question", text: "follow-up" });
+    await harness.service.flushDrains();
+    harness.failSends(null);
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(await receipts.get(AGENT_ID, "notice")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "question",
+    ]);
+
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent.map((item) => item.messageId)).toEqual(["notice", "question"]);
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
   test("receipt-backed refused steer stays queued and can be edited", async () => {
     const receipts = new MessageReceipts(join(dir, "agent-requests"));
     harness.service.setMessageReceipts(receipts);

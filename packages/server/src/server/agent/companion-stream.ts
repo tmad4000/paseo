@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { AgentPermissionRequest, AgentStreamEvent } from "./agent-sdk-types.js";
 
 export const COMPANION_ENTRY_LIMIT = 50;
@@ -229,10 +229,8 @@ function upsert(entries: CompanionEntry[], entry: CompanionEntry): CompanionEntr
 }
 
 export function retainCompanionEntries(entries: CompanionEntry[]): CompanionEntry[] {
-  // Durable user context and unresolved work do not compete with transient outcomes.
-  const durable = (entry: CompanionEntry) => entry.kind === "pin" || isCompanionEntryPending(entry);
-  const recent = new Set(entries.filter((entry) => !durable(entry)).slice(-COMPANION_ENTRY_LIMIT));
-  return entries.filter((entry) => durable(entry) || recent.has(entry));
+  // Retention is durable. Bound transport pages, never the stored history.
+  return entries;
 }
 
 /** Capture explicit question lines and lists explicitly labelled as needing input.

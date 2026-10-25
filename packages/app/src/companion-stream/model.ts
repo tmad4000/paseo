@@ -26,5 +26,9 @@ export function buildCompanionFeed(
         artifact,
       }),
     ),
-  ].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  ].sort((a, b) => {
+    const unresolvedAsk = (item: CompanionFeedItem) =>
+      item.kind === "entry" && item.entry.ask && item.entry.ask.state !== "done" ? 1 : 0;
+    return unresolvedAsk(b) - unresolvedAsk(a) || Date.parse(b.timestamp) - Date.parse(a.timestamp);
+  });
 }

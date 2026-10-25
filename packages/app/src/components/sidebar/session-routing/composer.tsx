@@ -9,12 +9,20 @@ import {
   type ReactNode,
   type Dispatch,
 } from "react";
-import { Text, View, ScrollView } from "react-native";
+import { Pressable, Text, View, ScrollView, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { v4 as uuid } from "uuid";
 import { Button } from "@/components/ui/button";
+import { Shortcut } from "@/components/ui/shortcut";
+import {
+  sessionRouteKey,
+  useRoutingBridge,
+  type RoutingBridgeEntry,
+} from "@/components/sidebar/find-or-start";
+import { useUniqueSessionForQuery } from "@/components/sidebar/sidebar-filter-context";
+import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import {
   DropdownMenu,
@@ -43,12 +51,15 @@ import {
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import { defaultNewConversationWorkspace, prepareNewConversationDraft } from "./new-conversation";
+import { openQuickLaunch } from "@/quick-launch/store";
+import { useDefaultProjectPlacements } from "@/default-project/hooks";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { deliverDirectRoutedPrompt, deliverRoutedPrompt } from "./delivery";
 import {
   initialRoutingState,
   recipientInScope,
   routingReducer,
+  selectRouteBestMatch,
   type Recipient,
   type RoutingAction,
   type RoutingState,
@@ -61,6 +72,8 @@ interface MatchRequest {
 interface MatchResponse {
   recipients: Recipient[];
   notice: string;
+  /** True when any selected host failed or its directory was unavailable. */
+  incomplete: boolean;
 }
 interface ActiveMatch {
   requestId: string;
@@ -77,10 +90,21 @@ function ownsRoutingDelivery(phase: RoutingState["phase"], itemId: string): bool
   return (phase.status === "sending" || phase.status === "pending") && phase.itemId === itemId;
 }
 
+/** What the sidebar's one field can ask of the composer (see find-or-start.ts). */
+export interface FindFieldActions {
+  /** Mod+Enter: intelligent Find over the typed text. */
+  findWithAi: () => void;
+  clear: () => void;
+  /** Deliver the typed text to an existing chat (the send state, one field). */
+  enterSend: () => void;
+  /** The routing draft is loading or a delivery is pending: Send cannot start yet. */
+  locked: boolean;
+}
+
 export function SessionRoutingComposer({
   children,
 }: {
-  children: (submit: () => void, clear: () => void) => ReactNode;
+  children: (actions: FindFieldActions) => ReactNode;
 }) {
   const { t } = useTranslation();
   const {
@@ -91,6 +115,7 @@ export function SessionRoutingComposer({
     serverIds,
     hostRegistryLoaded,
   } = useSidebarModel();
+  const defaultProjects = useDefaultProjectPlacements(allProjects);
   const [state, reduce] = useReducer(routingReducer, initialRoutingState);
   const pendingItemId =
     state.phase.status === "pending" || state.phase.status === "sending"
@@ -215,11 +240,12 @@ export function SessionRoutingComposer({
             .filter((placement) => placement.serverId === serverId)
             .map((placement) => placement.workspaceId);
           if (workspaceIds.length === 0) return { recipients: [], searched: 0, total: 0 };
-          if (!session?.serverInfo?.features?.sessionSearch)
-            throw new Error(t("sidebar.routing.updateHost"));
+          // Connection first: a host that has not reported server info is offline, not older.
           const client = getHostRuntimeStore().getClient(serverId);
-          if (!client || client.getConnectionState().status !== "connected")
+          if (!client || client.getConnectionState().status !== "connected" || !session.serverInfo)
             throw new Error(t("sidebar.routing.offline"));
+          if (!session.serverInfo.features?.sessionSearch)
+            throw new Error(t("sidebar.routing.updateHost"));
           const payload = await client.searchSessions({
             query,
             workspaceIds,
@@ -270,6 +296,7 @@ export function SessionRoutingComposer({
       return {
         recipients,
         notice: notices.join(" "),
+        incomplete: failures.length > 0,
       };
     },
   });
@@ -287,11 +314,9 @@ export function SessionRoutingComposer({
         throw new Error(t("sidebar.routing.invalidDestination"));
       const client = getHostRuntimeStore().getClient(input.recipient.serverId);
       if (!client) throw new Error(t("sidebar.routing.offline"));
-      const session = useSessionStore.getState().sessions[input.recipient.serverId];
-      if (
-        !session?.serverInfo?.features?.sessionSearch ||
-        !session.serverInfo.features.agentMessageQueue
-      )
+      const serverInfo = useSessionStore.getState().sessions[input.recipient.serverId]?.serverInfo;
+      if (!serverInfo) throw new Error(t("sidebar.routing.offline"));
+      if (!serverInfo.features?.sessionSearch || !serverInfo.features.agentMessageQueue)
         throw new Error(t("sidebar.routing.updateHost"));
       return deliverRoutedPrompt({
         ...input,
@@ -446,17 +471,20 @@ export function SessionRoutingComposer({
       itemId = uuid(),
       draftVersion = state.draftVersion,
       draftUpdatedAt = state.draftUpdatedAt,
+      options?: { forceQueue?: boolean; route?: boolean },
     ) => {
       const current = latest.current;
       const retry =
         current.state.phase.status === "pending" && current.state.phase.itemId === itemId;
       if (!canSendRoutedPrompt(current.state, current.serverIds, recipient, retry)) return;
       request.current = null;
+      const route = options?.route;
       dispatch({
         type: "phase",
-        phase: { status: "sending", recipient, text, itemId, draftVersion, draftUpdatedAt },
+        phase: { status: "sending", recipient, text, itemId, draftVersion, draftUpdatedAt, route },
       });
-      const mode = retry ? "queue" : current.state.deliveryMode;
+      // The route verb only ever queues; it never steers or interrupts a running agent.
+      const mode = retry || options?.forceQueue ? "queue" : current.state.deliveryMode;
       if (mode !== "queue") {
         await sendDirectFromComposer({
           recipient,
@@ -503,6 +531,7 @@ export function SessionRoutingComposer({
               draftVersion,
               draftUpdatedAt,
               error: message,
+              route,
             },
           });
       }
@@ -648,6 +677,88 @@ export function SessionRoutingComposer({
     }
   }, [match, send, t, dispatch, matchesContext, cancelMatch, continueNewConversation]);
 
+  // The explicit route verb: one action chaining search → select → deliver.
+  // It queues only, auto-selects solely under the documented threshold+margin
+  // gate, and otherwise falls back to the ordinary candidate list with the
+  // draft preserved. Passive Find/Send matching is unchanged.
+  const routeToBestMatch = useCallback(async () => {
+    const current = latest.current;
+    const submitted = current.state;
+    if (submitting.current || isRoutingLocked(submitted)) return;
+    if (submitted.mode !== "send" || submitted.newConversation || submitted.recipient) return;
+    const text = submitted.sendDraft;
+    if (!text.trim()) return;
+    const requestId = uuid();
+    const context: ActiveMatch = {
+      requestId,
+      mode: "send",
+      scope: submitted.scope,
+      hosts: current.hostMembership,
+      query: current.searchQuery,
+      draft: text,
+      draftVersion: submitted.draftVersion,
+      draftUpdatedAt: submitted.draftUpdatedAt,
+    };
+    const isCurrentMatch = () => {
+      const matchCurrent = latest.current;
+      return (
+        request.current === requestId &&
+        matchCurrent.state.phase.status === "matching" &&
+        matchCurrent.state.phase.requestId === requestId &&
+        matchesContext(context)
+      );
+    };
+    submitting.current = requestId;
+    try {
+      request.current = requestId;
+      activeMatch.current = context;
+      dispatch({
+        type: "phase",
+        phase: { status: "matching", requestId, mode: "send", text, route: true },
+      });
+      const result = await match.mutateAsync({ query: text, scope: submitted.scope });
+      if (!isCurrentMatch()) {
+        cancelMatch(requestId);
+        return;
+      }
+      request.current = null;
+      activeMatch.current = null;
+      const inScope = result.recipients.filter((recipient) =>
+        recipientInScope(recipient, context.scope),
+      );
+      // Never auto-select from partial coverage: a failed host could hide the
+      // real destination, so an incomplete search always asks.
+      const best = result.incomplete ? null : selectRouteBestMatch(inScope);
+      if (!best) {
+        dispatch({
+          type: "matched",
+          requestId,
+          recipients: result.recipients,
+          notice: result.notice,
+        });
+        return;
+      }
+      await send(best, text, undefined, context.draftVersion, context.draftUpdatedAt, {
+        forceQueue: true,
+        route: true,
+      });
+    } catch (error) {
+      if (!isCurrentMatch()) {
+        cancelMatch(requestId);
+        return;
+      }
+      dispatch({
+        type: "phase",
+        phase: {
+          status: "error",
+          message: error instanceof Error ? error.message : t("sidebar.routing.matchFailed"),
+        },
+      });
+    } finally {
+      if (submitting.current === requestId) submitting.current = null;
+    }
+  }, [match, send, t, dispatch, matchesContext, cancelMatch]);
+
   const select = useCallback(
     (recipient: Recipient | null) => {
       const current = latest.current;
@@ -672,12 +783,6 @@ export function SessionRoutingComposer({
       workspaceId: recipient.workspaceId,
     });
   }, []);
-  const setFindMode = useCallback(() => {
-    dispatch({ type: "mode", mode: "find" });
-  }, [dispatch]);
-  const setSendMode = useCallback(() => {
-    dispatch({ type: "mode", mode: "send" });
-  }, [dispatch]);
   const setAllProjects = useCallback(() => {
     dispatch({ type: "scope", scope: null });
   }, [dispatch]);
@@ -710,15 +815,32 @@ export function SessionRoutingComposer({
     else setDraft("");
     dispatch({ type: "clear" });
   }, [cancelMatch, dispatch, setDraft, setSearchQuery]);
+  // Clear prompt keeps the caret in the prompt field, like ✕ in the find field.
+  const clearPrompt = useCallback(() => {
+    clearInput();
+    sendInput.current?.focus();
+  }, [clearInput]);
+  // Same destination as Continue, created through Quick launch instead of navigating there. The
+  // prompt moves into Quick launch so it cannot also be continued from here.
+  const startWithoutLeaving = useCallback(() => {
+    const current = latest.current.state;
+    const workspace = current.newWorkspace;
+    if (!workspace || !current.sendDraft.trim() || isRoutingLocked(current)) return;
+    if (!newWorkspaceEligible()) return;
+    openQuickLaunch({
+      prompt: current.sendDraft,
+      destination: {
+        kind: "workspace",
+        serverId: workspace.serverId,
+        workspaceId: workspace.workspaceId,
+      },
+    });
+    setDraft("");
+  }, [newWorkspaceEligible, setDraft]);
+
   const resultsStale =
     state.phase.status === "results" &&
     state.phase.text !== (state.mode === "find" ? searchQuery : state.sendDraft);
-  const setPickerQuery = useCallback(
-    (text: string) => {
-      dispatch({ type: "pickerQuery", text });
-    },
-    [dispatch],
-  );
   const selectNewConversation = useCallback(() => {
     if (request.current) cancelMatch(request.current);
     const current = latest.current.state;
@@ -731,9 +853,10 @@ export function SessionRoutingComposer({
           serverIds,
           scope: current.scope,
           active: selection,
+          defaultProjects,
         }),
     });
-  }, [cancelMatch, dispatch, workspacePlacements, serverIds, selection]);
+  }, [cancelMatch, dispatch, workspacePlacements, serverIds, selection, defaultProjects]);
   const selectAutomatic = useCallback(() => {
     select(null);
   }, [select]);
@@ -767,16 +890,119 @@ export function SessionRoutingComposer({
     if (phase.status !== "pending" || submitting.current) return;
     const submissionId = uuid();
     submitting.current = submissionId;
-    void send(
-      phase.recipient,
-      phase.text,
-      phase.itemId,
-      phase.draftVersion,
-      phase.draftUpdatedAt,
-    ).finally(() => {
+    void send(phase.recipient, phase.text, phase.itemId, phase.draftVersion, phase.draftUpdatedAt, {
+      route: phase.route,
+    }).finally(() => {
       if (submitting.current === submissionId) submitting.current = null;
     });
   }, [send, state.phase]);
+  // "Wrong chat → move draft": restore the routed prompt and reopen the manual
+  // chooser. The queued copy keeps its durable-outbox semantics; this only
+  // brings the draft back for re-routing.
+  const moveDraft = useCallback(() => {
+    const phase = latest.current.state.phase;
+    if (phase.status !== "acknowledged" || !phase.route) return;
+    if (!latest.current.state.sendDraft.trim()) setDraft(phase.route.text);
+    dispatch({ type: "phase", phase: { status: "idle" } });
+    dispatch({ type: "picker", open: true });
+  }, [dispatch, setDraft]);
+  const routeFromButton = useCallback(() => {
+    void routeToBestMatch();
+  }, [routeToBestMatch]);
+
+  // --- The one field (docs/sidebar-filter.md, "One field") ---
+  // Find with AI, Send to a chat, and Send to best match all start from the typed text, so the
+  // text moves into the durable send draft when it is needed there and an empty draft never
+  // replaces a written one.
+  const carryQueryIntoDraft = useCallback(() => {
+    const query = latest.current.searchQuery.trim();
+    if (query && !latest.current.state.sendDraft.trim()) setDraft(query);
+  }, [setDraft]);
+  const findWithAi = useCallback(() => {
+    if (isRoutingLocked(latest.current.state)) return;
+    if (latest.current.state.mode !== "find") dispatch({ type: "mode", mode: "find" });
+    void submit();
+  }, [dispatch, submit]);
+  const enterSend = useCallback(() => {
+    if (isRoutingLocked(latest.current.state)) return;
+    carryQueryIntoDraft();
+    dispatch({ type: "mode", mode: "send" });
+  }, [carryQueryIntoDraft, dispatch]);
+  const routeQuery = useCallback(() => {
+    const current = latest.current;
+    if (isRoutingLocked(current.state) || submitting.current) return;
+    const query = current.searchQuery.trim();
+    const saved = current.state.sendDraft.trim();
+    // A saved draft is never overwritten, so routing now would send the draft, not the text the
+    // row is under. Show the draft instead; Route to best match there is one press away.
+    if (saved && saved !== query) {
+      dispatch({ type: "recipient", recipient: null });
+      return;
+    }
+    carryQueryIntoDraft();
+    dispatch({ type: "recipient", recipient: null });
+    void routeToBestMatch();
+  }, [carryQueryIntoDraft, dispatch, routeToBestMatch]);
+  const backToSearch = useCallback(() => {
+    if (isRoutingLocked(latest.current.state)) return;
+    dispatch({ type: "recipient", recipient: null });
+    dispatch({ type: "mode", mode: "find" });
+  }, [dispatch]);
+  // "Send" on a chat in the live results: that chat becomes the destination of the typed text.
+  const sendHere = useCallback(
+    (target: { serverId: string; agentId: string }) => {
+      const recipient = recipientDirectory.current.manualRecipients.find(
+        (candidate) =>
+          candidate.serverId === target.serverId && candidate.agentId === target.agentId,
+      );
+      const current = latest.current;
+      if (!recipient || isRoutingLocked(current.state)) return;
+      if (!current.serverIds.includes(recipient.serverId)) return;
+      // The person picked this chat by name, so a Find-with-AI scope set earlier must not
+      // silently refuse it: widen to All projects.
+      if (!recipientInScope(recipient, current.state.scope))
+        dispatch({ type: "scope", scope: null });
+      carryQueryIntoDraft();
+      select(recipient);
+    },
+    [carryQueryIntoDraft, dispatch, select],
+  );
+  // "Use this chat" on a Find with AI result: the field's text goes with it, as with Send.
+  const selectFromResults = useCallback(
+    (recipient: Recipient | null) => {
+      if (recipient && latest.current.state.mode === "find") carryQueryIntoDraft();
+      select(recipient);
+    },
+    [carryQueryIntoDraft, select],
+  );
+  const routableKeys = useMemo(
+    () => new Set(manualRecipients.map((recipient) => sessionRouteKey(recipient))),
+    [manualRecipients],
+  );
+  const registerBridge = useRoutingBridge((bridge) => bridge.register);
+  const unregisterBridge = useRoutingBridge((bridge) => bridge.unregister);
+  useEffect(() => {
+    const entry: RoutingBridgeEntry = { sendHere, findWithAi, routableKeys, locked };
+    registerBridge(entry);
+    return () => unregisterBridge(entry);
+  }, [findWithAi, locked, registerBridge, routableKeys, sendHere, unregisterBridge]);
+  const uniqueSession = useUniqueSessionForQuery();
+  const startChat = useStartChatFromFilterQuery();
+  const startChatAndStay = useCallback(() => startChat(false), [startChat]);
+  const openUniqueSession = useCallback(() => {
+    if (!uniqueSession) return;
+    navigateToAgent({
+      serverId: uniqueSession.serverId,
+      agentId: uniqueSession.agentId,
+      workspaceId: uniqueSession.workspaceId,
+    });
+  }, [uniqueSession]);
+  const routeAvailable = useSessionStore((snapshot) =>
+    serverIds.some((serverId) => {
+      const features = snapshot.sessions[serverId]?.serverInfo?.features;
+      return features?.sessionSearch === true && features.agentMessageQueue === true;
+    }),
+  );
   const scopeName =
     allProjects.find((project) => project.viewKey === state.scope)?.projectName ??
     t("sidebar.routing.allProjects");
@@ -790,64 +1016,88 @@ export function SessionRoutingComposer({
         .includes(pickerQuery),
   );
 
+  const query = searchQuery.trim();
+  // A Find in progress: the row is busy until it answers or a newer Find replaces it.
+  const findBusy = isLookupOrDeliveryActive(state.phase) && !isRoutePhaseActive(state.phase);
+  const scopeMenu = (
+    <DropdownMenu compactMode="sheet">
+      <DropdownMenuTrigger
+        disabled={locked}
+        accessibilityRole="button"
+        accessibilityLabel={t("sidebar.routing.scope", { name: scopeName })}
+        testID="routing-scope"
+      >
+        <Text style={styles.muted} numberOfLines={1}>
+          {scopeName}
+        </Text>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sheetTitle={t("sidebar.routing.chooseScope")}>
+        <DropdownMenuItem onSelect={setAllProjects}>
+          {t("sidebar.routing.allProjects")}
+        </DropdownMenuItem>
+        {currentProject ? (
+          <DropdownMenuItem onSelect={setCurrentProject}>
+            {t("sidebar.routing.currentProject", { name: currentProject.projectName })}
+          </DropdownMenuItem>
+        ) : null}
+        {allProjects.map((project) => (
+          <RoutingScopeOption
+            key={project.viewKey}
+            name={project.projectName}
+            scope={project.viewKey}
+            dispatch={dispatch}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <View style={styles.container} testID="session-routing-composer">
-      <View style={styles.row}>
-        <Button
-          size="xs"
-          variant={state.mode === "find" ? "secondary" : "ghost"}
-          disabled={locked}
-          accessibilityLabel={t("sidebar.routing.findMode")}
-          testID="routing-find-mode"
-          onPress={setFindMode}
-        >
-          {t("sidebar.routing.find")}
-        </Button>
-        <Button
-          size="xs"
-          variant={state.mode === "send" ? "secondary" : "ghost"}
-          disabled={locked}
-          accessibilityLabel={t("sidebar.routing.sendMode")}
-          testID="routing-send-mode"
-          onPress={setSendMode}
-        >
-          {t("sidebar.routing.sendPrompt")}
-        </Button>
-        <DropdownMenu compactMode="sheet">
-          <DropdownMenuTrigger
-            disabled={locked}
-            accessibilityRole="button"
-            accessibilityLabel={t("sidebar.routing.scope", { name: scopeName })}
-            testID="routing-scope"
-          >
-            <Text style={styles.muted} numberOfLines={1}>
-              {scopeName}
-            </Text>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sheetTitle={t("sidebar.routing.chooseScope")}>
-            <DropdownMenuItem onSelect={setAllProjects}>
-              {t("sidebar.routing.allProjects")}
-            </DropdownMenuItem>
-            {currentProject ? (
-              <DropdownMenuItem onSelect={setCurrentProject}>
-                {t("sidebar.routing.currentProject", { name: currentProject.projectName })}
-              </DropdownMenuItem>
-            ) : null}
-            {allProjects.map((project) => (
-              <RoutingScopeOption
-                key={project.viewKey}
-                name={project.projectName}
-                scope={project.viewKey}
-                dispatch={dispatch}
-              />
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </View>
       {state.mode === "find" ? (
-        children(submitFromButton, clearInput)
+        <>
+          {children({ findWithAi, clear: clearInput, enterSend, locked })}
+          {query ? (
+            <QueryActions
+              query={query}
+              uniqueSessionTitle={uniqueSession?.title ?? null}
+              locked={locked}
+              findBusy={findBusy}
+              routeAvailable={routeAvailable}
+              onOpenSession={openUniqueSession}
+              onNewChat={startChatAndStay}
+              onFindWithAi={findWithAi}
+              onRouteQuery={routeQuery}
+            >
+              {scopeMenu}
+            </QueryActions>
+          ) : null}
+        </>
       ) : (
         <>
+          <View style={styles.row}>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={locked}
+              accessibilityLabel={t("sidebar.routing.backToSearch")}
+              testID="routing-find-mode"
+              onPress={backToSearch}
+            >
+              {t("sidebar.routing.backToSearch")}
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={locked || (!state.sendDraft && state.phase.status === "idle")}
+              onPress={clearPrompt}
+              accessibilityLabel={t("sidebar.routing.clearPrompt")}
+              testID="routing-clear-input"
+            >
+              {t("sidebar.routing.clear")}
+            </Button>
+            {scopeMenu}
+          </View>
           <RoutingDestinationControls
             state={state}
             locked={locked}
@@ -870,86 +1120,273 @@ export function SessionRoutingComposer({
             testID="routing-send-draft"
             style={styles.input}
           />
+          {state.picker ? (
+            // The picker lists recent chats; it has no search field of its own (the sidebar
+            // field already finds chats, and "Send" on a match picks it directly).
+            <ScrollView style={styles.resultScroll} testID="routing-picker">
+              <Button size="sm" variant="ghost" onPress={selectAutomatic}>
+                {t("sidebar.routing.automatic")}
+              </Button>
+              {pickerRecipients.slice(0, PICKER_RECENT_LIMIT).map((recipient) => (
+                <PickerRecipientRow
+                  key={JSON.stringify([recipient.serverId, recipient.agentId])}
+                  recipient={recipient}
+                  onSelect={select}
+                />
+              ))}
+              {pickerRecipients.length === 0 ? (
+                <Text style={styles.muted}>{t("sidebar.routing.noChats")}</Text>
+              ) : null}
+            </ScrollView>
+          ) : null}
+          <View style={styles.row}>
+            <StartWithoutLeavingButton
+              state={state}
+              locked={locked}
+              eligible={newWorkspaceEligible()}
+              onPress={startWithoutLeaving}
+            />
+            <RouteBestMatchButton state={state} locked={locked} onPress={routeFromButton} />
+            <Button
+              size="xs"
+              disabled={isSubmitDisabled(state, searchQuery, locked, newWorkspaceEligible())}
+              loading={isLookupOrDeliveryActive(state.phase) && !isRoutePhaseActive(state.phase)}
+              onPress={submitFromButton}
+              accessibilityLabel={t(routingSubmitLabel(state))}
+              accessibilityHint={t("sidebar.routing.repliesThere")}
+              testID="routing-submit"
+            >
+              {t(submitButtonLabel(state))}
+            </Button>
+          </View>
+          <RoutingNoResultActions
+            phase={state.phase}
+            onChooseChat={openPicker}
+            onNewConversation={selectNewConversation}
+          />
         </>
       )}
-      {state.picker ? (
-        <View style={styles.results}>
-          <EditingTextInput
-            initialValue={state.pickerQuery}
-            onChangeText={setPickerQuery}
-            placeholder={t("sidebar.routing.pickPlaceholder")}
-            accessibilityLabel={t("sidebar.routing.pickPlaceholder")}
-            testID="routing-picker-query"
-            style={styles.input}
-          />
-          <Button size="sm" variant="ghost" onPress={selectAutomatic}>
-            {t("sidebar.routing.automatic")}
-          </Button>
-          <ScrollView style={styles.resultScroll}>
-            {pickerRecipients.map((recipient) => (
-              <PickerRecipientRow
-                key={JSON.stringify([recipient.serverId, recipient.agentId])}
-                recipient={recipient}
-                onSelect={select}
-              />
-            ))}
-          </ScrollView>
-          {pickerRecipients.length === 0 ? (
-            <Text style={styles.muted}>{t("sidebar.routing.noChats")}</Text>
-          ) : null}
-        </View>
-      ) : null}
-      <View style={styles.row}>
-        <Text style={styles.hint}>
-          {state.mode === "find"
-            ? t("sidebar.routing.searchOnly")
-            : t("sidebar.routing.repliesThere")}
-        </Text>
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={isClearDisabled(state, searchQuery, locked)}
-          onPress={clearInput}
-          accessibilityLabel={t(
-            state.mode === "find" ? "sidebar.routing.clearSearch" : "sidebar.routing.clearPrompt",
-          )}
-          testID="routing-clear-input"
-        >
-          {t("sidebar.routing.clear")}
-        </Button>
-        <Button
-          size="xs"
-          disabled={isSubmitDisabled(state, searchQuery, locked, newWorkspaceEligible())}
-          loading={state.phase.status === "matching" || state.phase.status === "sending"}
-          onPress={submitFromButton}
-          accessibilityLabel={t(routingSubmitLabel(state))}
-          testID="routing-submit"
-        >
-          {t(submitButtonLabel(state))}
-        </Button>
-      </View>
       <RoutingOutcome
         phase={state.phase}
         resultsStale={resultsStale}
         deliveryMode={state.deliveryMode}
         canSend={Boolean(state.sendDraft.trim()) && !locked}
-        onSelect={select}
+        onSelect={selectFromResults}
         onOpen={open}
         onSend={sendChoice}
         onRetry={retryDelivery}
+        onMoveDraft={moveDraft}
       />
-      {state.phase.status === "results" && state.phase.recipients.length === 0 ? (
-        <Button size="sm" variant="outline" onPress={openPicker}>
-          {t("sidebar.routing.chooseChat")}
-        </Button>
+    </View>
+  );
+}
+
+const ENTER_KEYS = [["Enter"]];
+const FIND_WITH_AI_KEYS = [["mod", "Enter"]];
+const PICKER_RECENT_LIMIT = 30;
+
+/** The rows under the field, each naming what its key does with the typed text. */
+function QueryActions({
+  query,
+  uniqueSessionTitle,
+  locked,
+  findBusy,
+  routeAvailable,
+  children,
+  onOpenSession,
+  onNewChat,
+  onFindWithAi,
+  onRouteQuery,
+}: {
+  query: string;
+  uniqueSessionTitle: string | null;
+  locked: boolean;
+  findBusy: boolean;
+  routeAvailable: boolean;
+  /** The scope menu, shown in the Find with AI row: the only place scope changes results. */
+  children: ReactNode;
+  onOpenSession: () => void;
+  onNewChat: () => void;
+  onFindWithAi: () => void;
+  onRouteQuery: () => void;
+}) {
+  const { t } = useTranslation();
+  // Enter belongs to Open when the text names exactly one chat, otherwise to New chat.
+  const opensSession = uniqueSessionTitle !== null;
+  return (
+    <View style={styles.queryActions} testID="routing-query-actions">
+      {opensSession ? (
+        <QueryActionRow
+          label={t("sidebar.routing.openSession", { title: uniqueSessionTitle })}
+          chord={ENTER_KEYS}
+          onPress={onOpenSession}
+          disabled={false}
+          testID="routing-open-session"
+        />
+      ) : null}
+      <QueryActionRow
+        label={t("sidebar.routing.newChatWith", { query })}
+        chord={opensSession ? null : ENTER_KEYS}
+        onPress={onNewChat}
+        disabled={false}
+        testID="routing-new-chat"
+      />
+      <QueryActionRow
+        label={t("sidebar.routing.findWithAi")}
+        chord={FIND_WITH_AI_KEYS}
+        onPress={onFindWithAi}
+        disabled={locked || findBusy}
+        testID="routing-find-ai"
+      >
+        {children}
+      </QueryActionRow>
+      {routeAvailable ? (
+        <QueryActionRow
+          label={t("sidebar.routing.sendToBestMatch")}
+          chord={null}
+          onPress={onRouteQuery}
+          disabled={locked || findBusy}
+          testID="routing-route-query"
+        />
       ) : null}
     </View>
   );
 }
 
-function isClearDisabled(state: RoutingState, query: string, locked: boolean): boolean {
+/** One compact action under the field: what Enter (or another key) does with the text. */
+function QueryActionRow({
+  label,
+  chord,
+  onPress,
+  disabled,
+  testID,
+  children,
+}: {
+  label: string;
+  chord: string[][] | null;
+  onPress: () => void;
+  disabled: boolean;
+  testID: string;
+  children?: ReactNode;
+}) {
   return (
-    locked || (!(state.mode === "find" ? query : state.sendDraft) && state.phase.status === "idle")
+    <View style={styles.queryActionRow}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        onPress={onPress}
+        style={disabled ? disabledQueryActionStyle : queryActionPressableStyle}
+        testID={testID}
+      >
+        <Text style={styles.queryActionLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {chord ? <Shortcut chord={chord} /> : null}
+      </Pressable>
+      {children}
+    </View>
+  );
+}
+
+function queryActionPressableStyle({
+  hovered = false,
+  pressed,
+}: PressableStateCallbackType & { hovered?: boolean }) {
+  return [
+    styles.queryActionPressable,
+    hovered && !pressed && styles.queryActionHovered,
+    pressed && styles.queryActionPressed,
+  ];
+}
+
+function disabledQueryActionStyle() {
+  return [styles.queryActionPressable, styles.queryActionDisabled];
+}
+
+function isLookupOrDeliveryActive(phase: RoutingState["phase"]): boolean {
+  return phase.status === "matching" || phase.status === "sending";
+}
+
+function isRoutePhaseActive(phase: RoutingState["phase"]): boolean {
+  return (phase.status === "matching" || phase.status === "sending") && phase.route === true;
+}
+
+function RouteBestMatchButton({
+  state,
+  locked,
+  onPress,
+}: {
+  state: RoutingState;
+  locked: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (state.mode !== "send" || state.newConversation) return null;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={locked || !state.sendDraft.trim() || state.recipient !== null}
+      loading={isRoutePhaseActive(state.phase)}
+      onPress={onPress}
+      accessibilityLabel={t("sidebar.routing.routeBestMatchAction")}
+      testID="routing-route-best"
+    >
+      {t("sidebar.routing.routeBestMatch")}
+    </Button>
+  );
+}
+
+function StartWithoutLeavingButton({
+  state,
+  locked,
+  eligible,
+  onPress,
+}: {
+  state: RoutingState;
+  locked: boolean;
+  eligible: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (state.mode !== "send" || !state.newConversation) return null;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={locked || !eligible || !state.sendDraft.trim()}
+      onPress={onPress}
+      accessibilityHint={t("quickLaunch.router.startWithoutLeavingHint")}
+      testID="routing-start-without-leaving"
+    >
+      {t("quickLaunch.router.startWithoutLeaving")}
+    </Button>
+  );
+}
+
+function RoutingNoResultActions({
+  phase,
+  onChooseChat,
+  onNewConversation,
+}: {
+  phase: RoutingState["phase"];
+  onChooseChat: () => void;
+  onNewConversation: () => void;
+}) {
+  const { t } = useTranslation();
+  if (phase.status !== "results" || phase.recipients.length > 0) return null;
+  return (
+    <>
+      <Button size="sm" variant="outline" onPress={onChooseChat}>
+        {t("sidebar.routing.chooseChat")}
+      </Button>
+      {phase.route ? (
+        <Button size="sm" variant="outline" onPress={onNewConversation}>
+          {t("sidebar.routing.routeNewConversation")}
+        </Button>
+      ) : null}
+    </>
   );
 }
 
@@ -1007,6 +1444,7 @@ function RoutingOutcome({
   onOpen,
   onSend,
   onRetry,
+  onMoveDraft,
 }: {
   phase: import("./model").RoutingPhase;
   resultsStale: boolean;
@@ -1016,6 +1454,7 @@ function RoutingOutcome({
   onOpen: (recipient: Recipient) => void;
   onSend: (recipient: Recipient) => void;
   onRetry: () => void;
+  onMoveDraft: () => void;
 }) {
   const { t } = useTranslation();
   const openReceipt = useCallback(() => {
@@ -1054,15 +1493,22 @@ function RoutingOutcome({
         <Button size="sm" variant="ghost" onPress={openReceipt}>
           {t("sidebar.routing.openChat")}
         </Button>
+        {phase.route ? (
+          <Button size="sm" variant="outline" onPress={onMoveDraft} testID="routing-move-draft">
+            {t("sidebar.routing.moveDraft")}
+          </Button>
+        ) : null}
       </View>
     );
   if (phase.status !== "results") return null;
   let headingKey:
     | "sidebar.routing.noMatch"
     | "sidebar.routing.found"
-    | "sidebar.routing.disambiguate" = "sidebar.routing.noMatch";
-  if (phase.recipients.length > 0)
-    headingKey = phase.mode === "find" ? "sidebar.routing.found" : "sidebar.routing.disambiguate";
+    | "sidebar.routing.disambiguate"
+    | "sidebar.routing.routeAmbiguous" = "sidebar.routing.noMatch";
+  if (phase.recipients.length > 0 && phase.mode === "find") headingKey = "sidebar.routing.found";
+  else if (phase.recipients.length > 0)
+    headingKey = phase.route ? "sidebar.routing.routeAmbiguous" : "sidebar.routing.disambiguate";
   return (
     <View style={styles.results}>
       {phase.notice ? <Text style={styles.muted}>{phase.notice}</Text> : null}
@@ -1217,6 +1663,28 @@ const styles = StyleSheet.create((theme) => ({
   receipt: { color: theme.colors.accent, fontSize: theme.fontSize.sm },
   results: { gap: theme.spacing[2] },
   resultScroll: { maxHeight: 260 },
+  // The field's actions: one compact line each, on the field's own rails.
+  queryActions: { gap: theme.spacing[0.5] },
+  queryActionRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[1] },
+  queryActionPressable: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+  },
+  queryActionHovered: { backgroundColor: theme.colors.surfaceSidebarHover },
+  queryActionPressed: { backgroundColor: theme.colors.surfaceSidebarSelected },
+  queryActionDisabled: { opacity: theme.opacity[50] },
+  queryActionLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+  },
   result: {
     gap: theme.spacing[1],
     paddingVertical: theme.spacing[2],

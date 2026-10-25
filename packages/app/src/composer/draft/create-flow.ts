@@ -64,6 +64,25 @@ function reducer<TDraftAgent>(
   }
 }
 
+function hasAttemptContent(attempt: CreateAttempt): boolean {
+  return Boolean(
+    attempt.text ||
+    (attempt.images && attempt.images.length > 0) ||
+    (attempt.attachments && attempt.attachments.length > 0),
+  );
+}
+
+function attemptContentFields(
+  attempt: CreateAttempt,
+): Pick<CreateAttempt, "images" | "attachments"> {
+  return {
+    ...(attempt.images && attempt.images.length > 0 ? { images: attempt.images } : {}),
+    ...(attempt.attachments && attempt.attachments.length > 0
+      ? { attachments: attempt.attachments }
+      : {}),
+  };
+}
+
 function prepareCreateAttempt<TDraftAgent>(
   attempt: CreateAttempt,
   buildDraftAgent: (attempt: CreateAttempt) => TDraftAgent,
@@ -84,6 +103,8 @@ interface SubmitContext {
   text: string;
   attachments: ComposerAttachment[];
   cwd: string;
+  /** Per-call override of the hook-level `allowEmptyText` (e.g. voice starting a draft chat). */
+  allowEmptyText?: boolean;
 }
 
 interface CreateRequestContext {
@@ -158,11 +179,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       return EMPTY_STREAM_ITEMS;
     }
 
-    if (
-      !machine.attempt.text &&
-      (!machine.attempt.images || machine.attempt.images.length === 0) &&
-      (!machine.attempt.attachments || machine.attempt.attachments.length === 0)
-    ) {
+    if (!hasAttemptContent(machine.attempt)) {
       return EMPTY_STREAM_ITEMS;
     }
 
@@ -199,7 +216,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
   );
 
   const runCreateAttempt = useCallback(
-    async ({ attempt, cwd }: { attempt: CreateAttempt; cwd: string }) => {
+    async ({ attempt, cwd }: { attempt: CreateAttempt; cwd: string }): Promise<string | null> => {
       const pendingServerId = getPendingServerId();
       if (!pendingServerId) {
         const error = new Error(t("composer.errors.noHostSelected"));
@@ -225,21 +242,26 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
 
         if (createResult.agentId) {
           updatePendingAgentId({ draftId, agentId: createResult.agentId });
-          handoffCreatedAgentMessageSubmission(
-            pendingServerId,
-            createResult.agentId,
-            createUserMessage({
-              clientMessageId: attempt.clientMessageId,
-              text: attempt.text,
-              timestamp: attempt.timestamp,
-              images: attempt.images,
-              attachments: attempt.attachments,
-            }),
-          );
+          // An empty-prompt create starts no turn, so there is no user message
+          // for the host to confirm; an optimistic one would stay pending.
+          if (hasAttemptContent(attempt)) {
+            handoffCreatedAgentMessageSubmission(
+              pendingServerId,
+              createResult.agentId,
+              createUserMessage({
+                clientMessageId: attempt.clientMessageId,
+                text: attempt.text,
+                timestamp: attempt.timestamp,
+                images: attempt.images,
+                attachments: attempt.attachments,
+              }),
+            );
+          }
           markPendingCreateLifecycle({ draftId, lifecycle: "sent" });
         }
 
         await onCreateSuccess({ result: createResult.result, attempt });
+        return createResult.agentId;
       } catch (error) {
         const resolved =
           error instanceof Error ? error : new Error(t("composer.errors.failedToCreateAgent"));
@@ -267,7 +289,12 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
   );
 
   const handleCreateFromInput = useCallback(
-    async ({ text, attachments, cwd }: SubmitContext) => {
+    async ({
+      text,
+      attachments,
+      cwd,
+      allowEmptyText: allowEmptyTextForCall,
+    }: SubmitContext): Promise<string | null> => {
       const existing = useCreateFlowStore.getState().pendingByDraftId[draftId];
       if (
         isSubmitting ||
@@ -295,7 +322,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       const images = wirePayload.images;
 
       const hasAttachmentContent = images.length > 0 || wirePayload.attachments.length > 0;
-      if (!trimmedPrompt && !hasAttachmentContent && !allowEmptyText) {
+      if (!trimmedPrompt && !hasAttachmentContent && !allowEmptyText && !allowEmptyTextForCall) {
         const error = new Error(t("composer.errors.initialPromptRequired"));
         dispatch({ type: "DRAFT_SET_ERROR", message: error.message });
         throw error;
@@ -305,6 +332,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
         text: trimmedPrompt,
         attachments,
         cwd,
+        allowEmptyText: allowEmptyTextForCall,
       });
       if (validationError) {
         const error = new Error(validationError);
@@ -328,14 +356,11 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
         clientMessageId: attempt.clientMessageId,
         text: attempt.text,
         timestamp: attempt.timestamp.getTime(),
-        ...(attempt.images && attempt.images.length > 0 ? { images: attempt.images } : {}),
-        ...(attempt.attachments && attempt.attachments.length > 0
-          ? { attachments: attempt.attachments }
-          : {}),
+        ...attemptContentFields(attempt),
       });
 
       onCreateStart?.();
-      await runCreateAttempt({ attempt, cwd });
+      return runCreateAttempt({ attempt, cwd });
     },
     [
       allowEmptyText,
@@ -356,7 +381,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       if (!isSubmitting) {
         startCreateAttempt(attempt);
       }
-      await runCreateAttempt({ attempt, cwd });
+      return runCreateAttempt({ attempt, cwd });
     },
     [isSubmitting, runCreateAttempt, startCreateAttempt],
   );

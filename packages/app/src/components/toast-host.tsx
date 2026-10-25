@@ -1,3 +1,5 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
+import { resolveAppVersion } from "@/utils/app-version";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -80,6 +82,15 @@ export function useToastHost(): {
     }
 
     const variant = options?.variant ?? "default";
+    // Every error or warning the person sees is also a diagnostic the host can read later.
+    if (nativeMessage && (variant === "error" || variant === "warning")) {
+      recordClientDiagnostic({
+        source: "toast",
+        severity: variant,
+        message: nativeMessage,
+        appVersion: resolveAppVersion(),
+      });
+    }
     const durationMs = options?.durationMs === undefined ? DEFAULT_DURATION_MS : options.durationMs;
     const nativeAndroid = options?.nativeAndroid ?? false;
 

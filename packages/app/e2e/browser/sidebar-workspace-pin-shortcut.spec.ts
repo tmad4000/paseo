@@ -1,3 +1,6 @@
+import { createMockIdleAgent, resetSeededPageState } from "../support/helpers/archive-tab";
+import { openMobileAgentSidebar } from "../support/helpers/sidebar";
+import { buildHostAgentDetailRoute } from "@/utils/host-routes";
 import { test, expect, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
@@ -92,7 +95,7 @@ interface PinRpcGate {
 // where it started.
 async function installPinRpcGate(
   page: Page,
-  options: { rejectFirst?: number } = {},
+  options: { rejectFirst?: number; requestType?: string } = {},
 ): Promise<PinRpcGate> {
   const rejectFirst = options.rejectFirst ?? 0;
   let sent = 0;
@@ -103,7 +106,7 @@ async function installPinRpcGate(
     ws.onMessage((message) => {
       const sessionMessage = readSessionMessage(message);
       if (
-        sessionMessage?.type === "workspace.pin.set.request" &&
+        sessionMessage?.type === (options.requestType ?? "workspace.pin.set.request") &&
         typeof sessionMessage.requestId === "string"
       ) {
         sent += 1;
@@ -115,7 +118,7 @@ async function installPinRpcGate(
                 type: "rpc_error",
                 payload: {
                   requestId: sessionMessage.requestId,
-                  requestType: "workspace.pin.set.request",
+                  requestType: options.requestType ?? "workspace.pin.set.request",
                   error: PIN_REJECTION_MESSAGE,
                   code: "transport",
                 },
@@ -275,4 +278,82 @@ test.describe("Pin workspace shortcut", () => {
       await workspace.cleanup();
     }
   });
+});
+
+for (const width of [390, 1440]) {
+  test(`individual session favorites persist and open Stream at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const workspace = await seedWorkspace({ repoPrefix: "session-pin-" });
+    try {
+      const agent = await createMockIdleAgent(workspace.client, {
+        cwd: workspace.repoPath,
+        workspaceId: workspace.workspaceId,
+        title: "Voice orchestrator — asks and open threads",
+      });
+      await resetSeededPageState(page);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(buildHostAgentDetailRoute(getServerId(), agent.id));
+      const pin = page.getByTestId("session-pin-toggle").filter({ visible: true });
+      await expect(pin).toHaveAccessibleName("Pin session");
+      await pin.focus();
+      await page.keyboard.press("Enter");
+      await expect(pin).toHaveAccessibleName("Unpin session");
+      await page.getByTestId("agent-view-artifacts").filter({ visible: true }).click();
+      await expect(pin).toHaveAccessibleName("Unpin session");
+      await page.reload();
+      await expect(pin).toHaveAccessibleName("Unpin session");
+      await page.getByTestId("agent-view-artifacts").filter({ visible: true }).click();
+      await expect(page.getByTestId("companion-stream").filter({ visible: true })).toBeVisible();
+      if (width === 390) await openMobileAgentSidebar(page);
+      const favorites = page.getByTestId("sidebar-pinned-sessions").filter({ visible: true });
+      await expect(favorites.getByRole("button")).toHaveCount(1);
+      await expect(favorites).toContainText(agent.title);
+      await expect(favorites.getByRole("button")).toBeInViewport({ ratio: 1 });
+      await page.screenshot({
+        path: testInfo.outputPath(`session-pins-${width}.png`),
+        animations: "disabled",
+      });
+      await favorites.getByRole("button").click();
+      await expect(pin).toBeInViewport();
+      await expect(page.getByTestId("companion-stream").filter({ visible: true })).toBeVisible();
+      await expect(pin).toHaveAccessibleName("Unpin session");
+      await pin.click();
+      await expect(pin).toHaveAccessibleName("Pin session");
+      if (width === 390) await openMobileAgentSidebar(page);
+      await expect(favorites).toHaveCount(0);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}
+
+test("session pin rejection is visible and retry succeeds", async ({ page }) => {
+  test.setTimeout(180_000);
+  const workspace = await seedWorkspace({ repoPrefix: "session-pin-failure-" });
+  try {
+    const agent = await createMockIdleAgent(workspace.client, {
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Pin retry",
+    });
+    await resetSeededPageState(page);
+    const gate = await installPinRpcGate(page, {
+      rejectFirst: 1,
+      requestType: "update_agent_request",
+    });
+    await page.goto(buildHostAgentDetailRoute(getServerId(), agent.id));
+    const pin = page.getByTestId("session-pin-toggle").filter({ visible: true });
+    await expect(pin).toHaveAccessibleName("Pin session");
+    await pin.click();
+    await expect(page.getByTestId("session-pin-error")).toContainText(PIN_REJECTION_MESSAGE);
+    await expect(pin).toHaveAccessibleName("Pin session");
+    await pin.click();
+    await expect(pin).toHaveAccessibleName("Unpin session");
+    expect(gate.sentCount()).toBe(2);
+    await expect(page.getByTestId("session-pin-error")).toHaveCount(0);
+  } finally {
+    await workspace.cleanup();
+  }
 });

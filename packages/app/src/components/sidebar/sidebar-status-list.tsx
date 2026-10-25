@@ -23,7 +23,10 @@ import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspac
 import { type SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import type { StatusBucket } from "@/hooks/sidebar-status-view-model";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
-import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
+import {
+  SidebarFilterResultsTail,
+  SidebarWorkspaceTabMatches,
+} from "@/components/sidebar/sidebar-filter-results";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -66,6 +69,7 @@ import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-me
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
+  workspaceLastActiveAt,
   type SidebarWorkspaceTrailing,
 } from "@/components/sidebar/workspace-trailing";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
@@ -232,9 +236,7 @@ export function SidebarStatusWorkspaceList({
         </View>
       ) : null}
       {listHeaderComponent}
-      {sidebarFilterEmpty ? (
-        <SidebarFilterEmptyState />
-      ) : (
+      {sidebarFilterEmpty ? null : (
         <StatusGroupList
           groups={groups}
           collapsedWorkspaceGroupKeys={
@@ -249,6 +251,7 @@ export function SidebarStatusWorkspaceList({
           onToggleWorkspacePin={onToggleWorkspacePin}
         />
       )}
+      <SidebarFilterResultsTail treeEmpty={sidebarFilterEmpty} onNavigate={onWorkspacePress} />
     </>
   );
 
@@ -345,11 +348,15 @@ function StatusGroupRows({
     canToggle: canToggleWorkspaces,
     toggleExpanded: toggleWorkspacesExpanded,
   } = useLimitedSidebarGroup(group.rows);
+  // One-list mode's single group has no header, so there is nothing to collapse it with and its
+  // rows sit flush like pinned rows rather than indented under a header.
+  const headed = group.leading.kind !== "none";
+  const isCollapsed = headed && collapsed;
 
   return (
-    <View style={collapsed ? undefined : styles.statusGroupBlockExpanded}>
-      <StatusGroupHeader group={group} collapsed={collapsed} />
-      {!collapsed ? (
+    <View style={isCollapsed ? undefined : styles.statusGroupBlockExpanded}>
+      {headed ? <StatusGroupHeader group={group} collapsed={isCollapsed} /> : null}
+      {!isCollapsed ? (
         <View
           style={styles.statusWorkspaceListContainer}
           testID={`sidebar-status-group-rows-${group.key}`}
@@ -363,6 +370,7 @@ function StatusGroupRows({
                 projectIconByProjectViewKey,
                 hostBadgeByServerId,
               })}
+              inStatusGroup={headed}
               shortcutNumber={shortcutIndex.get(workspace.workspaceKey) ?? null}
               showShortcutBadge={showShortcutBadges}
               canPin={supportsPinningByServerId.get(workspace.serverId) === true}
@@ -374,7 +382,7 @@ function StatusGroupRows({
             <SidebarGroupToggleRow
               expanded={workspacesExpanded}
               onPress={toggleWorkspacesExpanded}
-              indented
+              indented={headed}
               testID={`sidebar-status-group-show-more-${group.key}`}
             />
           ) : null}
@@ -470,6 +478,7 @@ function StatusGroupLeadingVisual({
   collapsed: boolean;
   showChevron: boolean;
 }) {
+  if (leading.kind === "none") return null;
   if (!showChevron) {
     return <StatusGroupIcon bucket={leading.bucket} />;
   }
@@ -541,23 +550,30 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
   }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
 
   return (
-    <StatusWorkspaceRowWithMenu
-      workspace={workspace}
-      hostBadge={hostBadge}
-      projectName={projectName}
-      projectIconDataUri={projectIconDataUri}
-      selected={selected}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      canPin={canPin}
-      onToggleWorkspacePin={onToggleWorkspacePin}
-      reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      inStatusGroup={inStatusGroup}
-      onPress={handlePress}
-      drag={drag}
-      isDragging={isDragging}
-      dragHandleProps={dragHandleProps}
-    />
+    <>
+      <StatusWorkspaceRowWithMenu
+        workspace={workspace}
+        hostBadge={hostBadge}
+        projectName={projectName}
+        projectIconDataUri={projectIconDataUri}
+        selected={selected}
+        shortcutNumber={shortcutNumber}
+        showShortcutBadge={showShortcutBadge}
+        canPin={canPin}
+        onToggleWorkspacePin={onToggleWorkspacePin}
+        reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+        inStatusGroup={inStatusGroup}
+        onPress={handlePress}
+        drag={drag}
+        isDragging={isDragging}
+        dragHandleProps={dragHandleProps}
+      />
+      <SidebarWorkspaceTabMatches
+        workspaceKey={workspace.workspaceKey}
+        workspace={workspace}
+        onNavigate={onWorkspacePress}
+      />
+    </>
   );
 });
 
@@ -1010,6 +1026,7 @@ function StatusWorkspaceActionSlot({
             archiveShortcutKeys={archiveShortcutKeys}
             isPinned={isPinned}
             onTogglePin={onTogglePin}
+            lastActiveAt={workspaceLastActiveAt(workspace)}
           />
         ) : null}
       </SidebarWorkspaceTrailingActionOverlay>

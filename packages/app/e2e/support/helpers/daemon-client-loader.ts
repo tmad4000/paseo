@@ -1,21 +1,17 @@
 import { randomUUID } from "node:crypto";
+import { DaemonClient as CompiledDaemonClient } from "@getpaseo/client/internal/daemon-client";
+import * as protocolSchemas from "@getpaseo/protocol/messages";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { getE2EDaemonPort } from "./daemon-port";
 import { createNodeWebSocketFactory, type NodeWebSocketFactory } from "./node-ws-factory";
 
 export async function loadDaemonClientConstructor<ClientConfig, ClientInstance>(): Promise<
   new (config: ClientConfig) => ClientInstance
 > {
-  const repoRoot = path.resolve(__dirname, "../../../../../");
-  const moduleUrl = pathToFileURL(
-    path.join(repoRoot, "packages/client/dist/daemon-client.js"),
-  ).href;
-  const mod = (await import(moduleUrl)) as {
-    DaemonClient: new (config: ClientConfig) => ClientInstance;
-  };
-  return mod.DaemonClient;
+  // Keep the SDK in Playwright's static module graph. Mixing a native dynamic import with
+  // transformed protocol imports loses named exports in Node 22's CJS/ESM bridge.
+  return CompiledDaemonClient as unknown as new (config: ClientConfig) => ClientInstance;
 }
 
 interface E2EDaemonClientConfig {
@@ -66,8 +62,5 @@ function loadAppVersion(): string {
 }
 
 export async function loadProtocolSchemas(): Promise<typeof import("@getpaseo/protocol/messages")> {
-  const moduleUrl = pathToFileURL(
-    path.resolve(__dirname, "../../../../../packages/protocol/dist/messages.js"),
-  ).href;
-  return import(moduleUrl);
+  return protocolSchemas;
 }
