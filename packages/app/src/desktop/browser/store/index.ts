@@ -27,6 +27,8 @@ export {
 
 interface BrowserStoreState extends BrowserIndexState {
   createBrowser: (input?: { initialUrl?: string }) => string;
+  /** Creates the browser for a known id if this device has none; an existing one is kept as is. */
+  ensureBrowser: (browserId: string, initialUrl: string | undefined) => boolean;
   updateBrowser: (browserId: string, patch: BrowserRecordPatch) => void;
   setBrowserViewport: (browserId: string, viewport: BrowserViewport) => void;
   removeBrowser: (browserId: string) => void;
@@ -63,6 +65,25 @@ export const useBrowserStore = create<BrowserStoreState>()(
         }));
 
         return browserId;
+      },
+      ensureBrowser: (browserId, initialUrl) => {
+        const parsed = BrowserAutomationBrowserIdSchema.safeParse(browserId.trim());
+        if (!parsed.success) return false;
+        set((state) =>
+          state.browsersById[parsed.data]
+            ? state
+            : {
+                browsersById: {
+                  ...state.browsersById,
+                  [parsed.data]: createBrowserRecord({
+                    browserId: parsed.data,
+                    initialUrl,
+                    now: Date.now(),
+                  }),
+                },
+              },
+        );
+        return true;
       },
       updateBrowser: (browserId, patch) => {
         set((state) => applyBrowserPatch(state, browserId, patch));

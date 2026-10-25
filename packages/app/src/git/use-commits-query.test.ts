@@ -8,7 +8,7 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: false,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: undefined,
         isPlaceholderData: false,
@@ -21,7 +21,7 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: true,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: undefined,
         isPlaceholderData: false,
@@ -34,7 +34,7 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: true,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: EMPTY_COMMITS,
         isPlaceholderData: false,
@@ -48,7 +48,7 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: true,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: undefined,
         isPlaceholderData: false,
@@ -61,7 +61,7 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: false,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: EMPTY_COMMITS,
         isPlaceholderData: false,
@@ -74,12 +74,38 @@ describe("resolveCheckoutCommitsQueryResult", () => {
     expect(
       resolveCheckoutCommitsQueryResult({
         enabled: true,
-        capabilityPresent: true,
+        capability: true,
         canFetch: true,
         data: EMPTY_COMMITS,
         isPlaceholderData: true,
         error: null,
       }),
     ).toEqual({ status: "loading" });
+  });
+
+  it("reports an unknown host as connecting, not unsupported", () => {
+    expect(
+      resolveCheckoutCommitsQueryResult({
+        enabled: true,
+        capability: null,
+        canFetch: true,
+        data: undefined,
+        isPlaceholderData: false,
+        error: null,
+      }),
+    ).toEqual({ status: "connecting" });
+  });
+
+  it("reports a known host without commit classification as unsupported", () => {
+    expect(
+      resolveCheckoutCommitsQueryResult({
+        enabled: true,
+        capability: false,
+        canFetch: true,
+        data: undefined,
+        isPlaceholderData: false,
+        error: null,
+      }),
+    ).toEqual({ status: "unsupported" });
   });
 });

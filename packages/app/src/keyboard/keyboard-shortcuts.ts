@@ -158,6 +158,8 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "toggle-command-center",
     "search-files",
     "navigation-back",
+    "navigation-forward",
+    "recent-sessions",
     "show-shortcuts",
     "toggle-settings",
     "cycle-theme",
@@ -165,7 +167,10 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   workspaces: [
     "new-agent",
     "new-workspace",
+    "quick-launch",
     "workspace-jump-index",
+    "workspace-recent-next",
+    "workspace-recent-previous",
     "workspace-prev",
     "workspace-next",
     "pin-workspace",
@@ -196,6 +201,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   ],
   layout: ["toggle-left-sidebar", "toggle-right-sidebar", "toggle-both-sidebars", "toggle-focus"],
   "agent-input": [
+    "subthreads-toggle",
     "focus-message-input",
     "cycle-agent-mode",
     "voice-toggle",
@@ -208,6 +214,8 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
 const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "new-agent": "settings.shortcuts.help.openProject",
   "new-workspace": "settings.shortcuts.help.newWorkspace",
+  "quick-launch": "quickLaunch.title",
+  "subthreads-toggle": "subthreads.shortcutHelp",
   "switch-project": "settings.shortcuts.help.switchProject",
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
@@ -219,6 +227,10 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-jump-index": "settings.shortcuts.help.jumpToWorkspace",
   "workspace-tab-jump-index": "settings.shortcuts.help.jumpToTab",
   "navigation-back": "common.actions.back",
+  "navigation-forward": "common.actions.forward",
+  "recent-sessions": "shell.recentSessions.title",
+  "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
+  "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
   "workspace-next": "settings.shortcuts.help.nextWorkspace",
   "workspace-tab-prev": "settings.shortcuts.help.previousTab",
@@ -308,6 +320,60 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "new-workspace",
       section: "workspaces",
       label: "New workspace",
+    },
+  },
+
+  // --- Quick launch ---
+  // Shift+N is the desktop New Window accelerator and Cmd+L focuses the composer, so Quick launch
+  // takes Shift+L: "launch" beside the composer it leaves undisturbed. It fires from text inputs
+  // because starting work from inside another chat's composer is the point.
+  {
+    id: "quick-launch-cmd-shift-l-mac",
+    action: "quick-launch.open",
+    combo: "Cmd+Shift+L",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "quick-launch",
+      section: "workspaces",
+      label: "Quick launch",
+    },
+  },
+  {
+    id: "quick-launch-ctrl-shift-l-non-mac",
+    action: "quick-launch.open",
+    combo: "Ctrl+Shift+L",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "quick-launch",
+      section: "workspaces",
+      label: "Quick launch",
+    },
+  },
+
+  // --- Subthreads drawer ---
+  // J sits beside L (focus composer / Quick launch) and is free on every platform here. It fires
+  // from the composer because an orchestrator's user is usually typing when they want to check
+  // on a subthread; the handler is enabled only in the focused pane of an agent with subthreads.
+  {
+    id: "subthreads-toggle-cmd-shift-j-mac",
+    action: "agent.subthreads.toggle",
+    combo: "Cmd+Shift+J",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "subthreads-toggle",
+      section: "agent-input",
+      label: "Subthreads drawer",
+    },
+  },
+  {
+    id: "subthreads-toggle-ctrl-shift-j-non-mac",
+    action: "agent.subthreads.toggle",
+    combo: "Ctrl+Shift+J",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "subthreads-toggle",
+      section: "agent-input",
+      label: "Subthreads drawer",
     },
   },
 
@@ -616,8 +682,9 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     },
   },
 
-  // --- Focus-history Back (fork) ---
-  // Upstream owns Cmd+[ for "Previous workspace", so Back takes the chord it leaves free.
+  // --- Focus-history Back/Forward (fork) ---
+  // Upstream owns Cmd+[ / Cmd+] for previous/next workspace, so Back and Forward take the
+  // arrow chords it leaves free.
   {
     id: "navigation-back-cmd-alt-left-mac",
     action: "navigation.back",
@@ -638,6 +705,28 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "navigation-back",
       section: "general",
       label: "Back",
+    },
+  },
+  {
+    id: "navigation-forward-cmd-alt-right-mac",
+    action: "navigation.forward",
+    combo: "Cmd+Alt+ArrowRight",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "navigation-forward",
+      section: "general",
+      label: "Forward",
+    },
+  },
+  {
+    id: "navigation-forward-ctrl-alt-right-non-mac",
+    action: "navigation.forward",
+    combo: "Ctrl+Alt+ArrowRight",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "navigation-forward",
+      section: "general",
+      label: "Forward",
     },
   },
 
@@ -712,6 +801,60 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-next",
       section: "workspaces",
       label: "Next workspace",
+    },
+  },
+
+  // --- Recent sessions (fork) ---
+  // Opens Cmd+K on the recent-sessions list; the header's Recent button shows the same list.
+  {
+    id: "recent-sessions-cmd-alt-r-mac",
+    action: "recent-sessions.open",
+    combo: "Cmd+Alt+R",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
+    },
+  },
+  {
+    id: "recent-sessions-ctrl-alt-r-non-mac",
+    action: "recent-sessions.open",
+    combo: "Ctrl+Alt+R",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "recent-sessions",
+      section: "general",
+      label: "Recent sessions",
+    },
+  },
+
+  // --- Recent workspaces (fork) ---
+  // Hold Control and tap Tab to walk most-recently-used workspaces; release to switch.
+  // Desktop only: browsers own Ctrl+Tab, and Ctrl+` already toggles the right sidebar. On
+  // web, Cmd+K lists recent workspaces first and Back/Forward offer a history menu.
+  {
+    id: "workspace-recent-ctrl-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: 1 },
+    help: {
+      id: "workspace-recent-next",
+      section: "workspaces",
+      label: "Switch to recent workspace",
+    },
+  },
+  {
+    id: "workspace-recent-ctrl-shift-tab-desktop",
+    action: "workspace.recent.switch",
+    combo: "Ctrl+Shift+Tab",
+    when: { desktop: true, commandCenter: false },
+    payload: { type: "delta", delta: -1 },
+    help: {
+      id: "workspace-recent-previous",
+      section: "workspaces",
+      label: "Switch to least recent workspace",
     },
   },
 

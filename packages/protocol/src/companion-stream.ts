@@ -49,6 +49,8 @@ const common = {
       askIds: z.array(z.string()),
     })
     .optional(),
+  // COMPAT(streamTags): fork feature; lowercase #hashtags parsed from text. Older hosts omit it.
+  tags: z.array(z.string()).optional(),
 };
 
 export const CompanionEntrySchema = z.discriminatedUnion("kind", [

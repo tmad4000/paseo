@@ -1,6 +1,12 @@
 import type { PluginSidebarGroup } from "@/plugins/sidebar-groups";
 
-export const BUILTIN_SIDEBAR_NAV_IDS = ["new-workspace", "history", "search", "schedules"] as const;
+export const BUILTIN_SIDEBAR_NAV_IDS = [
+  "new-workspace",
+  "quick-launch",
+  "history",
+  "search",
+  "schedules",
+] as const;
 export type BuiltinSidebarNavId = (typeof BUILTIN_SIDEBAR_NAV_IDS)[number];
 
 /** Persisted shape. Array order is the display order. */
@@ -27,6 +33,7 @@ export type SidebarNavItem = BuiltinSidebarNavItem | PluginSidebarNavItem;
 
 const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarNavId, string> = {
   "new-workspace": "sidebar.actions.newWorkspace",
+  "quick-launch": "quickLaunch.title",
   history: "sidebar.sections.sessions",
   search: "sidebar.sections.search",
   schedules: "sidebar.sections.schedules",
@@ -43,6 +50,7 @@ export function builtinSidebarNavLabelKey(id: BuiltinSidebarNavId): string {
  */
 const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarNavId, string | null> = {
   "new-workspace": "new-workspace",
+  "quick-launch": "quick-launch",
   history: null,
   search: "toggle-command-center",
   schedules: null,
@@ -57,6 +65,14 @@ export function pluginSidebarNavKey(
 ): string {
   return `plugin:${group.pluginId}:${group.contributionId}`;
 }
+
+/**
+ * Builtins added after people had already saved an order. Where the anchor is placed, the newcomer
+ * slots in right after it instead of trailing the list, so it shows up where it belongs.
+ */
+const BUILTIN_INSERT_AFTER: Partial<Record<BuiltinSidebarNavId, BuiltinSidebarNavId>> = {
+  "quick-launch": "new-workspace",
+};
 
 function isBuiltinSidebarNavId(key: string): key is BuiltinSidebarNavId {
   return (BUILTIN_SIDEBAR_NAV_IDS as readonly string[]).includes(key);
@@ -91,7 +107,12 @@ export function resolveSidebarNavItems(input: {
 
   for (const id of BUILTIN_SIDEBAR_NAV_IDS) {
     if (placed.has(id)) continue;
-    items.push({ kind: "builtin", key: id, id, visible: true });
+    placed.add(id);
+    const item: BuiltinSidebarNavItem = { kind: "builtin", key: id, id, visible: true };
+    const anchor = BUILTIN_INSERT_AFTER[id];
+    const anchorIndex = anchor ? items.findIndex((candidate) => candidate.key === anchor) : -1;
+    if (anchorIndex === -1) items.push(item);
+    else items.splice(anchorIndex + 1, 0, item);
   }
   for (const [key, group] of groupsByKey) {
     if (placed.has(key)) continue;

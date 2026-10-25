@@ -26,8 +26,23 @@ creation time when its assistant clock is unknown. A known original timestamp wi
 when it predates an imported conversation's creation time. Reopening, refreshing undated history,
 or reconnecting does not synthesize new activity.
 
-All three message sorts require every selected host to advertise `conversationMessageActivity`.
-Until server info arrives, or while an older host is selected, the sidebar uses stored manual order
-and retains the user's selected preference. Known older hosts show an update notice and disable the
-message choices. Manual and Title remain available; supporting hosts automatically restore the
-retained preference without rewriting it.
+## Pinned projects
+
+Pinned projects lead the project list in every sort mode, above a divider, the way pinned rows
+keep their order. The Default project comes first, then the order you dragged pinned projects
+into, then most recently pinned. That drag order is per device and separate from Manual order,
+so dragging a pinned project never switches the sort mode. Pinned projects still collapse,
+filter and list their workspaces like any other project. Pin state and the Default live on the
+host's project record (`~/.paseo/projects/projects.json`), so the phone and desktop agree; the
+actions hide on hosts that do not advertise `projectPinning`. Making a grouped project the
+default applies it on each of its hosts; the host Workspaces settings page sets one host only.
+
+## Host compatibility
+
+The message sorts work against every host. A host that predates `conversationMessageActivity` sends
+no role clocks, so its chats sort by the legacy last-user-message time (falling back to creation
+time), and the menu names each such host with its version ("Chats on SDMM770 (0.10.0-beta.11) sort
+by approximate times"). Until a host's server info arrives, the saved sort applies to its cached
+clocks and the menu shows no notice for it. The saved preference is never rewritten,
+and the menu's checkmark and trigger label name it. This keeps a client that updates before its host
+from losing the activity order it already had.

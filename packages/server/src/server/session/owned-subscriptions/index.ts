@@ -399,6 +399,11 @@ export class SessionDelivery {
     if (!source?.active) return false;
     // COMPAT(ownedSubscriptions): added in v0.8.0, remove after 2027-03-09 once client floor >= v0.8.0.
     if (!source.modern) return true;
+    // A UI command (open/close a tab) is an instruction to whichever app the user is looking at,
+    // not data a subscription owns, so it has no ownership proof. Without this, every modern
+    // client silently dropped `open_tab` / `paseo ui open-tab` while the daemon reported it as
+    // delivered. Recipients are scoped by principal where the broadcast is built.
+    if (message.type === "ui.command") return true;
     if (
       message.type === "status" &&
       message.payload.status === "server_info" &&

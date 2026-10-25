@@ -198,6 +198,32 @@ untouched. Forging either makes a background resume look like the user read a wo
 agent worked in it just now, which rewrites the sidebar timestamp permanently — persisted
 `updatedAt` is what workspace `statusEnteredAt` is re-derived from on the next daemon start.
 
+### Manual input and review status
+
+The Status submenu on agent tabs and workspace rows exposes Needs input (manual), Ready for
+review, In review, Changes requested, Approved, and Clear manual status. Workspace actions show
+the session count and update all non-archived sessions owned by that workspace, including managed
+children. Same-directory sibling workspaces are unaffected. Tab actions target exactly that
+session, including tabs shown in a cross-workspace View.
+
+Needs input describes a required human response or action, even when there is no permission or
+question chooser. It is persisted as `paseo.manual-needs-input=true`; review states reuse
+`paseo.review-status`. These labels survive reading, focus changes, turn completion and daemon
+reload. Selecting another manual status replaces the prior marker; clearing deletes the marker
+and any review note. It never approves a permission, sends a message, changes lifecycle status,
+or clears ordinary unread attention. Mark as unread remains a separate action.
+
+Manual Needs input contributes to the existing needs-input group. Pending review states contribute
+to attention when idle, while real running/error/permission signals keep their normal priority.
+Approved removes review attention but leaves ordinary unread activity visible. A manually flagged
+child also contributes to its owning workspace so marking a visible child tab cannot hide the
+request inside a parent. Tab tooltips include the marker, and the submenu checks the saved value.
+
+The app gates these controls on `server_info.features.manualAgentStatus`; older hosts keep their
+existing read/unread actions and show an update hint only inside the new submenu. Label deletions
+use nullable values in `update_agent_request`; old string-only patches remain accepted. Failed
+bulk writes report how many sessions failed and reload the saved state for retry.
+
 ## The subagents track
 
 The track is a pill at the foot of an agent's pane (`packages/app/src/subagents/track.tsx`): a count you can read at a glance, and a panel behind it — a popover on wide screens, a sheet on compact ones — holding the rows. It floats over the transcript rather than sitting in a band above the composer, so the timeline scrolls underneath it; `packages/app/src/panels/agent-tracks.tsx` owns that placement, and the pill frame is shared with the task list in `packages/app/src/composer/tracks.tsx`.
@@ -217,6 +243,119 @@ Clicking either kind opens a workspace tab. A Paseo subagent tab is a normal int
 Provider timelines use the same structural timeline item format but deliberately have a separate lifecycle and transport. A provider thread/session identifier is not a Paseo agent identifier, and closing its tab is always layout-only.
 
 Provider descriptors may include one compact subtitle. The provider owns its contents and formatting; clients display and truncate it without interpreting provider-specific model, thinking, or usage fields.
+
+### The subagents drawer
+
+An orchestrating agent's pane can open all of its subagents in a drawer beside its own chat
+(`packages/app/src/subthreads/`). It is for reading a subagent and replying to it without leaving
+the parent: the parent stays mounted, scrolled and drafted, and the drawer reuses the exact agent
+pane a tab would show. Entry points: the **Subagents** button beside the Chat / Stream controls,
+the **Read and reply beside this chat** row in the subagents track panel, and Mod+Shift+J (see
+below). The track and its tab-opening rows are unchanged.
+
+- **Rows** are the subagents track's rows, in the same creation order, with the managed agent's
+  own permission and attention state added: **Needs input** (a pending permission), **Failed**,
+  **Working**, **Unread** (finished or failed since the user last looked), and **Done**. Rows do
+  not reorder by urgency, so a row never moves under the pointer; the header summarizes counts
+  instead. Selecting a managed subagent reports it to the viewed-timeline sync under the drawer's
+  own owner key, so it hydrates and stays live without being a tab. Focusing it clears its
+  attention through the normal path, the same as reading it in a tab.
+- **One composer takes input.** The pane's focus is owned by either the parent or the drawer;
+  a press or keyboard focus inside a side claims it, and Mod+Shift+J opens the drawer, moves into
+  it, or closes it. Only the owning side's composer is the active composer, so typing,
+  dictation, interrupt and send shortcuts never fan out to both. On compact layouts and in panes
+  narrower than 820px the drawer covers the parent, which is then never active. On web the caret
+  follows ownership when it changes hands.
+- **The target is named where you type.** The thread header reads _Subagent of {parent} ·
+  {state}_, the drawer's leading edge takes the accent while it owns input, and the subagent's
+  composer placeholder (and therefore its accessible name) is **Reply to {subagent}**.
+- **Owners and approvals stay where they were.** Replies go to the selected managed subagent
+  through its own composer and queue; permission prompts render in that subagent's stream and
+  are answered there. Provider-owned subagents (Claude tasks and workflows, Codex and OpenCode
+  children) open read-only with a note to steer them through the parent. The drawer never sends
+  to more than one agent.
+- **Tab actions stay in the drawer.** Inside the drawer, "close" or "retarget current tab"
+  (for example `/clear` typed into the subagent) leaves the drawer instead of touching the
+  parent's tab. Files and tabs opened from a same-workspace subagent open in the parent's
+  workspace; a cross-workspace subagent opens its own workspace. **Open in tab** keeps the old
+  tab path one press away.
+- **Compatibility.** The drawer is client-only and uses existing agent, timeline and prompt
+  RPCs, so it works against any host the subagents track works against. Provider rows appear
+  only when the host advertises `providerSubagents`.
+
+- **Condensed activity.** Each managed row's second line is the subagent's pending approval
+  (in foreground text) or, failing that, its latest turn outcome, both from its Stream entries
+  and reduced to one markdown-free line. Hosts without the companion Stream show the plain
+  subtitle.
+
+#### The session side panel: subagents or a checklist
+
+The drawer is one mode of a per-session side panel. Its other mode, **Checklist**, puts a
+checklist beside the conversation, the way Codex desktop keeps a plan beside its chat. The
+two modes share one column and switch with a segmented control, so a checklist and the
+subagents never compete for a second pane. The column uses the app's sidebar resize handle
+(`SidebarResizeHandle`, one app-wide width persisted in `paseo:session-side-panel-width`) and
+covers the pane on compact layouts. Mod+Shift+J toggles whichever mode was last shown.
+
+- **Linked checklist.** With `paseo.checklist-url` set, the panel embeds that page (an iframe on
+  web and Electron, a WebView on native) with Reload and Open in browser. The page keeps its
+  own state — coordinator rows and personal checkmarks live in the checklist's origin, never in
+  Paseo — so they survive app updates and are shared with every other viewer of that page.
+  Only absolute http(s) URLs are embedded.
+- **This session's Stream.** Without a link, the Checklist mode shows the session's own Stream
+  (`CompanionFeed`) beside the chat, gated on the host's `companionStream` feature like the
+  Chat / Stream switcher.
+
+**Programmatic control is the existing agent-label API** (the session-pin mechanism), so it
+works against today's daemon and needs no new RPC:
+
+| Label                 | Values                                     | Effect                                                      |
+| --------------------- | ------------------------------------------ | ----------------------------------------------------------- |
+| `paseo.side-panel`    | `checklist`, `subagents`; empty or cleared | Opens that mode beside the chat; empty or removed closes    |
+| `paseo.checklist-url` | absolute http(s) URL; empty or cleared     | The page the Checklist mode embeds; a header button appears |
+
+```sh
+paseo agent update <id> --label paseo.checklist-url=https://m4-mini.tailb2a35c.ts.net:8047/general-checklist.html \
+  --label paseo.side-panel=checklist
+paseo agent update <id> --label paseo.side-panel=          # close
+```
+
+The MCP `update_agent` tool takes the same labels (null clears). Labels are per session on the
+owning host, so the choice persists across reloads, devices and app updates. Clients apply
+label changes without taking input away from the parent's composer; user gestures (open,
+close, switch mode) write the label back. Old clients keep the labels and ignore them.
+
+Two programmatic routes, one per need:
+
+- **The checklist beside this conversation, on every platform** — the labels above. The panel
+  lives inside the agent's pane, so it follows that session, works on web, desktop and phones
+  (covering the chat there), and needs no daemon change.
+- **Any workspace tab beside the user's view** — `open_tab` with `placement: "side"` (see
+  [agent tab control](agent-tab-control.md#side-placement-page-targets-and-delivery-fork-2026-10-10)).
+  It reuses the workspace side pane and its existing resize, focus and close behaviour; a page
+  opens as a desktop browser tab. It is a workspace layout, so it does not follow one session
+  and has no phone form.
+
+`browser_new_tab` alone opens in the background without placement; Views are user-arranged.
+
+Reference model: Claude's redesigned Projects ([announcement, 2026-09-17](https://claude.com/blog/projects-redesigned))
+and Managed Agents [session threads](https://platform.claude.com/docs/en/managed-agents/session-threads).
+The drawer adopts the interaction, not the execution model — Paseo threads stay local,
+persistent Paseo agents.
+
+| Claude Projects / session threads                            | Paseo                                                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Coordinator chat that routes work to new or existing threads | Any parent agent; it creates subagents with `create_agent` and steers existing ones with `send_agent_prompt` |
+| Thread list on the right while you monitor the main chat     | Subagents drawer beside the parent (over it on compact)                                                      |
+| Primary thread: condensed starts/ends and blockers           | Row state + condensed blocker/report line; finish and permission notifications still reach the parent agent  |
+| Dive into a thread to examine and steer it                   | Select a row: full chat, **Reply to {subagent}**, approvals answered in that subagent's own stream           |
+| Return to the main chat with context intact                  | Back / close / Mod+Shift+J; the parent never unmounts                                                        |
+| Each thread its own session, branch and copy                 | Each subagent its own persistent agent; isolation is the existing worktree choice at creation                |
+| Work continues while away                                    | Agents run on the host regardless of the client; drawer state is client-only and per pane                    |
+| Shared project memory and library                            | Not part of this feature; per-chat Stream and artifacts remain the nearest analog                            |
+
+Known limits: explorer "Add to chat" still targets the tab's chat (the parent), and on plain web
+browsers Chrome may claim Mod+Shift+J before the page sees it; the buttons remain.
 
 ### Claude provider subagents: the task protocol
 

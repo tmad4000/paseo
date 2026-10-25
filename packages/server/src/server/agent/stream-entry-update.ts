@@ -5,7 +5,14 @@ import {
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
 import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import { parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
 import { retainCompanionEntries } from "./companion-stream.js";
+
+/** Tags parsed at write time; omitted when the text has none. */
+function tagsFor(text: string): { tags?: string[] } {
+  const tags = parseStreamHashtags(text);
+  return tags.length ? { tags } : {};
+}
 
 export function applyStreamEntryUpdate(
   entries: CompanionEntry[],
@@ -60,7 +67,7 @@ function createEntry(
   input: StreamEntryUpdate,
   text: string,
 ): CompanionEntry {
-  const common = { timestamp: new Date().toISOString(), text, truncated: false };
+  const common = { timestamp: new Date().toISOString(), text, truncated: false, ...tagsFor(text) };
   switch (input.action) {
     case "add_question": {
       const id = `question:${input.entryId ?? randomUUID()}`;
@@ -106,6 +113,7 @@ function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionE
     timestamp: previous?.timestamp ?? new Date().toISOString(),
     text: input.text.trim(),
     truncated: false,
+    ...tagsFor(input.text.trim()),
     status: ask.state === "done" ? "done" : "open",
     source: findAskSource(entries, ask.sourceMessageId),
     ask: {

@@ -1,3 +1,6 @@
+import { resolveAppVersion } from "@/utils/app-version";
+import { installGlobalErrorDiagnostics } from "@/diagnostics/client-errors/global-handlers";
+import { installClientDiagnostics } from "@/diagnostics/client-errors/store";
 import "@/styles/unistyles";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalProvider } from "@gorhom/portal";
@@ -15,21 +18,24 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppState, useWindowDimensions, View } from "react-native";
+import { AppState, Platform, useWindowDimensions, View } from "react-native";
 import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { AppearanceProvider } from "@/appearance/provider";
 import { CommandCenter } from "@/command-center/command-center";
+import { RecentWorkspaceSwitcher } from "@/navigation/recent-workspace-switcher";
 import { CommandCenterRootActions } from "@/command-center/root-registration";
 import { CommandCenterProvider } from "@/command-center/provider";
 import { CommandCenterWorkspaceActions } from "@/command-center/workspace-registration";
+import { CommandCenterDefaultProjectActions } from "@/default-project/command-center";
 import { PluginCommandCenterActions } from "@/plugins/command-center/registration";
 import { AddProjectFlowHost } from "@/components/add-project-flow-host";
 import { WorktreeSetupCalloutSource } from "@/components/worktree-setup-callout-source";
 import { DownloadToast } from "@/components/download-toast";
 import { QuittingOverlay } from "@/components/quitting-overlay";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import { QuickLaunchHost } from "@/quick-launch/host";
 import { ChangelogHost } from "@/changelog";
 import { AppDiagnosticHost } from "@/components/app-diagnostic-host";
 import { AppearanceStyleBoundary } from "@/components/appearance-style-boundary";
@@ -75,6 +81,7 @@ import { ThemedStack } from "@/navigation/themed-stack";
 import {
   useNativeNavigationBackHandler,
   useNavigationFocusHistoryTracker,
+  useNavigationGestureHandlers,
 } from "@/navigation/focus-history-runtime";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { AgentNavigationListener } from "@/desktop/agent-navigation";
@@ -491,6 +498,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const hasMountedDesktopSidebar = useLatchedBoolean(chromeEnabled);
   useNavigationFocusHistoryTracker({ enabled: chromeEnabled });
   useNativeNavigationBackHandler({ enabled: chromeEnabled });
+  useNavigationGestureHandlers({ enabled: chromeEnabled });
   const toggleAgentList = isCompactLayout ? toggleMobileAgentList : toggleDesktopAgentList;
   const toggleDesktopSidebars = useCallback(() => {
     // The focused workspace owns its layout key, its checkout, and therefore the
@@ -608,15 +616,18 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <WorktreeSetupCalloutSource />
         <CommandCenterRootActions />
         <CommandCenterWorkspaceActions />
+        <CommandCenterDefaultProjectActions />
         <PluginCommandCenterActions />
         <WorkspacePinShortcutHandler />
         <WorkspaceRenameHost />
         <CommandCenter />
+        <RecentWorkspaceSwitcher />
         <AddProjectFlowHost />
         <HostChooserModal />
         <ProviderSettingsHost />
         <WorkspaceSetupDialog />
         <KeyboardShortcutsDialog />
+        <QuickLaunchHost />
         <AppDiagnosticHost />
         <ChangelogHost />
         <QuittingOverlay />
@@ -994,6 +1005,18 @@ function RootAppTree() {
 
 export default function RootLayout() {
   useEffect(() => installWebScrollbarStyles(), []);
+  useEffect(() => {
+    void installClientDiagnostics();
+    return installGlobalErrorDiagnostics({
+      errorUtils: (
+        globalThis as {
+          ErrorUtils?: Parameters<typeof installGlobalErrorDiagnostics>[0]["errorUtils"];
+        }
+      ).ErrorUtils,
+      target: Platform.OS === "web" && typeof window !== "undefined" ? window : null,
+      appVersion: resolveAppVersion(),
+    });
+  }, []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active") {

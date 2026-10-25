@@ -29,7 +29,10 @@ export const StreamListRequestSchema = z.object({
   includeArchived: z.boolean().optional(),
   cursor: z.string().max(10000).optional(),
   limit: z.number().int().min(1).max(100).optional(),
+  // COMPAT(streamTags): only sent to hosts advertising features.streamTags. Entries must carry all.
+  tags: z.array(z.string().max(100)).max(20).optional(),
 });
+export const StreamTagCountSchema = z.object({ tag: z.string(), count: z.number().int() });
 export const StreamListResponseSchema = z.object({
   type: z.literal("stream.list.response"),
   payload: z.object({
@@ -49,6 +52,10 @@ export const StreamListResponseSchema = z.object({
       })
       .optional(),
     coverage: z.enum(["loaded_history", "not_loaded"]).optional(),
+    /** Tag counts across the whole scope and other filters, ignoring the tag filter itself. */
+    tagCounts: z.array(StreamTagCountSchema).optional(),
+    /** Pinned tags for the scope: this chat when agentId is set, otherwise the host-wide list. */
+    pinnedTags: z.array(z.string()).optional(),
   }),
 });
 export const StreamUpdateRequestSchema = z.object({
@@ -83,7 +90,26 @@ export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),
   payload: z.object({ requestId: z.string(), accepted: z.boolean(), error: z.string().optional() }),
 });
+export const StreamTagPinRequestSchema = z.object({
+  type: z.literal("stream.tags.pin.request"),
+  requestId: z.string(),
+  /** Pin within one chat's Stream; omit to pin in the host-wide Stream. */
+  agentId: z.string().optional(),
+  tag: z.string().max(100),
+  pinned: z.boolean(),
+});
+export const StreamTagPinResponseSchema = z.object({
+  type: z.literal("stream.tags.pin.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    error: z.string().optional(),
+    pinnedTags: z.array(z.string()),
+  }),
+});
 export type StreamRow = z.infer<typeof StreamRowSchema>;
+export type StreamTagCount = z.infer<typeof StreamTagCountSchema>;
+export type StreamTagPin = Omit<z.infer<typeof StreamTagPinRequestSchema>, "type" | "requestId">;
 export type StreamFilter = z.infer<typeof StreamFilterSchema>;
 export type StreamListOptions = Omit<z.infer<typeof StreamListRequestSchema>, "type" | "requestId">;
 export type StreamEntryUpdate = Omit<

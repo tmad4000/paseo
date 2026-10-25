@@ -1,3 +1,4 @@
+import type { AgentSnapshotPayload, UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
@@ -37,6 +38,8 @@ export interface SeedDaemonClient {
   ): Promise<{
     rows: import("@getpaseo/protocol/global-stream").StreamRow[];
     nextCursor: string | null;
+    tagCounts?: import("@getpaseo/protocol/global-stream").StreamTagCount[];
+    pinnedTags?: string[];
   }>;
 
   listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot>;
@@ -142,6 +145,7 @@ export interface SeedDaemonClient {
         currentModeId: string | null;
         status: string;
         title?: string | null;
+        labels?: Record<string, string>;
       };
     }>;
   }>;
@@ -157,7 +161,10 @@ export interface SeedDaemonClient {
       firstPromptPreview?: string | null;
     }>;
   }>;
-  updateAgent(agentId: string, updates: { name?: string }): Promise<void>;
+  updateAgent(
+    agentId: string,
+    updates: { name?: string; labels?: Record<string, string> },
+  ): Promise<void>;
   setAgentMode(agentId: string, modeId: string): Promise<unknown>;
   waitForAgentUpsert(
     agentId: string,
@@ -171,9 +178,7 @@ export interface SeedDaemonClient {
   ): Promise<{ status: string; final?: { lastError?: string | null } | null }>;
   archiveAgent(agentId: string): Promise<{ archivedAt: string }>;
   refreshAgent(agentId: string): Promise<unknown>;
-  fetchAgent(options: {
-    agentId: string;
-  }): Promise<{ agent: { id: string; archivedAt?: string | null } } | null>;
+  fetchAgent(options: { agentId: string }): Promise<{ agent: AgentSnapshotPayload } | null>;
   getLastServerInfoMessage(): {
     features?: {
       projectAdd?: boolean;
@@ -201,6 +206,12 @@ export interface SeedDaemonClient {
     handler: (event: { terminalId: string; type: string; data?: Uint8Array }) => void,
   ): () => void;
   killTerminal(terminalId: string): Promise<{ error: string | null }>;
+  openWorkspaceTab(input: {
+    workspaceId: string;
+    target: UiWorkspaceTabTarget;
+    focus?: boolean;
+    placement?: "main" | "side";
+  }): Promise<{ deliveredTo: number; error: string | null }>;
 }
 
 export async function connectSeedClient(options?: {

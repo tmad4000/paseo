@@ -39,12 +39,15 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/file-icons.md](docs/file-icons.md)                             | Material icon theme integration for the file explorer                                                                          |
 | [docs/queue-mirroring.md](docs/queue-mirroring.md)                   | Moving the composer message queue onto the daemon so it mirrors across devices and drains with no client attached              |
 | [docs/session-routing.md](docs/session-routing.md) | Existing-chat Find/Send, scope isolation, tool-free matching, and delivery recovery |
+| [docs/quick-launch.md](docs/quick-launch.md) | Quick launch: starting an agent from a dialog without leaving the current one, default destination, one-request creation |
 | [docs/agent-tab-control.md](docs/agent-tab-control.md)               | MCP open_tab/close_tab over the ui.command push, and the queue-instead-of-interrupt busy-send policy                           |
 | [docs/companion-stream.md](docs/companion-stream.md)                 | Per-chat and global Stream — private review across paired hosts, questions, retention, capture limits and compatibility       |
 | [docs/providers.md](docs/providers.md)                               | Adding a new agent provider end-to-end                                                                                         |
 | [docs/forge-providers.md](docs/forge-providers.md)                   | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
 | [docs/custom-providers.md](docs/custom-providers.md)                 | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
 | [docs/plugins.md](docs/plugins.md)                                   | Local plugin manifest, directory source config, RPCs, native surfaces, and attachment sources                                  |
+| [docs/qa/conversation-sharing-phase1/README.md](docs/qa/conversation-sharing-phase1/README.md) | Phase 1 sharing test outputs, screenshots, and platform coverage limits |
+| [docs/design/conversation-sharing.md](docs/design/conversation-sharing.md) | Fork snapshot share links, redaction, guest boundary, and Phase 1 as-built notes |
 | [docs/service-proxy.md](docs/service-proxy.md)                       | Service proxy: exposing workspace scripts at public URLs, DNS setup, reverse proxy config                                      |
 | [docs/development.md](docs/development.md)                           | Dev server, build sync gotchas, CLI reference, agent state, Playwright MCP                                                     |
 | [docs/rpc-namespacing.md](docs/rpc-namespacing.md)                   | WebSocket RPC naming convention — dotted namespaces and `.request`/`.response` pairs                                           |
@@ -59,7 +62,8 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/mobile-testing.md](docs/mobile-testing.md)                     | Maestro and mobile test workflows                                                                                              |
 | [docs/cross-project-views.md](docs/cross-project-views.md)           | Views: cross-workspace split layouts, per-tab scope, timeline sync, selector gotcha                                            |
 | [docs/mobile-panels.md](docs/mobile-panels.md)                       | Compact left/center/right panel ownership, worklet motion, gesture revisions, and Fabric constraints                           |
-| [docs/sidebar-sorting.md](docs/sidebar-sorting.md) | Conversation sort modes, durable message clocks, historical fallback, and host compatibility |
+| [docs/sidebar-sorting.md](docs/sidebar-sorting.md) | Conversation sort modes, pinned projects and the Default project, durable message clocks, historical fallback, and host compatibility |
+| [docs/sidebar-filter.md](docs/sidebar-filter.md) | Live sidebar filter tiers — tree, nested tab titles, debounced message search and its daemon bounds |
 | [docs/explorer-sidebar.md](docs/explorer-sidebar.md)                 | Explorer sidebar and ordinary side-pane host contracts, lifecycle, placement, and routing preferences                          |
 | [docs/ad-hoc-daemon-testing.md](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                                                                                        |
 | [docs/browser-capture-harness.md](docs/browser-capture-harness.md)   | Real-Electron browser screenshot harness and compositor-surface gotcha                                                         |
@@ -120,6 +124,24 @@ retarget the PR to `next` and preserve that destination through delivery. Follow
 [release branch discipline](docs/release.md#release-branch-discipline) for creating
 and updating `next`, integrating it after a release, and releasing a hotfix from a tag.
 
+## Delivery cadence
+
+- Keep related fixes for one user-visible outcome on one feature branch. Commit and push
+  progress as useful, but finish the batch before opening its PR or starting a full
+  validation pipeline. A push to a branch without a PR does not run this repo's PR CI.
+- While implementing, run the tests for changed behavior. Before the PR, run
+  `npm run format`, `npm run lint`, and `npm run typecheck` once for the coherent
+  batch. Re-run only checks affected by later edits. Use the PR's routed GitHub
+  checks for full-suite verification; review their actual conclusions before merge.
+- `no-mistakes` is optional for routine work. Use it when the user asks for it,
+  or when its extra independent review is warranted by a broad or high-risk
+  change. Do not start it for each small follow-up in a batch. Once a run owns
+  a branch, finish or recover that run through its documented gates; do not
+  bypass an active run.
+- Do not bump all workspace versions in each feature or correction PR. The
+  release owner makes one version change for the release candidate after the
+  related code is integrated, following [docs/release.md](docs/release.md).
+
 ## Critical rules
 
 - **For fork feature changes, upstream updates, reconciliation, and fork releases, read and update [the fork feature register](docs/fork-features.md).** Preserve its user-visible acceptance checks and account for each included feature before declaring parity or an installation verified.
@@ -135,7 +157,7 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
   - Never re-run a test suite that another agent already ran and reported green — trust the result.
   - For full suite verification, push to CI and check GitHub Actions instead.
 - Add tests to existing suites and reuse their npm scripts and CI jobs instead of creating feature-specific ones.
-- **Always run typecheck and lint after every change.**
+- **Run typecheck and lint before the PR and after edits that could affect their result.**
 - **Build workspace packages before diagnosing cross-package type errors.** This repo consumes generated declarations across workspaces. If typecheck fails in a package that depends on another workspace, rebuild the owning stack first so `dist` declarations are current:
   - `npm run build:client` — rebuild protocol and client declarations.
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.

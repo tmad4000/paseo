@@ -1,3 +1,8 @@
+import {
+  RedactionProfileSchema,
+  ShareSnapshotSchema,
+  ShareRecordPayloadSchema,
+} from "./sharing.js";
 import { AgentArtifactSchema } from "./agent-artifact.js";
 export { AgentArtifactSchema } from "./agent-artifact.js";
 import {
@@ -5,6 +10,8 @@ import {
   StreamListResponseSchema,
   StreamUpdateRequestSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinRequestSchema,
+  StreamTagPinResponseSchema,
 } from "./global-stream.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
 export {
@@ -88,6 +95,12 @@ import {
   BrowserAutomationExecuteResponseSchema,
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
+import {
+  ClientDiagnosticsListRequestSchema,
+  ClientDiagnosticsListResponseSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsReportResponseSchema,
+} from "./client-diagnostics.js";
 import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -956,7 +969,7 @@ export const UpdateAgentRequestMessageSchema = z.object({
   type: z.literal("update_agent_request"),
   agentId: z.string(),
   name: z.string().optional(),
-  labels: z.record(z.string(), z.string()).optional(),
+  labels: z.record(z.string(), z.string().nullable()).optional(),
   requestId: z.string(),
 });
 
@@ -997,6 +1010,23 @@ export const ProjectIconSetRequestSchema = z.object({
 export const ProjectRemoveRequestSchema = z.object({
   type: z.literal("project.remove.request"),
   projectId: z.string(),
+  requestId: z.string(),
+});
+
+// COMPAT(projectPinning): fork feature, gated on server_info.features.projectPinning.
+export const ProjectPinSetRequestSchema = z.object({
+  type: z.literal("project.pin.set.request"),
+  projectId: z.string(),
+  pinned: z.boolean(),
+  requestId: z.string(),
+});
+
+// Exactly one Default project per host: setting one clears the previous default on that host.
+// COMPAT(projectPinning): fork feature, gated on server_info.features.projectPinning.
+export const ProjectDefaultSetRequestSchema = z.object({
+  type: z.literal("project.default.set.request"),
+  projectId: z.string(),
+  isDefault: z.boolean(),
   requestId: z.string(),
 });
 
@@ -2204,6 +2234,32 @@ export const ProjectRemoveResponseSchema = z.object({
   payload: ProjectRemoveResponsePayloadSchema,
 });
 
+export const ProjectPinSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  accepted: z.boolean(),
+  pinnedAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+export const ProjectPinSetResponseSchema = z.object({
+  type: z.literal("project.pin.set.response"),
+  payload: ProjectPinSetResponsePayloadSchema,
+});
+
+export const ProjectDefaultSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  accepted: z.boolean(),
+  defaultAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+export const ProjectDefaultSetResponseSchema = z.object({
+  type: z.literal("project.default.set.response"),
+  payload: ProjectDefaultSetResponsePayloadSchema,
+});
+
 export const WorkspaceTitleSetResponsePayloadSchema = z.object({
   requestId: z.string(),
   workspaceId: z.string(),
@@ -2677,6 +2733,48 @@ export const SessionSearchResponseSchema = z.object({
 
 export type SessionSearchResult = z.infer<typeof SessionSearchResultSchema>;
 
+// Lexical message search for the sidebar filter. Unlike `session.search` it never calls a model;
+// the daemon bounds the scan (sessions, hits, time) and supersedes an older request from the same
+// client. See docs/sidebar-filter.md.
+export const SessionTextSearchHitSchema = z.object({
+  agentId: z.string(),
+  workspaceId: z.string(),
+  workspaceTitle: z.string(),
+  projectName: z.string(),
+  title: z.string(),
+  provider: z.string(),
+  role: z.enum(["user", "assistant"]),
+  snippet: z.string(),
+  /** Offsets into `snippet`, in UTF-16 code units. */
+  matchStart: z.number().int().nonnegative(),
+  matchLength: z.number().int().nonnegative(),
+  timestamp: z.string().optional(),
+  seq: z.number().int().optional(),
+});
+
+export const SessionTextSearchRequestSchema = z.object({
+  type: z.literal("session.text_search.request"),
+  requestId: z.string(),
+  query: z.string().min(1).max(500),
+  /** Restricts the search to these workspaces. Omitted searches every active workspace. */
+  workspaceIds: z.array(z.string()).max(2000).optional(),
+});
+
+export const SessionTextSearchResponseSchema = z.object({
+  type: z.literal("session.text_search.response"),
+  payload: z.object({
+    requestId: z.string(),
+    hits: z.array(SessionTextSearchHitSchema),
+    searchedCount: z.number().int().nonnegative(),
+    totalCount: z.number().int().nonnegative(),
+    /** True when a bound stopped the scan before every candidate was read. */
+    truncated: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type SessionTextSearchHit = z.infer<typeof SessionTextSearchHitSchema>;
+
 export const AgentQueueSnapshotSchema = z.object({
   agentId: z.string(),
   /** Increments on every mutation so clients can drop a stale broadcast. */
@@ -2727,6 +2825,35 @@ export const AgentQueueListRequestSchema = z.object({
   type: z.literal("agent.queue.list.request"),
   requestId: z.string(),
   agentId: z.string(),
+});
+
+/** Host-side delivery state for one agent, for `paseo queue ls`. Gated on `deliveryInspect`. */
+export const AgentQueueInspectRequestSchema = z.object({
+  type: z.literal("agent.queue.inspect.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/**
+ * A device's unsent counts, sent after each reconnect flush so the host can say
+ * which devices still hold messages it has not received. Gated on `deliveryInspect`.
+ */
+export const ClientOutboxReportRequestSchema = z.object({
+  type: z.literal("client.outbox.report.request"),
+  requestId: z.string(),
+  // Bounded: the daemon keeps one report per client in memory.
+  deviceLabel: z.string().max(120).optional(),
+  platform: z.string().max(40).optional(),
+  agents: z
+    .array(
+      z.object({
+        agentId: z.string().max(200),
+        unsentQueued: z.number().int().nonnegative(),
+        unsentDirect: z.number().int().nonnegative(),
+        oldestCreatedAt: z.string().max(64).optional(),
+      }),
+    )
+    .max(500),
 });
 
 export const AgentQueueReorderRequestSchema = z.object({
@@ -2796,6 +2923,51 @@ export const AgentQueueSendNowResponseSchema = z.object({
 export const AgentQueueListResponseSchema = z.object({
   type: z.literal("agent.queue.list.response"),
   payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueInspectResponseSchema = z.object({
+  type: z.literal("agent.queue.inspect.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    queue: AgentQueueSnapshotSchema.nullable(),
+    /** Newest first; drainedAt/preview are null for items drained before they were recorded. */
+    drained: z.array(
+      z.object({
+        id: z.string(),
+        drainedAt: z.string().nullable(),
+        preview: z.string().nullable(),
+      }),
+    ),
+    /** Direct-send and drain receipts, newest first. `completed` means provider submission. */
+    receipts: z.array(
+      z.object({
+        messageId: z.string(),
+        state: z.string(),
+        createdAt: z.string().nullable(),
+      }),
+    ),
+    deviceReports: z.array(
+      z.object({
+        clientId: z.string(),
+        deviceLabel: z.string().nullable(),
+        platform: z.string().nullable(),
+        reportedAt: z.string(),
+        unsentQueued: z.number().int().nonnegative(),
+        unsentDirect: z.number().int().nonnegative(),
+        oldestCreatedAt: z.string().nullable(),
+      }),
+    ),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ClientOutboxReportResponseSchema = z.object({
+  type: z.literal("client.outbox.report.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentQueueReorderResponseSchema = z.object({
@@ -3032,6 +3204,8 @@ export const WorkspaceClearAttentionRequestSchema = z.object({
 export const WorkspaceMarkUnreadRequestSchema = z.object({
   type: z.literal("workspace.mark_unread.request"),
   workspaceId: z.string(),
+  // Fork: target one agent (a right-clicked tab) instead of the workspace's newest root agent.
+  agentId: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -3510,7 +3684,15 @@ export const UiWorkspaceTabTargetSchema = z.discriminatedUnion("kind", [
     subagentId: z.string(),
   }),
   z.object({ kind: z.literal("terminal"), terminalId: z.string() }),
-  z.object({ kind: z.literal("browser"), browserId: z.string() }),
+  z.object({
+    kind: z.literal("browser"),
+    // An existing browser on the client, or omitted with `url` to show a page: the daemon
+    // derives a stable id from the URL (ui-browser-target.ts), so repeats reuse one tab.
+    browserId: z.string().optional(),
+    // COMPAT(uiBrowserUrl): added in fork 0.10.0-beta.12. Clients that predate it ignore the
+    // URL and show the browser they have (or an empty one) for the derived id.
+    url: z.string().optional(),
+  }),
   z.object({
     kind: z.literal("file"),
     path: z.string(),
@@ -3524,6 +3706,14 @@ export const UiWorkspaceTabTargetSchema = z.discriminatedUnion("kind", [
 
 export type UiWorkspaceTabTarget = z.infer<typeof UiWorkspaceTabTargetSchema>;
 
+// Where an opened tab lands. "side" opens it in the workspace's side pane, beside what the
+// user is looking at, and never navigates or moves focus on any attached client; "main" (the
+// default) is the existing open-or-focus behaviour. Compact layouts have no side pane and keep
+// the tab in the background instead.
+// COMPAT(uiTabPlacement): added in fork 0.10.0-beta.12; older clients treat it as "main".
+export const UiTabPlacementSchema = z.enum(["main", "side"]);
+export type UiTabPlacement = z.infer<typeof UiTabPlacementSchema>;
+
 export const UiTabOpenRequestMessageSchema = z.object({
   type: z.literal("ui.tab.open.request"),
   requestId: z.string(),
@@ -3534,12 +3724,14 @@ export const UiTabOpenRequestMessageSchema = z.object({
   target: UiWorkspaceTabTargetSchema,
   // Default true. False opens the tab without stealing focus.
   focus: z.boolean().optional(),
+  placement: UiTabPlacementSchema.optional(),
 });
 
 export type UiTabOpenRequestMessage = z.infer<typeof UiTabOpenRequestMessageSchema>;
 
 // These connection event streams have no directory bootstrap or timeline membership.
 export const SessionEventSubscriptionSchema = z.enum([
+  "share.link.update",
   "project.update",
   "providers_snapshot_update",
   "agent_attention_required",
@@ -3592,7 +3784,98 @@ export const SubscriptionReleaseResponseSchema = z.object({
   payload: z.object({ requestId: z.string(), subscriptionId: z.string() }),
 });
 
+export const ShareLinkPreviewRequestSchema = z.object({
+  type: z.literal("share.link.preview.request"),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+  title: z.string().max(500).optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkCreateRequestSchema = z.object({
+  type: z.literal("share.link.create.request"),
+  previewDigest: z.string().optional(),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+  mode: z.literal("snapshot").optional(),
+  title: z.string().max(500).optional(),
+  expiresAt: z.string().nullable().optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkListRequestSchema = z.object({
+  type: z.literal("share.link.list.request"),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+});
+export const ShareLinkUpdateRequestSchema = z.object({
+  type: z.literal("share.link.update.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+  title: z.string().max(500).optional(),
+  expiresAt: z.string().nullable().optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkRevokeRequestSchema = z.object({
+  type: z.literal("share.link.revoke.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+});
+export const ShareLinkDeleteRequestSchema = z.object({
+  type: z.literal("share.link.delete.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+});
+export const ShareLinkPreviewResponseSchema = z.object({
+  type: z.literal("share.link.preview.response"),
+  payload: z.object({ requestId: z.string().optional(), snapshot: ShareSnapshotSchema.optional() }),
+});
+export const ShareLinkCreateResponseSchema = z.object({
+  type: z.literal("share.link.create.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+    url: z.string().optional(),
+  }),
+});
+export const ShareLinkListResponseSchema = z.object({
+  type: z.literal("share.link.list.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    shares: z.array(ShareRecordPayloadSchema).optional(),
+  }),
+});
+export const ShareLinkUpdateResponseSchema = z.object({
+  type: z.literal("share.link.update.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+  }),
+});
+export const ShareLinkRevokeResponseSchema = z.object({
+  type: z.literal("share.link.revoke.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+  }),
+});
+export const ShareLinkDeleteResponseSchema = z.object({
+  type: z.literal("share.link.delete.response"),
+  payload: z.object({ requestId: z.string().optional(), deletedId: z.string().optional() }),
+});
+export const ShareLinkUpdateEventSchema = z.object({
+  type: z.literal("share.link.update"),
+  payload: z.object({
+    share: ShareRecordPayloadSchema.optional(),
+    deletedId: z.string().optional(),
+  }),
+});
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  ShareLinkPreviewRequestSchema,
+  ShareLinkCreateRequestSchema,
+  ShareLinkListRequestSchema,
+  ShareLinkUpdateRequestSchema,
+  ShareLinkRevokeRequestSchema,
+  ShareLinkDeleteRequestSchema,
   UiTabOpenRequestMessageSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
@@ -3617,9 +3900,12 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UpdateCompanionEntryRequestMessageSchema,
   StreamListRequestSchema,
   StreamUpdateRequestSchema,
+  StreamTagPinRequestSchema,
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
+  ProjectPinSetRequestSchema,
+  ProjectDefaultSetRequestSchema,
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceLabelListRequestSchema,
@@ -3704,6 +3990,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentArtifactsScanRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   SessionSearchRequestSchema,
+  SessionTextSearchRequestSchema,
   AgentQueueEnqueueRequestSchema,
   AgentQueueRemoveRequestSchema,
   AgentQueueEditRequestSchema,
@@ -3711,6 +3998,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueListRequestSchema,
   AgentQueueReorderRequestSchema,
   AgentQueueGetItemImagesRequestSchema,
+  AgentQueueInspectRequestSchema,
+  ClientOutboxReportRequestSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsListRequestSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
   CheckoutDiffGetRequestSchema,
@@ -4083,6 +4374,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentHistorySearch: z.boolean().optional(),
         // COMPAT(sessionSearch): added in v0.10.0, remove gate after 2027-04-04.
         sessionSearch: z.boolean().optional(),
+        // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
+        sessionTextSearch: z.boolean().optional(),
         // COMPAT(conversationMessageActivity): added in v0.10.0; remove gate after 2027-04-06.
         conversationMessageActivity: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
@@ -4103,12 +4396,19 @@ export const ServerInfoStatusPayloadSchema = z
         artifactFeed: z.boolean().optional(),
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: z.boolean().optional(),
+        // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
+        deliveryInspect: z.boolean().optional(),
+        // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+        clientDiagnostics: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
+        conversationSharing: z.boolean().optional(),
         // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
         globalStream: z.boolean().optional(),
         durableStream: z.boolean().optional(),
         streamMessageInventory: z.boolean().optional(),
+        // COMPAT(streamTags): fork feature; #hashtag filters, tag counts and pinned tags.
+        streamTags: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
@@ -4135,8 +4435,14 @@ export const ServerInfoStatusPayloadSchema = z
         providerSubagentNesting: z.boolean().optional(),
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
         workspacePinning: z.boolean().optional(),
+        // COMPAT(projectPinning): fork feature, added in fork v0.10.0-beta.12, drop the gate after 2027-04-10.
+        projectPinning: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
+        // COMPAT(agentMarkUnread): fork feature, added in fork v0.10.0-beta.15, drop the gate after 2027-04-17.
+        agentMarkUnread: z.boolean().optional(),
+        // COMPAT(manualAgentStatus): fork feature, remove gate after 2027-04-24.
+        manualAgentStatus: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: z.boolean().optional(),
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
@@ -4191,6 +4497,9 @@ export const ServerInfoStatusPayloadSchema = z
         agentConfigApply: z.boolean().optional(),
         // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
         uiCommands: z.boolean().optional(),
+        // COMPAT(uiTabPlacement): fork 0.10.0-beta.12; side placement, page targets, and
+        // ui.command delivery to modern clients. Remove after 2027-04-10.
+        uiTabPlacement: z.boolean().optional(),
       })
       .optional(),
   })
@@ -4671,6 +4980,10 @@ export const WorkspaceProjectDescriptorPayloadSchema = z.object({
   projectIconRevision: z.string().optional(),
   projectRootPath: z.string(),
   projectKind: z.enum(["git", "non_git", "directory"]),
+  // ISO timestamps; absent or null means not pinned / not the host's Default project.
+  // COMPAT(projectPinning): fork feature, added in fork v0.10.0-beta.12, keep optional.
+  projectPinnedAt: z.string().nullable().optional(),
+  projectDefaultAt: z.string().nullable().optional(),
   // COMPAT(directorySync): sequence of this latest directory projection.
   syncSeq: z.number().int().positive().optional(),
 });
@@ -7049,6 +7362,7 @@ export const UiCommandMessageSchema = z.object({
       workspaceId: z.string(),
       target: UiWorkspaceTabTargetSchema,
       focus: z.boolean().optional(),
+      placement: UiTabPlacementSchema.optional(),
     }),
     z.object({
       command: z.literal("tab.close"),
@@ -7261,6 +7575,13 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  ShareLinkPreviewResponseSchema,
+  ShareLinkCreateResponseSchema,
+  ShareLinkListResponseSchema,
+  ShareLinkUpdateResponseSchema,
+  ShareLinkRevokeResponseSchema,
+  ShareLinkDeleteResponseSchema,
+  ShareLinkUpdateEventSchema,
   UiTabOpenResponseMessageSchema,
   UiCommandMessageSchema,
   BrowserHostRegisterResponseSchema,
@@ -7386,6 +7707,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentArtifactsScanResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   SessionSearchResponseSchema,
+  SessionTextSearchResponseSchema,
   AgentQueueEnqueueResponseSchema,
   AgentQueueRemoveResponseSchema,
   AgentQueueEditResponseSchema,
@@ -7393,13 +7715,20 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueListResponseSchema,
   AgentQueueReorderResponseSchema,
   AgentQueueGetItemImagesResponseSchema,
+  AgentQueueInspectResponseSchema,
+  ClientOutboxReportResponseSchema,
+  ClientDiagnosticsReportResponseSchema,
+  ClientDiagnosticsListResponseSchema,
   AgentQueueUpdateMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   StreamListResponseSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
+  ProjectPinSetResponseSchema,
+  ProjectDefaultSetResponseSchema,
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
@@ -7605,6 +7934,8 @@ export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessa
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
 export type ProjectIconSetResponse = z.infer<typeof ProjectIconSetResponseSchema>;
 export type ProjectRemoveResponse = z.infer<typeof ProjectRemoveResponseSchema>;
+export type ProjectPinSetResponse = z.infer<typeof ProjectPinSetResponseSchema>;
+export type ProjectDefaultSetResponse = z.infer<typeof ProjectDefaultSetResponseSchema>;
 export type WorkspaceTitleSetResponse = z.infer<typeof WorkspaceTitleSetResponseSchema>;
 export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
@@ -7759,6 +8090,8 @@ export type UpdateCompanionEntryRequestMessage = z.infer<
 export type ProjectRenameRequest = z.infer<typeof ProjectRenameRequestSchema>;
 export type ProjectIconSetRequest = z.infer<typeof ProjectIconSetRequestSchema>;
 export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
+export type ProjectPinSetRequest = z.infer<typeof ProjectPinSetRequestSchema>;
+export type ProjectDefaultSetRequest = z.infer<typeof ProjectDefaultSetRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;

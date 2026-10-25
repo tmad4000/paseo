@@ -1,3 +1,4 @@
+import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import React, { memo, useCallback, useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -18,6 +19,7 @@ import {
 } from "@/components/message";
 import type { TurnFooterHost } from "./layout";
 import { AssistantForkMenu } from "@/components/assistant-fork-menu";
+import { ThreadTurnControls } from "@/threads/turn-controls";
 import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 
@@ -40,7 +42,10 @@ export type AssistantTurnForkHandler = (input: {
  * Kept separate from `AssistantTurnForkHandler` (whose `boundary` stays
  * required) so the compiler keeps enforcing that completed turns always pin one.
  */
-export type InFlightTurnForkHandler = (target: AssistantForkTarget) => Promise<void> | void;
+export type InFlightTurnForkHandler = (
+  // A thread needs a completed reply to anchor to, so the streaming turn cannot start one.
+  target: Exclude<AssistantForkTarget, "thread">,
+) => Promise<void> | void;
 
 export const TurnFooter = memo(function TurnFooter({
   isRunning,
@@ -59,7 +64,7 @@ export const TurnFooter = memo(function TurnFooter({
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onForkInFlightTurn?: InFlightTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   if (isRunning) {
     return (
@@ -102,7 +107,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   return (
     <TurnFooterRow>
@@ -178,7 +183,7 @@ function CompletedTurnFooter({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   const getContent = useCallback(
     () =>
@@ -203,6 +208,7 @@ function CompletedTurnFooter({
     },
     [boundary, onForkAssistantTurn],
   );
+  const handleStartThread = useCallback(() => handleFork("thread"), [handleFork]);
   return (
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
@@ -212,7 +218,11 @@ function CompletedTurnFooter({
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}
         onPin={onPin}
-      />
+      >
+        {onForkAssistantTurn ? (
+          <ThreadTurnControls boundary={boundary} onStartThread={handleStartThread} />
+        ) : null}
+      </AssistantTurnFooter>
     </View>
   );
 }

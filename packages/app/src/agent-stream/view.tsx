@@ -1,3 +1,7 @@
+import { MessagePinItem } from "@/companion-stream/message-pin-control";
+import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
+import { useMessagePin } from "@/companion-stream/use-message-pin";
+import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
@@ -41,7 +45,7 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
-import type { StreamItem } from "@/types/stream";
+import { isUnreconciledLocalUserMessage, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import type { PendingPermission } from "@/types/shared";
@@ -52,6 +56,9 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
+import { useSendOutboxStore } from "@/stores/send-outbox-store";
+import { resolveChatMessageDeliveryState } from "@/composer/delivery-state";
+import { promptDirectSendAttention } from "@/composer/delivery-actions";
 import { useRevealedText } from "@/hooks/use-revealed-text";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { useLoadOlderAgentHistory } from "@/hooks/use-load-older-agent-history";
@@ -99,6 +106,7 @@ import {
 } from "@/workspace/file-open";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useThreadsHost } from "@/threads/context";
 import { useForkAgent } from "@/hooks/use-fork-agent";
 import { isWeb } from "@/constants/platform";
 import type { Theme } from "@/styles/theme";
@@ -106,6 +114,25 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
+
+/** Sheets and Stream tag suggestions for everything rendered inside one chat. */
+function ChatSurfaceProviders({
+  serverId,
+  agentId,
+  children,
+}: {
+  serverId: string;
+  agentId: string;
+  children: ReactNode;
+}) {
+  return (
+    <ToolCallSheetProvider>
+      <StreamTagScopeProvider serverId={serverId} agentId={agentId}>
+        {children}
+      </StreamTagScopeProvider>
+    </ToolCallSheetProvider>
+  );
+}
 
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
@@ -157,7 +184,7 @@ function renderStreamItemWithTurnFooter(input: {
   strategy: TurnContentStrategy;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }): ReactNode {
   if (!input.content) {
     return null;
@@ -357,6 +384,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       () => new Set(pendingMessageSubmissions.map((submission) => submission.clientMessageId)),
       [pendingMessageSubmissions],
     );
+    const submissionsByClientMessageId = useMemo(
+      () =>
+        new Map(
+          pendingMessageSubmissions.map((submission) => [
+            submission.clientMessageId,
+            { rpcSettled: submission.rpcSettled === true },
+          ]),
+        ),
+      [pendingMessageSubmissions],
+    );
     const isMobile = useIsCompactFormFactor();
     const streamRenderStrategy = useMemo(
       () =>
@@ -379,6 +416,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const transformTimelineItem = useInstalledTimelineTransform(resolvedServerId);
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
+    const sendOutboxEntries = useSendOutboxStore((state) => state.entries);
     const sessionStreamHead = useSessionStore((state) =>
       state.sessions[resolvedServerId]?.agentStreamHead?.get(agentId),
     );
@@ -439,13 +477,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       setExpandedToolCallGroupIds(new Set());
     }, [agentId]);
 
-    const handlePin = useCallback(
-      (text: string) => {
-        if (!agentId || !client) return;
-        client.updateCompanionEntry({ agentId, action: "add_pin", text }).catch(() => {});
-      },
-      [agentId, client],
-    );
+    const handlePin = useMessagePin(resolvedServerId, agentId, client, readOnly);
 
     const handleQAndA = useCallback(
       (text: string, messageId?: string) => {
@@ -526,6 +558,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       handleInlinePathPress({ raw: filePath, path: filePath }, "preferred");
     });
 
+    const threadsHost = useThreadsHost();
     const handleForkAssistantTurn: AssistantTurnForkHandler = useStableEvent(
       async ({ target, boundary }) => {
         await forkAgent({
@@ -534,6 +567,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           workspaceId: context.workspaceId,
           target,
           boundary,
+          layoutWorkspaceId: threadsHost?.layoutWorkspaceId,
         });
       },
     );
@@ -720,12 +754,21 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       });
     }, []);
 
+    const handleDeliveryAttention = useCallback(
+      (clientMessageId: string) => {
+        const entry = useSendOutboxStore.getState().entries[clientMessageId];
+        if (entry) void promptDirectSendAttention({ entry, client });
+      },
+      [client],
+    );
+
     const renderUserMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "user_message" }>) => {
         return (
           <ChatFindExpansion messageId={getStreamItemMessageId(item)}>
-            {() => (
+            {(renderFullContent) => (
               <UserMessage
+                renderFullContent={renderFullContent}
                 serverId={resolvedServerId}
                 agentId={agentId}
                 messageId={item.messageId}
@@ -741,6 +784,17 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                   item.clientMessageId !== undefined &&
                   pendingClientMessageIds.has(item.clientMessageId)
                 }
+                deliveryState={resolveChatMessageDeliveryState({
+                  isCanonical: !isUnreconciledLocalUserMessage(item),
+                  submission: item.clientMessageId
+                    ? submissionsByClientMessageId.get(item.clientMessageId)
+                    : undefined,
+                  outboxEntry: item.clientMessageId
+                    ? sendOutboxEntries[item.clientMessageId]
+                    : undefined,
+                })}
+                clientMessageId={item.clientMessageId}
+                onDeliveryAttentionPress={handleDeliveryAttention}
                 onPin={handlePin}
                 onQAndA={handleQAndA}
               />
@@ -753,6 +807,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agentId,
         client,
         pendingClientMessageIds,
+        submissionsByClientMessageId,
+        sendOutboxEntries,
+        handleDeliveryAttention,
         resolvedServerId,
         handlePin,
         handleQAndA,
@@ -771,23 +828,29 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           >
             <ChatFindExpansion messageId={getStreamItemMessageId(item)}>
               {(renderFullContent) => (
-                <AssistantMessage
-                  renderFullContent={renderFullContent}
-                  occurrenceKey={createAssistantImageOccurrenceKey({ agentId, itemId: item.id })}
-                  message={item.text}
-                  timestamp={item.timestamp.getTime()}
-                  workspaceRoot={workspaceRoot}
-                  serverId={resolvedServerId}
-                  client={client}
-                  spacing={layoutItem.assistantSpacing}
-                  phase={layoutItem.phase}
-                />
+                <MessagePinItem
+                  text={item.text}
+                  onPin={handlePin}
+                  sourceId={`msg:${getStreamItemMessageId(item)}`}
+                >
+                  <AssistantMessage
+                    renderFullContent={renderFullContent}
+                    occurrenceKey={createAssistantImageOccurrenceKey({ agentId, itemId: item.id })}
+                    message={item.text}
+                    timestamp={item.timestamp.getTime()}
+                    workspaceRoot={workspaceRoot}
+                    serverId={resolvedServerId}
+                    client={client}
+                    spacing={layoutItem.assistantSpacing}
+                    phase={layoutItem.phase}
+                  />
+                </MessagePinItem>
               )}
             </ChatFindExpansion>
           </AssistantFileLinkResolverProvider>
         );
       },
-      [agentId, client, handleInlinePathPress, resolvedServerId, toast, workspaceRoot],
+      [agentId, client, handleInlinePathPress, resolvedServerId, toast, workspaceRoot, handlePin],
     );
 
     const renderThoughtItem = useCallback(
@@ -1156,7 +1219,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         revealLoadedMessage={revealLoadedHistory}
         visibleMessageIds={visibleMessageIds}
       >
-        <ToolCallSheetProvider>
+        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId}>
           <AssistantSelectionCopySurface style={stylesheet.container}>
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({
@@ -1203,7 +1266,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               </View>
             )}
           </AssistantSelectionCopySurface>
-        </ToolCallSheetProvider>
+        </ChatSurfaceProviders>
       </ChatFind>
     );
   },

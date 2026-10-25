@@ -1878,6 +1878,107 @@ test("workspace mark unread selects the newest finished workspace root", async (
   });
 });
 
+test("workspace mark unread targets the requested agent when agentId is given", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  const workspace = createPersistedWorkspaceRecord({
+    workspaceId: REPO_CWD,
+    projectId: REPO_CWD,
+    cwd: REPO_CWD,
+    kind: "directory",
+    displayName: "repo",
+    createdAt: "2026-03-30T15:00:00.000Z",
+    updatedAt: "2026-03-30T15:00:00.000Z",
+  });
+  const project = createPersistedProjectRecord({
+    projectId: REPO_CWD,
+    rootPath: REPO_CWD,
+    kind: "non_git",
+    displayName: "repo",
+    createdAt: "2026-03-30T15:00:00.000Z",
+    updatedAt: "2026-03-30T15:00:00.000Z",
+  });
+  const storedRecords = new Map<string, StoredAgentRecord>([
+    [
+      "root-agent",
+      makeStoredAgent({
+        id: "root-agent",
+        cwd: REPO_CWD,
+        workspaceId: workspace.workspaceId,
+        updatedAt: "2026-03-30T16:00:00.000Z",
+      }),
+    ],
+    [
+      "newer-child",
+      makeStoredAgent({
+        id: "newer-child",
+        cwd: REPO_CWD,
+        workspaceId: workspace.workspaceId,
+        updatedAt: "2026-03-30T17:00:00.000Z",
+        labels: { "paseo.parent-agent-id": "root-agent" },
+      }),
+    ],
+  ]);
+  const markedAgentIds: string[] = [];
+  const session = createSessionForWorkspaceTests({
+    onMessage: (message) => emitted.push(message),
+    agentManager: {
+      markAgentUnread: async (agentId: string) => {
+        markedAgentIds.push(agentId);
+      },
+    },
+  });
+
+  session.workspaceRegistry.list = async () => [workspace];
+  session.workspaceRegistry.get = async (id: string) =>
+    id === workspace.workspaceId ? workspace : null;
+  session.projectRegistry.list = async () => [project];
+  session.projectRegistry.get = async (id: string) => (id === project.projectId ? project : null);
+  session.listAgentPayloads = async () =>
+    Array.from(storedRecords.values()).map((record) =>
+      makeAgent({
+        id: record.id,
+        cwd: record.cwd,
+        workspaceId: record.workspaceId,
+        status: record.lastStatus,
+        updatedAt: record.updatedAt,
+        requiresAttention: record.requiresAttention,
+        attentionReason: record.attentionReason,
+        attentionTimestamp: record.attentionTimestamp,
+        labels: record.labels,
+      }),
+    );
+
+  await session.handleMessage({
+    type: "workspace.mark_unread.request",
+    workspaceId: workspace.workspaceId,
+    agentId: "newer-child",
+    requestId: "req-mark-unread",
+  });
+
+  expect(markedAgentIds).toEqual(["newer-child"]);
+  expect(findByType(emitted, "workspace.mark_unread.response").payload).toEqual({
+    requestId: "req-mark-unread",
+    workspaceId: workspace.workspaceId,
+    markedAgentId: "newer-child",
+    success: true,
+    error: null,
+  });
+
+  emitted.length = 0;
+  await session.handleMessage({
+    type: "workspace.mark_unread.request",
+    workspaceId: workspace.workspaceId,
+    agentId: "missing-agent",
+    requestId: "req-mark-unread-missing",
+  });
+  expect(markedAgentIds).toEqual(["newer-child"]);
+  expect(findByType(emitted, "workspace.mark_unread.response").payload).toMatchObject({
+    requestId: "req-mark-unread-missing",
+    success: false,
+    error: "Agent not found in workspace: missing-agent",
+  });
+});
+
 test("workspace mark unread rejects workspaces without a finished root agent", async () => {
   const emitted: SessionOutboundMessage[] = [];
   const workspace = createPersistedWorkspaceRecord({
@@ -8089,6 +8190,107 @@ test("project.rename.request updates a project with no workspaces", async () => 
       projectCustomName: "Renamed empty project",
     },
   });
+});
+
+test("project.pin.set.request and project.default.set.request publish pin fields", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "session-project-pins-"));
+  try {
+    const projectRegistry = new FileBackedProjectRegistry(
+      path.join(workdir, "projects.json"),
+      createTestLogger(),
+    );
+    const scratch = createPersistedProjectRecord({
+      projectId: "prj_scratch",
+      rootPath: path.join(workdir, "tmpworkspace"),
+      kind: "non_git",
+      displayName: "tmpworkspace",
+      createdAt: "2026-07-20T12:00:00.000Z",
+      updatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    const previous = createPersistedProjectRecord({
+      projectId: "prj_previous",
+      rootPath: path.join(workdir, "previous"),
+      kind: "non_git",
+      displayName: "previous",
+      defaultAt: "2026-07-21T12:00:00.000Z",
+      createdAt: "2026-07-20T12:00:00.000Z",
+      updatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    mkdirSync(scratch.rootPath, { recursive: true });
+    mkdirSync(previous.rootPath, { recursive: true });
+    await projectRegistry.upsert(scratch);
+    await projectRegistry.upsert(previous);
+    const emitted: SessionOutboundMessage[] = [];
+    const session = asTestSession(
+      createSessionForWorkspaceTests({
+        onMessage: (message) => emitted.push(message),
+        projectRegistry,
+      }),
+    );
+    session.updateClientCapabilities({ [CLIENT_CAPS.projectUpdates]: true });
+    session.workspaceRegistry.list = async () => [];
+
+    await session.handleMessage({
+      type: "project.pin.set.request",
+      projectId: scratch.projectId,
+      pinned: true,
+      requestId: "req-project-pin",
+    });
+    const pinResponse = findByType(emitted, "project.pin.set.response");
+    expect(pinResponse?.payload).toMatchObject({
+      requestId: "req-project-pin",
+      projectId: scratch.projectId,
+      accepted: true,
+      error: null,
+    });
+    expect(pinResponse?.payload.pinnedAt).toEqual(expect.any(String));
+
+    emitted.length = 0;
+    await session.handleMessage({
+      type: "project.default.set.request",
+      projectId: scratch.projectId,
+      isDefault: true,
+      requestId: "req-project-default",
+    });
+    const defaultResponse = findByType(emitted, "project.default.set.response");
+    expect(defaultResponse?.payload).toMatchObject({
+      requestId: "req-project-default",
+      projectId: scratch.projectId,
+      accepted: true,
+      error: null,
+    });
+    const updates = filterByType(emitted, "project.update").map((message) => message.payload);
+    expect(updates).toEqual([
+      expect.objectContaining({
+        kind: "upsert",
+        project: expect.objectContaining({
+          projectId: scratch.projectId,
+          projectPinnedAt: pinResponse?.payload.pinnedAt,
+          projectDefaultAt: defaultResponse?.payload.defaultAt,
+        }),
+      }),
+      expect.objectContaining({
+        kind: "upsert",
+        project: expect.not.objectContaining({ projectDefaultAt: expect.anything() }),
+      }),
+    ]);
+    expect((await projectRegistry.get(previous.projectId))?.defaultAt).toBeNull();
+
+    emitted.length = 0;
+    await session.handleMessage({
+      type: "project.default.set.request",
+      projectId: "prj_missing",
+      isDefault: true,
+      requestId: "req-project-default-missing",
+    });
+    expect(findByType(emitted, "project.default.set.response")?.payload).toMatchObject({
+      accepted: false,
+      defaultAt: null,
+      error: "Project not found",
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("project.rename.request with whitespace-only customName clears the override", async () => {

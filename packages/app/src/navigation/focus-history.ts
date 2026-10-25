@@ -25,10 +25,18 @@ export interface RouteFocusLocation {
 export type NavigationFocusLocation = WorkspaceFocusLocation | RouteFocusLocation;
 
 export interface NavigationFocusHistorySnapshot {
+  /** There is history that way and nothing is in flight; what the buttons show. */
   canGoBack: boolean;
+  canGoForward: boolean;
   current: NavigationFocusLocation | null;
   restoring: boolean;
+  /** Nearest first: index 0 is one press of Back. */
+  backEntries: readonly NavigationFocusLocation[];
+  /** Nearest first: index 0 is one press of Forward. */
+  forwardEntries: readonly NavigationFocusLocation[];
 }
+
+export type NavigationFocusHistoryDirection = "back" | "forward";
 
 const MAX_HISTORY_LENGTH = 50;
 
@@ -63,7 +71,7 @@ export function navigationFocusLocationsEqual(
   );
 }
 
-function locationsShareRoute(
+export function navigationFocusLocationsShareRoute(
   left: NavigationFocusLocation,
   right: NavigationFocusLocation,
 ): boolean {
@@ -78,25 +86,112 @@ function locationsShareRoute(
   );
 }
 
+interface PendingRestore {
+  direction: NavigationFocusHistoryDirection;
+  steps: number;
+  target: NavigationFocusLocation;
+  // The stacks as they were before the move, so a restore that never lands can be undone.
+  previous: {
+    current: NavigationFocusLocation | null;
+    past: NavigationFocusLocation[];
+    future: NavigationFocusLocation[];
+  };
+}
+
+/**
+ * Browser-style focus history. `past` and `future` are stacks whose last entry is the
+ * next Back and Forward target respectively. Moving through history keeps both stacks;
+ * focusing anywhere new discards the forward branch, as a browser does.
+ */
 export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
   let current: NavigationFocusLocation | null = null;
   let past: NavigationFocusLocation[] = [];
-  let pendingRestore: NavigationFocusLocation | null = null;
+  let future: NavigationFocusLocation[] = [];
+  let pending: PendingRestore | null = null;
   let snapshot: NavigationFocusHistorySnapshot = {
     canGoBack: false,
+    canGoForward: false,
     current: null,
     restoring: false,
+    backEntries: [],
+    forwardEntries: [],
   };
   const listeners = new Set<() => void>();
 
   function publish(): void {
     snapshot = {
-      canGoBack: pendingRestore === null && past.length > 0,
+      canGoBack: pending === null && past.length > 0,
+      canGoForward: pending === null && future.length > 0,
       current,
-      restoring: pendingRestore !== null,
+      restoring: pending !== null,
+      backEntries: past.toReversed(),
+      forwardEntries: future.toReversed(),
     };
     for (const listener of listeners) {
       listener();
+    }
+  }
+
+  function push(stack: NavigationFocusLocation[], location: NavigationFocusLocation | null) {
+    return location ? [...stack, location].slice(-maxLength) : stack;
+  }
+
+  // Several steps at once (from the history menu) pass every skipped entry over to
+  // the other stack, so Forward afterwards walks back through them in order.
+  function go(
+    direction: NavigationFocusHistoryDirection,
+    steps: number,
+  ): NavigationFocusLocation | null {
+    const source = direction === "back" ? past : future;
+    if (pending || !Number.isInteger(steps) || steps < 1 || steps > source.length) {
+      return null;
+    }
+    const previous = { current, past, future };
+    for (let step = 0; step < steps; step += 1) {
+      if (direction === "back") {
+        const target = past[past.length - 1] ?? null;
+        past = past.slice(0, -1);
+        future = push(future, current);
+        current = target;
+      } else {
+        const target = future[future.length - 1] ?? null;
+        future = future.slice(0, -1);
+        past = push(past, current);
+        current = target;
+      }
+    }
+    const target = current;
+    if (!target) {
+      ({ current, past, future } = previous);
+      return null;
+    }
+    pending = { direction, steps, target, previous };
+    publish();
+    return target;
+  }
+
+  function visit(next: NavigationFocusLocation): boolean {
+    if (navigationFocusLocationsEqual(current, next)) {
+      return false;
+    }
+    past = push(past, current);
+    future = [];
+    current = next;
+    return true;
+  }
+
+  // Put the stacks back, minus the target that could not be reached, so the next
+  // Back or Forward skips it instead of failing on it again.
+  function abandon(restore: PendingRestore): void {
+    current = restore.previous.current;
+    past = restore.previous.past;
+    future = restore.previous.future;
+    if (restore.direction === "back") {
+      const index = past.length - restore.steps;
+      past = past.filter((_, position) => position !== index);
+    } else {
+      const index = future.length - restore.steps;
+      future = future.filter((_, position) => position !== index);
     }
   }
 
@@ -111,52 +206,65 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     },
 
     record(next: NavigationFocusLocation): void {
-      if (pendingRestore) {
-        if (!locationsShareRoute(next, pendingRestore)) {
+      if (pending) {
+        if (!navigationFocusLocationsShareRoute(next, pending.target)) {
           return;
         }
+        // What actually got focus wins over the remembered target (a closed tab
+        // resolves to whichever tab the workspace focused instead).
         current = next;
-        pendingRestore = null;
+        pending = null;
         publish();
         return;
       }
 
-      if (navigationFocusLocationsEqual(current, next)) {
-        return;
+      if (visit(next)) {
+        publish();
       }
-      if (current) {
-        past = [...past, current].slice(-maxLength);
-      }
-      current = next;
-      publish();
     },
 
-    back(): NavigationFocusLocation | null {
-      if (pendingRestore || past.length === 0) {
-        return null;
-      }
-      const target = past[past.length - 1] ?? null;
-      if (!target) {
-        return null;
-      }
-      past = past.slice(0, -1);
-      pendingRestore = target;
-      publish();
-      return target;
+    back(steps = 1): NavigationFocusLocation | null {
+      return go("back", steps);
     },
 
+    forward(steps = 1): NavigationFocusLocation | null {
+      return go("forward", steps);
+    },
+
+    /** The restore failed before it could navigate. */
     cancelRestore(): void {
-      if (!pendingRestore) {
+      if (!pending) {
         return;
       }
-      pendingRestore = null;
+      abandon(pending);
+      pending = null;
+      publish();
+    },
+
+    /**
+     * Stop waiting for the restore to be observed. A restore that changes nothing on
+     * screen (its tab already focused, or gone) never produces an observation, and
+     * history must not stay locked. `observed` is what is actually focused now: if it
+     * is not the target, the target was unreachable, so it is dropped and wherever
+     * focus really is gets recorded as an ordinary visit.
+     */
+    settleRestore(observed: NavigationFocusLocation | null): void {
+      if (!pending) {
+        return;
+      }
+      if (observed && !navigationFocusLocationsEqual(observed, pending.target)) {
+        abandon(pending);
+        visit(observed);
+      }
+      pending = null;
       publish();
     },
 
     reset(): void {
       current = null;
       past = [];
-      pendingRestore = null;
+      future = [];
+      pending = null;
       publish();
     },
   };

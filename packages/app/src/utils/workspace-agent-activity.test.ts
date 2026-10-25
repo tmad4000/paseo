@@ -13,6 +13,7 @@ function agent(input: {
   requiresAttention?: boolean;
   attentionReason?: Agent["attentionReason"];
   pendingPermissionCount?: number;
+  labels?: Record<string, string>;
   archivedAt?: string | null;
   parentAgentId?: string | null;
 }): Agent {
@@ -62,7 +63,7 @@ function agent(input: {
     attentionTimestamp: input.attentionTimestamp ? new Date(input.attentionTimestamp) : null,
     archivedAt: input.archivedAt ? new Date(input.archivedAt) : null,
     parentAgentId: input.parentAgentId ?? null,
-    labels: {},
+    labels: input.labels ?? {},
   };
 }
 
@@ -454,4 +455,42 @@ it("updates assistant-only workspace activity without changing the latest conver
     buildWorkspaceAgentActivityIndex(new Map([[unknown.id, unknown]])).get("workspace")
       ?.lastAssistantMessageAt,
   ).toEqual(unknown.createdAt);
+});
+
+it("uses the legacy last-user clock for agents from hosts without message activity", () => {
+  const legacy = agent({
+    id: "legacy",
+    workspaceId: "workspace",
+    updatedAt: "2026-10-01T00:00:00Z",
+  });
+  legacy.lastUserMessageAt = new Date("2026-09-15T00:00:00.000Z");
+  const indexed = buildWorkspaceAgentActivityIndex(new Map([[legacy.id, legacy]]));
+  expect(indexed.get("workspace")?.lastUserMessageAt?.toISOString()).toBe(
+    "2026-09-15T00:00:00.000Z",
+  );
+  expect(indexed.get("workspace")?.lastMessageAt?.toISOString()).toBe("2026-09-15T00:00:00.000Z");
+  expect(indexed.get("workspace")?.lastAssistantMessageAt).toEqual(legacy.createdAt);
+
+  // A supporting host's explicit "no user message yet" is not overridden by the legacy field.
+  legacy.messageActivity = { lastUserMessageAt: null, lastAssistantMessageAt: null };
+  const supported = buildWorkspaceAgentActivityIndex(new Map([[legacy.id, legacy]]));
+  expect(supported.get("workspace")?.lastUserMessageAt).toEqual(legacy.createdAt);
+});
+
+it("projects persistent manual input and review after unread attention is cleared", () => {
+  for (const [labels, expected] of [
+    [{ "paseo.manual-needs-input": "true" }, "needs_input"],
+    [{ "paseo.review-status": "ready" }, "attention"],
+  ] as const) {
+    const subject = agent({
+      id: "manual",
+      workspaceId: "workspace",
+      updatedAt: "2026-10-24T00:00:00Z",
+      labels,
+      requiresAttention: false,
+    });
+    expect(
+      buildWorkspaceAgentActivityIndex(new Map([[subject.id, subject]])).get("workspace")?.status,
+    ).toBe(expected);
+  }
 });

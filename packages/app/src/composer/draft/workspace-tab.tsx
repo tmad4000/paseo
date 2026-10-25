@@ -12,6 +12,7 @@ import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
+import type { MessagePayload } from "@/composer/types";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
@@ -21,6 +22,7 @@ import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
+import { threadLabelsForDraft, useThreadDraftStore } from "@/threads/draft-store";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { useAgentControlCommandCenterActions } from "@/command-center/agent-control-registration";
 import { encodeImages } from "@/utils/encode-images";
@@ -196,6 +198,8 @@ async function submitDraftCreateRequest(input: {
 
   const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
   const imagesData = await encodeImages(images);
+  // A "Reply in thread" draft is created already linked to the reply it answers.
+  const labels = threadLabelsForDraft(input.draftId);
   const options = {
     idempotencyKey: input.draftId,
     config,
@@ -204,9 +208,11 @@ async function submitDraftCreateRequest(input: {
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
     ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
+    ...(labels ? { labels } : {}),
   };
   const creation = useWorkspaceDraftSubmissionStore.getState().creationByDraftId[input.draftId];
   const result = creation ? await creation.retry(options) : await client.createAgent(options);
+  useThreadDraftStore.getState().clear(input.draftId);
 
   return {
     agentId: result.id,
@@ -455,9 +461,9 @@ export function WorkspaceDraftAgentTab({
     getPendingServerId: () => serverId,
     initialAttempt: initialCreateAttempt,
     allowEmptyText: allowsEmptyAutoSubmit,
-    validateBeforeSubmit: ({ text, attachments }) => {
+    validateBeforeSubmit: ({ text, attachments, allowEmptyText }) => {
       const allowsEmptyDraftText = shouldAllowEmptyDraftText({
-        allowsEmptyAutoSubmit,
+        allowsEmptyAutoSubmit: allowsEmptyAutoSubmit || allowEmptyText === true,
         attachments,
       });
       return validateDraftSubmission({
@@ -603,6 +609,27 @@ export function WorkspaceDraftAgentTab({
     workspaceId,
   ]);
 
+  // Voice attaches to an agent; a new chat creates its agent (no prompt, so no
+  // turn starts) with the draft's provider, model, mode and directory.
+  const draftWorkingDir = composerState.workingDir;
+  const createAgentForVoice = useCallback(
+    () =>
+      handleCreateFromInput({
+        text: "",
+        attachments: [],
+        cwd: draftWorkingDir,
+        allowEmptyText: true,
+      }),
+    [draftWorkingDir, handleCreateFromInput],
+  );
+
+  const handleSubmitMessage = useCallback(
+    async (payload: MessagePayload) => {
+      await handleCreateFromInput(payload);
+    },
+    [handleCreateFromInput],
+  );
+
   const focusInputRef = useRef<(() => void) | null>(null);
 
   const handleFocusInputCallback = useCallback((focus: () => void) => {
@@ -667,7 +694,7 @@ export function WorkspaceDraftAgentTab({
             serverId={serverId}
             workspaceId={workspaceId}
             isPaneFocused={isPaneFocused}
-            onSubmitMessage={handleCreateFromInput}
+            onSubmitMessage={handleSubmitMessage}
             isSubmitLoading={isSubmitting}
             blurOnSubmit={true}
             textSource={draftInput.textSource}
@@ -684,6 +711,7 @@ export function WorkspaceDraftAgentTab({
             onFocusInput={handleFocusInputCallback}
             commandDraftConfig={composerState.commandDraftConfig}
             agentControls={composerAgentControls}
+            createAgentForVoice={createAgentForVoice}
             isCompactLayout={isCompactComposerLayout}
           />
         </View>

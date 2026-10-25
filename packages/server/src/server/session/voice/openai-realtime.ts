@@ -27,14 +27,53 @@ export interface RealtimeSocket {
   close(): void;
   on(event: "open", listener: () => void): unknown;
   on(event: "message", listener: (data: { toString(): string }) => void): unknown;
-  on(event: "error" | "close", listener: () => void): unknown;
+  on(event: "error", listener: (error?: unknown) => void): unknown;
+  on(event: "close", listener: (code?: number, reason?: unknown) => void): unknown;
 }
+
+export type RealtimeFailureKind =
+  | "rejected"
+  | "processing"
+  | "connection"
+  | "closed"
+  | "timeout"
+  | "invalid_event"
+  | "transcription"
+  | "final_timeout"
+  | "delivery_unknown"
+  | "draft_too_large";
+
+/**
+ * The original cause of a GPT Realtime failure, captured before the user-facing message is
+ * forwarded, so it survives even when the device never receives that message. Metadata only:
+ * no audio, transcripts, instructions or credentials.
+ */
+export interface RealtimeFailureReport {
+  kind: RealtimeFailureKind;
+  /** The user-facing message the device is sent. */
+  message: string;
+  /** OpenAI error code (or type), e.g. "conversation_already_has_active_response". */
+  code?: string;
+  /** OpenAI error param: the field it objected to, never its value. */
+  param?: string;
+  /** OpenAI event_id of the rejected client event, when it names one. */
+  eventId?: string;
+  /** Most recent non-audio client event sent before the failure: the likely rejected operation. */
+  lastClientEvent?: string;
+  closeCode?: number;
+  closeReason?: string;
+  /** Connection state, response activity and mode at the moment of failure. */
+  phase: string;
+}
+
 export interface RealtimeOptions {
   store: RealtimeContextStore;
   host: RealtimeHost;
   key: () => string;
   model?: string;
   connect?: (key: string, model: string) => RealtimeSocket;
+  /** Receives every failure's original cause; must not throw. */
+  report?: (failure: RealtimeFailureReport) => void;
 }
 
 /** Deliberately no custom base URL: a voice opt-in must not send the key/audio to a substitute host. */
@@ -48,9 +87,63 @@ export function realtimeKey(env = process.env): string {
   return key;
 }
 
+/** Hosts without a resolvable credential must not advertise GPT Realtime; clients then use Paseo voice. */
+export function realtimeAvailable(env = process.env): boolean {
+  try {
+    realtimeKey(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const EventError = z.object({
+  type: z.union([z.string(), z.number()]).nullable().optional(),
+  code: z.union([z.string(), z.number()]).nullable().optional(),
+  message: z.union([z.string(), z.number()]).nullable().optional(),
+  param: z.union([z.string(), z.number()]).nullable().optional(),
+  event_id: z.union([z.string(), z.number()]).nullable().optional(),
+});
+
+function cleanCausePart(value: string | number | null | undefined, max: number): string {
+  const text = typeof value === "number" ? String(value) : (value ?? "");
+  return text.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/** A cause like "credit_balance_exhausted: add credits" must reach the user, not a generic failure. */
+export function realtimeErrorCause(error: unknown): { code: string; detail: string } {
+  const parsed = EventError.safeParse(error);
+  if (!parsed.success) return { code: "", detail: "" };
+  // The message is the actionable part; cap the identifier separately so it cannot crowd the message out.
+  const code = cleanCausePart(parsed.data.code, 80) || cleanCausePart(parsed.data.type, 80);
+  const message = cleanCausePart(parsed.data.message, 200);
+  const parts = [code, message].filter((part) => part.length > 0);
+  return { code, detail: parts.length ? ` (${parts.join(": ")})` : "" };
+}
+
+function closeReasonText(reason: unknown): string {
+  if (typeof reason === "string") return reason;
+  if (Buffer.isBuffer(reason)) return reason.toString();
+  return "";
+}
+
+/** Diagnostic fields of an OpenAI error: its code, the field it objected to, and its event id. */
+function causeFields(error: unknown): { code?: string; param?: string; eventId?: string } {
+  const parsed = EventError.safeParse(error);
+  if (!parsed.success) return {};
+  const code = cleanCausePart(parsed.data.code, 80) || cleanCausePart(parsed.data.type, 80);
+  const param = cleanCausePart(parsed.data.param, 80);
+  const eventId = cleanCausePart(parsed.data.event_id, 80);
+  return {
+    ...(code ? { code } : {}),
+    ...(param ? { param } : {}),
+    ...(eventId ? { eventId } : {}),
+  };
+}
+
 const Event = z.object({
   type: z.string(),
-  error: z.object({ code: z.string().optional() }).optional(),
+  error: z.unknown().optional(),
   item_id: z.string().optional(),
   previous_item_id: z.string().nullable().optional(),
   transcript: z.string().optional(),
@@ -78,6 +171,7 @@ export class OpenAiRealtime {
   private rejectReady: ((error: Error) => void) | null = null;
   private error: string | null = null;
   private responseActive = false;
+  private lastClientEvent: string | null = null;
   private responseWanted = false;
   private readonly responseIds = new Set<string>();
   private readonly discardedResponses = new Set<string>();
@@ -131,6 +225,10 @@ export class OpenAiRealtime {
     this.publish();
   }
   private send(event: object) {
+    const type = (event as { type?: unknown }).type;
+    // Audio appends stream continuously; the last other event is the one worth naming on failure.
+    if (typeof type === "string" && type !== "input_audio_buffer.append")
+      this.lastClientEvent = type;
     this.socket?.send(JSON.stringify(event));
   }
 
@@ -163,7 +261,10 @@ export class OpenAiRealtime {
       this.rejectReady = reject;
     });
     const timer = setTimeout(
-      () => this.fail("GPT Realtime connection timed out. Retry or explicitly select Paseo voice."),
+      () =>
+        this.fail("GPT Realtime connection timed out. Retry or explicitly select Paseo voice.", {
+          kind: "timeout",
+        }),
       15000,
     );
     socket.on("open", () => {
@@ -206,7 +307,7 @@ export class OpenAiRealtime {
       if (generation !== this.generation) return;
       const parsed = Event.safeParse(this.parse(raw.toString()));
       if (!parsed.success) {
-        this.fail("Invalid GPT Realtime event. Microphone paused.");
+        this.fail("Invalid GPT Realtime event. Microphone paused.", { kind: "invalid_event" });
         return;
       }
       // Speech must stop playback immediately, even while durable queue admission is pending.
@@ -217,18 +318,37 @@ export class OpenAiRealtime {
           if (generation === this.generation) await this.event(parsed.data);
           return undefined;
         })
-        .catch(() => {
-          if (generation === this.generation)
-            this.fail("GPT Realtime processing failed. Draft retained; no automatic resend.");
+        .catch((cause: unknown) => {
+          if (generation !== this.generation) return;
+          const parsedCause = realtimeErrorCause(cause);
+          this.fail(
+            `GPT Realtime processing failed${parsedCause.detail}. Draft retained; no automatic resend.`,
+            {
+              kind: "processing",
+              ...causeFields(cause),
+              ...(parsedCause.code
+                ? {}
+                : { code: cause instanceof Error ? cause.name : "processing_error" }),
+            },
+          );
         });
     });
-    socket.on("error", () => {
-      if (generation === this.generation)
-        this.fail("GPT Realtime connection failed. Retry or explicitly select Paseo voice.");
+    socket.on("error", (cause) => {
+      if (generation !== this.generation) return;
+      const parsedCause = realtimeErrorCause(cause);
+      this.fail(
+        `GPT Realtime connection failed${parsedCause.detail}. Retry or explicitly select Paseo voice.`,
+        { kind: "connection", ...causeFields(cause) },
+      );
     });
-    socket.on("close", () => {
-      if (generation === this.generation)
-        this.fail("GPT Realtime disconnected. Microphone paused; context retained.");
+    socket.on("close", (code, reason) => {
+      if (generation !== this.generation) return;
+      const closeReason = cleanCausePart(closeReasonText(reason), 120);
+      this.fail("GPT Realtime disconnected. Microphone paused; context retained.", {
+        kind: "closed",
+        ...(typeof code === "number" ? { closeCode: code } : {}),
+        ...(closeReason ? { closeReason } : {}),
+      });
     });
     try {
       await startup;
@@ -243,7 +363,20 @@ export class OpenAiRealtime {
       return null;
     }
   }
-  private fail(message: string) {
+  private fail(message: string, cause: Omit<RealtimeFailureReport, "message" | "phase">) {
+    const phase = [this.connection, this.responseActive ? "responding" : "idle", this.context.mode]
+      .filter(Boolean)
+      .join("/");
+    try {
+      this.options.report?.({
+        ...cause,
+        message,
+        phase,
+        ...(this.lastClientEvent ? { lastClientEvent: this.lastClientEvent } : {}),
+      });
+    } catch {
+      // Diagnostics must never change how a failure is handled.
+    }
     this.error = this.context.unconfirmedInput
       ? `${message} Some audio was not fully transcribed; verify saved text.`
       : message;
@@ -381,7 +514,10 @@ export class OpenAiRealtime {
       this.send({ type: "input_audio_buffer.commit" });
     }
     this.finalTimer = setTimeout(
-      () => this.fail("Final transcription did not finish. Draft retained; nothing sent."),
+      () =>
+        this.fail("Final transcription did not finish. Draft retained; nothing sent.", {
+          kind: "final_timeout",
+        }),
       12000,
     );
     const generation = this.generation;
@@ -389,7 +525,9 @@ export class OpenAiRealtime {
       .then(() => this.finishDraft())
       .catch(() => {
         if (generation === this.generation)
-          this.fail("Delivery outcome unknown. Draft retained; no automatic resend.");
+          this.fail("Delivery outcome unknown. Draft retained; no automatic resend.", {
+            kind: "delivery_unknown",
+          });
       });
     return this.endBarrier;
   }
@@ -514,9 +652,13 @@ export class OpenAiRealtime {
         await this.drainTranscripts();
         return;
       case "conversation.item.input_audio_transcription.failed":
-        this.fail(
-          "Transcription failed. Draft retained with an unconfirmed segment; nothing automatically resent.",
-        );
+        {
+          const cause = realtimeErrorCause(event.error);
+          this.fail(
+            `Transcription failed${cause.detail}. Draft retained with an unconfirmed segment; nothing automatically resent.`,
+            { kind: "transcription", ...causeFields(event.error) },
+          );
+        }
         return;
       case "response.created":
         if (event.response) {
@@ -608,12 +750,15 @@ export class OpenAiRealtime {
           this.requestResponse();
         }
         return;
-      case "error":
-        if (event.error?.code === "response_cancel_not_active") return;
+      case "error": {
+        const cause = realtimeErrorCause(event.error);
+        if (cause.code === "response_cancel_not_active") return;
         this.fail(
-          "GPT Realtime rejected an event. Microphone paused; retry or explicitly choose Paseo voice.",
+          `GPT Realtime rejected an event${cause.detail}. Microphone paused; retry or explicitly choose Paseo voice.`,
+          { kind: "rejected", ...causeFields(event.error) },
         );
         return;
+      }
     }
   }
   private async drainTranscripts() {
@@ -686,6 +831,7 @@ export class OpenAiRealtime {
     if (text.length > 64000) {
       this.fail(
         "Draft exceeds one request. Complete draft retained; save or split it before sending.",
+        { kind: "draft_too_large" },
       );
       return;
     }

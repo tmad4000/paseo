@@ -1,11 +1,14 @@
 import { useShallow } from "zustand/react/shallow";
-import { useSessionStore } from "@/stores/session-store";
-import { effectiveSidebarSortMode, messageSortAvailability } from "./message-sort-capability";
+import { shallow } from "zustand/shallow";
+import { useStoreWithEqualityFn } from "zustand/traditional";
+import { useSessionStore, type Agent } from "@/stores/session-store";
+import { olderMessageSortHosts } from "./message-sort-capability";
 import React, {
   createContext,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,13 +36,32 @@ import {
   filterAndSortSidebarProjects,
   normalizeSidebarQuery,
   sortSidebarWorkspaces,
-  workspaceMatchesSidebarQuery,
+  workspaceMatchesSidebarFilter,
   type SidebarSortMode,
 } from "./sidebar-filter-sort";
+import {
+  areSidebarTabMatchesEqual,
+  collectSidebarTabTitles,
+  EMPTY_SIDEBAR_TAB_MATCHES,
+  matchSidebarTabTitles,
+  type SidebarTabMatches,
+} from "./sidebar-filter-matches";
+import {
+  buildSidebarMessageSearchScope,
+  EMPTY_SIDEBAR_MESSAGE_SEARCH_SCOPE,
+  SidebarMessageSearchProvider,
+  SidebarTabMatchesProvider,
+  type SidebarMessageSearchScope,
+} from "./sidebar-filter-context";
+import { useSidebarFilterRequestStore } from "./sidebar-filter-request";
+import { pickUniqueSessionIdMatch, type SessionTarget } from "./find-or-start";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
   useWorkspaceLabelProjection,
 } from "@/workspace-labels";
+import { orderProjectsWithPins } from "@/default-project/model";
+import { useProjectPinStates } from "@/default-project/hooks";
+import { usePinnedProjectOrderStore } from "@/default-project/pinned-project-order-store";
 
 interface SidebarModel extends SidebarWorkspacesListResult {
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
@@ -56,18 +78,80 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   sortMode: SidebarSortMode;
-  messageSortAvailability: "ready" | "loading" | "unsupported";
+  /** Hosts whose chats sort by legacy clocks, labelled with their version. */
+  olderMessageSortHosts: readonly string[];
   setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
+  /** View keys of pinned and Default projects, which lead `projects` in every sort mode. */
+  pinnedProjectViewKeys: ReadonlySet<string>;
   collapsedProjectKeys: ReadonlySet<string>;
   toggleProjectCollapsed: (projectViewKey: string) => void;
   shortcutModel: SidebarShortcutModel;
 }
 
 const SidebarModelContext = createContext<SidebarModel | null>(null);
+
+const NO_AGENT_MAPS: ReadonlyArray<ReadonlyMap<string, Agent> | undefined> = [];
+
+/**
+ * Tab-title matches for the live filter. The agent directory is only read while a query is
+ * active, and the result keeps its previous identity when only statuses changed, so a running
+ * agent does not recompute the filtered tree on every update.
+ */
+function useSidebarTabMatches(
+  serverIds: readonly string[],
+  normalizedQuery: string,
+): SidebarTabMatches {
+  const agentMaps = useStoreWithEqualityFn(
+    useSessionStore,
+    (state) =>
+      normalizedQuery
+        ? serverIds.map((serverId) => state.sessions[serverId]?.agents)
+        : NO_AGENT_MAPS,
+    shallow,
+  );
+  const tabTitles = useMemo(
+    () =>
+      collectSidebarTabTitles(
+        serverIds.map((serverId, index) => ({ serverId, agents: agentMaps[index] })),
+      ),
+    [agentMaps, serverIds],
+  );
+  const previousRef = useRef<SidebarTabMatches>(EMPTY_SIDEBAR_TAB_MATCHES);
+  return useMemo(() => {
+    const next = matchSidebarTabTitles(tabTitles, normalizedQuery);
+    if (areSidebarTabMatchesEqual(previousRef.current, next)) return previousRef.current;
+    previousRef.current = next;
+    return next;
+  }, [normalizedQuery, tabTitles]);
+}
+
+/** A pasted session id's one visible chat; keeps its identity while it names the same chat. */
+function useUniqueSessionIdMatch(
+  tabMatches: SidebarTabMatches,
+  visibleWorkspaceKeys: ReadonlySet<string>,
+  normalizedQuery: string,
+): SessionTarget | null {
+  const previousRef = useRef<SessionTarget | null>(null);
+  return useMemo(() => {
+    const next = pickUniqueSessionIdMatch(tabMatches, visibleWorkspaceKeys, normalizedQuery);
+    const previous = previousRef.current;
+    if (
+      next &&
+      previous &&
+      next.serverId === previous.serverId &&
+      next.agentId === previous.agentId &&
+      next.workspaceId === previous.workspaceId &&
+      next.title === previous.title
+    )
+      return previous;
+    previousRef.current = next;
+    return next;
+  }, [normalizedQuery, tabMatches, visibleWorkspaceKeys]);
+}
 
 export function SidebarModelProvider({
   active,
@@ -81,18 +165,17 @@ export function SidebarModelProvider({
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
   const [searchQuery, setSearchQuery] = useState("");
+  const filterScope = useSidebarViewStore((state) => state.filterScope);
+  // "Search messages for …" from the command center lands here; the find field mirrors it.
+  const filterRequest = useSidebarFilterRequestStore((state) => state.request);
+  useEffect(() => {
+    if (filterRequest) setSearchQuery(filterRequest.query);
+  }, [filterRequest]);
   const sortMode = useSidebarViewStore((state) => state.sortMode);
   const setSortMode = useSidebarViewStore((state) => state.setSortMode);
-  const hostMessageActivitySupport = useSessionStore(
-    useShallow((state) =>
-      list.serverIds.map((serverId) => {
-        const info = state.sessions[serverId]?.serverInfo;
-        return info ? info.features?.conversationMessageActivity === true : undefined;
-      }),
-    ),
+  const olderSortHosts = useSessionStore(
+    useShallow((state) => olderMessageSortHosts(state, list.serverIds)),
   );
-  const sortAvailability = messageSortAvailability(hostMessageActivitySupport);
-  const effectiveSort = effectiveSidebarSortMode(sortMode, sortAvailability);
   const normalizedQuery = useMemo(() => normalizeSidebarQuery(searchQuery), [searchQuery]);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
   const { hosts: labelHosts } = useWorkspaceLabelProjection();
@@ -140,21 +223,40 @@ export function SidebarModelProvider({
     list.workspacePlacements,
     active !== false || needsWorkspaceEntries,
   );
-  const filteredWorkspaceEntriesByKey = useMemo(() => {
+  const tabMatches = useSidebarTabMatches(list.serverIds, normalizedQuery);
+  const tabMatchedWorkspaceKeys = useMemo(() => new Set(tabMatches.keys()), [tabMatches]);
+  // Project and label filters, before the text query: what the query's tiers may search.
+  const scopedWorkspaces = useMemo(() => {
     const byProject = filterWorkspacesByProjects({
       workspaces: [...workspaceEntriesByKey.values()],
       projectFilters: resolvedProjectFilters,
     });
-    const filtered = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter }).filter(
-      (workspace) => workspaceMatchesSidebarQuery(workspace, normalizedQuery),
+    return filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
+  }, [labelFilter, resolvedProjectFilters, workspaceEntriesByKey]);
+  const filteredWorkspaceEntriesByKey = useMemo(() => {
+    const filtered = scopedWorkspaces.filter((workspace) =>
+      workspaceMatchesSidebarFilter(workspace, normalizedQuery, tabMatchedWorkspaceKeys),
     );
-    const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, effectiveSort);
+    const sorted = sortSidebarWorkspaces(filtered, workspaceEntriesByKey, sortMode);
     return new Map(sorted.map((workspace) => [workspace.workspaceKey, workspace]));
-  }, [labelFilter, normalizedQuery, resolvedProjectFilters, effectiveSort, workspaceEntriesByKey]);
+  }, [normalizedQuery, sortMode, scopedWorkspaces, tabMatchedWorkspaceKeys, workspaceEntriesByKey]);
+  const messageSearchScopeRef = useRef<SidebarMessageSearchScope>(
+    EMPTY_SIDEBAR_MESSAGE_SEARCH_SCOPE,
+  );
+  // Entries change identity on every status update; the scope only changes when its membership
+  // does, so the debounced message search is not restarted by unrelated activity.
+  const messageSearchScope = useMemo(() => {
+    if (!normalizedQuery) return messageSearchScopeRef.current;
+    const next = buildSidebarMessageSearchScope(scopedWorkspaces);
+    if (next.key === messageSearchScopeRef.current.key) return messageSearchScopeRef.current;
+    messageSearchScopeRef.current = next;
+    return next;
+  }, [normalizedQuery, scopedWorkspaces]);
   const visibleWorkspaceKeys = useMemo(
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
   );
+  const uniqueSession = useUniqueSessionIdMatch(tabMatches, visibleWorkspaceKeys, normalizedQuery);
   // The two filters prune differently on purpose. The project filter is a membership test on the
   // project itself, so a project you filtered TO survives even with no workspaces — it still owns
   // a header row you can create your first workspace under. The label filter can only ask about
@@ -184,29 +286,43 @@ export function SidebarModelProvider({
       projects,
       entries: filteredWorkspaceEntriesByKey,
       query: normalizedQuery,
-      mode: effectiveSort,
+      mode: sortMode,
+      tabMatchedWorkspaceKeys,
     });
   }, [
     hasActiveLabelFilter,
     hasActiveProjectFilter,
     normalizedQuery,
-    effectiveSort,
+    sortMode,
     filteredWorkspaceEntriesByKey,
     resolvedProjectFilters,
     list.projects,
+    tabMatchedWorkspaceKeys,
     visibleWorkspaceKeys,
   ]);
-  const pinnedKeys = usePinnedSidebarKeys(filteredProjects);
+  const projectPinStates = useProjectPinStates(list.projects);
+  const pinnedProjectOrder = usePinnedProjectOrderStore((state) => state.pinnedProjectOrder);
+  const pinOrdered = useMemo(
+    () =>
+      orderProjectsWithPins({
+        projects: filteredProjects,
+        pinStates: projectPinStates,
+        pinnedProjectOrder,
+      }),
+    [filteredProjects, pinnedProjectOrder, projectPinStates],
+  );
+  const orderedProjects = pinOrdered.projects;
+  const pinnedKeys = usePinnedSidebarKeys(orderedProjects);
   const projectionInput = useMemo(
     () => ({
-      projects: filteredProjects,
+      projects: orderedProjects,
       pinnedKeys,
       pinnedWorkspaceOrder,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
       pinnedCollapsed,
-      sortMode: effectiveSort,
+      sortMode,
       collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
     }),
@@ -216,8 +332,8 @@ export function SidebarModelProvider({
       collapsedWorkspaceGroupKeys,
       groupMode,
       list.projectNamesByViewKey,
-      effectiveSort,
-      filteredProjects,
+      sortMode,
+      orderedProjects,
       pinnedCollapsed,
       pinnedKeys,
       pinnedWorkspaceOrder,
@@ -228,7 +344,7 @@ export function SidebarModelProvider({
   const value = useMemo(
     () => ({
       ...list,
-      projects: filteredProjects,
+      projects: orderedProjects,
       allProjects: list.projects,
       resolvedProjectFilters,
       hasProjectsBeforeFilter: list.projects.length > 0,
@@ -236,12 +352,13 @@ export function SidebarModelProvider({
       setSearchQuery,
       sortMode,
       setSortMode,
-      messageSortAvailability: sortAvailability,
+      olderMessageSortHosts: olderSortHosts,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
+      pinnedProjectViewKeys: pinOrdered.pinnedViewKeys,
       collapsedProjectKeys: normalizedQuery ? new Set<string>() : collapsedProjectKeys,
       toggleProjectCollapsed,
       shortcutModel: projection.shortcutModel,
@@ -253,17 +370,31 @@ export function SidebarModelProvider({
       searchQuery,
       sortMode,
       setSortMode,
-      sortAvailability,
+      olderSortHosts,
       groupMode,
       list,
-      filteredProjects,
+      orderedProjects,
+      pinOrdered.pinnedViewKeys,
       projection,
       toggleProjectCollapsed,
       filteredWorkspaceEntriesByKey,
     ],
   );
 
-  return <SidebarModelContext.Provider value={value}>{children}</SidebarModelContext.Provider>;
+  return (
+    <SidebarModelContext.Provider value={value}>
+      <SidebarTabMatchesProvider tabMatches={tabMatches} uniqueSession={uniqueSession}>
+        <SidebarMessageSearchProvider
+          rawQuery={searchQuery}
+          normalizedQuery={normalizedQuery}
+          scope={messageSearchScope}
+          messagesEnabled={filterScope === "messages"}
+        >
+          {children}
+        </SidebarMessageSearchProvider>
+      </SidebarTabMatchesProvider>
+    </SidebarModelContext.Provider>
+  );
 }
 
 export function useSidebarModel(): SidebarModel {

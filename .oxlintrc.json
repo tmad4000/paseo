@@ -312,7 +312,7 @@
     {
       "files": [
         "packages/app/src/components/ui/text-input/**/*.{ts,tsx}",
-        "packages/app/src/agent-stream/scroll-keyboard-dismiss/use-scroll-keyboard-dismiss.ts"
+        "packages/app/src/keyboard/software-keyboard-dismiss.ts"
       ],
       "rules": {
         "no-restricted-imports": "off"

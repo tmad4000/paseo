@@ -4,15 +4,18 @@ import { useTranslation } from "react-i18next";
 import {
   CalendarClock,
   CircleDashed,
+  Clock,
   Folder,
   FolderPlus,
   History,
   Home,
   Import,
   Keyboard,
+  List,
   PanelLeft,
   Plus,
   Settings,
+  Zap,
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { getIsElectronRuntime, useIsCompactFormFactor } from "@/constants/layout";
@@ -25,7 +28,11 @@ import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
-import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
+import { openQuickLaunch } from "@/quick-launch/store";
+import {
+  clearCommandCenterFocusRestoreElement,
+  takeCommandCenterFocusRestoreElement,
+} from "@/utils/command-center-focus-restore";
 import {
   buildOpenProjectRoute,
   buildSchedulesRoute,
@@ -35,13 +42,16 @@ import {
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
 import { useCommandCenterActions } from "./provider";
-import { buildGroupingContribution } from "./root-contributions";
+import { buildGroupingContributions } from "./root-contributions";
 
 const ThemedPlus = withUnistyles(Plus, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedHistory = withUnistyles(History, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedClock = withUnistyles(Clock, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedCalendarClock = withUnistyles(CalendarClock, (theme) => ({
@@ -53,9 +63,11 @@ const ThemedKeyboard = withUnistyles(Keyboard, (theme) => ({
 const ThemedSettings = withUnistyles(Settings, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
+const ThemedZap = withUnistyles(Zap, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedHome = withUnistyles(Home, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedImport = withUnistyles(Import, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedList = withUnistyles(List, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
@@ -71,12 +83,20 @@ function AddProjectIcon({ size }: CommandCenterIconProps) {
   return <ThemedFolderPlus size={size} strokeWidth={2.2} />;
 }
 
+function QuickLaunchIcon({ size }: CommandCenterIconProps) {
+  return <ThemedZap size={size} strokeWidth={2.2} />;
+}
+
 function SettingsIcon({ size }: CommandCenterIconProps) {
   return <ThemedSettings size={size} strokeWidth={2.2} />;
 }
 
 function HistoryIcon({ size }: CommandCenterIconProps) {
   return <ThemedHistory size={size} strokeWidth={2.2} />;
+}
+
+function RecentSessionsIcon({ size }: CommandCenterIconProps) {
+  return <ThemedClock size={size} strokeWidth={2.2} />;
 }
 
 function SchedulesIcon({ size }: CommandCenterIconProps) {
@@ -97,6 +117,10 @@ function ImportIcon({ size }: CommandCenterIconProps) {
 
 function FolderIcon({ size }: CommandCenterIconProps) {
   return <ThemedFolder size={size} strokeWidth={2.2} />;
+}
+
+function ListIcon({ size }: CommandCenterIconProps) {
+  return <ThemedList size={size} strokeWidth={2.2} />;
 }
 
 function CircleDashedIcon({ size }: CommandCenterIconProps) {
@@ -174,6 +198,26 @@ export function CommandCenterRootActions() {
         },
       },
       {
+        id: "quick-launch",
+        group: "actions",
+        groupRank: 0,
+        rank: 1.5,
+        keywords: ["quick", "launch", "start", "agent", "background", "prompt", "new"],
+        visibility: "always",
+        run: () => {
+          // Closing Quick launch returns focus to where it was before the command center opened.
+          openQuickLaunch({ restoreFocusTo: takeCommandCenterFocusRestoreElement() });
+        },
+        presentation: {
+          kind: "action",
+          title: t("quickLaunch.commandCenterTitle"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: QuickLaunchIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("quick-launch", overrides, shortcutPlatform) ?? undefined,
+        },
+      },
+      {
         id: "import-session",
         group: "actions",
         groupRank: 0,
@@ -225,6 +269,29 @@ export function CommandCenterRootActions() {
           title: t("sidebar.sections.sessions"),
           sectionTitle: t("shell.commandCenter.actions"),
           icon: HistoryIcon,
+        },
+      },
+      {
+        id: "recent-sessions",
+        group: "actions",
+        groupRank: 0,
+        rank: 4,
+        keywords: ["recent", "sessions", "agents", "chats", "switch", "last"],
+        visibility: "always",
+        // Switch Cmd+K to the recent list in place: closing and reopening would lose the
+        // focus-restore target and race a phone's sheet dismissal.
+        keepOpen: true,
+        run: () => {
+          useKeyboardShortcutsStore.getState().setCommandCenterScope("recent");
+        },
+        presentation: {
+          kind: "action",
+          title: t("shell.recentSessions.commandTitle"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: RecentSessionsIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("recent-sessions", overrides, shortcutPlatform) ??
+            undefined,
         },
       },
       {
@@ -317,14 +384,15 @@ export function CommandCenterRootActions() {
     }
 
     availableActions.push(
-      buildGroupingContribution({
+      ...buildGroupingContributions({
         groupMode,
         labels: {
           section: t("shell.commandCenter.actions"),
           groupByProject: t("shell.commandCenter.groupByProject"),
           groupByStatus: t("shell.commandCenter.groupByStatus"),
+          groupInOneList: t("shell.commandCenter.groupInOneList"),
         },
-        icons: { project: FolderIcon, status: CircleDashedIcon },
+        icons: { project: FolderIcon, status: CircleDashedIcon, list: ListIcon },
         setGroupMode,
       }),
     );
