@@ -432,6 +432,7 @@ export interface PaseoDaemonConfig {
     listen: string | null;
     publicBaseUrl: string | null;
     ownerDisplayName: string;
+    trustForwardedFor?: boolean;
     publisher?: SharingPublisherConfig;
   };
   serviceProxy?: {
@@ -959,7 +960,9 @@ export async function createPaseoDaemon(
   const shareService = await createSharingService(config, {
     getCommittedRows: (agentId) => agentManager.getTimelineRows(agentId),
   });
-  const shareListener = createConfiguredShareListener(config.sharing, shareService.store);
+  const shareListener = createConfiguredShareListener(config.sharing, {
+    view: (token) => shareService.store.view(token),
+  });
   const stopShareListener = async () => {
     await shareService.stop();
     if (!shareListener?.listening) return;

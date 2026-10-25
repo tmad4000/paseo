@@ -1,55 +1,88 @@
 import http from "node:http";
+import type { Duplex } from "node:stream";
 import express, { type Request, type Response } from "express";
-import type { ShareStore } from "./share-store.js";
+import type { ShareBytes } from "./render.js";
+import { ShareRateLimiter } from "./share-rate-limiter.js";
 import { SHARE_CSP, unavailablePage } from "./view/page.js";
 
+export interface ShareReader {
+  view(token: string): Promise<ShareBytes | null>;
+}
+interface ShareListenerOptions {
+  trustForwardedFor?: boolean;
+}
+
+const SECURITY_HEADERS = {
+  "Cache-Control": "no-store",
+  "Referrer-Policy": "no-referrer",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Content-Security-Policy": SHARE_CSP,
+  "X-Content-Type-Options": "nosniff",
+};
+
+function rejectSocket(socket: Duplex, until: number | null): void {
+  const status = until === null ? 404 : 429;
+  const body = until === null ? unavailablePage() : "Too many requests";
+  const headers = {
+    ...SECURITY_HEADERS,
+    Connection: "close",
+    "Content-Type": until === null ? "text/html; charset=utf-8" : "text/plain; charset=utf-8",
+    "Content-Length": String(Buffer.byteLength(body)),
+    ...(until === null
+      ? {}
+      : { "Retry-After": String(Math.max(1, Math.ceil((until - Date.now()) / 1000))) }),
+  };
+  const head = Object.entries(headers)
+    .map(([name, value]) => `${name}: ${value}\r\n`)
+    .join("");
+  socket.end(`HTTP/1.1 ${status} ${http.STATUS_CODES[status]}\r\n${head}\r\n${body}`);
+}
+
 /** Receives only a shares-directory reader; never mount daemon middleware here. */
-export function createShareListener(store: Pick<ShareStore, "view">): http.Server {
+export function createShareListener(
+  reader: ShareReader,
+  options: ShareListenerOptions = {},
+): http.Server {
   const app = express();
   app.disable("x-powered-by");
   app.disable("etag");
-  // Do not trust forwarded IP headers: a proxy must enforce its own external IP limits.
-  const windows = new Map<string, { until: number; total: number; unknown: number }>();
+  app.set("query parser", false);
+  const limits = new ShareRateLimiter(options.trustForwardedFor);
   const serve = async (request: Request, response: Response) => {
-    response.set({
-      "Cache-Control": "no-store",
-      "Referrer-Policy": "no-referrer",
-      "X-Robots-Tag": "noindex, nofollow",
-      "Content-Security-Policy": SHARE_CSP,
-      "X-Content-Type-Options": "nosniff",
-    });
+    response.set(SECURITY_HEADERS);
     const now = Date.now();
-    for (const [ip, value] of windows) if (value.until <= now) windows.delete(ip);
-    const ip = request.socket.remoteAddress ?? "unknown";
-    let window = windows.get(ip);
-    if (!window) {
-      // Bound memory even when many distinct IPs hit the listener.
-      if (windows.size >= 10000) {
-        response.status(429).send("Too many requests");
-        return;
-      }
-      window = { until: now + 60000, total: 0, unknown: 0 };
-      windows.set(ip, window);
-    }
-    const limited = () => {
-      response.set("Retry-After", String(Math.max(1, Math.ceil((window.until - now) / 1000))));
+    const limited = (until: number) => {
+      response.set("Retry-After", String(Math.max(1, Math.ceil((until - now) / 1000))));
       response.status(429).type("text").send("Too many requests");
     };
-    if (++window.total > 60) {
-      limited();
+    const globalUntil = limits.globalUntil(now);
+    if (globalUntil !== null) {
+      limited(globalUntil);
       return;
     }
-    const route =
-      request.method === "GET" ? /^\/s\/([A-Za-z0-9_-]{43})(\.json)?$/.exec(request.path) : null;
+    const window = limits.peerWindow(
+      request.socket.remoteAddress ?? "unknown",
+      request.headers["x-forwarded-for"],
+      now,
+    );
+    if (window.total > 60) {
+      limited(window.until);
+      return;
+    }
+    if (request.url.length > 256 || (request.method !== "GET" && request.method !== "HEAD")) {
+      response.status(404).type("html").send(unavailablePage());
+      return;
+    }
+    const route = /^\/s\/([A-Za-z0-9_-]{43})(\.json)?$/.exec(request.path);
     let snapshot = null;
     try {
-      if (route) snapshot = await store.view(route[1]!);
+      if (route) snapshot = await reader.view(route[1]!);
     } catch {
       /* fail closed without exposing storage errors */
     }
     if (!snapshot) {
       if (++window.unknown > 10) {
-        limited();
+        limited(window.until);
         return;
       }
       response.status(404).type("html").send(unavailablePage());
@@ -61,7 +94,7 @@ export function createShareListener(store: Pick<ShareStore, "view">): http.Serve
       route?.[2] ? "application/json; charset=utf-8" : "text/html; charset=utf-8",
     );
     response.set("Content-Length", String(bytes.byteLength));
-    response.end(bytes);
+    response.end(request.method === "HEAD" ? undefined : bytes);
   };
   app.use((request, response) => {
     void serve(request, response).catch(() => {
@@ -69,15 +102,31 @@ export function createShareListener(store: Pick<ShareStore, "view">): http.Serve
     });
   });
   const server = http.createServer(app);
-  server.on("upgrade", (_request, socket) => {
-    socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
-  });
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 30_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxHeadersCount = 50;
+  const reject = (request: http.IncomingMessage, socket: Duplex) => {
+    const now = Date.now();
+    let until = limits.globalUntil(now);
+    if (until === null) {
+      const window = limits.peerWindow(
+        request.socket.remoteAddress ?? "unknown",
+        request.headers["x-forwarded-for"],
+        now,
+      );
+      if (window.total > 60) until = window.until;
+    }
+    rejectSocket(socket, until);
+  };
+  server.on("upgrade", reject);
+  server.on("connect", reject);
   return server;
 }
 
 export function createConfiguredShareListener(
-  config: { listen: string | null } | undefined,
-  store: Pick<ShareStore, "view">,
+  config: ({ listen: string | null } & ShareListenerOptions) | undefined,
+  reader: ShareReader,
 ): http.Server | null {
-  return config?.listen ? createShareListener(store) : null;
+  return config?.listen ? createShareListener(reader, config) : null;
 }

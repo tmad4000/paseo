@@ -1,5 +1,55 @@
 # Conversation sharing QA
 
+## Phase 1c follow-ups — 2026-10-24
+
+M4 macOS, `feat/sharing-followups`, Beads `pspin-twk.14`, `twk.9`, `twk.8`, `twk.4`.
+No main-daemon access, deployment, tunnel changes, UI string changes or local Playwright run.
+The Worker deployment/round-trip status was reported by Fable; this batch did not probe it.
+
+| Focused test file                                             | Passed | Output                                     |
+| ------------------------------------------------------------- | -----: | ------------------------------------------ |
+| `packages/server/src/server/sharing/redaction-corpus.test.ts` |    148 | [Corpus](followups/redaction-corpus.txt)   |
+| `packages/server/src/server/sharing/share-listener.test.ts`   |     34 | [Listener](followups/listener.txt)         |
+| `packages/server/src/server/sharing/render.test.ts`           |     12 | [Render](followups/render.txt)             |
+| `packages/server/src/server/config.test.ts`                   |     13 | [Config](followups/config.txt)             |
+| `packages/app/src/utils/markdown-parser.test.ts`              |      6 | [App Markdown](followups/app-markdown.txt) |
+| `packages/server/src/server/sharing/sharing.e2e.test.ts`      |      5 | [Daemon e2e](followups/e2e.txt)            |
+
+237 focused tests passed. Files ran individually using
+`npx vitest run <file> --bail=1 > /tmp/sharing-followups-<name>.txt 2>&1`.
+The [new prose negatives failed before the redaction fix](followups/redaction-corpus-before.txt);
+[HEAD failed before listener hardening](followups/listener-before.txt), and
+[CONNECT failed before its explicit rejection](followups/listener-connect-before.txt).
+The passing cases check exact text, counters, idempotence, trusted/untrusted peers including
+IPv4-mapped IPv6 and CIDR boundaries, raw URL/method rejection before storage, HEAD header/body
+parity, server timeout/header settings and 600 successful HTTP requests across forwarded keys
+followed by a globally limited request. A fake reader is injected through the reader interface;
+HTTP is real and the daemon e2e uses isolated state. No production process was started or stopped.
+
+Before upgrading, two exact HTML snapshots were generated with markdown-it 10:
+[server baseline run](followups/render-baseline.txt), [app baseline run](followups/app-markdown-baseline.txt).
+Those fixtures are unchanged under 14.3.2, including whitespace, Markdown structure, escaping,
+links and the shared page shell. The typographer fixture adjustment removes `(p)`/`(P)` from
+expected typographer-on rewrites because 14 no longer rewrites them; typographer-off literal
+preservation still asserts both. Initial CI also found an outdated escaped-space reference
+fixture ([job excerpt](followups/ci-app-failure.txt), [local reproduction](followups/split-markdown-before.txt)).
+Markdown-it 14 treats `[docs]: docs\ folder/readme` as literal text rather than a reference
+definition. The fixture now expects separate paragraphs and asserts the renderer's exact literal
+HTML plus whole-versus-split equivalence. Bracketed/percent-escaped destinations remain covered.
+No production splitter change was needed. Three generic `command -p` corpus fixtures now name `sshpass`;
+a generic `command -p` is explicitly negative. Canonical unpadded Basic `user:password` pairs
+remain recognized to preserve the supplied `Basic dXNlcjpwYXNz` positive.
+
+The [resolved dependency tree](followups/markdown-dependencies.txt) contains only markdown-it
+14.3.2, including the scoped `react-native-markdown-display` override. Both workspaces use
+`@types/markdown-it` 14.2.0. [npm publication dates](followups/dependency-dates.txt) verify the
+one-month policy for every newly resolved version; 14.3.3 was not selected.
+`npm install` / the targeted `npm update markdown-it` used `--ignore-scripts --no-audit --no-fund`.
+The targeted update was needed to apply the new override to an existing lockfile.
+
+Required checks: [build:server](followups/build-server.txt), [typecheck](followups/typecheck.txt),
+[lint](followups/lint.txt), [format](followups/format.txt). Full-suite verification belongs to PR CI.
+
 ## Phase 1c publisher — 2026-10-24
 
 M4 macOS, `feat/sharing-publisher`, Beads `pspin-twk.13`, source version

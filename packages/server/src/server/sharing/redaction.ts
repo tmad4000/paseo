@@ -12,7 +12,7 @@ import { TimelineProjection } from "../agent/timeline-projection.js";
 export const SECRET_PATTERNS: readonly {
   name: string;
   pattern: RegExp;
-  replace?: (match: string, prefix: string) => string;
+  replace?: (match: string, prefix: string, offset: number, text: string) => string;
 }[] = [
   {
     name: "private key",
@@ -27,7 +27,20 @@ export const SECRET_PATTERNS: readonly {
   {
     name: "basic auth",
     pattern: /(\bBasic\s+)[A-Za-z0-9+/]+=*/gi,
-    replace: (_match, prefix) => `${prefix}[secret hidden]`,
+    replace: (match, prefix, offset, text) => {
+      const value = match.slice(prefix.length);
+      const before = text.slice(Math.max(0, offset - 34), offset);
+      const after = text.slice(offset + match.length, offset + match.length + 34);
+      const contextual =
+        /\b(?:Authorization:|auth\b)[\s\S]{0,20}$/i.test(before) ||
+        /^[\s\S]{0,20}\b(?:Authorization:|auth\b)/i.test(after);
+      const shaped =
+        value.length >= 12 &&
+        (value.includes("=") ||
+          (/[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)) ||
+          encodedBasicPair(value));
+      return contextual || shaped ? `${prefix}[secret hidden]` : match;
+    },
   },
   { name: "bearer", pattern: /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi },
   {
@@ -39,7 +52,14 @@ export const SECRET_PATTERNS: readonly {
     name: "labelled value",
     pattern:
       /\b([A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL)[A-Z0-9_]*\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/gi,
-    replace: (_match, prefix) => `${prefix}[secret hidden]`,
+    replace: (match, prefix) => {
+      const label = /^[A-Za-z0-9_]+/.exec(prefix)![0];
+      const rawValue = match.slice(prefix.length);
+      const value = /^["']/.test(rawValue) ? rawValue.slice(1, -1) : rawValue;
+      const identifier =
+        label.includes("_") || label === label.toUpperCase() || prefix.startsWith(`${label}=`);
+      return identifier || value.length >= 8 ? `${prefix}[secret hidden]` : match;
+    },
   },
   {
     name: "prose password",
@@ -49,8 +69,22 @@ export const SECRET_PATTERNS: readonly {
   {
     name: "CLI credential flag",
     pattern:
-      /((?<![A-Za-z0-9_-])(?:--password|--token|--api-key|--secret|--key|-p)(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/g,
+      /((?<![A-Za-z0-9_-])(?:--password|--token|--api-key|--secret|--key)(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/g,
     replace: (_match, prefix) => `${prefix}[secret hidden]`,
+  },
+  {
+    name: "credential command short flag",
+    pattern: /((?<![A-Za-z0-9_-])-p(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/g,
+    replace: (match, prefix, offset, text) => {
+      // Separators inside quoted arguments do not start a different command.
+      const commands = text
+        .slice(0, offset)
+        .match(/(?:[^"'\\;&|\r\n]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"|'[^']*')+/g);
+      const command = commands?.at(-1) ?? "";
+      return /\b(?:sshpass|mysql|mysqldump|mongosh|smbclient)\b/.test(command)
+        ? `${prefix}[secret hidden]`
+        : match;
+    },
   },
   { name: "openai", pattern: /\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}/g },
   { name: "github", pattern: /\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}/g },
@@ -72,12 +106,30 @@ export const SECRET_PATTERNS: readonly {
 ];
 const PLACEHOLDER = /\[(?:secret hidden|credentials|host|ip|email|phone)\]/g;
 // Every pass treats prior output as opaque, including owner-provided literal rules.
-function outsidePlaceholders(text: string, transform: (segment: string) => string): string {
+function outsidePlaceholders(
+  text: string,
+  transform: (segment: string, offset: number) => string,
+): string {
+  let offset = 0;
   return text
     .split(/(\[(?:secret hidden|credentials|host|ip|email|phone)\])/g)
-    .map((segment) => (segment.match(PLACEHOLDER) ? segment : transform(segment)))
+    .map((segment) => {
+      const start = offset;
+      offset += segment.length;
+      return segment.match(PLACEHOLDER) ? segment : transform(segment, start);
+    })
     .join("");
 }
+// Unpadded Basic user:password values can have neither digits nor '=' (for example
+// dXNlcjpwYXNz). Require an actual UTF-8 credential pair rather than ordinary prose.
+function encodedBasicPair(value: string): boolean {
+  const decoded = Buffer.from(value, "base64").toString("utf8");
+  return (
+    /^[^:\s]+:[^\r\n]+$/.test(decoded) &&
+    Buffer.from(decoded).toString("base64").replace(/=+$/, "") === value.replace(/=+$/, "")
+  );
+}
+
 const IPV4 = /(?<![A-Za-z0-9_.])\d{1,3}(?:\.\d{1,3}){3}(?![A-Za-z0-9_]|\.\d|-[a-z])/gi;
 const IPV6 =
   /(?<![A-Za-z0-9_.:%[])(?:\[[A-Fa-f0-9:.]+(?:%[A-Za-z0-9_.-]+)?\]|[A-Fa-f0-9]*:[A-Fa-f0-9:.]+(?:%[A-Za-z0-9_.-]+)?(?![A-Za-z0-9_.:%]))/g;
@@ -119,10 +171,13 @@ export function redactTimeline(
     }
     if (profile.scrub.secrets)
       for (const { pattern, replace } of SECRET_PATTERNS) {
-        text = outsidePlaceholders(text, (segment) =>
-          segment.replace(pattern, (match: string, prefix: string) => {
-            summary.secretsMasked++;
-            return replace ? replace(match, prefix) : "[secret hidden]";
+        text = outsidePlaceholders(text, (segment, start) =>
+          segment.replace(pattern, (match: string, prefix: string, offset: number) => {
+            const output = replace
+              ? replace(match, prefix, start + offset, text)
+              : "[secret hidden]";
+            if (output !== match) summary.secretsMasked++;
+            return output;
           }),
         );
       }

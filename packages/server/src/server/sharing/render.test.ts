@@ -33,6 +33,40 @@ const message = (i: number, text = `Message ${i}`): SharedMessage => ({
 });
 
 describe("prepared share snapshots", () => {
+  it("preserves exact rendered Markdown HTML across parser upgrades", () => {
+    const markdown = [
+      "# Heading",
+      "",
+      "Paragraph **bold** *emphasis* ~~deleted~~ and `literal --flag=1`.",
+      "",
+      "> Quoted text",
+      "",
+      "- Parent",
+      "  - Child",
+      "",
+      "3. Third",
+      "4. Fourth",
+      "",
+      "| Name | Value |",
+      "| :--- | ---: |",
+      "| one | two |",
+      "",
+      "```ts",
+      'const html = "<tag>";',
+      "```",
+      "",
+      '<script>alert("x")</script>',
+      "",
+      "[safe](https://example.com?a=1&b=2)",
+      "![blocked image](https://example.com/image.png)",
+      "[blocked](javascript:alert(1))",
+      "",
+      'Copy "quotes", (c), a -- b and ... unchanged.',
+    ].join("\n");
+    expect(renderSharePage(snapshot([message(0, markdown)]))).toMatchSnapshot(
+      "shared Markdown HTML",
+    );
+  });
   it.each([0, 500, 501, 5000])("retains the latest 500 rows from %i messages", (length) => {
     const input = snapshot(Array.from({ length }, (_, i) => message(i)));
     const prepared = prepareShareSnapshot(input);

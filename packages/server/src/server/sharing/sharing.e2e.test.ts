@@ -12,6 +12,7 @@ describe("snapshot sharing through the daemon", () => {
       mcpEnabled: false,
       sharing: {
         listen: "127.0.0.1:0",
+        trustForwardedFor: true,
         publicBaseUrl: "https://share.example.com",
         ownerDisplayName: "Jacob",
       },
@@ -86,13 +87,20 @@ describe("snapshot sharing through the daemon", () => {
       );
       const snapshot = JSON.parse(jsonBytes.toString());
       expect(snapshot.messages).toEqual(preview.messages);
+      const head = await fetch(guestUrl, {
+        method: "HEAD",
+        headers: { "X-Forwarded-For": "192.0.2.1" },
+      });
+      expect(head.status).toBe(200);
+      expect(head.headers.get("content-length")).toBe(String(htmlBytes.byteLength));
+      expect(await head.text()).toBe("");
       await clients[0]!.revokeShareLink(result.share.id);
       expect((await fetch(guestUrl)).status).toBe(404);
       await expect.poll(() => received[0]!.length).toBe(2);
       await expect.poll(() => received[1]!.length).toBe(2);
       expect(JSON.stringify(received)).not.toMatch(/tokenHash|\/s\//);
       expect(await clients[1]!.listShareLinks(agent.id)).toMatchObject([
-        { id: result.share.id, revokedAt: expect.any(String), viewCount: 2 },
+        { id: result.share.id, revokedAt: expect.any(String), viewCount: 3 },
       ]);
       await clients[1]!.deleteShareLink(result.share.id);
       expect(await clients[0]!.listShareLinks(agent.id)).toEqual([]);
