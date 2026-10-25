@@ -213,6 +213,8 @@ export const fr: TranslationResources = {
       daemonUnavailable: "Daemonindisponible",
       daemonClientUnavailable: "ClientDaemonindisponible",
       daemonClientDisconnected: "Le clientDaemonest déconnecté",
+      connectionInterrupted:
+        "Impossible de joindre votre hôte pour le moment. Paseo se reconnecte ; réessayez une fois la connexion rétablie.",
       noFileFound: "Aucun fichier trouvé pour{{token}}",
       unexpectedDictationError:
         "Une erreur inattendue s'est produite lors du traitement de la dictée.",

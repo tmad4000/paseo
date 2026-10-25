@@ -208,6 +208,8 @@ export const en = {
       daemonUnavailable: "Daemon unavailable",
       daemonClientUnavailable: "Daemon client unavailable",
       daemonClientDisconnected: "Daemon client is disconnected",
+      connectionInterrupted:
+        "Can't reach your host right now. Paseo is reconnecting; try again once it's back.",
       noFileFound: "No file found for {{token}}",
       unexpectedDictationError: "An unexpected error occurred while handling dictation.",
     },

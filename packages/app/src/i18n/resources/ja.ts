@@ -213,6 +213,8 @@ export const ja: TranslationResources = {
       daemonUnavailable: "デーモンが利用できません",
       daemonClientUnavailable: "デーモンクライアントが利用できません",
       daemonClientDisconnected: "デーモンクライアントが切断されています",
+      connectionInterrupted:
+        "現在ホストに接続できません。Paseo が再接続しています。接続が戻ったらもう一度お試しください。",
       noFileFound: "{{token}}のファイルが見つかりません",
       unexpectedDictationError: "音声入力処理中に予期しないエラーが発生しました。",
     },

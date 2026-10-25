@@ -176,6 +176,7 @@ import { useComposerForgeAutoAttach } from "./forge-auto-attach";
 import { readClipboardImage } from "./clipboard-image";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
+import { isConnectionErrorMessage, toDisplayErrorMessage } from "@/utils/error-messages";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
 import {
   appendWorkspaceFileAttachment,
@@ -1888,6 +1889,12 @@ function ComposerContentImpl({
   const isUploadingFile = pendingFiles.length > 0;
   const [pendingNativeImagePastes, setPendingNativeImagePastes] = useState(0);
   const [sendError, setSendError] = useState<string | null>(null);
+  // A connection failure stops being true once the host is back; don't leave it on screen.
+  useEffect(() => {
+    if (isConnected) {
+      setSendError((current) => (current && isConnectionErrorMessage(current) ? null : current));
+    }
+  }, [isConnected]);
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
@@ -3223,14 +3230,22 @@ function ComposerContentImpl({
 
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
+  const dismissSendError = useCallback(() => setSendError(null), []);
   const sendErrorNode = useMemo(
     () =>
       sendError ? (
-        <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
-        </Text>
+        <Pressable
+          onPress={dismissSendError}
+          accessibilityRole="button"
+          accessibilityHint={t("common.actions.dismiss")}
+          testID="composer-send-error"
+        >
+          <Text accessibilityRole="alert" style={styles.sendErrorText}>
+            {toDisplayErrorMessage(sendError)}
+          </Text>
+        </Pressable>
       ) : null,
-    [sendError],
+    [dismissSendError, sendError, t],
   );
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")

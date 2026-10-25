@@ -214,6 +214,8 @@ export const ptBR: TranslationResources = {
       daemonUnavailable: "Daemon indisponível",
       daemonClientUnavailable: "Cliente do daemon indisponível",
       daemonClientDisconnected: "O cliente do daemon está desconectado",
+      connectionInterrupted:
+        "Não foi possível alcançar seu host agora. O Paseo está reconectando; tente de novo quando a conexão voltar.",
       noFileFound: "Nenhum arquivo encontrado para {{token}}",
       unexpectedDictationError: "Ocorreu um erro inesperado ao processar o ditado.",
     },

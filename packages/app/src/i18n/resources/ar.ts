@@ -211,6 +211,8 @@ export const ar: TranslationResources = {
       daemonUnavailable: "Daemon غير متوفر",
       daemonClientUnavailable: "عميل Daemon غير متوفر",
       daemonClientDisconnected: "تم قطع اتصال عميل Daemon",
+      connectionInterrupted:
+        "تعذّر الوصول إلى المضيف الآن. يعيد Paseo الاتصال؛ حاول مرة أخرى بعد عودته.",
       noFileFound: "لم يتم العثور على ملف لـ{{token}}",
       unexpectedDictationError: "حدث خطأ غير متوقع أثناء معالجة الإملاء.",
     },
