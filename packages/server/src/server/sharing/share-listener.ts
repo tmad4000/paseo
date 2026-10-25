@@ -1,7 +1,7 @@
 import http from "node:http";
 import express, { type Request, type Response } from "express";
 import type { ShareStore } from "./share-store.js";
-import { SHARE_CSP, renderSharePage, unavailablePage } from "./view/page.js";
+import { SHARE_CSP, unavailablePage } from "./view/page.js";
 
 /** Receives only a shares-directory reader; never mount daemon middleware here. */
 export function createShareListener(store: Pick<ShareStore, "view">): http.Server {
@@ -55,8 +55,13 @@ export function createShareListener(store: Pick<ShareStore, "view">): http.Serve
       response.status(404).type("html").send(unavailablePage());
       return;
     }
-    if (route?.[2]) response.json(snapshot);
-    else response.type("html").send(renderSharePage(snapshot));
+    const bytes = route?.[2] ? snapshot.json : snapshot.html;
+    response.set(
+      "Content-Type",
+      route?.[2] ? "application/json; charset=utf-8" : "text/html; charset=utf-8",
+    );
+    response.set("Content-Length", String(bytes.byteLength));
+    response.end(bytes);
   };
   app.use((request, response) => {
     void serve(request, response).catch(() => {

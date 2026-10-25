@@ -120,6 +120,10 @@ The link is a capability: anyone holding it can read that snapshot. Its token is
 never stored in plaintext, and cannot be copied again from Manage shares. Create another link
 if you lose it. URL path tokens can appear in reverse-proxy access logs; protect those logs.
 
+Pasting a share link into a messenger can make that service fetch the page to generate a preview.
+That fetch counts as a view. The page uses the generic browser title “Shared conversation” and
+has no description or Open Graph metadata; the conversation title appears only in the page body.
+
 CLI: `paseo share create <agent> --expires 7d`, `paseo share preview <agent> --json`,
 `paseo share ls --json`, `paseo share revoke <share-id>`, and `paseo share delete <share-id>`.
 

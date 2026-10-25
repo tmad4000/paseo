@@ -45,6 +45,8 @@ export const ptBR: TranslationResources = {
       "30d": "30 dias",
     },
     omitted: {
+      earlier_one: "{{count}} mensagem anterior não está incluída neste instantâneo",
+      earlier_other: "{{count}} mensagens anteriores não estão incluídas neste instantâneo",
       tool_calls_one: "{{count}} chamada oculta",
       tool_calls_other: "{{count}} chamadas ocultas",
       reasoning_one: "{{count}} raciocínio oculto",

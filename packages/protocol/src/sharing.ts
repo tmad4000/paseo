@@ -40,7 +40,7 @@ export const SharedMessageSchema = z.discriminatedUnion("kind", [
     kind: z.literal("omitted"),
     id: z.string(),
     at: z.string(),
-    reason: z.enum(["tool_calls", "reasoning", "excluded"]),
+    reason: z.enum(["tool_calls", "reasoning", "excluded", "earlier"]),
     count: z.number(),
   }),
 ]);

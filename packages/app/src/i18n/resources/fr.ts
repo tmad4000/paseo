@@ -45,6 +45,8 @@ export const fr: TranslationResources = {
       "30d": "30 jours",
     },
     omitted: {
+      earlier_one: "{{count}} message antérieur n’est pas inclus dans cet instantané",
+      earlier_other: "{{count}} messages antérieurs ne sont pas inclus dans cet instantané",
       tool_calls_one: "{{count}} appel d’outil masqué",
       tool_calls_other: "{{count}} appels d’outils masqués",
       reasoning_one: "{{count}} raisonnement masqué",

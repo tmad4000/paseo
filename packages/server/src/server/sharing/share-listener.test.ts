@@ -1,15 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import type http from "node:http";
+import * as renderer from "./render.js";
+import type { AgentTimelineRow } from "../agent/agent-timeline-store-types.js";
 import { ShareService } from "./share-service.js";
 import { createShareListener } from "./share-listener.js";
 let dir: string;
 let service: ShareService;
 let server: http.Server;
 let base: string;
+let timeline: AgentTimelineRow[];
 const source = {
   agentId: "agent",
   title: "Example <script>bad</script>",
@@ -19,26 +22,23 @@ const source = {
 };
 beforeEach(async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), "paseo-share-http-"));
-  service = new ShareService(
+  timeline = [
     {
-      getCommittedRows: async () => [
-        {
-          seq: 1,
-          timestamp: source.createdAt,
-          item: {
-            type: "assistant_message",
-            text: "**Hello** <script>alert(1)</script> [bad](javascript:alert(1)) ![image](https://evil.example/image.png) [safe](https://example.com)",
-          },
-        },
-      ],
+      seq: 1,
+      timestamp: source.createdAt,
+      item: {
+        type: "assistant_message",
+        text: "**Hello** <script>alert(1)</script> [bad](javascript:alert(1)) ![image](https://evil.example/image.png) [safe](https://example.com)",
+      },
     },
-    dir,
-  );
+  ];
+  service = new ShareService({ getCommittedRows: async () => timeline }, dir);
   server = createShareListener(service.store);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(dir, { recursive: true, force: true });
@@ -46,6 +46,71 @@ afterEach(async () => {
 const create = (expiresAt?: string | null) =>
   service.create(source, { configured: true, publicBaseUrl: base, expiresAt });
 describe("share listener", () => {
+  it("loads the listener without a renderer or Markdown dependency", async () => {
+    vi.resetModules();
+    vi.doMock("./render.js", () => {
+      throw new Error("Renderer reached from listener");
+    });
+    vi.doMock("markdown-it", () => {
+      throw new Error("Markdown reached from listener");
+    });
+    try {
+      expect((await import("./share-listener.js")).createShareListener).toBeTypeOf("function");
+    } finally {
+      vi.doUnmock("./render.js");
+      vi.doUnmock("markdown-it");
+      vi.resetModules();
+    }
+  });
+  it("serves byte-identical 5,000-row bounded artifacts with no guest rendering", async () => {
+    timeline = Array.from({ length: 5000 }, (_, i) => ({
+      seq: i + 1,
+      timestamp: source.createdAt,
+      item: { type: "user_message", messageId: `m${i}`, text: `Message ${i}` },
+    }));
+    const preview = await service.preview(source);
+    const { url, share } = await service.create(source, {
+      configured: true,
+      publicBaseUrl: base,
+      previewDigest: preview.sourceDigest,
+    });
+    const page = vi.spyOn(renderer, "renderSharePage");
+    const prepare = vi.spyOn(renderer, "prepareShareSnapshot");
+    const artifacts = vi.spyOn(renderer, "renderShareArtifacts");
+    for (const extension of ["html", "json"]) {
+      const response = await fetch(`${url}${extension === "json" ? ".json" : ""}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(
+        extension === "json" ? "application/json; charset=utf-8" : "text/html; charset=utf-8",
+      );
+      const bytes = Buffer.from(await response.arrayBuffer());
+      expect(bytes).toEqual(await readFile(path.join(dir, `${share.id}.snapshot.${extension}`)));
+      expect(response.headers.get("content-length")).toBe(String(bytes.byteLength));
+      if (extension === "json") {
+        const snapshot = JSON.parse(bytes.toString());
+        expect(snapshot.messages).toEqual(preview.messages);
+        expect(snapshot.messages).toHaveLength(501);
+        expect(snapshot.messages[0]).toMatchObject({
+          kind: "omitted",
+          reason: "earlier",
+          count: 4500,
+        });
+      } else
+        expect(bytes.toString()).toContain(
+          "4500 earlier messages are not included in this snapshot",
+        );
+    }
+    expect(page).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(artifacts).not.toHaveBeenCalled();
+  });
+  it("does not render a missing HTML artifact on a guest GET", async () => {
+    const { url, share } = await create();
+    await rm(path.join(dir, `${share.id}.snapshot.html`));
+    const render = vi.spyOn(renderer, "renderShareArtifacts");
+    expect((await fetch(url)).status).toBe(404);
+    expect(render).not.toHaveBeenCalled();
+  });
   it("enforces the unknown-token limit for concurrent requests without blocking valid links", async () => {
     const { url } = await create();
     const responses = await Promise.all(
@@ -61,6 +126,8 @@ describe("share listener", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain("<strong>Hello</strong>");
+    expect(html).toContain("<title>Shared conversation</title>");
+    expect(html.split("</head>")[0]).not.toContain("Example");
     expect(html).not.toMatch(/<script|<img|href="javascript:/);
     expect(html).toContain('rel="noopener noreferrer nofollow"');
     expect(response.headers.get("cache-control")).toBe("no-store");

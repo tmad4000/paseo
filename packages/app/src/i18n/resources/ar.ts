@@ -44,6 +44,8 @@ export const ar: TranslationResources = {
       "30d": "30 يومًا",
     },
     omitted: {
+      earlier_one: "لا تتضمن هذه اللقطة {{count}} رسالة سابقة",
+      earlier_other: "لا تتضمن هذه اللقطة {{count}} من الرسائل السابقة",
       tool_calls_one: "إخفاء {{count}} استدعاء أدوات",
       tool_calls_other: "إخفاء {{count}} استدعاء أدوات",
       reasoning_one: "إخفاء {{count}} تفكير",

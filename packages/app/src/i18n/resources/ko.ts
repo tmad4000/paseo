@@ -44,6 +44,8 @@ export const ko: TranslationResources = {
       "30d": "30일",
     },
     omitted: {
+      earlier_one: "이 스냅샷에는 이전 메시지 {{count}}개가 포함되지 않습니다",
+      earlier_other: "이 스냅샷에는 이전 메시지 {{count}}개가 포함되지 않습니다",
       tool_calls_one: "도구 호출 {{count}}개 숨김",
       tool_calls_other: "도구 호출 {{count}}개 숨김",
       reasoning_one: "추론 {{count}}개 숨김",

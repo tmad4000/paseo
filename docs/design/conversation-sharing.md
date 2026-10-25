@@ -651,8 +651,7 @@ plus negatives: `0.10.0-beta.16`, `v1.2.3.4`, `src/x.y.ts`, `https://github.com/
   messages are not included in this snapshot". Then render; if HTML exceeds 2 MiB, drop the oldest
   rows and re-render until it fits. The JSON stored is the same bounded list.
 - Store `{id}.snapshot.html` and `{id}.snapshot.json` atomically, then the record (unchanged
-  publish-after-durable order). `ShareStore.view(token)` returns `{ html: Buffer, json: Buffer,
-title }`; the listener streams bytes with `Content-Length`.
+  publish-after-durable order). `ShareStore.view(token)` returns `{ html: Buffer, json: Buffer }`; the listener streams bytes with `Content-Length`.
 - Title update re-renders from the stored JSON and rewrites the HTML (owner-triggered, cheap).
 - twk.11: `<title>` is the literal "Shared conversation"; no `description`/`og:*` meta; the real
   title appears only in the body `<h1>`. Document in `public-docs/configuration.md` that pasting a
@@ -783,7 +782,8 @@ Config (`persisted-config.ts`, env equivalents, schema file, docs):
 
 ## As built (Phase 1)
 
-Phase 1 implements snapshot links only (`pspin-twk.2`). [QA evidence](../qa/conversation-sharing-phase1/README.md) records source and browser checks. Configuration instructions live in
+Phase 1 implements snapshot links only (`pspin-twk.2`), with redaction hardening (`pspin-twk.10`)
+and bounded static artifacts (`pspin-twk.7`, `pspin-twk.11`). [QA evidence](../qa/conversation-sharing-phase1/README.md) records source and browser checks. Configuration instructions live in
 [public configuration](../../public-docs/configuration.md#conversation-share-links-paseo-fork).
 
 Differences from the proposal:
@@ -795,6 +795,17 @@ Differences from the proposal:
 - The app preview displays the snapshot's text directly, including Markdown source. The guest
   page renders Markdown with the app's existing `markdown-it` version, raw HTML and images
   disabled. This keeps the preview free of remote image loads and rich tool rendering.
+- Preview and create retain the latest 500 rows plus one earlier-omission row. A suffix search
+  finds the largest set that fits the 2 MiB UTF-8 HTML budget; it produces the same result as
+  dropping oldest rows one at a time, with fewer Markdown renders.
+- HTML and JSON are stored before the record grants access. Guest reads serve those bytes;
+  title edits re-render from stored JSON. A metadata-only page that cannot fit is rejected.
+  A title edit that would exceed the cap is rejected without dropping more snapshot messages.
+- `render.ts` owns Markdown and re-exports the CSS/CSP. The shared shell, stylesheet and CSP
+  remain in Markdown-free `view/page.ts`, which the listener can import independently.
+- Older JSON-only snapshots fail closed. An owner title change can regenerate HTML only if
+  the stored message list already fits both limits; otherwise create a new link. A guest
+  request never generates a missing HTML artifact.
 - The guest page needs no JavaScript. Its inline stylesheet is authorized by an exact CSP hash;
   all other sources are blocked. This avoids extra public routes or a weaker inline-style policy.
 - Share change events require an advertised client capability and an owned event subscription,

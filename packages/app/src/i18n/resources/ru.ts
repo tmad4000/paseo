@@ -45,6 +45,8 @@ export const ru: TranslationResources = {
       "30d": "30 дней",
     },
     omitted: {
+      earlier_one: "В этот снимок не включено {{count}} предыдущее сообщение",
+      earlier_other: "В этот снимок не включены {{count}} предыдущих сообщений",
       tool_calls_one: "Скрыто вызовов: {{count}}",
       tool_calls_other: "Скрыто вызовов: {{count}}",
       reasoning_one: "Скрыто рассуждений: {{count}}",

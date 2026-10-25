@@ -41,6 +41,8 @@ export const en = {
       "30d": "30 days",
     },
     omitted: {
+      earlier_one: "{{count}} earlier message is not included in this snapshot",
+      earlier_other: "{{count}} earlier messages are not included in this snapshot",
       tool_calls_one: "{{count}} tool call hidden",
       tool_calls_other: "{{count}} tool calls hidden",
       reasoning_one: "{{count}} reasoning entry hidden",

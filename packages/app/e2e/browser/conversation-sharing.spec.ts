@@ -98,6 +98,7 @@ for (const width of [1440, 390]) {
       const guest = await context.newPage();
       await guest.setViewportSize({ width, height: 960 });
       await guest.goto(url);
+      await expect(guest).toHaveTitle("Shared conversation");
       await expect(
         guest.getByRole("heading", { name: "Planning a focused release" }),
       ).toBeVisible();
@@ -129,3 +130,56 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+test("shows the bounded earlier-messages label in the compact preview and guest page", async ({
+  page,
+  context,
+}, testInfo) => {
+  test.setTimeout(180000);
+  const fixture = await seedMockAgentWorkspace({
+    repoPrefix: "share-bounds-qa-",
+    title: "A bounded conversation",
+    initialPrompt: "emit 500 assistant messages before synthetic user message",
+  });
+  try {
+    await fixture.client.waitForAgentUpsert(
+      fixture.agentId,
+      (agent) => agent.status === "idle",
+      60000,
+    );
+    await page.setViewportSize({ width: 390, height: 960 });
+    await openAgentRoute(page, fixture);
+    await page.getByTestId("workspace-header-menu-trigger").click();
+    await page.getByTestId("conversation-share-action").click();
+    const sheet = page.getByTestId("conversation-share-content");
+    const earlier = sheet
+      .getByTestId("share-preview")
+      .getByText(/\d+ earlier messages? (?:is|are) not included in this snapshot/);
+    await expect(earlier).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await page.getByText("Share conversation", { exact: true }).boundingBox())?.y ??
+          Infinity,
+      )
+      .toBeLessThan(200);
+    const label = await earlier.innerText();
+    await expect(page.getByRole("button", { name: "Create link", exact: true })).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath("share-earlier-preview-390.png") });
+    await page.getByRole("button", { name: "Create link", exact: true }).click();
+    const link = sheet.getByText(/^http:\/\/127\.0\.0\.1:\d+\/s\/[A-Za-z0-9_-]{43}$/, {
+      exact: true,
+    });
+    await expect(link).toBeVisible();
+    const guest = await context.newPage();
+    await guest.setViewportSize({ width: 390, height: 960 });
+    await guest.goto(await link.innerText());
+    await expect(guest).toHaveTitle("Shared conversation");
+    await expect(guest.getByRole("heading", { name: "A bounded conversation" })).toBeVisible();
+    await expect(guest.getByText(label, { exact: true })).toBeVisible();
+    await guest.screenshot({ path: testInfo.outputPath("guest-earlier-390.png") });
+    await guest.close();
+  } finally {
+    await fixture.cleanup();
+  }
+});

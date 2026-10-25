@@ -342,6 +342,42 @@ const SourceSchema = z.object({
     ).toBe(false);
   });
 
+  it("accepts the widened earlier omission reason without another feature gate", () => {
+    const result = GeneratedWSOutboundMessageSchema.safeParse({
+      type: "session",
+      message: {
+        type: "share.link.preview.response",
+        payload: {
+          snapshot: {
+            v: 1,
+            title: "Share",
+            owner: { name: "Owner" },
+            agent: { provider: "mock" },
+            createdAt: "2026-10-24T12:00:00Z",
+            messages: [
+              {
+                kind: "omitted",
+                id: "share_earlier",
+                at: "2026-10-24T12:00:00Z",
+                reason: "earlier",
+                count: 4500,
+              },
+            ],
+            redactionSummary: {
+              hiddenToolCalls: 0,
+              hiddenReasoning: 0,
+              secretsMasked: 0,
+              pathsCollapsed: 0,
+              contactsMasked: 0,
+              messagesExcluded: 0,
+            },
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("emits runtime imports with .js extensions", async () => {
     const generated = await readFile(generatedWSOutboundPath, "utf8");
     expect(generated).toContain('from "../../validation/ws-outbound-schema-metadata.js"');
