@@ -13,6 +13,7 @@ function agent(input: {
   requiresAttention?: boolean;
   attentionReason?: Agent["attentionReason"];
   pendingPermissionCount?: number;
+  labels?: Record<string, string>;
   archivedAt?: string | null;
   parentAgentId?: string | null;
 }): Agent {
@@ -62,7 +63,7 @@ function agent(input: {
     attentionTimestamp: input.attentionTimestamp ? new Date(input.attentionTimestamp) : null,
     archivedAt: input.archivedAt ? new Date(input.archivedAt) : null,
     parentAgentId: input.parentAgentId ?? null,
-    labels: {},
+    labels: input.labels ?? {},
   };
 }
 
@@ -474,4 +475,22 @@ it("uses the legacy last-user clock for agents from hosts without message activi
   legacy.messageActivity = { lastUserMessageAt: null, lastAssistantMessageAt: null };
   const supported = buildWorkspaceAgentActivityIndex(new Map([[legacy.id, legacy]]));
   expect(supported.get("workspace")?.lastUserMessageAt).toEqual(legacy.createdAt);
+});
+
+it("projects persistent manual input and review after unread attention is cleared", () => {
+  for (const [labels, expected] of [
+    [{ "paseo.manual-needs-input": "true" }, "needs_input"],
+    [{ "paseo.review-status": "ready" }, "attention"],
+  ] as const) {
+    const subject = agent({
+      id: "manual",
+      workspaceId: "workspace",
+      updatedAt: "2026-10-24T00:00:00Z",
+      labels,
+      requiresAttention: false,
+    });
+    expect(
+      buildWorkspaceAgentActivityIndex(new Map([[subject.id, subject]])).get("workspace")?.status,
+    ).toBe(expected);
+  }
 });

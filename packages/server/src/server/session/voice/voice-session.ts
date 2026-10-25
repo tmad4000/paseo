@@ -126,6 +126,14 @@ export interface VoiceSessionHost {
   emit(msg: SessionOutboundMessage): void;
   loadAgent(agentId: string): Promise<ManagedAgent>;
   sendSpokenInput(agentId: string, text: string, messageId: string): Promise<void>;
+  /** Records a host-observed voice failure for client diagnostics readback. */
+  reportDiagnostic?(input: {
+    message: string;
+    code?: string;
+    operation?: string;
+    phase?: string;
+    agentId?: string;
+  }): void;
 }
 
 export interface VoiceSessionOptions {
@@ -654,6 +662,19 @@ export class VoiceSession {
     this.realtime = new OpenAiRealtime({
       store: new RealtimeContextStore(this.realtimeHome, agentId),
       key: realtimeKey,
+      report: (failure) => {
+        this.sessionLogger.warn({ agentId, ...failure }, "realtime_voice_failed");
+        const where = [failure.lastClientEvent, failure.param].filter(Boolean).join(" param=");
+        this.host.reportDiagnostic?.({
+          message: failure.message,
+          code:
+            failure.code ??
+            (failure.closeCode !== undefined ? `close_${failure.closeCode}` : failure.kind),
+          operation: where ? `${failure.kind}:${where}` : failure.kind,
+          phase: failure.phase,
+          agentId,
+        });
+      },
       host: {
         status: (realtime) => {
           this.inputMuted = realtime.muted;

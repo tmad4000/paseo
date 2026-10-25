@@ -1,4 +1,5 @@
 import { useWorkspaceLinks } from "./use-workspace-links";
+import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
@@ -1006,6 +1007,7 @@ function getHeaderRenameTabKind(
 }
 
 interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
+  sharingAgentId?: string;
   isLoading: boolean;
   title: string;
   subtitle: string;
@@ -1038,6 +1040,7 @@ function WorkspaceHeaderTitleBar({
   canCopyTabLink,
   onCopyTabLink,
   onCopyWorkspaceLink,
+  sharingAgentId,
   renameTabKind,
   onRenameCurrentTab,
   isLoading,
@@ -1067,8 +1070,10 @@ function WorkspaceHeaderTitleBar({
   onViewScriptTerminal,
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
+  const sharing = useConversationSharing(normalizedServerId, sharingAgentId);
   return (
     <View style={styles.headerTitleContainer}>
+      {sharing.sheet}
       {isLoading ? (
         <View style={styles.headerTitleTextGroup}>
           <View style={styles.headerTitleSkeleton} />
@@ -1076,6 +1081,7 @@ function WorkspaceHeaderTitleBar({
       ) : (
         <View style={styles.headerTitleTextGroup}>
           <ScreenTitle testID="workspace-header-title">{title}</ScreenTitle>
+          {sharing.badge}
           <WorkspaceHeaderProjectRow
             subtitle={subtitle}
             isSubtitleDistinct={isSubtitleDistinct}
@@ -1090,6 +1096,8 @@ function WorkspaceHeaderTitleBar({
             onCopyTabLink={onCopyTabLink}
             onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
+            sharingAvailability={sharing.availability}
+            onShareConversation={sharing.open}
             onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
@@ -1113,6 +1121,8 @@ function WorkspaceHeaderTitleBar({
             onCopyTabLink={onCopyTabLink}
             onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
+            sharingAvailability={sharing.availability}
+            onShareConversation={sharing.open}
             onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -4175,6 +4185,11 @@ function WorkspaceScreenContent({
                 onCopyTabLink={onCopyTabLink}
                 onCopyWorkspaceLink={onCopyWorkspaceLink}
                 renameTabKind={renameTabKind}
+                sharingAgentId={
+                  activeTabDescriptor?.target.kind === "agent"
+                    ? activeTabDescriptor.target.agentId
+                    : undefined
+                }
                 onRenameCurrentTab={handleRenameCurrentTab}
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
@@ -4212,6 +4227,7 @@ function WorkspaceScreenContent({
       canCopyTabLink,
       onCopyTabLink,
       onCopyWorkspaceLink,
+      activeTabDescriptor,
       renameTabKind,
       handleRenameCurrentTab,
       canOpenImportSheet,

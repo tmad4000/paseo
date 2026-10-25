@@ -1,3 +1,4 @@
+import type { ClientDiagnosticInput } from "@/diagnostics/client-errors/model";
 import type { RealtimeVoiceState } from "@getpaseo/protocol/messages";
 import { Buffer } from "buffer";
 import type { AgentStreamEventPayload, SessionOutboundMessage } from "@getpaseo/protocol/messages";
@@ -138,6 +139,8 @@ export interface VoiceRuntimeDeps {
   getServerInfo(serverId: string): DaemonServerInfo | null;
   activateKeepAwake(tag: string): Promise<void>;
   deactivateKeepAwake(tag: string): Promise<void>;
+  /** Records a voice failure the person saw, for host-readable client diagnostics. */
+  recordDiagnostic?(input: ClientDiagnosticInput): void;
 }
 
 interface RuntimeSessionState {
@@ -646,7 +649,23 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   }
 
   /** Shows the failure, and speaks it when it starts a new episode. */
+  function recordVoiceDiagnostic(input: { code: string; message: string; operation?: string }) {
+    deps.recordDiagnostic?.({
+      source: "voice",
+      severity: "error",
+      ...input,
+      phase: state.snapshot.phase,
+      agentId: state.snapshot.activeAgentId,
+      serverId: state.snapshot.activeServerId,
+    });
+  }
+
   function reportFailure(kind: VoiceFailureKind): Promise<void> {
+    recordVoiceDiagnostic({
+      code: kind,
+      operation: state.snapshot.voiceProvider ?? undefined,
+      message: `Voice failure: ${kind}`,
+    });
     const announce = failures.report(kind);
     patchSnapshot({ failure: failures.current() });
     if (!announce) {
@@ -1381,6 +1400,14 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         state.snapshot.voiceProvider !== "openai-realtime"
       )
         return;
+      // The host's failure text is what the overlay shows; record each distinct one once.
+      if (realtime.error && realtime.error !== state.snapshot.realtime?.error) {
+        recordVoiceDiagnostic({
+          code: "realtime_state_error",
+          operation: `realtime:${realtime.connection}`,
+          message: realtime.error,
+        });
+      }
       patchSnapshot({ realtime, isMuted: realtime.muted });
       if (realtime.muted || realtime.connection !== "connected") {
         state.transportReady = false;
@@ -1392,6 +1419,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
     onInputError(serverId, error) {
       if (serverId !== state.snapshot.activeServerId || !state.snapshot.isVoiceMode) return;
+      recordVoiceDiagnostic({ code: "host_input_error", message: error });
       console.warn(`[VoiceRuntime#${instanceId}] Host input error: ${error}`);
       state.transportReady = false;
       void reportFailure("recognition-failed");

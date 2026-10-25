@@ -1,3 +1,13 @@
+import type {
+  RedactionProfile,
+  ShareRecordPayload,
+  ShareSnapshot,
+} from "@getpaseo/protocol/sharing";
+export type {
+  RedactionProfile,
+  ShareRecordPayload,
+  ShareSnapshot,
+} from "@getpaseo/protocol/sharing";
 import type { OwnedSubscription } from "./connection/index.js";
 export type { OwnedSubscription, SubscriptionObserver } from "./connection/index.js";
 import type { DaemonClientConfig } from "./daemon-client.js";
@@ -485,7 +495,25 @@ export interface PaseoConfigActions {
   ): Promise<{ requestId: string; config: MutableDaemonConfig }>;
 }
 
+export interface PaseoShareActions {
+  preview(agentId: string, redaction?: RedactionProfile): Promise<ShareSnapshot>;
+  create(input: {
+    agentId: string;
+    title?: string;
+    expiresAt?: string | null;
+    redaction?: RedactionProfile;
+    previewDigest?: string;
+  }): Promise<{ share: ShareRecordPayload; url: string }>;
+  list(agentId?: string): Promise<ShareRecordPayload[]>;
+  update(
+    shareId: string,
+    patch: { title?: string; expiresAt?: string | null },
+  ): Promise<ShareRecordPayload>;
+  revoke(shareId: string): Promise<ShareRecordPayload>;
+  delete(shareId: string): Promise<void>;
+}
 export interface PaseoApi {
+  readonly shares: PaseoShareActions;
   dispose(): Promise<void>;
   observeEvents: DaemonClient["observeEvents"];
   readonly terminals: PaseoTerminalActions;
@@ -697,6 +725,14 @@ export function createPaseoApi(
 
   return {
     dispose,
+    shares: {
+      preview: (agentId, redaction) => daemonClient.previewShareLink(agentId, redaction),
+      create: (input) => daemonClient.createShareLink(input),
+      list: (agentId) => daemonClient.listShareLinks(agentId),
+      update: (shareId, patch) => daemonClient.updateShareLink(shareId, patch),
+      revoke: (shareId) => daemonClient.revokeShareLink(shareId),
+      delete: (shareId) => daemonClient.deleteShareLink(shareId),
+    },
     observeEvents,
     terminals,
     projects: {

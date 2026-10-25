@@ -278,6 +278,14 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
+        sharing: z
+          .object({
+            listen: z.string().optional(),
+            publicBaseUrl: z.url().optional(),
+            ownerDisplayName: z.string().optional(),
+          })
+          .strict()
+          .optional(),
         serviceProxy: z
           .object({
             // COMPAT(serviceProxyEnabled): added 2026-06-02, remove after 2026-12-02.

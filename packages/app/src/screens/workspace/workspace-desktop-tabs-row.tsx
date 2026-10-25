@@ -1,3 +1,5 @@
+import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
+import type { ManualStatusTarget } from "@/agent-status/model";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   useCallback,
@@ -821,6 +823,14 @@ function TabChip({
   dragHandleProps: DraggableListDragHandleProps | undefined;
 }) {
   const { closeButtonTestId, contextMenuTestId, menuEntries } = resolvedTab;
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      tab.target.kind === "agent"
+        ? { kind: "agent", serverId: tab.scope?.serverId ?? serverId, agentId: tab.target.agentId }
+        : null,
+    [serverId, tab],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
   const { t } = useTranslation();
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
@@ -1007,7 +1017,13 @@ function TabChip({
           </View>
         ) : null}
 
-        <ContextMenuContent align="start" width={DROPDOWN_WIDTH} testID={contextMenuTestId}>
+        <ContextMenuContent
+          align="start"
+          width={DROPDOWN_WIDTH}
+          testID={contextMenuTestId}
+          pages={statusPages}
+        >
+          {statusTarget ? <AgentStatusMenuTrigger /> : null}
           {menuEntries.map((entry) =>
             entry.kind === "separator" ? (
               <ContextMenuSeparator key={entry.key} />

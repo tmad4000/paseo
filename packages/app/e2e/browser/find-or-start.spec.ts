@@ -99,4 +99,51 @@ test.describe("Find or start", () => {
     await composer.getByTestId("routing-find-mode").click();
     await expect(field).toBeVisible();
   });
+
+  test("✕ clears the field and keeps focus in it", async ({ page }) => {
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: home.id });
+    await waitForSidebarHydration(page);
+    const composer = page.getByTestId("session-routing-composer");
+    const field = composer.getByTestId("sidebar-title-project-filter");
+
+    await field.fill("relay reconnect");
+    await composer.getByTestId("sidebar-title-project-filter-clear").click();
+    await expect(field).toHaveValue("");
+    await expect(field).toBeFocused();
+    await expect(composer.getByTestId("sidebar-title-project-filter-clear")).toHaveCount(0);
+    // Typing goes straight back into the field.
+    await page.keyboard.type("relay");
+    await expect(field).toHaveValue("relay");
+  });
+
+  test("the find row's controls explain themselves on hover", async ({ page }) => {
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: home.id });
+    await waitForSidebarHydration(page);
+    const composer = page.getByTestId("session-routing-composer");
+    const field = composer.getByTestId("sidebar-title-project-filter");
+    await field.fill("relay");
+
+    const hovers = [
+      ["routing-send-mode", "routing-send-mode-tooltip", "Send this text to a chat you pick"],
+      [
+        "sidebar-title-project-filter-clear",
+        "sidebar-title-project-filter-clear-tooltip",
+        "Clear sidebar filter",
+      ],
+      ["sidebar-filter-scope-trigger", "sidebar-filter-scope-tooltip", "Filter scope:"],
+      ["sidebar-sort-trigger", "sidebar-sort-tooltip", "Sort chats:"],
+    ] as const;
+    for (const [trigger, tooltip, text] of hovers) {
+      await composer.getByTestId(trigger).hover();
+      await expect(page.getByTestId(tooltip)).toBeVisible();
+      await expect(page.getByTestId(tooltip)).toContainText(text);
+      await page.screenshot({ path: test.info().outputPath(`${tooltip}.png`) });
+    }
+
+    // Opening a menu hides its tooltip; the menu still opens.
+    await composer.getByTestId("sidebar-sort-trigger").click();
+    await expect(page.getByTestId("sidebar-sort-recent")).toBeVisible();
+    await expect(page.getByTestId("sidebar-sort-tooltip")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
 });

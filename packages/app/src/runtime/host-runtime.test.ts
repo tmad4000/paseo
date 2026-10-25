@@ -159,13 +159,14 @@ class FakeDaemonClient {
   }
 
   public ownedSubscriptions = true;
+  public serverVersion = "0.8.0";
 
   getLastServerInfoMessage(): ReturnType<DaemonClient["getLastServerInfoMessage"]> {
     return {
       status: "server_info",
       serverId: "srv_test",
       hostname: "test",
-      version: "0.8.0",
+      version: this.serverVersion,
       features: { ownedSubscriptions: this.ownedSubscriptions },
     };
   }
@@ -1352,6 +1353,27 @@ describe("HostRuntimeController", () => {
     expect(controller.getSnapshot().connectionStatus).toBe("online");
     expect(controller.getSnapshot().agentDirectoryStatus).toBe("ready");
     expect(controller.getSnapshot().connectionEpoch).toBe(firstEpoch + 1);
+  });
+
+  it("exposes fresh handshake versions through snapshots on a same-client reconnect", async () => {
+    const clients: FakeDaemonClient[] = [];
+    const controller = new HostRuntimeController({
+      host: makeHost(),
+      deps: makeDeps({ "direct:lan:6767": 12 }, clients),
+    });
+    await controller.start({ autoProbe: false });
+    const client = clients[0]!;
+    const originalClient = controller.getSnapshot().client;
+    const observed: Array<string | null | undefined> = [];
+    const unsubscribe = controller.subscribe(() => {
+      observed.push(controller.getSnapshot().client?.getLastServerInfoMessage()?.version);
+    });
+    client.setConnectionState({ status: "disconnected", reason: "client_closed" });
+    client.serverVersion = "0.10.0-beta.16";
+    client.setConnectionState({ status: "connected" });
+    expect(controller.getSnapshot().client).toBe(originalClient);
+    expect(observed.at(-1)).toBe("0.10.0-beta.16");
+    unsubscribe();
   });
 
   it("stores directory sync errors as non-blocking after a successful directory load", async () => {

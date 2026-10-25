@@ -956,60 +956,37 @@ function SidebarSearchControls() {
               style={styles.sidebarSearchInput}
             />
             {searchQuery ? (
-              <Pressable
-                onPress={clear}
-                accessibilityRole="button"
-                accessibilityLabel={t("sidebar.filterSidebar.clear")}
-                testID="sidebar-title-project-filter-clear"
-              >
-                <X size={14} color={theme.colors.foregroundMuted} />
-              </Pressable>
+              <SidebarFilterClearButton clear={clear} inputRef={searchInputRef} />
             ) : null}
           </View>
-          <Pressable
-            onPress={enterSend}
-            disabled={locked}
-            accessibilityRole="button"
-            accessibilityLabel={t("sidebar.routing.sendToChat")}
-            style={locked ? lockedSendTriggerStyle : styles.sidebarSortTrigger}
-            testID="routing-send-mode"
-          >
-            <Send size={14} color={theme.colors.foregroundMuted} />
-          </Pressable>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <Pressable
+                onPress={enterSend}
+                disabled={locked}
+                accessibilityRole="button"
+                accessibilityLabel={t("sidebar.routing.sendToChat")}
+                style={locked ? lockedSendTriggerStyle : styles.sidebarSortTrigger}
+                testID="routing-send-mode"
+              >
+                <Send size={14} color={theme.colors.foregroundMuted} />
+              </Pressable>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              align="center"
+              offset={8}
+              testID="routing-send-mode-tooltip"
+            >
+              <IconTooltipContent label={t("sidebar.routing.sendToChat")} />
+            </TooltipContent>
+          </Tooltip>
           <SidebarFilterScopeMenu />
-          <DropdownMenu compactMode="sheet">
-            <DropdownMenuTrigger
-              style={styles.sidebarSortTrigger}
-              accessibilityRole="button"
-              accessibilityLabel={t("sidebar.filterSidebar.sortBy", {
-                value: t(`sidebar.filterSidebar.sort.${sortMode}`),
-              })}
-              testID="sidebar-sort-trigger"
-            >
-              <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              width={280}
-              sheetTitle={t("sidebar.filterSidebar.sortHeading")}
-            >
-              {olderMessageSortHosts.length > 0 ? (
-                <DropdownMenuItem disabled testID="sidebar-sort-older-hosts">
-                  {t("sidebar.filterSidebar.sortOlderHosts", {
-                    hosts: olderMessageSortHosts.join(", "),
-                  })}
-                </DropdownMenuItem>
-              ) : null}
-              {SIDEBAR_SORT_MODES.map((mode) => (
-                <SidebarSortItem
-                  key={mode}
-                  mode={mode}
-                  selected={sortMode === mode}
-                  onSelectMode={setSortMode}
-                />
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <SidebarSortMenu
+            sortMode={sortMode}
+            setSortMode={setSortMode}
+            olderMessageSortHosts={olderMessageSortHosts}
+          />
         </View>
       );
     },
@@ -1026,6 +1003,110 @@ function SidebarSearchControls() {
     ],
   );
   return <SessionRoutingComposer>{renderFindField}</SessionRoutingComposer>;
+}
+
+/**
+ * ✕ in the find field. It empties the field and keeps the caret in it, so the next query can be
+ * typed at once. The reset effect in SidebarSearchControls keeps that focus (web only rewrites the
+ * value; native carries focus into the swapped input), and this button unmounts once the query is
+ * empty.
+ */
+function SidebarFilterClearButton({
+  clear,
+  inputRef,
+}: {
+  clear: () => void;
+  inputRef: RefObject<EditingTextInputHandle | null>;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const clearAndRefocus = useCallback(() => {
+    clear();
+    inputRef.current?.focus();
+  }, [clear, inputRef]);
+  const label = t("sidebar.filterSidebar.clear");
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <Pressable
+          onPress={clearAndRefocus}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          testID="sidebar-title-project-filter-clear"
+        >
+          <X size={14} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="center"
+        offset={8}
+        testID="sidebar-title-project-filter-clear-tooltip"
+      >
+        <IconTooltipContent label={label} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarSortMenu({
+  sortMode,
+  setSortMode,
+  olderMessageSortHosts,
+}: {
+  sortMode: SidebarSortMode;
+  setSortMode: (mode: SidebarSortMode) => void;
+  olderMessageSortHosts: readonly string[];
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  // Controlled so the hover tooltip stays hidden while the menu is open (sidebar-help-menu.tsx).
+  const [open, setOpen] = useState(false);
+  const label = t("sidebar.filterSidebar.sortBy", {
+    value: t(`sidebar.filterSidebar.sort.${sortMode}`),
+  });
+  return (
+    <DropdownMenu compactMode="sheet" open={open} onOpenChange={setOpen}>
+      <Tooltip delayDuration={300} enabledOnDesktop={!open}>
+        <TooltipTrigger asChild>
+          <View collapsable={false}>
+            <DropdownMenuTrigger
+              style={styles.sidebarSortTrigger}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              testID="sidebar-sort-trigger"
+            >
+              <ArrowDownUp size={14} color={theme.colors.foregroundMuted} />
+            </DropdownMenuTrigger>
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="center" offset={8} testID="sidebar-sort-tooltip">
+          <IconTooltipContent label={label} />
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent
+        align="end"
+        width={280}
+        sheetTitle={t("sidebar.filterSidebar.sortHeading")}
+      >
+        {olderMessageSortHosts.length > 0 ? (
+          <DropdownMenuItem disabled testID="sidebar-sort-older-hosts">
+            {t("sidebar.filterSidebar.sortOlderHosts", {
+              hosts: olderMessageSortHosts.join(", "),
+            })}
+          </DropdownMenuItem>
+        ) : null}
+        {SIDEBAR_SORT_MODES.map((mode) => (
+          <SidebarSortItem
+            key={mode}
+            mode={mode}
+            selected={sortMode === mode}
+            onSelectMode={setSortMode}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function SidebarSortItem({

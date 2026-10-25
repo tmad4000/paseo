@@ -69,6 +69,7 @@ describe("checkForAppUpdate", () => {
       readyToInstall: false,
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
+      publishedVersion: null,
       body: null,
       date: null,
       errorMessage: null,

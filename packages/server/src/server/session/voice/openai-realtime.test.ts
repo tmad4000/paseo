@@ -452,3 +452,99 @@ describe("realtimeAvailable", () => {
     );
   });
 });
+
+describe("GPT Realtime failure diagnostics", () => {
+  async function reportingFixture() {
+    const directory = mkdtempSync(join(process.cwd(), ".realtime-test-"));
+    dirs.push(directory);
+    const store = new RealtimeContextStore(directory, "11111111-1111-4111-8111-111111111111");
+    const socket = new Socket();
+    const host = {
+      status: vi.fn(),
+      speech: vi.fn(),
+      audio: vi.fn(),
+      stopPlayback: vi.fn(),
+      submit: vi.fn().mockResolvedValue(undefined),
+      endVoice: vi.fn(),
+    };
+    const report = vi.fn();
+    const voice = new OpenAiRealtime({
+      store,
+      host,
+      key: () => "test-key",
+      connect: () => socket,
+      report,
+    });
+    const started = voice.start();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    socket.emit("open");
+    socket.event({ type: "session.updated" });
+    await started;
+    const settle = async () => {
+      for (let i = 0; i < 30; i++) await Promise.resolve();
+    };
+    return { voice, host, socket, report, settle };
+  }
+
+  it("reports the rejected event's code, param, event id and the last client operation", async () => {
+    const { socket, report, host, settle } = await reportingFixture();
+    socket.event({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        code: "conversation_already_has_active_response",
+        message: "Conversation already has an active response in progress.",
+        param: "response",
+        event_id: "evt_client_42",
+      },
+    });
+    await settle();
+    expect(report).toHaveBeenCalledTimes(1);
+    const failure = report.mock.calls[0][0];
+    expect(failure).toMatchObject({
+      kind: "rejected",
+      code: "conversation_already_has_active_response",
+      param: "response",
+      eventId: "evt_client_42",
+      lastClientEvent: "session.update",
+    });
+    expect(failure.message).toContain("GPT Realtime rejected an event");
+    expect(failure.phase).toMatch(/^connected\//);
+    // The cause is captured before the user-facing state is published.
+    expect(host.status).toHaveBeenCalled();
+    expect(JSON.stringify(failure)).not.toContain("test-key");
+  });
+
+  it("reports the close code and reason when the OpenAI socket closes", async () => {
+    const { socket, report } = await reportingFixture();
+    socket.emit("close", 1011, Buffer.from("server error"));
+    expect(report.mock.calls[0][0]).toMatchObject({
+      kind: "closed",
+      closeCode: 1011,
+      closeReason: "server error",
+    });
+  });
+
+  it("reports processing failures with the thrown error's name when there is no code", async () => {
+    const { socket, report, settle } = await reportingFixture();
+    // An unknown tool call with no bound request makes event handling throw.
+    socket.event({
+      type: "response.output_item.done",
+      response_id: "resp_1",
+      item: { id: "item_1", type: "function_call", name: "send_to_agent", call_id: "call_1" },
+    });
+    await settle();
+    expect(report.mock.calls[0][0]).toMatchObject({ kind: "processing", code: "Error" });
+  });
+
+  it("never lets a throwing reporter change how the failure is handled", async () => {
+    const { socket, report, host, settle } = await reportingFixture();
+    report.mockImplementation(() => {
+      throw new Error("diagnostics down");
+    });
+    socket.event({ type: "error", error: { code: "server_error", message: "boom" } });
+    await settle();
+    const last = host.status.mock.calls.at(-1)?.[0];
+    expect(last).toMatchObject({ connection: "unavailable", muted: true });
+  });
+});

@@ -1,3 +1,8 @@
+import {
+  RedactionProfileSchema,
+  ShareSnapshotSchema,
+  ShareRecordPayloadSchema,
+} from "./sharing.js";
 import { AgentArtifactSchema } from "./agent-artifact.js";
 export { AgentArtifactSchema } from "./agent-artifact.js";
 import {
@@ -5,6 +10,8 @@ import {
   StreamListResponseSchema,
   StreamUpdateRequestSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinRequestSchema,
+  StreamTagPinResponseSchema,
 } from "./global-stream.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
 export {
@@ -88,6 +95,12 @@ import {
   BrowserAutomationExecuteResponseSchema,
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
+import {
+  ClientDiagnosticsListRequestSchema,
+  ClientDiagnosticsListResponseSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsReportResponseSchema,
+} from "./client-diagnostics.js";
 import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -956,7 +969,7 @@ export const UpdateAgentRequestMessageSchema = z.object({
   type: z.literal("update_agent_request"),
   agentId: z.string(),
   name: z.string().optional(),
-  labels: z.record(z.string(), z.string()).optional(),
+  labels: z.record(z.string(), z.string().nullable()).optional(),
   requestId: z.string(),
 });
 
@@ -3718,6 +3731,7 @@ export type UiTabOpenRequestMessage = z.infer<typeof UiTabOpenRequestMessageSche
 
 // These connection event streams have no directory bootstrap or timeline membership.
 export const SessionEventSubscriptionSchema = z.enum([
+  "share.link.update",
   "project.update",
   "providers_snapshot_update",
   "agent_attention_required",
@@ -3770,7 +3784,98 @@ export const SubscriptionReleaseResponseSchema = z.object({
   payload: z.object({ requestId: z.string(), subscriptionId: z.string() }),
 });
 
+export const ShareLinkPreviewRequestSchema = z.object({
+  type: z.literal("share.link.preview.request"),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+  title: z.string().max(500).optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkCreateRequestSchema = z.object({
+  type: z.literal("share.link.create.request"),
+  previewDigest: z.string().optional(),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+  mode: z.literal("snapshot").optional(),
+  title: z.string().max(500).optional(),
+  expiresAt: z.string().nullable().optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkListRequestSchema = z.object({
+  type: z.literal("share.link.list.request"),
+  requestId: z.string().optional(),
+  agentId: z.string().optional(),
+});
+export const ShareLinkUpdateRequestSchema = z.object({
+  type: z.literal("share.link.update.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+  title: z.string().max(500).optional(),
+  expiresAt: z.string().nullable().optional(),
+  redaction: RedactionProfileSchema.optional(),
+});
+export const ShareLinkRevokeRequestSchema = z.object({
+  type: z.literal("share.link.revoke.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+});
+export const ShareLinkDeleteRequestSchema = z.object({
+  type: z.literal("share.link.delete.request"),
+  requestId: z.string().optional(),
+  shareId: z.string().optional(),
+});
+export const ShareLinkPreviewResponseSchema = z.object({
+  type: z.literal("share.link.preview.response"),
+  payload: z.object({ requestId: z.string().optional(), snapshot: ShareSnapshotSchema.optional() }),
+});
+export const ShareLinkCreateResponseSchema = z.object({
+  type: z.literal("share.link.create.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+    url: z.string().optional(),
+  }),
+});
+export const ShareLinkListResponseSchema = z.object({
+  type: z.literal("share.link.list.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    shares: z.array(ShareRecordPayloadSchema).optional(),
+  }),
+});
+export const ShareLinkUpdateResponseSchema = z.object({
+  type: z.literal("share.link.update.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+  }),
+});
+export const ShareLinkRevokeResponseSchema = z.object({
+  type: z.literal("share.link.revoke.response"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    share: ShareRecordPayloadSchema.optional(),
+  }),
+});
+export const ShareLinkDeleteResponseSchema = z.object({
+  type: z.literal("share.link.delete.response"),
+  payload: z.object({ requestId: z.string().optional(), deletedId: z.string().optional() }),
+});
+export const ShareLinkUpdateEventSchema = z.object({
+  type: z.literal("share.link.update"),
+  payload: z.object({
+    share: ShareRecordPayloadSchema.optional(),
+    deletedId: z.string().optional(),
+  }),
+});
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  ShareLinkPreviewRequestSchema,
+  ShareLinkCreateRequestSchema,
+  ShareLinkListRequestSchema,
+  ShareLinkUpdateRequestSchema,
+  ShareLinkRevokeRequestSchema,
+  ShareLinkDeleteRequestSchema,
   UiTabOpenRequestMessageSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
@@ -3795,6 +3900,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UpdateCompanionEntryRequestMessageSchema,
   StreamListRequestSchema,
   StreamUpdateRequestSchema,
+  StreamTagPinRequestSchema,
   ProjectRenameRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
@@ -3894,6 +4000,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueGetItemImagesRequestSchema,
   AgentQueueInspectRequestSchema,
   ClientOutboxReportRequestSchema,
+  ClientDiagnosticsReportRequestSchema,
+  ClientDiagnosticsListRequestSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
   CheckoutDiffGetRequestSchema,
@@ -4290,11 +4398,16 @@ export const ServerInfoStatusPayloadSchema = z
         agentMessageQueue: z.boolean().optional(),
         // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
         deliveryInspect: z.boolean().optional(),
+        // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+        clientDiagnostics: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
+        conversationSharing: z.boolean().optional(),
         // COMPAT(globalStream): fork beta.11; remove gate after 2027-04-06.
         globalStream: z.boolean().optional(),
         durableStream: z.boolean().optional(),
+        // COMPAT(streamTags): fork feature; #hashtag filters, tag counts and pinned tags.
+        streamTags: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
@@ -4327,6 +4440,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceMarkUnread: z.boolean().optional(),
         // COMPAT(agentMarkUnread): fork feature, added in fork v0.10.0-beta.15, drop the gate after 2027-04-17.
         agentMarkUnread: z.boolean().optional(),
+        // COMPAT(manualAgentStatus): fork feature, remove gate after 2027-04-24.
+        manualAgentStatus: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: z.boolean().optional(),
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
@@ -7459,6 +7574,13 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  ShareLinkPreviewResponseSchema,
+  ShareLinkCreateResponseSchema,
+  ShareLinkListResponseSchema,
+  ShareLinkUpdateResponseSchema,
+  ShareLinkRevokeResponseSchema,
+  ShareLinkDeleteResponseSchema,
+  ShareLinkUpdateEventSchema,
   UiTabOpenResponseMessageSchema,
   UiCommandMessageSchema,
   BrowserHostRegisterResponseSchema,
@@ -7594,11 +7716,14 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueGetItemImagesResponseSchema,
   AgentQueueInspectResponseSchema,
   ClientOutboxReportResponseSchema,
+  ClientDiagnosticsReportResponseSchema,
+  ClientDiagnosticsListResponseSchema,
   AgentQueueUpdateMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   StreamListResponseSchema,
   StreamUpdateResponseSchema,
+  StreamTagPinResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
   ProjectPinSetResponseSchema,
