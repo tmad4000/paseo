@@ -213,6 +213,8 @@ export const ru: TranslationResources = {
       daemonUnavailable: "Daemon недоступен",
       daemonClientUnavailable: "Daemon клиента недоступен",
       daemonClientDisconnected: "Daemon клиента отключен",
+      connectionInterrupted:
+        "Сейчас не удаётся связаться с хостом. Paseo переподключается; повторите попытку, когда связь восстановится.",
       noFileFound: "Файл для {{token}} не найден",
       unexpectedDictationError: "При обработке диктовки произошла непредвиденная ошибка.",
     },

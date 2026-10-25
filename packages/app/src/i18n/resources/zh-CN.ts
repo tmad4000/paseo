@@ -211,6 +211,7 @@ export const zhCN: TranslationResources = {
       daemonUnavailable: "Daemon 不可用",
       daemonClientUnavailable: "Daemon client 不可用",
       daemonClientDisconnected: "Daemon client 已断开连接",
+      connectionInterrupted: "暂时无法连接到你的主机。Paseo 正在重新连接，恢复后请重试。",
       noFileFound: "未找到 {{token}} 对应的文件",
       unexpectedDictationError: "处理听写时发生意外错误。",
     },
