@@ -122,7 +122,7 @@ class WorkspaceStatus {
         ...input,
         cwd: this.workspace.cwd,
         workspaceId: this.workspace.workspaceId,
-        labels: { [PARENT_AGENT_ID_LABEL]: "parent-agent" },
+        labels: { ...input.labels, [PARENT_AGENT_ID_LABEL]: "parent-agent" },
       }),
     );
   }
@@ -141,7 +141,7 @@ class WorkspaceStatus {
         ...input,
         cwd: this.worktreeWorkspace.cwd,
         workspaceId: this.worktreeWorkspace.workspaceId,
-        labels: { [PARENT_AGENT_ID_LABEL]: "parent-agent" },
+        labels: { ...input.labels, [PARENT_AGENT_ID_LABEL]: "parent-agent" },
       }),
     );
   }
@@ -239,6 +239,7 @@ class WorkspaceStatus {
 }
 
 interface AgentState {
+  labels?: Record<string, string>;
   id: string;
   status: AgentSnapshotPayload["status"];
   pendingPermissionCount?: number;
@@ -717,4 +718,36 @@ test("Git observation targets exclude archived records without hydrating app des
   expect(await directory.listObservationTargets()).toEqual([
     { id: "observed", workspaceDirectory: "/workspace/observed", workspaceKind: "local_checkout" },
   ]);
+});
+
+test("manual input and review markers contribute only to their owning workspace", async () => {
+  const workspace = new WorkspaceStatus();
+  workspace.hasSiblingWorkspaceSameCwd();
+  workspace.hasStampedRootAgent({
+    id: "manual-input",
+    status: "idle",
+    workspaceId: "workspace-1",
+    labels: { "paseo.manual-needs-input": "true" },
+  });
+  workspace.hasStampedRootAgent({
+    id: "manual-review",
+    status: "idle",
+    workspaceId: "workspace-1-sibling",
+    labels: { "paseo.review-status": "ready" },
+  });
+  await expect(workspace.workspaceStatuses()).resolves.toEqual({
+    "workspace-1": "needs_input",
+    "workspace-1-sibling": "attention",
+  });
+});
+
+test("a manual marker on a child tab contributes to its workspace", async () => {
+  const workspace = new WorkspaceStatus();
+  workspace.hasRootAgent({ id: "parent-agent", status: "idle" });
+  workspace.hasDelegatedAgent({
+    id: "child",
+    status: "idle",
+    labels: { "paseo.manual-needs-input": "true" },
+  });
+  await expect(workspace.workspaceStatus()).resolves.toBe("needs_input");
 });

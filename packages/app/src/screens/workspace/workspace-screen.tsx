@@ -1,3 +1,4 @@
+import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
@@ -219,6 +220,7 @@ import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
   WorkspaceHeaderMenuDesktop,
   WorkspaceHeaderMenuMobile,
+  type WorkspaceHeaderTabActions,
 } from "@/screens/workspace/workspace-header-menu";
 import { PluginHeaderButtons } from "@/plugins";
 import {
@@ -996,7 +998,15 @@ function WorkspaceHeaderProjectRow({
   );
 }
 
-interface WorkspaceHeaderTitleBarProps {
+function getHeaderRenameTabKind(
+  tab: WorkspaceTabDescriptor | null,
+): WorkspaceHeaderTabActions["renameTabKind"] {
+  const kind = tab?.target.kind;
+  return kind === "agent" || kind === "terminal" ? kind : null;
+}
+
+interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
+  sharingAgentId?: string;
   isLoading: boolean;
   title: string;
   subtitle: string;
@@ -1026,6 +1036,9 @@ interface WorkspaceHeaderTitleBarProps {
 }
 
 function WorkspaceHeaderTitleBar({
+  sharingAgentId,
+  renameTabKind,
+  onRenameCurrentTab,
   isLoading,
   title,
   subtitle,
@@ -1053,8 +1066,10 @@ function WorkspaceHeaderTitleBar({
   onViewScriptTerminal,
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
+  const sharing = useConversationSharing(normalizedServerId, sharingAgentId);
   return (
     <View style={styles.headerTitleContainer}>
+      {sharing.sheet}
       {isLoading ? (
         <View style={styles.headerTitleTextGroup}>
           <View style={styles.headerTitleSkeleton} />
@@ -1062,6 +1077,7 @@ function WorkspaceHeaderTitleBar({
       ) : (
         <View style={styles.headerTitleTextGroup}>
           <ScreenTitle testID="workspace-header-title">{title}</ScreenTitle>
+          {sharing.badge}
           <WorkspaceHeaderProjectRow
             subtitle={subtitle}
             isSubtitleDistinct={isSubtitleDistinct}
@@ -1072,6 +1088,10 @@ function WorkspaceHeaderTitleBar({
       <View style={styles.compactHeaderMenuCluster}>
         {isMobile ? (
           <WorkspaceHeaderMenuMobile
+            renameTabKind={renameTabKind}
+            sharingAvailability={sharing.availability}
+            onShareConversation={sharing.open}
+            onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -1090,6 +1110,10 @@ function WorkspaceHeaderTitleBar({
           />
         ) : (
           <WorkspaceHeaderMenuDesktop
+            renameTabKind={renameTabKind}
+            sharingAvailability={sharing.availability}
+            onShareConversation={sharing.open}
+            onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
             importAgentDisabled={importAgentDisabled}
@@ -3696,6 +3720,10 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const renameTabKind = getHeaderRenameTabKind(activeTabDescriptor);
+  const handleRenameCurrentTab = useCallback(() => {
+    if (activeTabDescriptor) handleRenameTab(activeTabDescriptor);
+  }, [activeTabDescriptor, handleRenameTab]);
   const activeFileFields = getWorkspaceFileLocationFields(activeTabDescriptor);
   const activeFilePath = activeFileFields.path;
   const activeFileLineStart = activeFileFields.lineStart;
@@ -4138,6 +4166,13 @@ function WorkspaceScreenContent({
               <NavigationForwardButton />
               <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
+                renameTabKind={renameTabKind}
+                sharingAgentId={
+                  activeTabDescriptor?.target.kind === "agent"
+                    ? activeTabDescriptor.target.agentId
+                    : undefined
+                }
+                onRenameCurrentTab={handleRenameCurrentTab}
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
                 subtitle={workspaceHeaderSubtitle}
@@ -4171,6 +4206,9 @@ function WorkspaceScreenContent({
         />
       ) : null,
     [
+      activeTabDescriptor,
+      renameTabKind,
+      handleRenameCurrentTab,
       canOpenImportSheet,
       createTerminalDisabled,
       currentBranchName,

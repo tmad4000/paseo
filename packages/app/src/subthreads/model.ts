@@ -90,6 +90,7 @@ export function buildSubthreadRows(
       status,
       pendingPermissionCount: agent?.pendingPermissions.length ?? 0,
       requiresAttention: row.kind === "paseo" ? Boolean(row.requiresAttention) : false,
+      labels: agent?.labels,
       attentionReason: agent?.attentionReason ?? null,
     });
     const description = resolveRowLabel(row.description);

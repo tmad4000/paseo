@@ -64,6 +64,8 @@ defined there, and a separate module would import them in a cycle.
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
 | `agent.queue.get_item_images.request` | in        | Fetch one item's image bytes                   |
+| `agent.queue.inspect.request`         | in        | Host delivery state for `paseo queue ls`       |
+| `client.outbox.report.request`        | in        | A device's unsent counts after a reconnect     |
 | `agent.queue.update`                  | out       | Unsolicited snapshot broadcast; no `requestId` |
 
 Each `.request` has the matching `.response`. `agent.queue.update` is a broadcast and follows
@@ -221,7 +223,15 @@ failures the client shows one attention message and continues retrying.
 
 On every (re)connect that advertises `agentMessageQueue` (the `server_info`
 status message, which is exactly the re-established-transport signal), the
-session flushes eligible outbox entries oldest first within each agent. Enqueue entries use
+session flushes eligible outbox entries oldest first within each agent.
+Listen for that message with a raw `client.on("status")` handler
+(`contexts/session-outbox-flush.ts`). The daemon sends the connect-time
+`server_info` before any owned `observeEvents` subscription exists, so a feed
+subscriber never receives it. From 2026-09-28 to 2026-10-22 the flush listened on
+the feed and never ran on reconnect, leaving rows on "Waiting to sync with host"
+indefinitely. The same helper also flushes once at mount when the client is
+already connected, because a cold start can connect before the session context
+subscribes. Enqueue entries use
 the ordinary enqueue RPC; removal intents use the remove RPC and are never
 re-enqueued. A failed predecessor blocks later items for that agent while other
 agents proceed. Re-sending an enqueue is safe because the daemon treats a
@@ -250,7 +260,94 @@ before attempting the remove RPC. The intent survives snapshots that still inclu
 its item; after the RPC is acknowledged, persist its deletion from the outbox.
 This also reconciles a lost enqueue response without resending the canceled payload.
 
+## Direct sends
+
+A direct send (Enter, Steer, Interrupt, or Send now from the composer) has the same un-acked
+window as a queued message. Before 2026-10-22 it had no durable copy: the composer cleared the
+draft, awaited the RPC for up to 60 seconds, and restored the text only on failure. An app kill or
+iOS suspension in that window lost the message (reproduced against a SIGSTOPped daemon).
+
+The send outbox (`packages/app/src/stores/send-outbox-store/`) closes it. When the host
+dedupes retried sends, `dispatchComposerAgentMessage` stores the full request under its
+client message id before sending. That requires both `agentRequestReceipts` (steer and interrupt
+receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
+per-agent ordered flush that reconnects use:
+
+- Accepted: the entry is removed and the optimistic bubble proceeds as before.
+- Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
+  mid-request): the entry stays, the bubble
+  stays with its pending mark, and the composer does not take the text back. Every reconnect and
+  cold start resends the **identical** request. The daemon's receipt (or queue item id) makes a
+  retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
+  receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
+- A definitive answer (`AgentMessageRejectedError` from `accepted: false`, a `DaemonRpcError`,
+  or a request that cannot be built): while the author is sending, the entry is removed and the
+  text returns to the composer with the error, as before. A refusal during a background flush
+  parks the entry with `rejectedError`; it is not retried until the user taps Retry. Classify
+  refusals positively. Any unrecognized error means "unknown", never "refused", because handing an
+  arrived message back to the composer turns the user's resend into a duplicate.
+- `agent_request_outcome_unknown` arrives as a refusal, but the host may have delivered the message.
+  It stays parked with its own explanation and never returns to the composer. Edit is offered only
+  for definitive refusals of plain-text messages, since the outbox does not keep composer attachments.
+
+A send failure stops that agent's later entries so they cannot overtake it. A refusal does not.
+The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the
+host unreachable, before its features are known, can still store a send first. The reconnect flush
+itself checks the live features, so a downgraded daemon is never sent retries it cannot dedupe.
+
+Entries with no live chat bubble appear in the composer's **Unsent messages** track: after a
+relaunch, or for another chat's sends. Each row offers Retry, Discard, and, for refused messages, Edit,
+which moves the text back into the message box. Only a refused message may be edited. One that is
+still retrying could already be on the host.
+
+## Delivery marks
+
+The user's own messages carry a messaging-app style tick
+(`composer/delivery-state.ts`, rendered by `components/delivery-mark.tsx`):
+
+| Mark         | Chat bubble                                                  | Queued row                                       |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------ |
+| Clock        | Optimistic, host has not answered (`rpcSettled` false)       | Outbox entry not in the latest host snapshot     |
+| Check        | Host accepted the send; provider echo not seen yet           | In the host queue: "On the host"                 |
+| Double check | Canonical timeline row (has `messageId` or `timelineCursor`) | Never; a drained item becomes a delivered bubble |
+| Alert        | Outbox entry refused or at `SEND_OUTBOX_MAX_ATTEMPTS`        | Outbox entry at `QUEUE_OUTBOX_MAX_ATTEMPTS`      |
+
+Clock, check and alert stay visible on every platform. The double check joins the timestamp row,
+which desktop reveals on hover. The alert never stops retries; it only tells the user. Tapping a
+bubble's alert explains it and offers Retry now.
+
+## Delivery inspection
+
+`paseo queue ls <agent>` shows the host's view of delivery for one agent, gated on
+`deliveryInspect`:
+
+- **Queued on the host:** the daemon queue, with creation times.
+- **Recently delivered:** items that left the queue for the agent, newest first, with time and a
+  one-line preview. The store derives `drainedLog` from `drainedIds` inside `mutate()`, so every
+  drain path records it and a failed drain that restores the item removes its entry. Items
+  drained before this existed show an unknown time.
+- **Delivery receipts:** direct-send and drain receipts. `completed` means the provider accepted
+  the message; `pending` means the host stopped mid-submit and the outcome is unknown.
+- **Devices reporting unsent messages:** after each reconnect flush settles, a client sends
+  `client.outbox.report.request` with per-agent counts of queued and direct messages still in
+  its outbox, plus the oldest one's time. Reports are held in memory, replaced per client id
+  and capped at 64 devices; they reset when the daemon restarts and refill as devices reconnect.
+
+The limit is fundamental: a message saved on a device that has not reconnected exists only on
+that device. The host cannot see it, and neither can the CLI. A report says only "this device
+held N unsent messages at time T", never their text.
+
 ## Known edges
+
+Both outboxes are only as durable as the platform's `AsyncStorage`. On iOS and Android a write is
+on disk when `setItem` resolves, and the outboxes wait for it before sending. On web and Electron
+`AsyncStorage` is Chromium localStorage, which commits to disk in batches. A crash or SIGKILL within
+a few seconds of a write can drop it; a normal quit or tab close flushes. Reproduced: a kill 3 s
+after sending lost the entry, while a kill 15 s after it was delivered exactly once.
+
+Never `set()` a persisted outbox store before it has rehydrated. Persist writes the in-memory
+state, so an early write replaces the saved entries with the empty initial state. Every mutation
+awaits hydration first (`send-outbox-store/index.test.ts` covers the connect-time case).
 
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
 affordance; adding one is a separate change.
