@@ -63,7 +63,7 @@ describe("share service", () => {
     });
     await service.update(result.share.id, { title: "password=hidden" });
     expect(await service.store.view(tokenFrom(result.url))).toMatchObject({
-      title: "[secret hidden]",
+      title: "password=[secret hidden]",
       messages: current.messages,
     });
   });

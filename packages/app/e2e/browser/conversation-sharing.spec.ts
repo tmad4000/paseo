@@ -4,6 +4,10 @@ import { test as base } from "../support/fixtures";
 import { seedMockAgentWorkspace, openAgentRoute } from "../support/helpers/mock-agent";
 import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 
+function backgroundColors(elements: Element[]) {
+  return elements.map((element) => getComputedStyle(element).backgroundColor);
+}
+
 const test = base.extend({
   e2eDaemonConfig: [
     async ({ e2eForkProviders: _providers }, provide) => {
@@ -35,7 +39,7 @@ for (const width of [1440, 390]) {
       repoPrefix: "share-qa-",
       title: "Planning a focused release",
       initialPrompt:
-        "Outline a focused release. Use /Users/jacob/private/src/release.ts and password=fixture-secret-value as examples.",
+        "Outline a focused release. Use /Users/jacob/private/src/release.ts and password=fixture-secret-value as examples. Connect to 100.84.242.74:7070 and db.internal.",
     });
     try {
       await fixture.client.waitForAgentUpsert(
@@ -58,6 +62,28 @@ for (const width of [1440, 390]) {
         .toBeLessThan(200);
       await expect(sheet.getByText(/password=fixture-secret-value/)).toHaveCount(0);
       await expect(sheet.getByText(/\[secret hidden\]/)).toBeVisible();
+      const hosts = sheet.getByRole("switch", { name: "Hostnames and IP addresses", exact: true });
+      await expect(hosts).toBeChecked();
+      await expect(sheet.getByTestId("share-preview")).toContainText("hosts 2");
+      await expect(sheet.getByTestId("share-preview")).toContainText("[ip]:7070 and [host]");
+      await hosts.click();
+      await expect(hosts).not.toBeChecked();
+      await expect(sheet.getByTestId("share-preview")).toContainText(
+        "100.84.242.74:7070 and db.internal",
+      );
+      await expect(sheet.getByTestId("share-preview")).toContainText("hosts 0");
+      await hosts.click();
+      await expect(hosts).toBeChecked();
+      await expect(sheet.getByTestId("share-preview")).toContainText("[ip]:7070 and [host]");
+      await expect(page.getByRole("button", { name: "Create link", exact: true })).toBeEnabled();
+      const enabledTrackColors = await sheet
+        .getByRole("switch", { name: "Secrets", exact: true })
+        .locator("div")
+        .evaluateAll(backgroundColors);
+      // Reanimated switches expose checked state before the visual transition finishes.
+      await expect
+        .poll(() => hosts.locator("div").evaluateAll(backgroundColors))
+        .toEqual(enabledTrackColors);
       await page.screenshot({
         path: testInfo.outputPath(`share-sheet-${width}.png`),
         fullPage: true,
@@ -76,6 +102,8 @@ for (const width of [1440, 390]) {
         guest.getByRole("heading", { name: "Planning a focused release" }),
       ).toBeVisible();
       await expect(guest.getByText(/fixture-secret-value/)).toHaveCount(0);
+      await expect(guest.getByText(/100\.84\.242\.74|db\.internal/)).toHaveCount(0);
+      await expect(guest.getByText(/\[ip\]:7070 and \[host\]/)).toBeVisible();
       await guest.screenshot({
         path: testInfo.outputPath(`guest-light-${width}.png`),
         fullPage: true,

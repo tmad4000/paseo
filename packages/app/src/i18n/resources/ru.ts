@@ -26,7 +26,7 @@ export const ru: TranslationResources = {
     loading: "Загрузка предпросмотра…",
     updateHost: "Обновите хост, чтобы делиться беседами.",
     summary:
-      "Скрыто: инструменты {{tools}}, рассуждения {{reasoning}} · Секреты {{secrets}}, контакты {{contacts}} · Сокращено путей: {{paths}}",
+      "Скрыто: инструменты {{tools}}, рассуждения {{reasoning}} · Секреты {{secrets}}, контакты {{contacts}}, хосты {{hosts}} · Сокращено путей: {{paths}}",
     shareMetadata:
       "Снимок · Просмотры: {{views}} · Срок: {{expiry}} · Последний просмотр: {{lastViewed}}",
     fields: {
@@ -34,6 +34,7 @@ export const ru: TranslationResources = {
       reasoning: "Рассуждения",
       errors: "Ошибки",
       secrets: "Секреты",
+      hosts: "Имена хостов и IP-адреса",
       paths: "Пути файлов",
       contacts: "Адреса почты и телефоны",
     },

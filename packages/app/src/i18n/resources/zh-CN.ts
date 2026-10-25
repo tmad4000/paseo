@@ -26,13 +26,14 @@ export const zhCN: TranslationResources = {
     loading: "正在加载预览…",
     updateHost: "请更新主机以分享对话。",
     summary:
-      "隐藏：工具 {{tools}} 次、推理 {{reasoning}} 条 · 遮盖：密钥 {{secrets}} 处、联系方式 {{contacts}} 处 · 已缩短路径 {{paths}} 处",
+      "隐藏：工具 {{tools}} 次、推理 {{reasoning}} 条 · 遮盖：密钥 {{secrets}} 处、联系方式 {{contacts}}, 主机 {{hosts}} 处 · 已缩短路径 {{paths}} 处",
     shareMetadata: "快照 · {{views}} 次查看 · 到期时间：{{expiry}} · 上次查看：{{lastViewed}}",
     fields: {
       toolCalls: "工具调用",
       reasoning: "推理",
       errors: "错误",
       secrets: "密钥",
+      hosts: "主机名和 IP 地址",
       paths: "文件路径",
       contacts: "电子邮箱和电话号码",
     },

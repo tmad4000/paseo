@@ -26,7 +26,7 @@ export const ja: TranslationResources = {
     loading: "プレビューを読み込み中…",
     updateHost: "会話を共有するにはホストを更新してください。",
     summary:
-      "非表示: ツール {{tools}} 件、推論 {{reasoning}} 件 · マスク: 秘密情報 {{secrets}} 件、連絡先 {{contacts}} 件 · 短縮パス {{paths}} 件",
+      "非表示: ツール {{tools}} 件、推論 {{reasoning}} 件 · マスク: 秘密情報 {{secrets}} 件、連絡先 {{contacts}}, ホスト {{hosts}} 件 · 短縮パス {{paths}} 件",
     shareMetadata:
       "スナップショット · 閲覧 {{views}} 回 · 有効期限: {{expiry}} · 最終閲覧: {{lastViewed}}",
     fields: {
@@ -34,6 +34,7 @@ export const ja: TranslationResources = {
       reasoning: "推論",
       errors: "エラー",
       secrets: "秘密情報",
+      hosts: "ホスト名とIPアドレス",
       paths: "ファイルパス",
       contacts: "メールアドレスと電話番号",
     },

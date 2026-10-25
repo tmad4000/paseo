@@ -27,6 +27,7 @@ export function SharePreview({ snapshot }: { snapshot: ShareSnapshot }) {
           tools: summary.hiddenToolCalls,
           reasoning: summary.hiddenReasoning,
           secrets: summary.secretsMasked,
+          hosts: summary.hostsMasked ?? 0,
           paths: summary.pathsCollapsed,
           contacts: summary.contactsMasked,
         })}
@@ -161,7 +162,7 @@ function ShareToggle({
   disabled,
 }: {
   model: ShareFormModel;
-  field: "toolCalls" | "reasoning" | "errors" | "secrets" | "paths" | "contacts";
+  field: "toolCalls" | "reasoning" | "errors" | "secrets" | "hosts" | "paths" | "contacts";
   group: "include" | "scrub";
   value: boolean;
   disabled: boolean;
@@ -174,7 +175,10 @@ function ShareToggle({
         (field === "toolCalls" || field === "reasoning" || field === "errors")
       )
         model.setInclude(field, next);
-      if (group === "scrub" && (field === "secrets" || field === "paths" || field === "contacts"))
+      if (
+        group === "scrub" &&
+        (field === "secrets" || field === "hosts" || field === "paths" || field === "contacts")
+      )
         model.setScrub(field, next);
     },
     [group, field, model],
@@ -322,13 +326,13 @@ export function ShareSheet({
           <View style={compact ? styles.section : styles.optionGroup}>
             <Text style={styles.heading}>{t("sharing.hide")}</Text>
             <SettingsCard>
-              {(["secrets", "paths", "contacts"] as const).map((key) => (
+              {(["secrets", "hosts", "paths", "contacts"] as const).map((key) => (
                 <ShareToggle
                   key={key}
                   model={model}
                   field={key}
                   group="scrub"
-                  value={state.profile.scrub[key]}
+                  value={state.profile.scrub[key] !== false}
                   disabled={state.creating}
                 />
               ))}
