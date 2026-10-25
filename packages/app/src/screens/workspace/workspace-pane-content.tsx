@@ -25,6 +25,8 @@ export interface BuildWorkspacePaneContentModelInput {
   tab: WorkspaceTabDescriptor;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
+  /** Set when the tab sits in another workspace's layout (a foreign session in a split). */
+  layoutWorkspaceId?: string;
   host: PaneHost;
   fileNavigationRevision?: number;
   onOpenTab: (target: WorkspaceTabDescriptor["target"]) => void;
@@ -44,6 +46,7 @@ export function buildWorkspacePaneContentModel({
   tab,
   normalizedServerId,
   normalizedWorkspaceId,
+  layoutWorkspaceId,
   host,
   fileNavigationRevision,
   onOpenTab,
@@ -64,6 +67,7 @@ export function buildWorkspacePaneContentModel({
     paneContextValue: {
       serverId: normalizedServerId,
       workspaceId: normalizedWorkspaceId,
+      ...(layoutWorkspaceId ? { layoutWorkspaceId } : {}),
       host,
       tabId: tab.tabId,
       target: tab.target,

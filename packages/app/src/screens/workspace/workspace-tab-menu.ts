@@ -56,7 +56,8 @@ export type WorkspaceTabMenuEntry =
         | "x"
         | "file-code-2"
         | "search"
-        | "layout-panel-left";
+        | "layout-panel-left"
+        | "circle";
       hint?: string;
       tooltip?: string;
       disabled?: boolean;

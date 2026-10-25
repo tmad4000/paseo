@@ -9,8 +9,39 @@ async function loadModuleForPlatform(platform: "web" | "ios" | "android") {
 describe("desktop-updates helpers", () => {
   afterEach(() => {
     vi.doUnmock("react-native");
+    vi.doUnmock("@/desktop/electron/invoke");
     vi.restoreAllMocks();
     vi.resetModules();
+  });
+
+  it("retains the feed version separately from the installed version", async () => {
+    vi.doMock("@/desktop/electron/invoke", () => ({
+      invokeDesktopCommand: vi.fn().mockResolvedValue({
+        currentVersion: "1.2.4",
+        latestVersion: "1.2.4",
+        publishedVersion: "1.2.3",
+        hasUpdate: false,
+        readyToInstall: false,
+      }),
+    }));
+    const { checkDesktopAppUpdate } = await loadModuleForPlatform("web");
+    const result = await checkDesktopAppUpdate({ releaseChannel: "beta", intent: "manual" });
+    expect(result.publishedVersion).toBe("1.2.3");
+    expect(result.currentVersion).toBe("1.2.4");
+  });
+
+  it("does not infer a published release from a legacy bridge response", async () => {
+    vi.doMock("@/desktop/electron/invoke", () => ({
+      invokeDesktopCommand: vi.fn().mockResolvedValue({
+        currentVersion: "1.2.4",
+        latestVersion: "1.2.4",
+        hasUpdate: false,
+        readyToInstall: false,
+      }),
+    }));
+    const { checkDesktopAppUpdate } = await loadModuleForPlatform("web");
+    const result = await checkDesktopAppUpdate({ releaseChannel: "beta", intent: "manual" });
+    expect(result.publishedVersion).toBeNull();
   });
 
   it("normalizes versions for app-daemon comparisons", async () => {

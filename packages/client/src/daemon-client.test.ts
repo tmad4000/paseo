@@ -1026,6 +1026,7 @@ test("advertises client capabilities in hello", async () => {
       timeline_replacement_invalidation: true,
       provider_snapshot_references: true,
       explicit_event_subscriptions: true,
+      conversation_sharing: true,
       owned_subscriptions: true,
       compact_provider_snapshots: true,
       custom_mode_icons: true,
@@ -7076,4 +7077,69 @@ test("queue responses classify missing routing destinations without interpreting
       await rejected.toBeInstanceOf(AgentQueueDestinationChangedError);
     else await rejected.not.toBeInstanceOf(AgentQueueDestinationChangedError);
   }
+});
+
+test("share client correlates optional-wire responses and propagates configuration errors", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "share-unit",
+    transportFactory: () => mock.transport,
+    reconnect: { enabled: false },
+  });
+  clients.push(client);
+  const connecting = client.connect();
+  mock.triggerOpen();
+  await connecting;
+  const preview = client.previewShareLink("agent");
+  await vi.waitFor(() => expect(mock.sent.length).toBeGreaterThan(0));
+  const request = parseSentFrame(mock.sent.at(-1));
+  expect(request.type).toBe("share.link.preview.request");
+  const snapshot = {
+    v: 1,
+    title: "Preview",
+    owner: { name: "Jacob" },
+    agent: { provider: "codex" },
+    createdAt: "2026-10-24T12:00:00Z",
+    messages: [],
+    redactionSummary: {
+      hiddenToolCalls: 0,
+      hiddenReasoning: 0,
+      secretsMasked: 0,
+      pathsCollapsed: 0,
+      contactsMasked: 0,
+      messagesExcluded: 0,
+    },
+  };
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "share.link.preview.response",
+      payload: { requestId: "unrelated", snapshot: { ...snapshot, title: "Wrong reply" } },
+    }),
+  );
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "share.link.preview.response",
+      payload: { requestId: request.requestId, snapshot },
+    }),
+  );
+  expect(await preview).toEqual(snapshot);
+  const create = client.createShareLink({ agentId: "agent" });
+  const rejected = expect(create).rejects.toMatchObject({ code: "sharing_not_configured" });
+  await vi.waitFor(() =>
+    expect(parseSentFrame(mock.sent.at(-1)).type).toBe("share.link.create.request"),
+  );
+  const createRequest = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "rpc_error",
+      payload: {
+        requestId: createRequest.requestId,
+        requestType: createRequest.type,
+        error: "Configure sharing",
+        code: "sharing_not_configured",
+      },
+    }),
+  );
+  await rejected;
 });

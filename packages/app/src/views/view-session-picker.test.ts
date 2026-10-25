@@ -41,8 +41,8 @@ describe("view session picker rows", () => {
       untitledLabel: "New agent",
     });
     expect(rows.map((row) => [row.agent.id, row.subtitle])).toEqual([
-      ["a1", "Mac mini · alpha · main"],
-      ["b1", "Laptop · beta · feature"],
+      ["a1", "a1 · Mac mini · alpha · main"],
+      ["b1", "b1 · Laptop · beta · feature"],
     ]);
   });
 
@@ -63,5 +63,22 @@ describe("view session picker rows", () => {
       "a1",
       "b1",
     ]);
+  });
+
+  it("names provider and short id, finds a pasted id, and can stay on one host", () => {
+    const id = "9b8394eb-de93-4c1a-8f3e-0123456789ab";
+    const rows = buildViewSessionPickerRows({
+      agents: [
+        agent({ id, title: "Release orchestrator", provider: "claude" }),
+        agent({ id: "b1", serverId: "host-b", serverLabel: "Laptop", workspaceId: "ws-beta" }),
+      ],
+      workspaceLabelByKey,
+      showHost: false,
+      untitledLabel: "New agent",
+      serverId: "host-a",
+    });
+    expect(rows.map((row) => row.subtitle)).toEqual(["claude · 9b8394eb · alpha · main"]);
+    expect(filterViewSessionPickerRows(rows, "9b8394eb").map((row) => row.agent.id)).toEqual([id]);
+    expect(filterViewSessionPickerRows(rows, id).map((row) => row.agent.id)).toEqual([id]);
   });
 });

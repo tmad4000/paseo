@@ -1,7 +1,9 @@
+import type { SharingSessionOptions } from "./sharing/share-service.js";
 import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
 import { MessageReceipts } from "./message-receipts/index.js";
+import { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
@@ -35,6 +37,7 @@ import { asUint8Array, decodeBinaryFrame } from "@getpaseo/protocol/binary-frame
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { HostnamesConfig } from "./hostnames.js";
 import { isHostnameAllowed } from "./hostnames.js";
+import { realtimeAvailable } from "./session/voice/openai-realtime.js";
 import {
   Session,
   type SessionLifecycleIntent,
@@ -544,6 +547,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly agentManager: AgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly messageReceipts: MessageReceipts;
+  private readonly clientDiagnostics: ClientDiagnosticsStore;
   private readonly creationService: CreationService;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -680,6 +684,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     agentQueueService?: AgentQueueService | null,
+    private readonly sharing?: SharingSessionOptions,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -700,6 +705,10 @@ export class VoiceAssistantWebSocketServer {
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
     this.messageReceipts = new MessageReceipts(join(paseoHome, "agent-requests"));
+    this.clientDiagnostics = new ClientDiagnosticsStore(
+      join(paseoHome, "diagnostics"),
+      this.logger.child({ module: "client-diagnostics" }),
+    );
     this.creationService = new CreationService(
       join(paseoHome, "creations"),
       this.logger.child({ module: "creation" }),
@@ -1003,9 +1012,15 @@ export class VoiceAssistantWebSocketServer {
     origin: SessionConnection | null,
     message: WSOutboundMessage,
   ): number {
+    // Only the requester's own principal sees its UI commands (the owner, for MCP and CLI
+    // callers); a hub's other principals never receive another user's tab instructions.
+    const principalId = origin?.principalId ?? OWNER_SESSION_ADMISSION.principalId;
     const sockets = [...this.sessions]
       .filter(([ws, connection]) => {
         if (connection.lifecycle !== "reconnectable") {
+          return false;
+        }
+        if (connection.principalId !== principalId) {
           return false;
         }
         return !origin?.sockets.has(ws);
@@ -1186,6 +1201,10 @@ export class VoiceAssistantWebSocketServer {
     this.socketIdentities.clear();
     this.externalSessionsByKey.clear();
     this.wss.close();
+    // Last, so shutdown ordering is unchanged; a pending diagnostics write still lands on disk.
+    await this.clientDiagnostics
+      .flush()
+      .catch((error) => this.logger.warn({ err: error }, "Failed to flush client diagnostics"));
   }
 
   private sendToClient(ws: WebSocketLike, message: WSOutboundMessage): void {
@@ -1538,6 +1557,7 @@ export class VoiceAssistantWebSocketServer {
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       agentQueueService: this.agentQueueService,
+      clientDiagnostics: this.clientDiagnostics,
       checkoutDiffManager: this.checkoutDiffManager,
       github: this.github,
       workspaceGitService: this.workspaceGitService,
@@ -1556,6 +1576,7 @@ export class VoiceAssistantWebSocketServer {
       hubRelationships: options.hubRelationships,
       broadcastToClients: options.broadcastToClients,
       serviceProxy: this.serviceProxy ?? undefined,
+      sharing: this.sharing,
       scriptRuntimeStore: this.scriptRuntimeStore ?? undefined,
       workspaceSetupSnapshots: this.workspaceSetupSnapshots,
       workspaceSetupRuntime: this.workspaceSetupRuntime,
@@ -1939,6 +1960,8 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(agentHistorySearch): added in v0.3.0, remove gate after 2027-02-07.
         agentHistorySearch: true,
         sessionSearch: true,
+        // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
+        sessionTextSearch: true,
         conversationMessageActivity: true,
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: true,
@@ -1960,10 +1983,18 @@ export class VoiceAssistantWebSocketServer {
         artifactFeed: true,
         // COMPAT(agentMessageQueue): added in v0.4.0, remove the client-side queue fallback once daemon floor >= v0.4.0.
         agentMessageQueue: this.agentQueueService !== null,
+        // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.
+        deliveryInspect: this.agentQueueService !== null,
+        // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
+        clientDiagnostics: true,
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: true,
+        // COMPAT(conversationSharing): fork feature, added in fork v0.10.0-beta.17, drop the gate after 2027-04-24.
+        conversationSharing: true,
         globalStream: true,
         durableStream: true,
+        // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
+        streamTags: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
         steerOnly: true,
@@ -1989,8 +2020,13 @@ export class VoiceAssistantWebSocketServer {
         providerSubagentNesting: true,
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
         workspacePinning: true,
+        // COMPAT(projectPinning): fork feature, added in fork v0.10.0-beta.12, drop the gate after 2027-04-10.
+        projectPinning: true,
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: true,
+        // COMPAT(agentMarkUnread): fork feature, added in fork v0.10.0-beta.15, drop the gate after 2027-04-17.
+        agentMarkUnread: true,
+        manualAgentStatus: true,
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: true,
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
@@ -2019,7 +2055,8 @@ export class VoiceAssistantWebSocketServer {
         canonicalSubmittedPrompts: true,
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: true,
-        openaiRealtimeVoice: true,
+        // Advertised only with a resolvable OpenAI credential; clients fall back to Paseo voice otherwise.
+        openaiRealtimeVoice: realtimeAvailable(),
         // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
         voiceConcurrentInput: this.agentQueueService !== null,
         // COMPAT(stableProjectIdentity): added in v0.1.109, remove gate after 2027-01-15.
@@ -2040,6 +2077,8 @@ export class VoiceAssistantWebSocketServer {
         agentConfigApply: true,
         // COMPAT(uiCommands): added in v0.4.0, remove after 2027-02-17.
         uiCommands: true,
+        // COMPAT(uiTabPlacement): fork 0.10.0-beta.12, remove after 2027-04-10.
+        uiTabPlacement: true,
       },
     };
   }

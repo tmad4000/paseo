@@ -1,3 +1,4 @@
+import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,7 @@ import {
   useHostRuntimeLastError,
   useHosts,
 } from "@/runtime/host-runtime";
-import { useHostFeature } from "@/runtime/host-features";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import {
   deriveRouteBottomAnchorIntent,
   deriveRouteBottomAnchorRequest,
@@ -100,6 +101,9 @@ import type { PendingPermission } from "@/types/shared";
 import type { StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
+import { useSubthreadReplyTarget } from "@/subthreads/context";
+import { SubthreadsHost, type RenderSubthreadAgentInput } from "@/subthreads/host";
+import { SessionChecklistButton, SubthreadsOpenButton } from "@/subthreads/open-button";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
@@ -339,6 +343,7 @@ function useAgentPanelDescriptor(
   target: { kind: "agent"; agentId: string },
   context: { serverId: string },
 ): PanelDescriptor {
+  const { t } = useTranslation();
   const descriptorState = useSessionStore(
     useShallow((state) => {
       const session = state.sessions[context.serverId];
@@ -351,6 +356,7 @@ function useAgentPanelDescriptor(
         pendingPermissionCount: agent?.pendingPermissions.length ?? 0,
         requiresAttention: agent?.requiresAttention ?? false,
         attentionReason: agent?.attentionReason ?? null,
+        labels: agent?.labels,
         isTurnActive: selectAgentTurnPresentation(session, target.agentId).isActive,
       };
     }),
@@ -358,11 +364,15 @@ function useAgentPanelDescriptor(
   const provider = descriptorState.provider;
   const label = resolveWorkspaceAgentTabLabel(descriptorState.title);
   const icon = getProviderIcon(provider, context.serverId);
+  const marker = manualStatus(descriptorState.labels ?? {});
+  const baseTooltip = label ?? `${formatProviderLabel(provider)} agent`;
+  const tooltip =
+    marker === "clear" ? baseTooltip : `${baseTooltip} · ${t(`manualStatus.${marker}`)}`;
 
   return {
     label: label ?? "",
     subtitle: `${formatProviderLabel(provider)} agent`,
-    tooltip: label ?? `${formatProviderLabel(provider)} agent`,
+    tooltip,
     titleState: label ? "ready" : "loading",
     icon,
     statusBucket: descriptorState.status
@@ -371,6 +381,7 @@ function useAgentPanelDescriptor(
           pendingPermissionCount: descriptorState.pendingPermissionCount,
           requiresAttention: descriptorState.requiresAttention,
           attentionReason: descriptorState.attentionReason,
+          labels: descriptorState.labels,
         })
       : null,
   };
@@ -383,15 +394,29 @@ function AgentPanel() {
 
   return (
     <RetainedChatContent>
-      <AgentPanelContent
+      <SubthreadsHost
         serverId={serverId}
         workspaceId={workspaceId}
         agentId={target.agentId}
-        isPaneFocused={isInteractive}
-        onOpenWorkspaceFile={openFileInWorkspace}
-      />
+        renderAgent={renderSubthreadAgent}
+      >
+        {(parentActive) => (
+          <AgentPanelContent
+            serverId={serverId}
+            workspaceId={workspaceId}
+            agentId={target.agentId}
+            isPaneFocused={isInteractive && parentActive}
+            onOpenWorkspaceFile={openFileInWorkspace}
+          />
+        )}
+      </SubthreadsHost>
     </RetainedChatContent>
   );
+}
+
+/** A subagent opened in its parent's drawer gets the same pane a tab would show. */
+function renderSubthreadAgent(input: RenderSubthreadAgentInput) {
+  return <AgentPanelContent {...input} />;
 }
 
 function DraftPanel() {
@@ -1187,7 +1212,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     handleReturnToChat();
     streamViewRef.current?.scrollToBottom("jump-to-bottom");
   }, [handleReturnToChat, streamViewRef]);
-  const artifactFeedSupported = useHostFeature(serverId, "artifactFeed");
+  const artifactFeedAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
@@ -1206,7 +1231,12 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     hasPluginComposerPills,
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
-  const companionStreamSupported = useHostFeature(serverId, "companionStream");
+  const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
+  // An unknown host keeps the switcher: the Stream degrades to snapshot entries until it connects.
+  const showViewSwitcher =
+    companionStreamAvailability !== false || artifactFeedAvailability !== false;
+  // A host that turns out to offer neither view returns the pane to the chat.
+  const visibleView = showViewSwitcher ? selectedView : "chat";
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1258,7 +1288,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       <AgentComposerSection
         agentId={agentId}
         serverId={serverId}
-        isPaneFocused={isPaneFocused && selectedView !== "artifacts"}
+        isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
         isArchivingCurrentAgent={isArchivingCurrentAgent}
         archivedAt={agentState.archivedAt}
         cwd={cwd}
@@ -1328,7 +1358,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
 
   // The chat stays mounted behind the Stream so the draft, scroll position and
   // expanded state survive Back to chat and Reply in chat.
-  const isChatVisible = selectedView === "chat";
+  const isChatVisible = visibleView === "chat";
   const dock = (
     <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
@@ -1358,7 +1388,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     ],
     [t],
   );
-  const showViewSwitcher = companionStreamSupported || artifactFeedSupported;
   const viewSwitcherStyle = useMemo(
     () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
     [isChatVisible],
@@ -1378,7 +1407,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           {showViewSwitcher ? (
             <SegmentedControl
               options={viewOptions}
-              value={selectedView}
+              value={visibleView}
               onValueChange={handleSetSelectedView}
               size={isCompact ? "sm" : "xs"}
               testID="agent-view-switcher"
@@ -1386,6 +1415,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             />
           ) : null}
           <SessionPinButton serverId={serverId} agentId={agentId} />
+          <SubthreadsOpenButton />
+          <SessionChecklistButton />
         </View>
         {dock}
         {!isChatVisible ? (
@@ -1395,8 +1426,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             cwd={cwd}
             entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
             artifacts={artifacts}
-            isSupported={companionStreamSupported}
-            artifactsSupported={artifactFeedSupported}
+            isSupported={companionStreamAvailability === true}
+            artifactsSupported={artifactFeedAvailability === true}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
             onReturnToChat={handleReturnToChat}
             onReplyInChat={handleReplyInChat}
@@ -1648,6 +1679,12 @@ function ActiveAgentComposer({
   const paneContext = usePaneContext();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const { workspaceId, tabId, retargetCurrentTab } = paneContext;
+  const { t } = useTranslation();
+  // Inside a parent's subagents drawer, the field itself names who receives the message.
+  const replyTarget = useSubthreadReplyTarget(agentId);
+  const replyPlaceholder = replyTarget
+    ? t("subthreads.replyPlaceholder", { label: replyTarget.label })
+    : undefined;
   const { archiveAgent } = useArchiveAgent();
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const hideWorkspaceAgent = useWorkspaceLayoutStore((state) => state.hideAgent);
@@ -1683,7 +1720,11 @@ function ActiveAgentComposer({
         throw new Error("Agent not found");
       }
 
-      const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+      // The layout holding this tab: the session's own workspace, or the one it was dropped into.
+      const workspaceKey = buildWorkspaceTabPersistenceKey({
+        serverId,
+        workspaceId: paneContext.layoutWorkspaceId ?? workspaceId,
+      });
       if (workspaceKey) {
         unpinWorkspaceAgent(workspaceKey, agentId);
         hideWorkspaceAgent(workspaceKey, agentId);
@@ -1706,6 +1747,7 @@ function ActiveAgentComposer({
       archiveAgent,
       closeWorkspaceTab,
       hideWorkspaceAgent,
+      paneContext.layoutWorkspaceId,
       retargetCurrentTab,
       serverId,
       tabId,
@@ -1740,6 +1782,7 @@ function ActiveAgentComposer({
         onMessageSent={onMessageSent}
         onClientSlashCommand={handleClientSlashCommand}
         isCompactLayout={isCompactComposerLayout}
+        placeholder={replyPlaceholder}
       />
     </View>
   );

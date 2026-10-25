@@ -104,3 +104,23 @@ Gotchas:
 - Only agents and terminals can join a View: their tab ids are globally unique, while
   targets like `files` or `changes_tree` would collide across workspaces.
 - Tab ids are deterministic per target, so a View dedupes the same agent opened twice.
+
+## Splits without a View (2026-10-10)
+
+Feedback: needing a separate "View" just to put two sessions side by side was confusing. The
+common case is now handled where people already are, in a normal session's workspace:
+
+- **Split right / down with session…** in a pane's menu splits the pane and drops a picked
+  session into the new half. The picker lists recent sessions on this host with title,
+  provider and short id, and searches by any of them (a pasted `9b8394eb` finds the session).
+- A session from **another workspace on the same host** can sit in that split. It keeps its own
+  workspace for its composer, attachments and file opens, survives reloads, and closing its tab
+  never archives it (`screens/workspace/foreign-sessions.ts`, `subagents/close-tab-policy.ts`).
+  No extra tab state is stored: a tab is foreign when its agent's home workspace differs.
+- An orchestrator can do the same with `open_tab { target: { kind: "agent" }, placement: "side" }`
+  or `paseo ui open-tab --workspace <mine> --agent <id> --side`.
+
+Views stay for what a workspace cannot do: sessions from **different hosts** in one layout, and
+named, saved arrangements. Proposed simplifications, not done here: collapse the sidebar Views
+header into the "Stream" row until a View exists, and offer "Open in View" only for cross-host
+sessions.

@@ -37,6 +37,7 @@ import {
   resolveSystemWindowTheme,
   resolveWindowBounds,
   setupWindowResizeEvents,
+  setupNavigationGestureEvents,
   setupWindowStatePersistence,
   setupDefaultContextMenu,
   setupDragDropPrevention,
@@ -731,6 +732,7 @@ async function createWindow(
 
   setupDarwinCompositorWatchdog(mainWindow);
   setupWindowResizeEvents(mainWindow);
+  setupNavigationGestureEvents(mainWindow);
   if (windowStateStore) {
     setupWindowStatePersistence(mainWindow, windowStateStore);
   }

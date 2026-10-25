@@ -7,7 +7,28 @@ export interface SidebarWorkspaceGroup {
   key: string;
   label: string;
   rows: SidebarWorkspaceEntry[];
-  leading: { kind: "status"; bucket: StatusBucket };
+  /**
+   * What heads the group. `none` is the one-list mode's single group: no header row, nothing to
+   * collapse, just the rows — each of which already carries its own status badge.
+   */
+  leading: { kind: "status"; bucket: StatusBucket } | { kind: "none" };
+}
+
+/** The key of one-list mode's only group. */
+export const SIDEBAR_ONE_LIST_GROUP_KEY = "list";
+
+/**
+ * One-list mode: every unpinned workspace in a single headerless group, in the order it arrives.
+ * The sidebar model hands the projection its entries already filtered and sorted by the chosen
+ * sort mode, so this keeps that order rather than imposing one of its own.
+ */
+export function oneListWorkspaceGroups(
+  rows: readonly SidebarWorkspaceEntry[],
+): SidebarWorkspaceGroup[] {
+  if (rows.length === 0) return [];
+  return [
+    { key: SIDEBAR_ONE_LIST_GROUP_KEY, label: "", rows: [...rows], leading: { kind: "none" } },
+  ];
 }
 
 export function statusWorkspaceGroups(groups: readonly StatusGroup[]): SidebarWorkspaceGroup[] {

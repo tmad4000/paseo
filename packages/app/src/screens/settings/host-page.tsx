@@ -1,3 +1,4 @@
+import { HostShares } from "@/sharing/host-shares";
 import {
   ArrowDown,
   ArrowUp,
@@ -53,6 +54,7 @@ import { ProvidersSection } from "@/screens/settings/providers-section";
 import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
+import { DefaultProjectSettingsCard } from "@/default-project/settings-card";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -256,6 +258,7 @@ export function HostConnectionsPage({ serverId }: { serverId: string }) {
     <View>
       <HostConnectionError serverId={serverId} />
       <ConnectionsSection host={host} />
+      <HostShares serverId={serverId} />
     </View>
   );
 }
@@ -316,6 +319,7 @@ export function HostWorkspacesPage({ serverId }: { serverId: string }) {
     <View>
       {isConnected ? (
         <SettingsSection title={t("settings.hostSections.workspaces")}>
+          <DefaultProjectSettingsCard serverId={serverId} />
           <AutoArchiveMergedWorkspacesCard serverId={serverId} />
         </SettingsSection>
       ) : (

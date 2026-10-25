@@ -29,6 +29,8 @@ const common = {
   text: z.string(),
   truncated: z.boolean(),
   ask: TrackedAskSchema.optional(),
+  // COMPAT(streamTags): fork feature; lowercase #hashtags parsed from text. Older hosts omit it.
+  tags: z.array(z.string()).optional(),
 };
 
 export const CompanionEntrySchema = z.discriminatedUnion("kind", [

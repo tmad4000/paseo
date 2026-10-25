@@ -39,12 +39,15 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/file-icons.md](docs/file-icons.md)                             | Material icon theme integration for the file explorer                                                                          |
 | [docs/queue-mirroring.md](docs/queue-mirroring.md)                   | Moving the composer message queue onto the daemon so it mirrors across devices and drains with no client attached              |
 | [docs/session-routing.md](docs/session-routing.md) | Existing-chat Find/Send, scope isolation, tool-free matching, and delivery recovery |
+| [docs/quick-launch.md](docs/quick-launch.md) | Quick launch: starting an agent from a dialog without leaving the current one, default destination, one-request creation |
 | [docs/agent-tab-control.md](docs/agent-tab-control.md)               | MCP open_tab/close_tab over the ui.command push, and the queue-instead-of-interrupt busy-send policy                           |
 | [docs/companion-stream.md](docs/companion-stream.md)                 | Per-chat and global Stream — private review across paired hosts, questions, retention, capture limits and compatibility       |
 | [docs/providers.md](docs/providers.md)                               | Adding a new agent provider end-to-end                                                                                         |
 | [docs/forge-providers.md](docs/forge-providers.md)                   | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
 | [docs/custom-providers.md](docs/custom-providers.md)                 | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
 | [docs/plugins.md](docs/plugins.md)                                   | Local plugin manifest, directory source config, RPCs, native surfaces, and attachment sources                                  |
+| [docs/qa/conversation-sharing-phase1/README.md](docs/qa/conversation-sharing-phase1/README.md) | Phase 1 sharing test outputs, screenshots, and platform coverage limits |
+| [docs/design/conversation-sharing.md](docs/design/conversation-sharing.md) | Fork snapshot share links, redaction, guest boundary, and Phase 1 as-built notes |
 | [docs/service-proxy.md](docs/service-proxy.md)                       | Service proxy: exposing workspace scripts at public URLs, DNS setup, reverse proxy config                                      |
 | [docs/development.md](docs/development.md)                           | Dev server, build sync gotchas, CLI reference, agent state, Playwright MCP                                                     |
 | [docs/rpc-namespacing.md](docs/rpc-namespacing.md)                   | WebSocket RPC naming convention — dotted namespaces and `.request`/`.response` pairs                                           |
@@ -59,7 +62,8 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/mobile-testing.md](docs/mobile-testing.md)                     | Maestro and mobile test workflows                                                                                              |
 | [docs/cross-project-views.md](docs/cross-project-views.md)           | Views: cross-workspace split layouts, per-tab scope, timeline sync, selector gotcha                                            |
 | [docs/mobile-panels.md](docs/mobile-panels.md)                       | Compact left/center/right panel ownership, worklet motion, gesture revisions, and Fabric constraints                           |
-| [docs/sidebar-sorting.md](docs/sidebar-sorting.md) | Conversation sort modes, durable message clocks, historical fallback, and host compatibility |
+| [docs/sidebar-sorting.md](docs/sidebar-sorting.md) | Conversation sort modes, pinned projects and the Default project, durable message clocks, historical fallback, and host compatibility |
+| [docs/sidebar-filter.md](docs/sidebar-filter.md) | Live sidebar filter tiers — tree, nested tab titles, debounced message search and its daemon bounds |
 | [docs/explorer-sidebar.md](docs/explorer-sidebar.md)                 | Explorer sidebar and ordinary side-pane host contracts, lifecycle, placement, and routing preferences                          |
 | [docs/ad-hoc-daemon-testing.md](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                                                                                        |
 | [docs/browser-capture-harness.md](docs/browser-capture-harness.md)   | Real-Electron browser screenshot harness and compositor-surface gotcha                                                         |

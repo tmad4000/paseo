@@ -861,3 +861,63 @@ it("orders unresolved asks before completed asks across cursor pages and rejects
     }),
   ).toThrow("completion evidence");
 });
+
+it("stores parsed tags on written notes and asks", () => {
+  const pin = applyStreamEntryUpdate([], {
+    agentId: "a",
+    action: "add_pin",
+    entryId: "p",
+    text: "Quote this #Ideas `#code`",
+  });
+  expect(pin[0]?.tags).toEqual(["ideas"]);
+  const ask = applyStreamEntryUpdate([], {
+    agentId: "a",
+    action: "set_ask",
+    entryId: "x",
+    expectedRevision: 0,
+    text: "Ship #tags",
+    ask: { state: "open", remaining: "", evidence: "" },
+  });
+  expect(ask[0]?.tags).toEqual(["tags"]);
+  expect(
+    applyStreamEntryUpdate([], { agentId: "a", action: "add_pin", entryId: "n", text: "None" })[0],
+  ).not.toHaveProperty("tags");
+});
+
+it("filters by every requested tag, parses legacy entries on read and keeps artifacts out", () => {
+  const legacy: CompanionEntry = {
+    id: "pin:old",
+    kind: "pin",
+    text: "Old note #launch #ideas",
+    timestamp,
+    truncated: false,
+  };
+  const inferred: CompanionEntry = {
+    id: "turn:q",
+    kind: "question",
+    status: "open",
+    text: "Should we #launch?",
+    timestamp,
+    truncated: false,
+  };
+  const sources = [
+    {
+      id: "a",
+      cwd: "/a",
+      companionEntries: [legacy, inferred],
+      artifacts: [{ path: "/a/f.md", updatedAt: timestamp } as never],
+    },
+  ];
+  const page = listStreamRows(sources, { tags: ["launch"] });
+  expect(page.rows.map((row) => row.id)).toEqual([JSON.stringify(["a", "entry", "pin:old"])]);
+  expect(page.rows[0]?.item.kind === "entry" && page.rows[0].item.entry.tags).toEqual([
+    "launch",
+    "ideas",
+  ]);
+  expect(page.tagCounts).toEqual([
+    { tag: "ideas", count: 1 },
+    { tag: "launch", count: 1 },
+  ]);
+  expect(listStreamRows(sources, { tags: ["launch", "missing"] }).rows).toEqual([]);
+  expect(listStreamRows(sources, { search: "nothing matches" }).tagCounts).toEqual([]);
+});

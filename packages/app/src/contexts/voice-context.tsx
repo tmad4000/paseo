@@ -1,3 +1,5 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
+import { resolveAppVersion } from "@/utils/app-version";
 import {
   createContext,
   useContext,
@@ -164,6 +166,8 @@ export function VoiceProvider({ children }: VoiceProviderProps) {
       deactivateKeepAwake: async (tag) => {
         await deactivateKeepAwake(tag);
       },
+      recordDiagnostic: (input) =>
+        recordClientDiagnostic({ ...input, appVersion: resolveAppVersion() }),
     });
 
     engineRef.current = engine;

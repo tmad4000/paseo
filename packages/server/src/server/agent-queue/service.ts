@@ -26,6 +26,38 @@ import {
 
 export type AgentQueueMutationListener = (snapshot: AgentQueueSnapshot) => void;
 
+/** What one device last said it still holds unsent. Memory only: devices re-report on reconnect. */
+export interface DeviceOutboxReport {
+  clientId: string;
+  deviceLabel: string | null;
+  platform: string | null;
+  reportedAt: string;
+  agents: Array<{
+    agentId: string;
+    unsentQueued: number;
+    unsentDirect: number;
+    oldestCreatedAt: string | null;
+  }>;
+}
+
+export interface AgentDeliveryInspection {
+  queue: AgentQueueSnapshot;
+  drained: Array<{ id: string; drainedAt: string | null; preview: string | null }>;
+  receipts: Array<{ messageId: string; state: string; createdAt: string | null }>;
+  deviceReports: Array<{
+    clientId: string;
+    deviceLabel: string | null;
+    platform: string | null;
+    reportedAt: string;
+    unsentQueued: number;
+    unsentDirect: number;
+    oldestCreatedAt: string | null;
+  }>;
+}
+
+const MAX_DEVICE_OUTBOX_REPORTS = 64;
+const MAX_INSPECTED_RECEIPTS = 50;
+
 export interface EnqueueAgentMessageInput {
   agentId: string;
   itemId: string;
@@ -79,6 +111,7 @@ export class AgentQueueService {
   private readonly drainTails = new Map<string, Promise<void>>();
   private readonly sendNowClaims = new Set<string>();
   private unsubscribeAgentEvents: (() => void) | null = null;
+  private readonly outboxReports = new Map<string, DeviceOutboxReport>();
 
   constructor(options: AgentQueueServiceOptions) {
     this.store = options.store;
@@ -148,6 +181,51 @@ export class AgentQueueService {
 
   async list(agentId: string): Promise<AgentQueueSnapshot> {
     return toAgentQueueSnapshot(await this.store.get(agentId));
+  }
+
+  /** Records a device's unsent counts, replacing its previous report. */
+  recordOutboxReport(report: DeviceOutboxReport): void {
+    this.outboxReports.delete(report.clientId);
+    this.outboxReports.set(report.clientId, report);
+    while (this.outboxReports.size > MAX_DEVICE_OUTBOX_REPORTS) {
+      const oldest = this.outboxReports.keys().next().value;
+      if (oldest === undefined) break;
+      this.outboxReports.delete(oldest);
+    }
+  }
+
+  /**
+   * Everything the host knows about one agent's message delivery. A message
+   * still on a device that has not reconnected is invisible here; device
+   * reports are the only window onto those, and only as counts.
+   */
+  async inspect(agentId: string): Promise<AgentDeliveryInspection> {
+    const queue = await this.store.get(agentId);
+    const logged = new Map((queue.drainedLog ?? []).map((entry) => [entry.id, entry]));
+    const drained = (queue.drainedIds ?? [])
+      .map((id) => {
+        const entry = logged.get(id);
+        return { id, drainedAt: entry?.drainedAt ?? null, preview: entry?.preview ?? null };
+      })
+      .toReversed();
+    const receipts = this.receipts
+      ? (await this.receipts.listForAgent(agentId)).slice(0, MAX_INSPECTED_RECEIPTS)
+      : [];
+    const deviceReports = [...this.outboxReports.values()]
+      .map((report) => {
+        const counts = report.agents.find((entry) => entry.agentId === agentId);
+        return {
+          clientId: report.clientId,
+          deviceLabel: report.deviceLabel,
+          platform: report.platform,
+          reportedAt: report.reportedAt,
+          unsentQueued: counts?.unsentQueued ?? 0,
+          unsentDirect: counts?.unsentDirect ?? 0,
+          oldestCreatedAt: counts?.oldestCreatedAt ?? null,
+        };
+      })
+      .sort((left, right) => right.reportedAt.localeCompare(left.reportedAt));
+    return { queue: toAgentQueueSnapshot(queue), drained, receipts, deviceReports };
   }
 
   async listVoiceInputs(

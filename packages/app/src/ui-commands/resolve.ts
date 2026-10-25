@@ -1,4 +1,5 @@
 import type { UiCommandMessage, UiWorkspaceTabTarget } from "@getpaseo/protocol/messages";
+import { browserIdForUrl, normalizeUiBrowserUrl } from "@getpaseo/protocol/ui-browser-target";
 import { normalizeWorkspaceTabTarget } from "@/workspace-tabs/identity";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 
@@ -15,6 +16,10 @@ export interface ResolvedUiTabOpenCommand {
   workspaceId: string;
   target: WorkspaceTabTarget;
   focus: boolean;
+  /** Present for "side": beside the user's view, never navigating or moving focus. */
+  placement?: "side";
+  /** For a browser target that names a page: what to load if this device has no such browser. */
+  browserUrl?: string;
 }
 
 export interface ResolvedUiTabCloseCommand {
@@ -46,8 +51,11 @@ export function toWorkspaceTabTarget(target: UiWorkspaceTabTarget): WorkspaceTab
       });
     case "terminal":
       return normalizeWorkspaceTabTarget({ kind: "terminal", terminalId: target.terminalId });
-    case "browser":
-      return normalizeWorkspaceTabTarget({ kind: "browser", browserId: target.browserId });
+    case "browser": {
+      const url = normalizeUiBrowserUrl(target.url);
+      const browserId = target.browserId?.trim() || (url ? browserIdForUrl(url) : "");
+      return normalizeWorkspaceTabTarget({ kind: "browser", browserId });
+    }
     case "file":
       return normalizeWorkspaceTabTarget({
         kind: "file",
@@ -94,11 +102,16 @@ export function resolveUiCommand(input: {
     return { command: "tab.close", serverId, workspaceId, target };
   }
 
+  const browserUrl =
+    payload.target.kind === "browser" ? normalizeUiBrowserUrl(payload.target.url) : null;
+
   return {
     command: "tab.open",
     serverId,
     workspaceId,
     target,
     focus: payload.focus !== false,
+    ...(payload.placement === "side" ? { placement: "side" as const } : {}),
+    ...(browserUrl ? { browserUrl } : {}),
   };
 }

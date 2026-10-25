@@ -35,7 +35,8 @@ export type CheckoutCommitsQueryResult =
 
 interface ResolveCheckoutCommitsQueryResultInput {
   enabled: boolean;
-  capabilityPresent: boolean;
+  /** Null while the host's server info has not arrived: unknown, not unsupported. */
+  capability: boolean | null;
   canFetch: boolean;
   data: CheckoutCommitsData | undefined;
   isPlaceholderData: boolean;
@@ -44,13 +45,13 @@ interface ResolveCheckoutCommitsQueryResultInput {
 
 export function resolveCheckoutCommitsQueryResult({
   enabled,
-  capabilityPresent,
+  capability,
   canFetch,
   data,
   isPlaceholderData,
   error,
 }: ResolveCheckoutCommitsQueryResultInput): CheckoutCommitsQueryResult {
-  if (!capabilityPresent) {
+  if (capability === false) {
     return { status: "unsupported" };
   }
   if (data && !isPlaceholderData) {
@@ -59,7 +60,7 @@ export function resolveCheckoutCommitsQueryResult({
   if (!enabled) {
     return { status: "idle" };
   }
-  if (!canFetch) {
+  if (capability === null || !canFetch) {
     return { status: "connecting" };
   }
   if (error) {
@@ -80,14 +81,17 @@ export function useCheckoutCommitsQuery({
   // COMPAT(commitsList): added in v0.1.110, remove after 2027-01-16.
   // COMPAT(commitBaseClassification): added in v0.2.0, remove after 2027-01-23.
   // Single capability-detection site; downstream reads a clean load-state union.
-  const capabilityPresent = useSessionStore(
-    (state) =>
-      state.sessions[serverId]?.serverInfo?.features?.commitsList === true &&
-      state.sessions[serverId]?.serverInfo?.features?.commitBaseClassification === true,
-  );
+  const capability = useSessionStore((state) => {
+    const serverInfo = state.sessions[serverId]?.serverInfo;
+    if (!serverInfo) return null;
+    return (
+      serverInfo.features?.commitsList === true &&
+      serverInfo.features.commitBaseClassification === true
+    );
+  });
 
   const canFetch = Boolean(cwd) && Boolean(client) && isConnected;
-  const queryEnabled = queryEnabledByCaller && capabilityPresent && canFetch;
+  const queryEnabled = queryEnabledByCaller && capability === true && canFetch;
 
   const query = useFetchQuery<CheckoutCommitsData>({
     queryKey: checkoutCommitsQueryKey(serverId, cwd),
@@ -109,7 +113,7 @@ export function useCheckoutCommitsQuery({
 
   return resolveCheckoutCommitsQueryResult({
     enabled: queryEnabledByCaller,
-    capabilityPresent,
+    capability,
     canFetch,
     data: query.data,
     isPlaceholderData: query.isPlaceholderData,

@@ -32,7 +32,8 @@ export interface TerminalEmulatorProps {
   dom?: unknown;
   ref: Ref<TerminalEmulatorHandle>;
   streamKey: string;
-  supportsTerminalInputModeReplay: boolean;
+  /** Null while the host's server info has not arrived. */
+  supportsTerminalInputModeReplay: boolean | null;
   testId?: string;
   xtermTheme?: ITheme;
   scrollbackLines: number;

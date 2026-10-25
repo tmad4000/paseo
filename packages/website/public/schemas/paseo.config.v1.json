@@ -156,6 +156,22 @@
                 }
               },
               "additionalProperties": false
+            },
+            "sharing": {
+              "type": "object",
+              "properties": {
+                "listen": {
+                  "type": "string"
+                },
+                "publicBaseUrl": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "ownerDisplayName": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

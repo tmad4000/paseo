@@ -1,4 +1,4 @@
-import { OpenAiVoiceControls } from "@/components/openai-voice-controls";
+import { useSubthreadReplyLabel } from "@/subthreads/context";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -20,6 +20,7 @@ import {
   forwardRef,
 } from "react";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -38,6 +39,8 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useSessionStore } from "@/stores/session-store";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import type { VoiceFailureKind } from "@/voice/voice-failure";
+import type { VoiceRuntime } from "@/voice/voice-runtime";
+import { startPreferredVoice } from "@/voice/preferred-voice";
 import { useToast } from "@/contexts/toast-context";
 import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities";
 import {
@@ -162,6 +165,10 @@ export interface MessageInputProps {
   /** When true and there's sendable content, calls onQueue instead of onSubmit */
   isAgentRunning?: boolean;
   supportsVoiceConcurrentInput?: boolean;
+  /** Host advertises GPT realtime voice (credential configured); the voice toggle prefers it. */
+  preferRealtimeGpt?: boolean;
+  /** Draft chats (no agent yet): the voice toggle calls this to create the agent and start voice. */
+  onStartVoiceWithoutAgent?: () => void;
   isCancellingAgent?: boolean;
   onCancelAgent?: () => void;
   /** Controls what the default send action (Enter, send button, dictation) does when the agent is
@@ -595,6 +602,10 @@ function MessageInputOverlay({
         muteError: string | null;
         failure: VoiceFailureKind | null;
         lastInputStatus: "queued" | "sent" | "removed" | "unknown" | null;
+        realtime?: {
+          connection: "connecting" | "connected" | "unavailable" | "off";
+          error: string | null;
+        };
         toggleMute: () => void;
       }
     | null
@@ -639,6 +650,7 @@ function MessageInputOverlay({
         voiceCommandsEnabled={voice.voiceCommandsEnabled}
         isMuteSwitching={voice.isMuteSwitching}
         muteError={voice.muteError}
+        realtime={voice.realtime}
         failure={voice.failure}
         lastInputStatus={voice.lastInputStatus}
         isSwitching={voice.isVoiceSwitching}
@@ -996,7 +1008,7 @@ interface ToggleRealtimeVoiceContext {
     | {
         isVoiceSwitching: boolean;
         isVoiceModeForAgent: (serverId: string, agentId: string) => boolean;
-        startVoice: (serverId: string, agentId: string) => Promise<unknown>;
+        startVoice: VoiceRuntime["startVoice"];
       }
     | null
     | undefined;
@@ -1006,6 +1018,8 @@ interface ToggleRealtimeVoiceContext {
   disabled: boolean;
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
+  preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   handleStopRealtimeVoice: () => Promise<unknown> | void;
   toast: { error: (msg: string) => void };
   interruptBeforeVoiceMessage: string;
@@ -1016,15 +1030,25 @@ function toggleRealtimeVoiceImpl(ctx: ToggleRealtimeVoiceContext): void {
     return;
   }
   if (ctx.voice.isVoiceSwitching) return;
+  if (ctx.onStartVoiceWithoutAgent) {
+    ctx.onStartVoiceWithoutAgent();
+    return;
+  }
   if (ctx.voice.isVoiceModeForAgent(ctx.voiceServerId, ctx.voiceAgentId)) {
     void ctx.handleStopRealtimeVoice();
     return;
   }
-  if (ctx.isAgentRunning && !ctx.supportsVoiceConcurrentInput) {
+  // GPT realtime runs beside a working agent; only host-only voice on old hosts needs the gate.
+  if (ctx.isAgentRunning && !ctx.supportsVoiceConcurrentInput && !ctx.preferRealtimeGpt) {
     ctx.toast.error(ctx.interruptBeforeVoiceMessage);
     return;
   }
-  void ctx.voice.startVoice(ctx.voiceServerId, ctx.voiceAgentId).catch((error) => {
+  void startPreferredVoice({
+    startVoice: ctx.voice.startVoice,
+    serverId: ctx.voiceServerId,
+    agentId: ctx.voiceAgentId,
+    preferRealtimeGpt: ctx.preferRealtimeGpt,
+  }).catch((error) => {
     console.error("[MessageInput] Failed to start realtime voice", error);
     const message = extractErrorMessage(error);
     if (message && message.trim().length > 0) {
@@ -1248,6 +1272,8 @@ interface ResolvedMessageInputProps {
   voiceAgentId: string | undefined;
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
+  preferRealtimeGpt: boolean;
+  onStartVoiceWithoutAgent: (() => void) | undefined;
   defaultSendBehavior: "interrupt" | "steer" | "queue";
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmitLoadingPress: (() => void) | undefined;
@@ -1296,6 +1322,8 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     voiceAgentId: props.voiceAgentId,
     isAgentRunning: props.isAgentRunning ?? false,
     supportsVoiceConcurrentInput: props.supportsVoiceConcurrentInput ?? false,
+    preferRealtimeGpt: props.preferRealtimeGpt ?? false,
+    onStartVoiceWithoutAgent: props.onStartVoiceWithoutAgent,
     defaultSendBehavior: props.defaultSendBehavior,
     onQueue: props.onQueue,
     onSubmitLoadingPress: props.onSubmitLoadingPress,
@@ -1316,6 +1344,17 @@ function extractErrorMessage(error: unknown): string | null {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return null;
+}
+
+/** Inside a subagents drawer the field is named for its recipient, not the generic agent. */
+function resolveInputAccessibilityLabel(
+  t: TFunction,
+  replyTargetLabel: string | null,
+  fallbackKey: string,
+): string {
+  return replyTargetLabel
+    ? t("subthreads.replyPlaceholder", { label: replyTargetLabel })
+    : t(fallbackKey);
 }
 
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
@@ -1352,6 +1391,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       voiceAgentId,
       isAgentRunning,
       supportsVoiceConcurrentInput,
+      preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       defaultSendBehavior,
       onQueue,
       onSubmitLoadingPress,
@@ -1368,6 +1409,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     } = resolveMessageInputProps(props);
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
+    // In a parent's subagents drawer, the field's name says who receives it, for screen readers and voice control.
+    const replyTargetLabel = useSubthreadReplyLabel(voiceAgentId);
     const isCompact = useIsCompactFormFactor();
     const { height: windowHeight } = useWindowDimensions();
     const maxInputHeight = resolveMaxInputHeight(windowHeight);
@@ -1575,7 +1618,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isDictationProcessing,
       dictationStatus,
     );
-    const showRealtimeOverlay = showsLegacyVoiceOverlay(isRealtimeVoiceForCurrentAgent, voice);
+    const showRealtimeOverlay = isRealtimeVoiceForCurrentAgent;
     const showOverlay = showDictationOverlay || showRealtimeOverlay;
     const surfacePresentation = resolveComposerSurfacePresentation(showOverlay);
 
@@ -1664,6 +1707,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         disabled,
         isAgentRunning,
         supportsVoiceConcurrentInput,
+        preferRealtimeGpt,
+        onStartVoiceWithoutAgent,
         handleStopRealtimeVoice,
         toast,
         interruptBeforeVoiceMessage: t("composer.voice.interruptBeforeVoice"),
@@ -1673,6 +1718,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       handleStopRealtimeVoice,
       isAgentRunning,
       supportsVoiceConcurrentInput,
+      preferRealtimeGpt,
+      onStartVoiceWithoutAgent,
       isConnected,
       t,
       toast,
@@ -2009,7 +2056,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           autoFocusKey={autoFocusKey}
           textInputRef={textInputRef}
         />
-        <OpenAiVoiceControls serverId={voiceServerId} agentId={voiceAgentId} readOnly={readOnly} />
         {/* Regular input */}
         <View
           ref={inputWrapperRef}
@@ -2026,7 +2072,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               textInputStyle={textInputStyle}
               readOnlyTextStyle={readOnlyTextStyle}
               placeholder={placeholder ?? t("composer.placeholders.fallback")}
-              accessibilityLabel={t(mode.accessibilityLabelKey)}
+              accessibilityLabel={resolveInputAccessibilityLabel(
+                t,
+                replyTargetLabel,
+                mode.accessibilityLabelKey,
+              )}
               onChangeText={handleInputChange}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
@@ -2342,10 +2392,3 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
-
-function showsLegacyVoiceOverlay(
-  active: boolean,
-  voice: { voiceProvider?: string } | null,
-): boolean {
-  return active && voice?.voiceProvider !== "openai-realtime";
-}

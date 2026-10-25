@@ -14,27 +14,30 @@ import {
 } from "../support/helpers/sidebar";
 
 test.describe("Sidebar context menus", () => {
-  test("right-clicking workspace and project rows opens their actions at the pointer", async ({
-    page,
-  }) => {
-    const workspace = await seedWorkspace({ repoPrefix: "sidebar-context-menu-" });
+  for (const height of [720, 600]) {
+    test(`right-clicking rows anchors their actions at the pointer in a ${height}px viewport`, async ({
+      page,
+    }) => {
+      const workspace = await seedWorkspace({ repoPrefix: "sidebar-context-menu-" });
 
-    try {
-      await gotoAppShell(page);
+      try {
+        await page.setViewportSize({ width: 1280, height });
+        await gotoAppShell(page);
 
-      await showWorkspaceHoverCard(page, workspace.workspaceId);
-      await openWorkspaceContextMenu(page, workspace.workspaceId);
-      await expectWorkspaceContextMenuActions(page, workspace.workspaceId);
-      await expectWorkspaceContextMenuOwnsAttention(page);
+        await showWorkspaceHoverCard(page, workspace.workspaceId);
+        await openWorkspaceContextMenu(page, workspace.workspaceId);
+        await expectWorkspaceContextMenuActions(page, workspace.workspaceId);
+        await expectWorkspaceContextMenuOwnsAttention(page);
 
-      await closeWorkspaceContextMenu(page, workspace.workspaceId);
-      await expectWorkspaceRowHoverCleared(page, workspace.workspaceId);
-      await openProjectContextMenu(page, workspace.projectKey);
-      await expectProjectContextMenuActions(page, workspace.projectKey);
+        await closeWorkspaceContextMenu(page, workspace.workspaceId);
+        await expectWorkspaceRowHoverCleared(page, workspace.workspaceId);
+        await openProjectContextMenu(page, workspace.projectKey);
+        await expectProjectContextMenuActions(page, workspace.projectKey);
 
-      await closeProjectContextMenu(page, workspace.projectKey);
-    } finally {
-      await workspace.cleanup();
-    }
-  });
+        await closeProjectContextMenu(page, workspace.projectKey);
+      } finally {
+        await workspace.cleanup();
+      }
+    });
+  }
 });

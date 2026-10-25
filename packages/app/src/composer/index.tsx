@@ -95,6 +95,11 @@ import {
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { appendPendingQueueRows, getPendingQueueMessageIds } from "@/composer/queue-sync";
 import { useVoiceOptional } from "@/contexts/voice-context";
+import {
+  resolveCanCreateAgentForVoice,
+  startPreferredVoice,
+  startPreferredVoiceForNewAgent,
+} from "@/voice/preferred-voice";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -126,6 +131,13 @@ import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispat
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { submitAgentInput } from "@/composer/submit";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
+import { createDirectSendOutbox } from "@/composer/submission/direct-send-outbox";
+import { DeliveryMark } from "@/components/delivery-mark";
+import { UnsentTrack } from "@/composer/unsent-track";
+import {
+  resolveQueuedMessageDeliveryState,
+  type MessageDeliveryState,
+} from "@/composer/delivery-state";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useAppSettings } from "@/hooks/use-settings";
 import { RenderProfile } from "@/utils/render-profiler";
@@ -418,6 +430,8 @@ interface RenderQueueTrackArgs {
   removalFailedLabel: string;
   queuedMessages: readonly QueuedMessage[];
   pendingMessageIds: ReadonlySet<string>;
+  /** Present when the host owns the queue; the legacy local queue has no ticks. */
+  deliveryStates?: ReadonlyMap<string, MessageDeliveryState>;
   pendingLabel: string;
   summaryLabel: string;
   attachmentPreviewLabel: string;
@@ -456,6 +470,7 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
     removalFailedLabel,
     queuedMessages,
     pendingMessageIds,
+    deliveryStates,
     pendingLabel,
     summaryLabel,
     attachmentPreviewLabel,
@@ -514,6 +529,7 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
               removeLabel={removeLabel}
               readLabel={readLabel}
               isPending={pendingMessageIds.has(item.id)}
+              deliveryState={deliveryStates?.get(item.id)}
               pendingLabel={resolveQueuedPendingLabel(
                 item.id,
                 removalFailedIds,
@@ -634,15 +650,44 @@ interface AttemptStartRealtimeVoiceArgs {
   hasAgent: boolean;
   serverId: string;
   agentId: string;
+  preferRealtimeGpt: boolean;
+  /** Draft composers only: creates the agent so voice can attach to it. */
+  createAgentForVoice: (() => Promise<string | null>) | undefined;
+  canCreateAgentForVoice: boolean;
   toastErrorRef: { current: (message: string) => void };
 }
 
 function attemptStartRealtimeVoice(args: AttemptStartRealtimeVoiceArgs): void {
-  const { voice, isConnected, hasAgent, serverId, agentId, toastErrorRef } = args;
-  if (!voice || !isConnected || !hasAgent) return;
+  const {
+    voice,
+    isConnected,
+    hasAgent,
+    serverId,
+    agentId,
+    preferRealtimeGpt,
+    createAgentForVoice,
+    canCreateAgentForVoice,
+    toastErrorRef,
+  } = args;
+  if (!voice || !isConnected) return;
+  const createAgent = !hasAgent && canCreateAgentForVoice ? createAgentForVoice : undefined;
+  if (!hasAgent && !createAgent) return;
   if (voice.isVoiceSwitching) return;
-  if (voice.isVoiceModeForAgent(serverId, agentId)) return;
-  void voice.startVoice(serverId, agentId).catch((error) => {
+  if (hasAgent && voice.isVoiceModeForAgent(serverId, agentId)) return;
+  const started = !createAgent
+    ? startPreferredVoice({
+        startVoice: voice.startVoice,
+        serverId,
+        agentId,
+        preferRealtimeGpt,
+      })
+    : startPreferredVoiceForNewAgent({
+        createAgent,
+        startVoice: voice.startVoice,
+        serverId,
+        preferRealtimeGpt,
+      });
+  void started.catch((error) => {
     console.error("[Composer] Failed to start voice mode", error);
     const message = resolveErrorMessage(error);
     if (message && message.trim().length > 0) {
@@ -796,10 +841,50 @@ function resolveMessageInputPassthroughAction(
   }
 }
 
+function resolveQueuedRowStatusLabel(
+  state: MessageDeliveryState,
+  pendingLabel: string,
+  t: (key: string) => string,
+): string {
+  if (state === "attention") return t("composer.delivery.queueAttention");
+  if (state === "accepted") return t("composer.delivery.queueOnHost");
+  return pendingLabel;
+}
+
+function QueuedRowStatus({
+  isPending,
+  deliveryState,
+  pendingLabel,
+}: {
+  isPending: boolean;
+  deliveryState?: MessageDeliveryState;
+  pendingLabel: string;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (!deliveryState) {
+    return isPending ? <Text style={styles.queuePendingText}>{pendingLabel}</Text> : null;
+  }
+  // A pending removal outranks the forward path: it keeps the removal label and clock.
+  const state = deliveryState === "accepted" && isPending ? "pending" : deliveryState;
+  const label = resolveQueuedRowStatusLabel(state, pendingLabel, t);
+  return (
+    <View style={styles.queueStatusRow} testID="queued-message-delivery">
+      <DeliveryMark state={state} />
+      <Text
+        style={[styles.queuePendingText, state === "attention" && styles.queueAttentionText]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 interface QueuedMessageRowProps {
   item: QueuedMessage;
   draftKey: string;
   isPending: boolean;
+  deliveryState?: MessageDeliveryState;
   pendingLabel: string;
   onSave: (id: string, expectedText: string, text: string) => Promise<boolean>;
   onRemove: (id: string) => Promise<boolean>;
@@ -816,6 +901,7 @@ function QueuedMessageRow({
   item,
   draftKey,
   isPending,
+  deliveryState,
   pendingLabel,
   onSave,
   onRemove,
@@ -1007,7 +1093,11 @@ function QueuedMessageRow({
         >
           {item.text}
         </Text>
-        {isPending ? <Text style={styles.queuePendingText}>{pendingLabel}</Text> : null}
+        <QueuedRowStatus
+          isPending={isPending}
+          deliveryState={deliveryState}
+          pendingLabel={pendingLabel}
+        />
       </Pressable>
       <View style={styles.queueActions}>
         {!isPending && (
@@ -1306,6 +1396,11 @@ interface ComposerProps {
   onAttentionPromptSend?: () => void;
   /** Controlled agent controls rendered in input area (draft flows). */
   agentControls?: DraftAgentControlsProps;
+  /**
+   * Draft chats: creates the agent (no prompt) and resolves to its id, so the
+   * voice button can start a voice session before the first message is sent.
+   */
+  createAgentForVoice?: () => Promise<string | null>;
   /** Extra styles merged onto the message input wrapper (e.g. elevated background). */
   inputWrapperStyle?: import("react-native").ViewStyle;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
@@ -1477,8 +1572,10 @@ interface ComposerVoiceModeButtonProps {
 interface ComposerRightControlsSlotProps extends ComposerVoiceModeButtonProps {
   isVoiceModeForAgent: boolean;
   hasAgent: boolean;
+  canCreateAgentForVoice: boolean;
   isAgentRunning: boolean;
   supportsVoiceConcurrentInput: boolean;
+  preferRealtimeGpt: boolean;
   hasSendableContent: boolean;
   isCompact: boolean;
   showVoice: boolean;
@@ -1487,19 +1584,23 @@ interface ComposerRightControlsSlotProps extends ComposerVoiceModeButtonProps {
 function ComposerRightControlsSlot({
   isVoiceModeForAgent,
   hasAgent,
+  canCreateAgentForVoice,
   isAgentRunning,
   supportsVoiceConcurrentInput,
+  preferRealtimeGpt,
   hasSendableContent,
   isCompact,
   showVoice,
   ...voiceProps
 }: ComposerRightControlsSlotProps) {
   const hideVoiceForCompactInput = isCompact && hasSendableContent;
+  // GPT realtime converses beside a working agent (requests queue), so it
+  // never needs the interrupt-first gate that host voice needs on old hosts.
   const showVoiceModeButton =
     showVoice &&
     !isVoiceModeForAgent &&
-    hasAgent &&
-    (!isAgentRunning || supportsVoiceConcurrentInput) &&
+    (hasAgent || canCreateAgentForVoice) &&
+    (!isAgentRunning || supportsVoiceConcurrentInput || preferRealtimeGpt) &&
     !hideVoiceForCompactInput;
   if (!showVoiceModeButton) return null;
   return (
@@ -1577,6 +1678,7 @@ function ComposerContentImpl({
   submitButtonTestID,
   submitIcon = "arrow",
   isSubmitLoading = false,
+  createAgentForVoice,
   waitForForgeAutoAttachOnSubmit = false,
   submitBehavior = "clear",
   blurOnSubmit = false,
@@ -1696,6 +1798,12 @@ function ComposerContentImpl({
   // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.
   const supportsVoiceConcurrentInput = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.voiceConcurrentInput === true,
+  );
+  // COMPAT(openaiRealtimeVoice): fork feature, added in fork v0.10.0. Hosts
+  // advertise it only when an OpenAI credential resolves; otherwise the voice
+  // button starts Paseo voice.
+  const preferRealtimeGpt = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.openaiRealtimeVoice === true,
   );
   const supportsQueueEdit = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.queueEdit === true,
@@ -1967,6 +2075,7 @@ function ComposerContentImpl({
         }),
         encodeImages,
         submission: createMessageSubmissionWriter(serverId),
+        outbox: createDirectSendOutbox(serverId, client),
         activeTurnBehavior,
         activeTurnId:
           activeTurnBehavior === "steer" || activeTurnBehavior === "steer_only"
@@ -2403,6 +2512,13 @@ function ComposerContentImpl({
   }, []);
 
   const isVoiceModeForAgent = resolveIsVoiceModeForAgent(voice, serverId, agentId);
+  const hasSendableContent = hasText || selectedAttachments.length > 0;
+  const canCreateAgentForVoice = resolveCanCreateAgentForVoice({
+    hasAgent,
+    canCreateAgent: createAgentForVoice !== undefined,
+    isSubmitLoading,
+    hasSendableContent,
+  });
 
   const handleToggleRealtimeVoice = useCallback(() => {
     attemptStartRealtimeVoice({
@@ -2411,9 +2527,21 @@ function ComposerContentImpl({
       hasAgent,
       serverId,
       agentId,
+      preferRealtimeGpt,
+      createAgentForVoice,
+      canCreateAgentForVoice,
       toastErrorRef,
     });
-  }, [agentId, hasAgent, isConnected, serverId, voice]);
+  }, [
+    agentId,
+    canCreateAgentForVoice,
+    createAgentForVoice,
+    hasAgent,
+    isConnected,
+    preferRealtimeGpt,
+    serverId,
+    voice,
+  ]);
 
   const handleSaveQueuedMessage = useCallback(
     async (id: string, expectedText: string, text: string): Promise<boolean> => {
@@ -2586,8 +2714,6 @@ function ComposerContentImpl({
     ],
   );
 
-  const hasSendableContent = hasText || selectedAttachments.length > 0;
-
   // Handle keyboard navigation for command autocomplete.
   const handleCommandKeyPress = useCallback(
     (event: ComposerKeyPressEvent) => autocompleteRef.current?.onKeyPress(event) ?? false,
@@ -2635,8 +2761,10 @@ function ComposerContentImpl({
       <ComposerRightControlsSlot
         isVoiceModeForAgent={isVoiceModeForAgent}
         hasAgent={hasAgent}
+        canCreateAgentForVoice={canCreateAgentForVoice}
         isAgentRunning={isAgentRunning}
         supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
+        preferRealtimeGpt={preferRealtimeGpt}
         hasSendableContent={hasSendableContent}
         isCompact={isCompactLayout}
         showVoice={mode.showVoice}
@@ -2653,9 +2781,11 @@ function ComposerContentImpl({
       buttonIconSize,
       handleToggleRealtimeVoice,
       hasAgent,
+      canCreateAgentForVoice,
       hasSendableContent,
       isAgentRunning,
       supportsVoiceConcurrentInput,
+      preferRealtimeGpt,
       isConnected,
       isCompactLayout,
       isVoiceModeForAgent,
@@ -2929,6 +3059,24 @@ function ComposerContentImpl({
     ],
   );
 
+  // Ticks belong to the host-owned queue. An outbox entry implies that queue, and
+  // also covers a cold start while the host is unreachable and its features unknown.
+  const queuedDeliveryStates = useMemo(() => {
+    const states = new Map<string, MessageDeliveryState>();
+    for (const item of queuedMessages) {
+      const outboxEntry = outboxEntries[item.id];
+      if (!supportsAgentMessageQueue && !outboxEntry) continue;
+      states.set(
+        item.id,
+        resolveQueuedMessageDeliveryState({
+          outboxEntry,
+          inHostQueue: !pendingMessageIds.has(item.id),
+        }),
+      );
+    }
+    return states;
+  }, [outboxEntries, pendingMessageIds, queuedMessages, supportsAgentMessageQueue]);
+
   const queueList = useMemo(
     () => (
       <QueueTrack
@@ -2965,6 +3113,7 @@ function ComposerContentImpl({
         removalFailedLabel={t("composer.attachments.queueRemovalFailed")}
         queuedMessages={queuedMessages}
         pendingMessageIds={pendingMessageIds}
+        deliveryStates={queuedDeliveryStates}
         pendingLabel={t("composer.attachments.queueWaitingToSync")}
         summaryLabel={t("composer.attachments.queuedMessages", { count: queuedMessages.length })}
         attachmentPreviewLabel={t("composer.attachments.queuedAttachment")}
@@ -2992,6 +3141,7 @@ function ComposerContentImpl({
       isAgentRunning,
       queuedMessages,
       pendingMessageIds,
+      queuedDeliveryStates,
       t,
     ],
   );
@@ -3068,6 +3218,13 @@ function ComposerContentImpl({
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={styles.inputAreaContent}>
+            <UnsentTrack
+              serverId={serverId}
+              agentId={agentId}
+              client={client}
+              getComposerText={textSource.getSnapshot}
+              restoreComposerText={replaceUserInput}
+            />
             {queueList}
             {sendErrorNode}
 
@@ -3123,6 +3280,11 @@ function ComposerContentImpl({
                   voiceAgentId={agentId}
                   isAgentRunning={isAgentRunning}
                   supportsVoiceConcurrentInput={supportsVoiceConcurrentInput}
+                  preferRealtimeGpt={preferRealtimeGpt}
+                  onStartVoiceWithoutAgent={
+                    // A draft's tab id is not an agent; never start voice on it.
+                    !hasAgent && createAgentForVoice ? handleToggleRealtimeVoice : undefined
+                  }
                   isCancellingAgent={isCancellingAgent}
                   onCancelAgent={handleCancelAgent}
                   defaultSendBehavior={activeSendBehavior}
@@ -3351,6 +3513,16 @@ const styles = StyleSheet.create((theme: Theme) => ({
   queuePendingText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  queueAttentionText: {
+    color: theme.colors.statusWarning,
+  },
+  queueStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    marginTop: theme.spacing[1],
+    marginLeft: -theme.spacing[1],
   },
   queueActions: {
     flexDirection: "row",

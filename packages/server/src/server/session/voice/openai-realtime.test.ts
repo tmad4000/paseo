@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { OpenAiRealtime, type RealtimeSocket } from "./openai-realtime.js";
+import {
+  OpenAiRealtime,
+  realtimeAvailable,
+  realtimeErrorCause,
+  type RealtimeSocket,
+} from "./openai-realtime.js";
 import { RealtimeContextStore } from "./realtime-context.js";
 
 class Socket extends EventEmitter implements RealtimeSocket {
@@ -317,6 +322,73 @@ describe("GPT Realtime attachment", () => {
     );
     f.voice.stop();
   });
+  it("surfaces the provider cause when GPT Realtime rejects an event", async () => {
+    const f = await fixture();
+    f.socket.event({
+      type: "error",
+      error: {
+        type: "insufficient_quota",
+        code: "credit_balance_exhausted",
+        message: "You have no credits remaining.",
+      },
+    });
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain(
+      "(credit_balance_exhausted: You have no credits remaining.)",
+    );
+  });
+  it("accepts null or malformed error payloads and keeps a bare rejection readable", async () => {
+    const f = await fixture();
+    f.socket.event({ type: "error", error: { code: null, message: "Upstream rejected input." } });
+    await f.settle();
+    expect(f.voice.status().error).toContain("(Upstream rejected input.)");
+    expect(f.voice.status().error).not.toContain("Invalid GPT Realtime event");
+    f.voice.stop();
+    const g = await fixture();
+    g.socket.event({ type: "error", error: { code: { nested: true }, message: ["array"] } });
+    await g.settle();
+    expect(g.voice.status().error).toContain(
+      "GPT Realtime rejected an event. Microphone paused; retry or explicitly choose Paseo voice.",
+    );
+    expect(g.voice.status().error).not.toContain("Invalid GPT Realtime event");
+    g.voice.stop();
+  });
+  it("surfaces the connection failure cause from the socket error", async () => {
+    const f = await fixture();
+    f.socket.emit("error", new Error("Unexpected server response: 401"));
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain("(Unexpected server response: 401)");
+  });
+  it("names the processing failure cause when event handling throws", async () => {
+    const f = await fixture();
+    f.host.submit.mockRejectedValue(new Error("lost ack"));
+    f.voice.focus("agent");
+    await f.transcript("one", "do work");
+    expect(f.voice.status().connection).toBe("unavailable");
+    expect(f.voice.status().error).toContain(
+      "GPT Realtime processing failed (Delivery outcome unknown; no automatic resend.).",
+    );
+  });
+  it("includes the transcription failure cause while retaining the draft", async () => {
+    const f = await fixture();
+    f.voice.listen();
+    await f.transcript("one", "keep this");
+    f.socket.event({ type: "input_audio_buffer.committed", item_id: "two" });
+    f.socket.event({
+      type: "conversation.item.input_audio_transcription.failed",
+      item_id: "two",
+      error: { code: "audio_transcription_failed", message: "Transcription service errored." },
+    });
+    await f.settle();
+    expect(f.voice.status()).toMatchObject({ connection: "unavailable", muted: true });
+    expect(f.voice.status().error).toContain(
+      "(audio_transcription_failed: Transcription service errored.)",
+    );
+    expect(f.store.read().draft[0].text).toBe("keep this");
+    expect(f.host.submit).not.toHaveBeenCalled();
+  });
   it("mute before final transcription leaves the unsent draft unsent", async () => {
     const f = await fixture();
     f.voice.listen();
@@ -336,5 +408,143 @@ describe("GPT Realtime attachment", () => {
     expect(f.store.read().draft.map((entry) => entry.text)).toEqual(["keep this draft"]);
     expect(f.voice.status()).toMatchObject({ mode: "listen", muted: true });
     f.voice.stop();
+  });
+});
+
+describe("realtimeErrorCause", () => {
+  it("formats the cause, collapses whitespace, and caps parts separately", () => {
+    expect(realtimeErrorCause(undefined).detail).toBe("");
+    expect(realtimeErrorCause(null).detail).toBe("");
+    expect(realtimeErrorCause("boom").detail).toBe("");
+    expect(realtimeErrorCause({ type: null, code: null, message: null }).detail).toBe("");
+    expect(realtimeErrorCause({ type: "server_error" }).detail).toBe(" (server_error)");
+    expect(realtimeErrorCause({ code: "x", message: "a\n  b" }).detail).toBe(" (x: a b)");
+    expect(realtimeErrorCause({ message: " \n " }).detail).toBe("");
+    expect(realtimeErrorCause({ code: "", message: "  " }).detail).toBe("");
+  });
+  it("falls back from an empty code to the type and tolerates numbers", () => {
+    expect(
+      realtimeErrorCause({ code: "", type: "insufficient_quota", message: "No credits." }),
+    ).toEqual({ code: "insufficient_quota", detail: " (insufficient_quota: No credits.)" });
+    expect(realtimeErrorCause({ code: 429, message: "Rate limited" }).detail).toBe(
+      " (429: Rate limited)",
+    );
+  });
+  it("keeps the actionable message when the identifier is verbose", () => {
+    const cause = realtimeErrorCause({ code: "c".repeat(200), message: "add credits" });
+    expect(cause.detail.endsWith(": add credits)")).toBe(true);
+    expect(cause.detail.length).toBe(2 + 80 + 2 + "add credits".length + 1);
+  });
+  it("reads the message from an Error instance", () => {
+    expect(realtimeErrorCause(new Error("Unexpected server response: 401")).detail).toBe(
+      " (Unexpected server response: 401)",
+    );
+  });
+});
+
+describe("realtimeAvailable", () => {
+  it("is true only when a credential resolves, without throwing", () => {
+    expect(realtimeAvailable({ OPENAI_API_KEY: "sk-test" })).toBe(true);
+    expect(realtimeAvailable({})).toBe(false);
+    expect(realtimeAvailable({ OPENAI_API_KEY: "   " })).toBe(false);
+    expect(realtimeAvailable({ PASEO_OPENAI_REALTIME_API_KEY_FILE: "/nonexistent/key" })).toBe(
+      false,
+    );
+  });
+});
+
+describe("GPT Realtime failure diagnostics", () => {
+  async function reportingFixture() {
+    const directory = mkdtempSync(join(process.cwd(), ".realtime-test-"));
+    dirs.push(directory);
+    const store = new RealtimeContextStore(directory, "11111111-1111-4111-8111-111111111111");
+    const socket = new Socket();
+    const host = {
+      status: vi.fn(),
+      speech: vi.fn(),
+      audio: vi.fn(),
+      stopPlayback: vi.fn(),
+      submit: vi.fn().mockResolvedValue(undefined),
+      endVoice: vi.fn(),
+    };
+    const report = vi.fn();
+    const voice = new OpenAiRealtime({
+      store,
+      host,
+      key: () => "test-key",
+      connect: () => socket,
+      report,
+    });
+    const started = voice.start();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    socket.emit("open");
+    socket.event({ type: "session.updated" });
+    await started;
+    const settle = async () => {
+      for (let i = 0; i < 30; i++) await Promise.resolve();
+    };
+    return { voice, host, socket, report, settle };
+  }
+
+  it("reports the rejected event's code, param, event id and the last client operation", async () => {
+    const { socket, report, host, settle } = await reportingFixture();
+    socket.event({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        code: "conversation_already_has_active_response",
+        message: "Conversation already has an active response in progress.",
+        param: "response",
+        event_id: "evt_client_42",
+      },
+    });
+    await settle();
+    expect(report).toHaveBeenCalledTimes(1);
+    const failure = report.mock.calls[0][0];
+    expect(failure).toMatchObject({
+      kind: "rejected",
+      code: "conversation_already_has_active_response",
+      param: "response",
+      eventId: "evt_client_42",
+      lastClientEvent: "session.update",
+    });
+    expect(failure.message).toContain("GPT Realtime rejected an event");
+    expect(failure.phase).toMatch(/^connected\//);
+    // The cause is captured before the user-facing state is published.
+    expect(host.status).toHaveBeenCalled();
+    expect(JSON.stringify(failure)).not.toContain("test-key");
+  });
+
+  it("reports the close code and reason when the OpenAI socket closes", async () => {
+    const { socket, report } = await reportingFixture();
+    socket.emit("close", 1011, Buffer.from("server error"));
+    expect(report.mock.calls[0][0]).toMatchObject({
+      kind: "closed",
+      closeCode: 1011,
+      closeReason: "server error",
+    });
+  });
+
+  it("reports processing failures with the thrown error's name when there is no code", async () => {
+    const { socket, report, settle } = await reportingFixture();
+    // An unknown tool call with no bound request makes event handling throw.
+    socket.event({
+      type: "response.output_item.done",
+      response_id: "resp_1",
+      item: { id: "item_1", type: "function_call", name: "send_to_agent", call_id: "call_1" },
+    });
+    await settle();
+    expect(report.mock.calls[0][0]).toMatchObject({ kind: "processing", code: "Error" });
+  });
+
+  it("never lets a throwing reporter change how the failure is handled", async () => {
+    const { socket, report, host, settle } = await reportingFixture();
+    report.mockImplementation(() => {
+      throw new Error("diagnostics down");
+    });
+    socket.event({ type: "error", error: { code: "server_error", message: "boom" } });
+    await settle();
+    const last = host.status.mock.calls.at(-1)?.[0];
+    expect(last).toMatchObject({ connection: "unavailable", muted: true });
   });
 });

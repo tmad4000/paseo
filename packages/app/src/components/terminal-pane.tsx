@@ -52,6 +52,7 @@ import {
 import { resolveTerminalRestoreOptions } from "@/terminal/runtime/terminal-restore-options";
 import { usePanelStore } from "@/stores/panel-store";
 import { useBlockMobilePanelOpenGestures } from "@/mobile-panels/provider";
+import { hostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { toXtermTheme } from "@/utils/to-xterm-theme";
 import TerminalEmulator, { type TerminalEmulatorHandle } from "./terminal-emulator";
@@ -238,9 +239,8 @@ export function TerminalPane({
   const supportsTerminalRestoreModes = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.["terminal-restore-modes"] === true,
   );
-  const supportsTerminalInputModeReplay = useSessionStore(
-    (state) =>
-      state.sessions[serverId]?.serverInfo?.features?.["terminal-input-mode-replay"] === true,
+  const supportsTerminalInputModeReplay = useSessionStore((state) =>
+    hostFeatureAvailability(state.sessions[serverId]?.serverInfo, "terminal-input-mode-replay"),
   );
   const supportsTerminalSizeOwnership = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.["terminal-size-ownership"] === true,

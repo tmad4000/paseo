@@ -18,4 +18,16 @@ describe("resolveCloseAgentTabPolicy", () => {
     expect(resolveCloseAgentTabPolicy(null)).toEqual({ kind: "archive-on-close" });
     expect(resolveCloseAgentTabPolicy(undefined)).toEqual({ kind: "archive-on-close" });
   });
+
+  it("closes a session shown in another workspace's split without archiving it", () => {
+    expect(
+      resolveCloseAgentTabPolicy({ parentAgentId: null, workspaceId: "home" }, "elsewhere"),
+    ).toEqual({ kind: "layout-only" });
+    expect(
+      resolveCloseAgentTabPolicy({ parentAgentId: null, workspaceId: "home" }, "home"),
+    ).toEqual({ kind: "archive-on-close" });
+    expect(
+      resolveCloseAgentTabPolicy({ parentAgentId: null, workspaceId: undefined }, "home"),
+    ).toEqual({ kind: "archive-on-close" });
+  });
 });
