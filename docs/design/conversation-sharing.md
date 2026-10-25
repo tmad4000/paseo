@@ -1,7 +1,8 @@
 # Conversation sharing
 
-Status: design, 2026-10-24. Beads epic `pspin-twk` (design `pspin-twk.1`, Phase 1 `pspin-twk.2`,
-Phase 2 `pspin-twk.3`). Requested by the fork owner; first external user is Brenda Mathisen.
+Status: Phase 1 merged (main `eb592ed99`, PR #110); Phase 1c hardening and external publish decided
+2026-10-24 (ADR-1 below). Beads epic `pspin-twk` (design `twk.1`, Phase 1 `twk.2`, Phase 2 `twk.3`,
+Phase 1c `twk.7`–`twk.13`). Requested by the fork owner; first external user is Brenda Mathisen.
 
 ## Problem
 
@@ -551,13 +552,200 @@ commenter cannot prompt); participant prompt appears in owner's chat with the au
 reaches the provider; presence appears and disappears within one heartbeat; owner removal closes
 the stream; permission prompts never reach guests.
 
+## Phase 1c — hardening and external publish (decided 2026-10-24)
+
+Jacob's decision after the Funnel threat model: harden the pipeline and publish snapshots to an
+external host so nothing on the M4 has to be internet-reachable. No Funnel or `tailscale serve`
+change for shares. The local listener stays behind `daemon.sharing.listen`, default off. Order of
+work, one PR each: `pspin-twk.10` → `pspin-twk.7` (with `twk.11`) → `pspin-twk.13` → `twk.4`,
+`twk.9`, `twk.8`.
+
+### ADR-1: external publish target is a Cloudflare Worker with Workers KV
+
+**Context.** Three candidates: an unlisted Ideaflow Vision note via the existing share and revoke
+API; a Cloudflare Worker with KV or R2; Cloudflare Pages. Criteria: revocation guarantee, expiry,
+link-unfurler behaviour, coupling of Paseo Fork to Ideaflow, operational fit for a daemon, cost.
+
+**Decision.** Cloudflare Worker + Workers KV, in `packages/share-worker`, served from a
+`*.workers.dev` hostname first (custom domain is a later product choice).
+
+| Criterion           | Vision note                                                                                                                          | Worker + KV (chosen)                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Revocation          | `revoke_note_share`; page caching and propagation are Vision's, not ours                                                             | KV `delete`, read on every request with `Cache-Control: no-store`; eventual consistency bounds revocation to about 60 s worldwide |
+| Expiry              | None native; daemon would have to revoke on a timer                                                                                  | `expirationTtl` on the KV entry: the host forgets the snapshot by itself even if the daemon is off                                |
+| Unfurlers           | Vision's page `<title>`/meta, outside our control                                                                                    | We serve the bytes: generic `<title>`, no description/og meta, `noindex`, same CSP as the local listener                          |
+| Coupling            | Paseo Fork depends on an Ideaflow account; daemon needs an Auth0 user token that expires and is refreshed through a Chrome extension | One long-lived admin secret the daemon holds in a mode-600 file; no account coupling for guests                                   |
+| Daemon fit          | Interactive token refresh is unfit for an always-on daemon                                                                           | Outbound HTTPS `PUT`/`DELETE` only                                                                                                |
+| Rate limiting / DoS | Vision's                                                                                                                             | Workers rate-limiting binding per client IP; zone WAF rules later if a custom domain is added                                     |
+| Cost                | Free                                                                                                                                 | Free tier (Workers 100k req/day, KV 1k writes/day); no new paid resource                                                          |
+| Availability        | Served while the M4 is offline                                                                                                       | Served while the M4 is offline                                                                                                    |
+
+R2 and Pages were rejected: KV's TTL matches expiry exactly and values are small (bounded 2 MiB
+HTML); R2 adds lifecycle rules for no benefit, and Pages is a per-deploy static site, the wrong
+shape for per-share objects. The Vision note remains a good **export** target (Phase 3): a person
+who wants the conversation in their notes, not a link host.
+
+**Consequences.** A second deployable (the Worker) with its own deploy step, done by the
+orchestrating session after the PR merges, never by the implementer. The daemon gains a publisher
+abstraction; the local listener is one of two "hosts". Revocation becomes "revoked at the host
+within about a minute" instead of "on the next request"; the UI says so.
+
+### twk.10 — redaction gaps
+
+Probe on 2026-10-24 against the built pipeline leaked, verbatim: `100.84.242.74`,
+`m4-mini.tailb2a35c.ts.net`, `142.249.144.90`, `Authorization: Basic amFjb2I6…`,
+`AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCyEXAMPLEKEY` (the `/` breaks the 32-char run),
+`the wifi password is hunter2`, `sshpass -p 'iPsj…'`, `617-555-0199`, `(415) 555-0123`. The URL
+`postgres://jacob:Sup3rSecret@db.internal:5432/app` was masked by accident (the email rule ate
+`Sup3rSecret@db.internal:5432`), leaving the username and a misleading `[email]`.
+
+Rules to add (placeholders in brackets are literal output):
+
+| Rule                                                                                                                                       | Output                              | Counter          |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- | ---------------- |
+| URL userinfo `scheme://user:pass@host`, `scheme://user@host`                                                                               | `scheme://[credentials]@host`       | `secretsMasked`  |
+| `Basic <base64>` after `Authorization:` or standalone                                                                                      | `Basic [secret hidden]`             | `secretsMasked`  |
+| Labelled value: `[A-Z0-9_]*(KEY\|SECRET\|TOKEN\|PASSWORD\|PASSWD\|CREDENTIAL)[A-Z0-9_]*\s*[:=]\s*('…'\|"…"\|\S+)` (case-insensitive label) | label kept, value `[secret hidden]` | `secretsMasked`  |
+| Base64 or hex run ≥ 32 chars including `/ + =` within 20 chars of key/secret/token/password/auth/credential                                | `[secret hidden]`                   | `secretsMasked`  |
+| Prose: `(password\|passphrase\|passcode\|pin)\s+(is\|was\|=\|:)\s+\S+`                                                                     | `password is [secret hidden]`       | `secretsMasked`  |
+| CLI flags `-p`, `--password`, `--token`, `--api-key`, `--secret`, `--key` followed by `=`/space and a value (quoted or bare)               | flag kept, value `[secret hidden]`  | `secretsMasked`  |
+| IPv4 (octets 0–255, not followed by more dotted numbers) and IPv6 (incl. `::`), port kept                                                  | `[ip]`, e.g. `[ip]:6767`            | `hostsMasked`    |
+| Hostnames ending `.ts.net`, `.local`, `.internal`, `.lan`, `.home.arpa`, `.localdomain`, and `localhost`                                   | `[host]`                            | `hostsMasked`    |
+| NANP phones `\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}` in addition to E.164                                                                         | `[phone]`                           | `contactsMasked` |
+
+Public FQDNs (`github.com`, `ideaflow.app`) and relative paths are kept. Version strings
+(`0.10.0-beta.16`, `14.3.2`) and `x.y.ts` must not match the IPv4 rule: require four octets each
+≤ 255 and reject when preceded by `v` or followed by `-[a-z]`. Order stays: literals → secrets →
+hosts → paths → contacts, each pass skipping existing placeholders.
+
+Wire change: `RedactionProfile.scrub.hosts: z.boolean().optional()` (absent = `true`);
+`RedactionSummary.hostsMasked: z.number().optional()`. UI: a fourth Hide toggle, **Hostnames and
+IP addresses** (on). CLI: `--no-scrub hosts`. All nine locales.
+
+Test corpus (`redaction-corpus.test.ts`, table-driven, each row asserts the exact output and the
+counters): the nine probe strings above with expected outputs, the accidental-mask case
+(`postgres://jacob:Sup3rSecret@db.internal:5432/app` → `postgres://[credentials]@[host]:5432/app`),
+plus negatives: `0.10.0-beta.16`, `v1.2.3.4`, `src/x.y.ts`, `https://github.com/tmad4000/paseo`,
+`see RFC 1918`, `call 911`. Idempotence: a second pass changes nothing.
+
+### twk.7 — pre-render and bound at create; serve static bytes (includes twk.11)
+
+- `sharing/render.ts` owns `renderSharePage` and `markdown-it`; `share-listener.ts` and
+  `view/page.ts` no longer import markdown-it. The listener's request path performs no parsing.
+- Bound before render: keep the **latest** 500 `SharedMessage` rows (omitted rows count). If any
+  were dropped, prepend one `omitted` row `{ reason: "earlier", count }` rendered as "N earlier
+  messages are not included in this snapshot". Then render; if HTML exceeds 2 MiB, drop the oldest
+  rows and re-render until it fits. The JSON stored is the same bounded list.
+- Store `{id}.snapshot.html` and `{id}.snapshot.json` atomically, then the record (unchanged
+  publish-after-durable order). `ShareStore.view(token)` returns `{ html: Buffer, json: Buffer,
+title }`; the listener streams bytes with `Content-Length`.
+- Title update re-renders from the stored JSON and rewrites the HTML (owner-triggered, cheap).
+- twk.11: `<title>` is the literal "Shared conversation"; no `description`/`og:*` meta; the real
+  title appears only in the body `<h1>`. Document in `public-docs/configuration.md` that pasting a
+  link into a messenger makes that service fetch the page (counts as a view).
+- Tests: bound at exactly 500 (501 → 500 + earlier row), 2 MiB cap, listener serves identical bytes
+  to the stored file, no `markdown-it` import reachable from `share-listener.ts` (assert via a
+  module-graph test or by making `render.ts` the only importer), title update rewrites HTML,
+  `<title>` generic.
+
+### twk.13 — publisher: daemon side
+
+Config (`persisted-config.ts`, env equivalents, schema file, docs):
+
+```json
+{
+  "daemon": {
+    "sharing": {
+      "publisher": {
+        "kind": "cloudflare-worker",
+        "baseUrl": "https://paseo-share.<account>.workers.dev",
+        "adminTokenFile": "~/.config/paseo/share-admin-token"
+      }
+    }
+  }
+}
+```
+
+- `kind` is a discriminated union with one member today. `adminTokenFile` (mode 600) or
+  `PASEO_SHARING_PUBLISHER_TOKEN`. When a publisher is configured, share URLs are
+  `${baseUrl}/s/<token>` and `publicBaseUrl`/`listen` are not required; if both are configured the
+  publisher wins for URLs and the local listener keeps serving the same snapshot.
+- `ShareHost` interface: `publish({ tokenHash, html, json, expiresAt })`, `unpublish(tokenHash)`.
+  Implementations: `LocalListenerHost` (no-op publish; serving happens from the store) and
+  `CloudflareWorkerHost` (`PUT {baseUrl}/admin/shares/{tokenHash}` with
+  `Authorization: Bearer <admin token>`, JSON body `{ html, json, expiresAt }`; `DELETE` for
+  unpublish; 10 s timeout; one retry on network error).
+- Create: render → publish → store record with `published: { kind, baseUrl, at }`. Publish failure
+  fails the create with `share_publish_failed` and persists nothing.
+- Revoke/delete: set `revokedAt` locally first, then `unpublish`. On failure persist
+  `publishState: "unpublish_pending"` and retry with backoff (1 min, 5 min, 30 min, then hourly)
+  from a small daemon-side queue that survives restarts; Manage shares shows "Revoke pending at
+  the host" until it clears. Revocation at the host is also bounded by KV consistency (~60 s);
+  copy says "within about a minute".
+- Expiry update re-publishes with the new TTL; title update re-renders and re-publishes.
+- RPCs unchanged in shape; `ShareRecordPayload` gains optional `published` and `publishState`.
+- The e2e test runs a local fake Worker (`http.createServer` implementing the admin contract) to
+  prove publish, unpublish, retry-after-failure and URL construction without network.
+
+### twk.13 — publisher: Worker side (`packages/share-worker`)
+
+- Routes: `GET /s/<43-char token>` → `sha256(token)` → KV `h:<hash>` → HTML; `GET /s/<token>.json`
+  → KV `j:<hash>`. Everything else, including unauthenticated `/admin/*`, returns the identical
+  404 page. `PUT|DELETE /admin/shares/<64 hex>` require `Authorization: Bearer <ADMIN_TOKEN>`
+  (Worker secret, constant-time compare); `PUT` body is validated (`html` ≤ 2 MiB, `json` ≤ 2 MiB,
+  `expiresAt` ISO or null → `expirationTtl` ≥ 60 s or none); responds 204. Unauthenticated admin
+  requests get the same 404 as guests, so the daemon treats a 404 on `PUT` as a configuration error.
+- Headers on guest responses: identical to the local listener (`no-store`, `no-referrer`,
+  `noindex, nofollow`, the same CSP string exported from `render.ts`, `nosniff`); no cookies.
+- Rate limiting: Workers Rate Limiting binding keyed by `cf-connecting-ip`: 60/min per IP, 10/min
+  unknown-token per IP; admin routes 30/min per IP. Tokens never appear in logs (no `console.log`
+  of URLs; observability logs off or sampled without request URLs).
+- Tests: vitest in the node environment with a fake KV and plain `Request` objects: hash lookup,
+  404 parity (body and headers byte-identical for unknown/expired/malformed/admin-unauth), headers,
+  admin auth and validation, TTL passthrough, method handling.
+- Deploy (orchestrating session, after merge): `wrangler kv namespace create SHARES` once,
+  `wrangler secret put ADMIN_TOKEN`, `wrangler deploy` with `CLOUDFLARE_ACCOUNT_ID` and an API
+  token that has Workers Scripts and KV edit permissions (the existing CLI token may lack them; a
+  Workers-scoped token is the clean path and is a Jacob step if needed). Record the deployed URL
+  and the admin-token file path in `public-docs/configuration.md` and in the ops memory.
+
+### Small follow-ups
+
+- **twk.9** listener surface: `app.set("query parser", false)`; `server.headersTimeout = 15_000`,
+  `requestTimeout = 30_000`, `keepAliveTimeout = 5_000`, `maxHeadersCount = 50`; reject
+  `req.url.length > 256` and any method other than `GET`/`HEAD` before touching the store; `HEAD`
+  answers like `GET` without a body; the listener receives `{ view }` only, not the store object.
+- **twk.4** proxy-aware limits: `daemon.sharing.trustForwardedFor: boolean` (default false). When
+  true and the socket peer is loopback or in `100.64.0.0/10`, key limits on the first
+  `X-Forwarded-For` hop; always keep a global ceiling (600/min). Only matters if a listener is ever
+  published; documented as not in use.
+- **twk.8** markdown-it: upgrade to `14.3.2` (released 2026-09-12, policy-compliant on
+  2026-10-24; fixes CVE-2022-21670). `14.3.3` (2026-10-16) is allowed after 2026-11-16. The app's
+  markdown-it moves with it.
+
+### Acceptance, Phase 1c
+
+1. Corpus test passes with the exact outputs above; the Phase 1 redaction tests still pass.
+2. A 5,000-message fixture shares as 500 messages plus one "earlier" row; the guest page and
+   `.json` are byte-identical to the stored files; a request to the listener performs no Markdown
+   rendering (asserted by a spy on `render.ts` in the listener test).
+3. With the fake Worker: create publishes and returns `${baseUrl}/s/<token>`; the fake receives
+   `html`, `json`, `expiresAt`; revoke sends `DELETE`; a failing `DELETE` leaves
+   `publishState: "unpublish_pending"` and succeeds on retry; a failing `PUT` fails the create and
+   leaves no record.
+4. Worker unit tests: all 404s byte-identical; admin without token is a 404; `PUT` with a 3 MiB body
+   is rejected; TTL derived from `expiresAt`.
+5. Manual, after deploy by the orchestrating session: create a share from a scratch conversation
+   with the Worker configured, open the URL from the M5 (not the M4), confirm redaction and the
+   generic `<title>`, revoke, confirm 404 within a minute, confirm the local listener is still not
+   bound (`lsof` shows nothing).
+
 ## Open decisions for Jacob
 
-1. **Public origin for shares.** Recommended: Tailscale Funnel on the already-enabled `:8443` of
-   `m4-mini.tailb2a35c.ts.net`, mapped to the share listener (one `tailscale serve` command, no new
-   infra, a long ugly hostname). Alternative: a Cloudflare Tunnel on an Ideaflow domain such as
-   `share.paseo.ideaflow.app` (nicer URL, one more tunnel to run). Phase 1 ships with either; only
-   `publicBaseUrl` changes.
+1. **Public origin for shares.** Decided 2026-10-24: external publish to a Cloudflare Worker
+   (ADR-1); no Funnel, no `tailscale serve` change. The earlier "already-enabled `:8443`" idea was
+   wrong: that port serves the Hermes status bridge, and `:443` carries a stale route. Remaining
+   sub-decision: keep the `*.workers.dev` hostname or add a custom domain later.
 2. **Owner display name** for guests: "Jacob", "Jacob Cole", or something else.
 3. **Default expiry**: proposed 7 days. "Never" stays available.
 4. **Live mode in Phase 1 or 1b**: proposed 1b to keep the first PR reviewable.
