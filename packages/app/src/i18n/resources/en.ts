@@ -23,13 +23,14 @@ export const en = {
     loading: "Loading preview…",
     updateHost: "Update the host to share conversations.",
     summary:
-      "Hidden: tools {{tools}}, reasoning {{reasoning}} · Masked: secrets {{secrets}}, contacts {{contacts}} · Paths collapsed: {{paths}}",
+      "Hidden: tools {{tools}}, reasoning {{reasoning}} · Masked: secrets {{secrets}}, contacts {{contacts}}, hosts {{hosts}} · Paths collapsed: {{paths}}",
     shareMetadata: "Snapshot · {{views}} views · Expires: {{expiry}} · Last viewed: {{lastViewed}}",
     fields: {
       toolCalls: "Tool calls",
       reasoning: "Reasoning",
       errors: "Errors",
       secrets: "Secrets",
+      hosts: "Hostnames and IP addresses",
       paths: "File paths",
       contacts: "Emails and phone numbers",
     },

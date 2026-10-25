@@ -26,7 +26,7 @@ export const ptBR: TranslationResources = {
     loading: "Carregando prévia…",
     updateHost: "Atualize o host para compartilhar conversas.",
     summary:
-      "Ocultos: ferramentas {{tools}}, raciocínios {{reasoning}} · Mascarados: segredos {{secrets}}, contatos {{contacts}} · Caminhos abreviados: {{paths}}",
+      "Ocultos: ferramentas {{tools}}, raciocínios {{reasoning}} · Mascarados: segredos {{secrets}}, contatos {{contacts}}, hosts {{hosts}} · Caminhos abreviados: {{paths}}",
     shareMetadata:
       "Instantâneo · {{views}} visualizações · Expira: {{expiry}} · Última visualização: {{lastViewed}}",
     fields: {
@@ -34,6 +34,7 @@ export const ptBR: TranslationResources = {
       reasoning: "Raciocínio",
       errors: "Erros",
       secrets: "Segredos",
+      hosts: "Nomes de host e endereços IP",
       paths: "Caminhos de arquivos",
       contacts: "E-mails e telefones",
     },

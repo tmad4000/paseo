@@ -292,21 +292,35 @@ never shared in Phase 1.
 
 ### Step 2: text scrubbers (applied to shown text)
 
-- **Secrets** (`scrub.secrets`): high-confidence patterns replaced by `[secret hidden]`: `sk-…`,
-  `sk-ant-…`, `ghp_`/`gho_`/`github_pat_`, `AKIA[0-9A-Z]{16}`, `xox[abprs]-…`, `AIza…`, JWTs
-  (`eyJ…\.…\.…`), `-----BEGIN … PRIVATE KEY-----` blocks, `Bearer <token>`, URL query values for
-  `token|key|secret|password|sig|signature|access_token`, `password=`/`passwd:` assignments, and any
-  base64url/hex run ≥ 32 chars adjacent to `key|token|secret|auth` within 20 chars. Patterns live in
-  one module with table-driven tests; false negatives are expected, so this is defense in depth,
-  not the reason tool output is hidden.
+Pass order is owner literals → secrets → hosts → paths → contacts. Every pass skips existing
+`[secret hidden]`, `[credentials]`, `[host]`, `[ip]`, `[email]` and `[phone]` markers.
+
+- **Extra patterns**: owner-supplied literal strings, masked first as `[secret hidden]`.
+- **Secrets** (`scrub.secrets`): provider keys (`sk-…`, GitHub, AWS, Slack, Google), JWTs,
+  private-key blocks, Bearer tokens, sensitive URL query values, and labelled
+  `KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL` assignments. Also covers Basic auth, prose
+  `password|passphrase|passcode|pin is|was|:|= …`, credential flags (`-p`, `--password`, `--token`,
+  `--api-key`, `--secret`, `--key`), and base64/hex runs ≥ 32 characters (including `/`, `+`, `=`)
+  within 20 characters of `key|secret|token|password|auth|credential`. Values become
+  `[secret hidden]`; labels and flags stay. URL userinfo becomes `[credentials]`, keeping the
+  scheme, `@`, host, port and path. Each replacement increments `secretsMasked`.
+- **Hosts** (`scrub.hosts`, absent means on): IPv4 (four octets ≤ 255) and IPv6, including `::`,
+  become `[ip]`. Ports stay. Internal hostnames ending `.ts.net`, `.local`, `.internal`, `.lan`,
+  `.home.arpa`, `.localdomain`, plus `localhost`, become `[host]`. Public FQDNs stay. Version
+  strings such as `0.10.0-beta.16`, `v1.2.3.4` and `14.3.2`, and filenames such as `x.y.ts` stay.
+  Each address or hostname increments the optional `hostsMasked` counter. When contacts are
+  hidden, an email domain is left for the contacts pass to consume the whole email;
+  masking only its host would expose the username.
 - **Paths** (`scrub.paths`): absolute local paths (`/Users/<u>/…`, `/home/<u>/…`, `/Volumes/…`,
-  `/private/…`, `/tmp/…`, `C:\Users\…`, `~/…`) collapse to `…/<last two segments>`. Paths inside
-  fenced code blocks are collapsed too. Repository-relative paths (no leading `/`, `~` or drive) are
-  kept; they are usually the point of the message.
-- **Contacts** (`scrub.contacts`): emails → `[email]`, E.164-looking phone numbers → `[phone]`,
-  except the owner's own display name and any string in an owner allowlist. Names are not
-  redacted automatically (no reliable rule); per-message exclusion and `extraPatterns` cover them.
-- **Extra patterns**: owner-supplied literal strings, masked everywhere.
+  `/private/…`, `/tmp/…`, `C:\Users\…`, `~/…`) collapse to `…/<last two segments>`, including
+  fenced code and quoted paths. Repository-relative paths stay.
+- **Contacts** (`scrub.contacts`): emails become `[email]`; E.164 and NANP phone formats
+  (`617-555-0199`, `(415) 555-0123`, dotted or spaced equivalents) become `[phone]`. The owner's
+  display name is kept unless explicitly scrubbed. Names are not detected automatically;
+  per-message exclusion and `extraPatterns` cover them.
+
+The rules live in one module with a table-driven corpus. False negatives remain possible;
+review the preview before sharing. Tool payloads remain structurally excluded.
 
 ### Step 3: summary and preview
 

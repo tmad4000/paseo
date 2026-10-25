@@ -26,13 +26,14 @@ export const ar: TranslationResources = {
     loading: "جارٍ تحميل المعاينة…",
     updateHost: "حدّث المضيف لمشاركة المحادثات.",
     summary:
-      "المخفي: أدوات {{tools}}، تفكير {{reasoning}} · المحجوب: أسرار {{secrets}}، جهات اتصال {{contacts}} · المسارات المختصرة: {{paths}}",
+      "المخفي: أدوات {{tools}}، تفكير {{reasoning}} · المحجوب: أسرار {{secrets}}، جهات اتصال {{contacts}}, المضيفون {{hosts}} · المسارات المختصرة: {{paths}}",
     shareMetadata: "لقطة · {{views}} مشاهدة · تنتهي: {{expiry}} · آخر مشاهدة: {{lastViewed}}",
     fields: {
       toolCalls: "استدعاءات الأدوات",
       reasoning: "التفكير",
       errors: "الأخطاء",
       secrets: "الأسرار",
+      hosts: "أسماء المضيفين وعناوين IP",
       paths: "مسارات الملفات",
       contacts: "البريد الإلكتروني وأرقام الهاتف",
     },

@@ -26,13 +26,14 @@ export const ko: TranslationResources = {
     loading: "미리보기 불러오는 중…",
     updateHost: "대화를 공유하려면 호스트를 업데이트하세요.",
     summary:
-      "숨김: 도구 {{tools}}개, 추론 {{reasoning}}개 · 가림: 비밀 {{secrets}}개, 연락처 {{contacts}}개 · 축약 경로 {{paths}}개",
+      "숨김: 도구 {{tools}}개, 추론 {{reasoning}}개 · 가림: 비밀 {{secrets}}개, 연락처 {{contacts}}, 호스트 {{hosts}}개 · 축약 경로 {{paths}}개",
     shareMetadata: "스냅샷 · 조회 {{views}}회 · 만료: {{expiry}} · 마지막 조회: {{lastViewed}}",
     fields: {
       toolCalls: "도구 호출",
       reasoning: "추론",
       errors: "오류",
       secrets: "비밀 정보",
+      hosts: "호스트 이름 및 IP 주소",
       paths: "파일 경로",
       contacts: "이메일 및 전화번호",
     },

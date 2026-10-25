@@ -26,7 +26,7 @@ export const fr: TranslationResources = {
     loading: "Chargement de l’aperçu…",
     updateHost: "Mettez l’hôte à jour pour partager des conversations.",
     summary:
-      "Masqués : outils {{tools}}, raisonnements {{reasoning}} · Secrets {{secrets}}, contacts {{contacts}} · Chemins abrégés : {{paths}}",
+      "Masqués : outils {{tools}}, raisonnements {{reasoning}} · Secrets {{secrets}}, contacts {{contacts}}, hôtes {{hosts}} · Chemins abrégés : {{paths}}",
     shareMetadata:
       "Instantané · {{views}} visites · Expiration : {{expiry}} · Dernière visite : {{lastViewed}}",
     fields: {
@@ -34,6 +34,7 @@ export const fr: TranslationResources = {
       reasoning: "Raisonnement",
       errors: "Erreurs",
       secrets: "Secrets",
+      hosts: "Noms d’hôte et adresses IP",
       paths: "Chemins des fichiers",
       contacts: "E-mails et numéros de téléphone",
     },

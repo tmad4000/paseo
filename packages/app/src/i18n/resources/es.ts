@@ -26,7 +26,7 @@ export const es: TranslationResources = {
     loading: "Cargando vista previa…",
     updateHost: "Actualiza el host para compartir conversaciones.",
     summary:
-      "Ocultos: herramientas {{tools}}, razonamiento {{reasoning}} · Protegidos: secretos {{secrets}}, contactos {{contacts}} · Rutas abreviadas: {{paths}}",
+      "Ocultos: herramientas {{tools}}, razonamiento {{reasoning}} · Protegidos: secretos {{secrets}}, contactos {{contacts}}, hosts {{hosts}} · Rutas abreviadas: {{paths}}",
     shareMetadata:
       "Instantánea · {{views}} visitas · Caduca: {{expiry}} · Última visita: {{lastViewed}}",
     fields: {
@@ -34,6 +34,7 @@ export const es: TranslationResources = {
       reasoning: "Razonamiento",
       errors: "Errores",
       secrets: "Secretos",
+      hosts: "Nombres de host y direcciones IP",
       paths: "Rutas de archivos",
       contacts: "Correos y teléfonos",
     },

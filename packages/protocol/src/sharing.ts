@@ -2,14 +2,19 @@ import { z } from "zod";
 
 export const RedactionProfileSchema = z.object({
   include: z.object({ toolCalls: z.boolean(), reasoning: z.boolean(), errors: z.boolean() }),
-  scrub: z.object({ secrets: z.boolean(), paths: z.boolean(), contacts: z.boolean() }),
+  scrub: z.object({
+    secrets: z.boolean(),
+    hosts: z.boolean().optional(),
+    paths: z.boolean(),
+    contacts: z.boolean(),
+  }),
   excludedMessageIds: z.array(z.string()).max(10000),
   extraPatterns: z.array(z.string().min(1).max(1000)).max(100),
 });
 export type RedactionProfile = z.infer<typeof RedactionProfileSchema>;
 export const DEFAULT_REDACTION: RedactionProfile = {
   include: { toolCalls: false, reasoning: false, errors: false },
-  scrub: { secrets: true, paths: true, contacts: true },
+  scrub: { secrets: true, hosts: true, paths: true, contacts: true },
   excludedMessageIds: [],
   extraPatterns: [],
 };
@@ -17,6 +22,7 @@ export const RedactionSummarySchema = z.object({
   hiddenToolCalls: z.number(),
   hiddenReasoning: z.number(),
   secretsMasked: z.number(),
+  hostsMasked: z.number().optional(),
   pathsCollapsed: z.number(),
   contactsMasked: z.number(),
   messagesExcluded: z.number(),
