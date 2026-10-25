@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
   sharing: {
+    unpublishPending: "Revogação pendente no servidor",
+    revokeDelay: "A revogação no servidor é concluída em cerca de um minuto.",
     deleteMessage: "Excluir este link e seu instantâneo? Esta ação não pode ser desfeita.",
     action: "Compartilhar…",
     title: "Compartilhar conversa",

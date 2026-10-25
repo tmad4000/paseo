@@ -38,6 +38,7 @@ const schema: OutputSchema<ShareRecordPayload> = {
   columns: [
     { header: "ID", field: "id" },
     { header: "TITLE", field: "title" },
+    { header: "HOST", field: (share) => share.published?.kind ?? "local-listener" },
     { header: "EXPIRES", field: "expiresAt" },
     { header: "REVOKED", field: "revokedAt" },
     { header: "VIEWS", field: "viewCount" },
@@ -105,7 +106,8 @@ export function createShareCommand(): Command {
             schema: {
               idField: "url" as const,
               columns: [{ header: "URL", field: "url" as const }],
-              renderHuman: () => result.url,
+              renderHuman: () =>
+                `${result.url}\nHost: ${result.share.published?.kind ?? "local-listener"}`,
             },
           };
         }),

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -27,6 +27,8 @@ beforeEach(async () => {
   service = new ShareService({ getCommittedRows: async () => timeline }, directory);
 });
 afterEach(async () => {
+  await service.stop();
+  vi.unstubAllGlobals();
   await rm(directory, { recursive: true, force: true });
 });
 const tokenFrom = (url: string) => url.split("/").at(-1)!;
@@ -35,6 +37,115 @@ const viewedSnapshot = async (url: string) => {
   return bytes ? JSON.parse(bytes.json.toString("utf8")) : null;
 };
 describe("share service", () => {
+  it("leaves local title and expiry unchanged when a host update fails", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, {
+      kind: "cloudflare-worker",
+      baseUrl: "https://shares.example",
+      adminToken: "fixture-admin",
+    });
+    const result = await service.create(source, options);
+    const before = await service.store.artifacts(result.share.id);
+    fetch.mockResolvedValue(new Response(null, { status: 503 }));
+    await expect(
+      service.update(result.share.id, { title: "Failed title", expiresAt: null }),
+    ).rejects.toMatchObject({ code: "share_publish_failed" });
+    expect(await service.store.artifacts(result.share.id)).toEqual(before);
+    expect((await service.list())[0]).toEqual(result.share);
+  });
+  it("retains pending delete records across restarts, removes local artifacts, and honors the backoff", async () => {
+    let failing = true;
+    const fetch = vi.fn(
+      async (_url: string, init: RequestInit) =>
+        new Response(null, { status: init.method === "DELETE" && failing ? 503 : 204 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const publisher = {
+      kind: "cloudflare-worker" as const,
+      baseUrl: "https://shares.example",
+      adminToken: "fixture-admin",
+    };
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, publisher);
+    await service.start();
+    const result = await service.create(source, { publicBaseUrl: null, configured: false });
+    expect(result.url).toMatch(/^https:\/\/shares.example\/s\//);
+    await service.delete(result.share.id);
+    expect(await service.list()).toMatchObject([
+      { id: result.share.id, revokedAt: expect.any(String), publishState: "unpublish_pending" },
+    ]);
+    expect(await service.store.view(tokenFrom(result.url))).toBeNull();
+    await expect(service.store.artifacts(result.share.id)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await service.stop();
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, publisher);
+    await service.start();
+    const queued = async () =>
+      JSON.parse(await readFile(path.join(directory, "unpublish-queue.json"), "utf8"));
+    for (const [attempt, delay] of [60_000, 300_000, 1_800_000, 3_600_000, 3_600_000].entries()) {
+      const [entry] = await queued();
+      expect(entry.attempts).toBe(attempt + 1);
+      expect(entry.nextAt - Date.now()).toBeGreaterThan(delay - 1000);
+      const before = fetch.mock.calls.length;
+      await service.retryUnpublishes(entry.nextAt - 1);
+      expect(fetch).toHaveBeenCalledTimes(before);
+      if (attempt === 4) {
+        failing = false;
+        // An explicit revoke can also finish an already queued deletion.
+        expect((await service.revoke(result.share.id)).publishState).toBeUndefined();
+      } else await service.retryUnpublishes(entry.nextAt);
+    }
+    expect(await queued()).toEqual([]);
+    expect(await service.list()).toEqual([]);
+  });
+  it("recovers local pending revocation after a crash before enqueue and refuses to republish revoked content", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+    const publisher = {
+      kind: "cloudflare-worker" as const,
+      baseUrl: "https://shares.example",
+      adminToken: "fixture-admin",
+    };
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, publisher);
+    const result = await service.create(source, options);
+    await service.store.update(result.share.id, (record) => ({
+      ...record,
+      revokedAt: new Date().toISOString(),
+      publishState: "unpublish_pending",
+    }));
+    await service.start();
+    await service.retryUnpublishes(Date.now() + 1000);
+    expect((await service.list())[0]?.publishState).toBeUndefined();
+    await expect(service.update(result.share.id, { title: "resurrect" })).rejects.toMatchObject({
+      code: "share_revoked",
+    });
+  });
+  it("keeps a pending revocation on its original host after config changes", async () => {
+    const fetch = vi.fn(
+      async (_url: string, init: RequestInit) =>
+        new Response(null, { status: init.method === "DELETE" ? 503 : 204 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const publisher = {
+      kind: "cloudflare-worker" as const,
+      baseUrl: "https://original.example",
+      adminToken: "fixture-admin",
+    };
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, publisher);
+    const result = await service.create(source, options);
+    await service.revoke(result.share.id);
+    await service.stop();
+    fetch.mockClear();
+    service = new ShareService({ getCommittedRows: async () => timeline }, directory, {
+      ...publisher,
+      baseUrl: "https://different.example",
+    });
+    await service.start();
+    await service.retryUnpublishes(Date.now() + 61_000);
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await service.list())[0]?.publishState).toBe("unpublish_pending");
+  });
   it("stores the same bounded 5,000-row preview and publishes both artifacts before the record", async () => {
     timeline = Array.from({ length: 5000 }, (_, i) => ({
       seq: i + 1,

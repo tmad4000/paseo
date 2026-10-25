@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
   sharing: {
+    unpublishPending: "إلغاء الرابط قيد الانتظار على المضيف",
+    revokeDelay: "يكتمل إلغاء الرابط على المضيف خلال دقيقة تقريبًا.",
     deleteMessage: "هل تريد حذف هذا الرابط ولقطته؟ لا يمكن التراجع عن ذلك.",
     action: "مشاركة…",
     title: "مشاركة المحادثة",

@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { loadConfig, resolveBundledWebUiDistDir, resolveConfigFromPersisted } from "./config.js";
 import { loadPersistedConfig } from "./persisted-config.js";
@@ -10,6 +10,81 @@ import { loadPersistedConfig } from "./persisted-config.js";
 const roots: string[] = [];
 
 describe("server config", () => {
+  test("loads a persisted publisher token at startup, warns for readable files, and honors env overrides", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-publisher-"));
+    roots.push(paseoHome);
+    const tokenFile = path.join(paseoHome, "admin-token");
+    await writeFile(tokenFile, "fixture-admin\n", { mode: 0o600 });
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        daemon: {
+          sharing: {
+            publisher: {
+              kind: "cloudflare-worker",
+              baseUrl: "https://shares.example/",
+              adminTokenFile: tokenFile,
+            },
+          },
+        },
+      }),
+    );
+    expect(loadConfig(paseoHome, { env: {} }).sharing).toMatchObject({
+      listen: null,
+      publicBaseUrl: null,
+      publisher: {
+        kind: "cloudflare-worker",
+        baseUrl: "https://shares.example",
+        adminToken: "fixture-admin",
+      },
+    });
+    const tokenOnly = loadConfig(paseoHome, {
+      env: { PASEO_SHARING_PUBLISHER_TOKEN: "env-admin" },
+    });
+    expect(tokenOnly.configReload?.overrideControlledPaths).toContain(
+      "daemon.sharing.publisher.adminTokenFile",
+    );
+    expect(tokenOnly.configReload?.overrideControlledPaths).not.toContain(
+      "daemon.sharing.publisher",
+    );
+    expect(tokenOnly.configReload?.overrideControlledPaths).not.toContain(
+      "daemon.sharing.publisher.baseUrl",
+    );
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await chmod(tokenFile, 0o644);
+      loadConfig(paseoHome, { env: {} });
+      if (process.platform !== "win32")
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining("mode 600"));
+      expect(
+        loadConfig(paseoHome, {
+          env: {
+            PASEO_SHARING_PUBLISHER_BASE_URL: "https://other.example",
+            PASEO_SHARING_PUBLISHER_TOKEN: "env-admin",
+          },
+        }).sharing?.publisher,
+      ).toMatchObject({ baseUrl: "https://other.example", adminToken: "env-admin" });
+      expect(
+        loadConfig(paseoHome, {
+          env: {
+            PASEO_SHARING_PUBLISHER_BASE_URL: "https://other.example",
+            PASEO_SHARING_PUBLISHER_TOKEN_FILE: tokenFile,
+          },
+        }).sharing?.publisher?.adminToken,
+      ).toBe("fixture-admin");
+      expect(() =>
+        loadConfig(paseoHome, {
+          env: {
+            PASEO_SHARING_PUBLISHER_BASE_URL: "https://user:pass@other.example",
+            PASEO_SHARING_PUBLISHER_TOKEN: "env-admin",
+          },
+        }),
+      ).toThrow("without credentials");
+    } finally {
+      warning.mockRestore();
+    }
+  });
   test("sharing is opt-in, persisted and overridable by environment", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-sharing-"));
     roots.push(paseoHome);

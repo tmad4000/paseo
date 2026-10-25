@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
   sharing: {
+    unpublishPending: "等待主机撤销",
+    revokeDelay: "主机上的撤销将在大约一分钟内完成。",
     deleteMessage: "删除此链接及其快照？此操作无法撤销。",
     action: "分享…",
     title: "分享对话",

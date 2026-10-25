@@ -61,6 +61,17 @@ export class ShareStore {
     }
     return records;
   }
+  snapshot(id: string): Promise<z.infer<typeof ShareSnapshotSchema>> {
+    return this.serial(async () =>
+      ShareSnapshotSchema.parse(JSON.parse(await fs.readFile(this.file(id, "json"), "utf8"))),
+    );
+  }
+  artifacts(id: string): Promise<ShareBytes> {
+    return this.serial(async () => ({
+      html: await fs.readFile(this.file(id, "html")),
+      json: await fs.readFile(this.file(id, "json")),
+    }));
+  }
   list(agentId?: string): Promise<ShareRecord[]> {
     return this.serial(async () =>
       (await this.readAll()).filter((r) => !agentId || r.agentId === agentId),
@@ -93,6 +104,12 @@ export class ShareStore {
       }
       await writeJsonFileAtomic(this.file(id), next);
       return next;
+    });
+  }
+  deleteArtifacts(id: string): Promise<void> {
+    return this.serial(async () => {
+      await fs.rm(this.file(id, "json"), { force: true });
+      await fs.rm(this.file(id, "html"), { force: true });
     });
   }
   delete(id: string): Promise<void> {

@@ -1,6 +1,6 @@
 import os from "node:os";
 import { configurationEnvironment } from "./config-environment.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePaseoNodeEnv } from "./paseo-env.js";
@@ -756,6 +756,12 @@ function resolveServiceAndWebUiOverridePaths(
   cli: CliConfigOverrides | undefined,
 ): string[] {
   const paths: string[] = [];
+  if (env.PASEO_SHARING_PUBLISHER_BASE_URL !== undefined)
+    paths.push("daemon.sharing.publisher.baseUrl");
+  if (env.PASEO_SHARING_PUBLISHER_TOKEN_FILE !== undefined)
+    paths.push("daemon.sharing.publisher.adminTokenFile");
+  if (env.PASEO_SHARING_PUBLISHER_TOKEN !== undefined)
+    paths.push("daemon.sharing.publisher.adminTokenFile");
   if (env.PASEO_SHARING_LISTEN !== undefined) paths.push("daemon.sharing.listen");
   if (env.PASEO_SHARING_PUBLIC_BASE_URL !== undefined) paths.push("daemon.sharing.publicBaseUrl");
   if (env.PASEO_SHARING_OWNER_NAME !== undefined) paths.push("daemon.sharing.ownerDisplayName");
@@ -867,7 +873,9 @@ function resolveSharingConfig(
   env: NodeJS.ProcessEnv,
   persisted: PersistedConfig,
 ): NonNullable<PaseoDaemonConfig["sharing"]> {
+  const publisher = resolveSharingPublisher(env, persisted.daemon?.sharing?.publisher);
   return {
+    ...(publisher ? { publisher } : {}),
     listen: env.PASEO_SHARING_LISTEN ?? persisted.daemon?.sharing?.listen ?? null,
     publicBaseUrl:
       env.PASEO_SHARING_PUBLIC_BASE_URL ?? persisted.daemon?.sharing?.publicBaseUrl ?? null,
@@ -876,4 +884,39 @@ function resolveSharingConfig(
       persisted.daemon?.sharing?.ownerDisplayName ??
       os.userInfo().username,
   };
+}
+
+function resolveSharingPublisher(
+  env: NodeJS.ProcessEnv,
+  saved: NonNullable<NonNullable<PersistedConfig["daemon"]>["sharing"]>["publisher"],
+): NonNullable<PaseoDaemonConfig["sharing"]>["publisher"] {
+  const baseUrl = env.PASEO_SHARING_PUBLISHER_BASE_URL ?? saved?.baseUrl;
+  let publisher: NonNullable<PaseoDaemonConfig["sharing"]>["publisher"];
+  if (baseUrl !== undefined) {
+    const url = new URL(baseUrl);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error(
+        "Sharing publisher requires an HTTP(S) base URL without credentials, query or fragment.",
+      );
+    const tokenFile = env.PASEO_SHARING_PUBLISHER_TOKEN_FILE ?? saved?.adminTokenFile;
+    let adminToken = env.PASEO_SHARING_PUBLISHER_TOKEN?.trim();
+    if (!adminToken && tokenFile) {
+      const file = expandTilde(tokenFile);
+      if ((statSync(file).mode & 0o077) !== 0)
+        console.warn("Sharing publisher token file is group/other accessible; use mode 600.");
+      adminToken = readFileSync(file, "utf8").trim();
+    }
+    if (!adminToken || /[\r\n]/.test(adminToken))
+      throw new Error(
+        "Sharing publisher requires an admin token file or PASEO_SHARING_PUBLISHER_TOKEN.",
+      );
+    publisher = { kind: "cloudflare-worker", baseUrl: baseUrl.replace(/\/+$/, ""), adminToken };
+  }
+  return publisher;
 }

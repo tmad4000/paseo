@@ -25,12 +25,12 @@ async function create(
   load: LoadSource,
 ): Promise<SessionOutboundMessage> {
   const config = sharing.config;
-  if (!config?.listen || !config.publicBaseUrl)
+  if (!config || (!config.publisher && (!config.listen || !config.publicBaseUrl)))
     throw new SharingError(
       "sharing_not_configured",
-      "Configure daemon.sharing.listen and daemon.sharing.publicBaseUrl to share conversations.",
+      "Configure daemon.sharing.publisher or daemon.sharing.listen and daemon.sharing.publicBaseUrl to share conversations.",
     );
-  if (sharing.isListening && !sharing.isListening())
+  if (!config.publisher && sharing.isListening && !sharing.isListening())
     throw new SharingError(
       "share_listener_unavailable",
       `The share listener is not running on ${config.listen}. Check the daemon log and restart the daemon with a free address.`,

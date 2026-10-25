@@ -1,5 +1,7 @@
 export const en = {
   sharing: {
+    unpublishPending: "Revoke pending at the host",
+    revokeDelay: "Revocation at the host completes within about a minute.",
     deleteMessage: "Delete this link and its snapshot? This cannot be undone.",
     action: "Share…",
     title: "Share conversation",

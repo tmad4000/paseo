@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
   sharing: {
+    unpublishPending: "호스트에서 취소 대기 중",
+    revokeDelay: "호스트에서의 취소는 약 1분 이내에 완료됩니다.",
     deleteMessage: "이 링크와 스냅샷을 삭제할까요? 되돌릴 수 없습니다.",
     action: "공유…",
     title: "대화 공유",

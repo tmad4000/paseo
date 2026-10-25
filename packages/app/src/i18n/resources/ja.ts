@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
   sharing: {
+    unpublishPending: "ホストでの取り消しを待機中",
+    revokeDelay: "ホストでの取り消しは約1分以内に完了します。",
     deleteMessage: "このリンクとスナップショットを削除しますか？元に戻せません。",
     action: "共有…",
     title: "会話を共有",

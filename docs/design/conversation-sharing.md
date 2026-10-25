@@ -722,6 +722,35 @@ Config (`persisted-config.ts`, env equivalents, schema file, docs):
   Workers-scoped token is the clean path and is a Jacob step if needed). Record the deployed URL
   and the admin-token file path in `public-docs/configuration.md` and in the ops memory.
 
+### As built (Phase 1c publisher)
+
+`pspin-twk.13` adds an outbound-only Cloudflare publisher and the private
+`@getpaseo/share-worker` workspace. Deployment remains with Fable after merge; no deployed URL,
+account/KV IDs, or secret is committed here. The Worker deployment guide owns prerequisites:
+[`packages/share-worker/README.md`](../../packages/share-worker/README.md).
+
+The durable unpublish queue is `$PASEO_HOME/shares/unpublish-queue.json`. It holds hashes,
+original host URLs and retry clocks without plaintext tokens or admin secrets. Local pending
+records recover an interrupted enqueue. Deletion removes local artifacts immediately and retains the revoked pending record until host
+cleanup succeeds. The queue persists that deletion intent across restarts.
+Changing publisher URLs retains the original job pending until that configuration is restored;
+revoked shares reject metadata edits to prevent republishing them.
+
+Divergences and limits:
+
+- Wrangler cannot substitute a KV binding ID through `--var`. The deployment guide uses an
+  ignored config copy for the namespace ID and `CLOUDFLARE_ACCOUNT_ID` for the account.
+- The unavailable page shell/CSS is copied verbatim; its CSP hash is precomputed for the Worker.
+  A parity test compares it to the server source and listener headers.
+- Worker reads do not update local view counts; no callback reaches the owner's daemon.
+- Expiry metadata is checked on every Worker read, including when the minimum 60-second KV TTL
+  exceeds the requested expiry. Three rate-limit bindings implement the three thresholds;
+  Cloudflare enforces them per IP per location.
+
+Focused verification and platform coverage are recorded in the publisher PR and
+[sharing QA](../qa/conversation-sharing-phase1/README.md). Installed-app verification and live
+Cloudflare deployment remain separate operator steps.
+
 ### Small follow-ups
 
 - **twk.9** listener surface: `app.set("query parser", false)`; `server.headersTimeout = 15_000`,
