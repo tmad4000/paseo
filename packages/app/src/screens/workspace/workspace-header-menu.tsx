@@ -11,6 +11,7 @@ import {
   Pencil,
   SquarePen,
   Share2,
+  MessageSquareText,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
@@ -43,6 +44,7 @@ const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedFirstMessage = withUnistyles(MessageSquareText);
 const ThemedShare = withUnistyles(Share2);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -52,6 +54,7 @@ const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping
 const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
 const MENU_RENAME_ICON = <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+const MENU_FIRST_MESSAGE_ICON = <ThemedFirstMessage size={16} uniProps={mutedColorMapping} />;
 const MENU_SHARE_ICON = <ThemedShare size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
@@ -157,11 +160,13 @@ export interface WorkspaceHeaderTabActions {
   onRenameCurrentTab: () => void;
   sharingAvailability?: boolean | null;
   onShareConversation?: () => void;
+  onShowFirstMessage?: () => void;
 }
 
 function WorkspaceHeaderTabActionItems({
   sharingAvailability,
   onShareConversation,
+  onShowFirstMessage,
   renameTabKind,
   onRenameCurrentTab,
 }: WorkspaceHeaderTabActions) {
@@ -178,6 +183,15 @@ function WorkspaceHeaderTabActionItems({
           ? t("workspace.tabs.menu.renameAgent")
           : t("workspace.tabs.menu.renameTerminal")}
       </DropdownMenuItem>
+      {renameTabKind === "agent" && onShowFirstMessage ? (
+        <DropdownMenuItem
+          testID="workspace-header-first-message"
+          leading={MENU_FIRST_MESSAGE_ICON}
+          onSelect={onShowFirstMessage}
+        >
+          {t("firstMessage.title")}
+        </DropdownMenuItem>
+      ) : null}
       {sharingAvailability === true ? (
         <DropdownMenuItem
           testID="conversation-share-action"
@@ -278,6 +292,7 @@ export function WorkspaceHeaderMenuMobile({
   onRenameCurrentTab,
   sharingAvailability,
   onShareConversation,
+  onShowFirstMessage,
   ...workspaceActions
 }: WorkspaceHeaderMenuMobileProps) {
   const { t } = useTranslation();
@@ -313,6 +328,7 @@ export function WorkspaceHeaderMenuMobile({
           renameTabKind={renameTabKind}
           sharingAvailability={sharingAvailability}
           onShareConversation={onShareConversation}
+          onShowFirstMessage={onShowFirstMessage}
           onRenameCurrentTab={onRenameCurrentTab}
         />
         <DropdownMenuItem

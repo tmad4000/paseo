@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  firstMessage: {
+    title: "الرسالة الأولى",
+    loading: "جارٍ تحميل الرسالة الأولى…",
+    error: "تعذّر تحميل الرسالة الأولى. تحقق من الاتصال بالمضيف وحاول مجددًا.",
+    empty: "لم تُرسَل أي رسائل في هذه الدردشة بعد.",
+    noText: "لا تحتوي هذه الرسالة على نص.",
+    updateHost: "حدّث المضيف لعرض الرسالة الأولى.",
+  },
   sharing: {
     unpublishPending: "إلغاء الرابط قيد الانتظار على المضيف",
     revokeDelay: "يكتمل إلغاء الرابط على المضيف خلال دقيقة تقريبًا.",

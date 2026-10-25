@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  firstMessage: {
+    title: "Первое сообщение",
+    loading: "Загрузка первого сообщения…",
+    error:
+      "Не удалось загрузить первое сообщение. Проверьте подключение к хосту и попробуйте ещё раз.",
+    empty: "В этом чате ещё нет отправленных сообщений.",
+    noText: "В этом сообщении нет текста.",
+    updateHost: "Обновите хост, чтобы просмотреть первое сообщение.",
+  },
   sharing: {
     unpublishPending: "Отзыв на хосте ожидается",
     revokeDelay: "Отзыв на хосте завершится примерно в течение минуты.",

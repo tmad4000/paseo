@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  firstMessage: {
+    title: "Premier message",
+    loading: "Chargement du premier message…",
+    error: "Impossible de charger le premier message. Vérifiez la connexion à l’hôte et réessayez.",
+    empty: "Aucun message n’a encore été envoyé dans cette discussion.",
+    noText: "Ce message ne contient pas de texte.",
+    updateHost: "Mettez l’hôte à jour pour voir le premier message.",
+  },
   sharing: {
     unpublishPending: "Révocation en attente sur le serveur",
     revokeDelay: "La révocation sur le serveur prend environ une minute.",

@@ -1,3 +1,4 @@
+import { useFirstMessage } from "@/first-message/reader";
 import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
@@ -1067,9 +1068,11 @@ function WorkspaceHeaderTitleBar({
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
   const sharing = useConversationSharing(normalizedServerId, sharingAgentId);
+  const firstMessage = useFirstMessage(normalizedServerId, sharingAgentId);
   return (
     <View style={styles.headerTitleContainer}>
       {sharing.sheet}
+      {firstMessage.sheet}
       {isLoading ? (
         <View style={styles.headerTitleTextGroup}>
           <View style={styles.headerTitleSkeleton} />
@@ -1091,6 +1094,7 @@ function WorkspaceHeaderTitleBar({
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
@@ -1113,6 +1117,7 @@ function WorkspaceHeaderTitleBar({
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}

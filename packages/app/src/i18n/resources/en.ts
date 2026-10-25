@@ -1,4 +1,12 @@
 export const en = {
+  firstMessage: {
+    title: "First message",
+    loading: "Loading first message…",
+    error: "Could not load the first message. Check the host connection and try again.",
+    empty: "No messages have been sent in this chat yet.",
+    noText: "This message has no text.",
+    updateHost: "Update the host to view the first message.",
+  },
   sharing: {
     unpublishPending: "Revoke pending at the host",
     revokeDelay: "Revocation at the host completes within about a minute.",

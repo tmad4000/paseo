@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  firstMessage: {
+    title: "Primeira mensagem",
+    loading: "Carregando a primeira mensagem…",
+    error:
+      "Não foi possível carregar a primeira mensagem. Verifique a conexão com o host e tente novamente.",
+    empty: "Nenhuma mensagem foi enviada neste chat ainda.",
+    noText: "Esta mensagem não tem texto.",
+    updateHost: "Atualize o host para ver a primeira mensagem.",
+  },
   sharing: {
     unpublishPending: "Revogação pendente no servidor",
     revokeDelay: "A revogação no servidor é concluída em cerca de um minuto.",

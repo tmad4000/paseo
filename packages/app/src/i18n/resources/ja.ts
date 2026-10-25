@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  firstMessage: {
+    title: "最初のメッセージ",
+    loading: "最初のメッセージを読み込み中…",
+    error:
+      "最初のメッセージを読み込めませんでした。ホストへの接続を確認して、もう一度お試しください。",
+    empty: "このチャットにはまだメッセージが送信されていません。",
+    noText: "このメッセージにはテキストがありません。",
+    updateHost: "最初のメッセージを表示するにはホストを更新してください。",
+  },
   sharing: {
     unpublishPending: "ホストでの取り消しを待機中",
     revokeDelay: "ホストでの取り消しは約1分以内に完了します。",

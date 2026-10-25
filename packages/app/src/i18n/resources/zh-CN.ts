@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  firstMessage: {
+    title: "第一条消息",
+    loading: "正在加载第一条消息…",
+    error: "无法加载第一条消息。请检查主机连接并重试。",
+    empty: "此聊天尚未发送任何消息。",
+    noText: "此消息没有文本。",
+    updateHost: "请更新主机以查看第一条消息。",
+  },
   sharing: {
     unpublishPending: "等待主机撤销",
     revokeDelay: "主机上的撤销将在大约一分钟内完成。",

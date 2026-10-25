@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  firstMessage: {
+    title: "첫 메시지",
+    loading: "첫 메시지 불러오는 중…",
+    error: "첫 메시지를 불러올 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+    empty: "이 채팅에는 아직 보낸 메시지가 없습니다.",
+    noText: "이 메시지에는 텍스트가 없습니다.",
+    updateHost: "첫 메시지를 보려면 호스트를 업데이트하세요.",
+  },
   sharing: {
     unpublishPending: "호스트에서 취소 대기 중",
     revokeDelay: "호스트에서의 취소는 약 1분 이내에 완료됩니다.",
