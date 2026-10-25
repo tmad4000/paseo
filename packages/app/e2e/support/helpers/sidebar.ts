@@ -30,10 +30,18 @@ async function expectContextMenuAtPointer(
   menuTestID: string,
   anchor: ContextMenuAnchor,
 ): Promise<void> {
-  const bounds = await page.getByTestId(menuTestID).boundingBox();
-  if (!bounds) throw new Error(`Could not measure ${menuTestID}`);
-  expect(Math.abs(bounds.x - anchor.x)).toBeLessThanOrEqual(2);
-  expect(Math.abs(bounds.y - (anchor.y + 4))).toBeLessThanOrEqual(2);
+  // The surface remounts after measurement and can flip above the pointer when
+  // there is not enough room below. Wait for its settled, pointer-anchored bounds.
+  await expect(async () => {
+    const bounds = await page.getByTestId(menuTestID).boundingBox();
+    expect(bounds).not.toBeNull();
+    if (!bounds) return;
+    expect(Math.abs(bounds.x - anchor.x)).toBeLessThanOrEqual(2);
+    const below = Math.abs(bounds.y - (anchor.y + 4));
+    const above = Math.abs(bounds.y + bounds.height - (anchor.y - 4));
+    expect(Math.min(below, above)).toBeLessThanOrEqual(2);
+    await expect(page.getByTestId(menuTestID)).toBeInViewport({ ratio: 1 });
+  }).toPass({ timeout: 10_000 });
 }
 
 export async function openWorkspaceContextMenu(page: Page, workspaceId: string): Promise<void> {

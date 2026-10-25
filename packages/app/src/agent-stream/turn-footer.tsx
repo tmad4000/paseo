@@ -1,3 +1,4 @@
+import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import React, { memo, useCallback, useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -63,7 +64,7 @@ export const TurnFooter = memo(function TurnFooter({
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onForkInFlightTurn?: InFlightTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   if (isRunning) {
     return (
@@ -106,7 +107,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   return (
     <TurnFooterRow>
@@ -182,7 +183,7 @@ function CompletedTurnFooter({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
-  onPin?: (text: string) => void;
+  onPin?: MessagePinHandler;
 }) {
   const getContent = useCallback(
     () =>

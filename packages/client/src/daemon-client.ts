@@ -1,4 +1,13 @@
-import type { StreamListOptions, StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import type {
+  RedactionProfile,
+  ShareRecordPayload,
+  ShareSnapshot,
+} from "@getpaseo/protocol/sharing";
+import type {
+  StreamListOptions,
+  StreamEntryUpdate,
+  StreamTagPin,
+} from "@getpaseo/protocol/global-stream";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
 import {
@@ -12,6 +21,10 @@ import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
+import type {
+  ClientDiagnosticEvent,
+  ClientDiagnosticSource,
+} from "@getpaseo/protocol/client-diagnostics";
 import type { AgentAttentionNotificationPayload } from "@getpaseo/protocol/agent-attention-notification";
 import {
   AgentCreateFailedStatusPayloadSchema,
@@ -389,6 +402,15 @@ export type DaemonEventHandler = (event: DaemonEvent) => void;
 export type BrowserAutomationExecuteRequestMessage = BrowserAutomationExecuteRequest;
 export type BrowserAutomationExecuteResponseMessage = BrowserAutomationExecuteResponse;
 
+/** A host request that failed as an error response or a timeout. */
+export interface DaemonRequestErrorEvent {
+  kind: "rpc_error" | "timeout";
+  requestType: string;
+  requestId: string;
+  code?: string;
+  message: string;
+}
+
 export interface DaemonClientConfig {
   /** Deliver compact bodies/hash references to a caller-owned snapshot cache.
    * The default keeps public SDK snapshot entries expanded. */
@@ -419,6 +441,11 @@ export interface DaemonClientConfig {
   runtimeMetricsWindowMs?: number;
   trace?: DaemonClientTrace;
   capabilities?: Partial<Record<ClientCapability, unknown>>;
+  /**
+   * Called when a request comes back as a host error or times out, for client diagnostics.
+   * Called synchronously; must not throw.
+   */
+  onRequestError?: (event: DaemonRequestErrorEvent) => void;
 }
 
 export interface DaemonClientTrace {
@@ -981,6 +1008,7 @@ type SetDaemonConfigResponse = Extract<
   { type: "set_daemon_config_response" }
 >;
 type CorrelatedResponseMessage =
+  | Extract<SessionOutboundMessage, { type: `share.link.${string}.response` }>
   | Extract<SessionOutboundMessage, { payload: { requestId: string } }>
   | Extract<SessionOutboundMessage, { type: "terminals_changed" }>
   | GetDaemonConfigResponse
@@ -999,6 +1027,17 @@ export class DaemonConnectionError extends Error {
   ) {
     super(message);
     this.name = "DaemonConnectionError";
+  }
+}
+
+/**
+ * The host answered a send with a refusal. Distinct from transport failures, which
+ * say nothing about whether the host received the request.
+ */
+export class AgentMessageRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentMessageRejectedError";
   }
 }
 
@@ -1927,8 +1966,33 @@ export class DaemonClient {
       const result = await promise;
       if (result.kind === "error") throw result.error;
       return result.value;
+    } catch (error) {
+      this.notifyRequestError(params.message.type, params.requestId, error);
+      throw error;
     } finally {
       await wire.finish();
+    }
+  }
+
+  private notifyRequestError(requestType: string, requestId: string, error: unknown): void {
+    const hook = this.config.onRequestError;
+    if (!hook) return;
+    // Never report the diagnostics channel's own failures, or a failing host would feed itself.
+    if (requestType.startsWith("client.diagnostics.")) return;
+    let kind: DaemonRequestErrorEvent["kind"];
+    if (error instanceof DaemonRpcError) kind = "rpc_error";
+    else if (isWaiterTimeoutError(error)) kind = "timeout";
+    else return;
+    try {
+      hook({
+        kind,
+        requestType,
+        requestId,
+        code: error instanceof DaemonRpcError ? error.code : undefined,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } catch {
+      // A diagnostics hook must not change request behavior.
     }
   }
 
@@ -2081,6 +2145,21 @@ export class DaemonClient {
       });
     if (!response.success) {
       throw new Error(response.error ?? "Failed to mark workspace unread");
+    }
+  }
+
+  async markAgentUnread(workspaceId: string, agentId: string, requestId?: string): Promise<void> {
+    const response =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.mark_unread.response">({
+        requestId,
+        message: {
+          type: "workspace.mark_unread.request",
+          workspaceId,
+          agentId,
+        },
+      });
+    if (!response.success) {
+      throw new Error(response.error ?? "Failed to mark agent unread");
     }
   }
 
@@ -3052,6 +3131,62 @@ export class DaemonClient {
     );
   }
 
+  /** Host-side delivery state for one agent. Requires `deliveryInspect`. */
+  async inspectAgentDelivery(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.queue.inspect.response">> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.inspect.response">({
+        message: { type: "agent.queue.inspect.request", agentId },
+      });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  /** Sends device-side error diagnostics to the host. Requires `clientDiagnostics`. */
+  async reportClientDiagnostics(input: {
+    deviceLabel?: string;
+    platform?: string;
+    events: ClientDiagnosticEvent[];
+  }): Promise<{ acknowledgedIds: string[]; deferredIds: string[] }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"client.diagnostics.report.response">({
+        message: { type: "client.diagnostics.report.request", ...input },
+      });
+    if (payload.error) throw new Error(payload.error);
+    return { acknowledgedIds: payload.acknowledgedIds, deferredIds: payload.deferredIds };
+  }
+
+  /** Reads the host's recorded device and host-voice diagnostics, newest first. */
+  async listClientDiagnostics(
+    options: { limit?: number; since?: string; source?: ClientDiagnosticSource } = {},
+  ): Promise<CorrelatedResponsePayload<"client.diagnostics.list.response">> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"client.diagnostics.list.response">({
+        message: { type: "client.diagnostics.list.request", ...options },
+      });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  /** Tells the host what this device still holds unsent. Requires `deliveryInspect`. */
+  async reportOutbox(input: {
+    deviceLabel?: string;
+    platform?: string;
+    agents: Array<{
+      agentId: string;
+      unsentQueued: number;
+      unsentDirect: number;
+      oldestCreatedAt?: string;
+    }>;
+  }): Promise<void> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"client.outbox.report.response">({
+        message: { type: "client.outbox.report.request", ...input },
+      });
+    if (payload.error) throw new Error(payload.error);
+  }
+
   async listQueuedAgentMessages(agentId: string): Promise<AgentQueueSnapshot> {
     return this.requireAgentQueuePayload(
       await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.list.response">({
@@ -3118,7 +3253,7 @@ export class DaemonClient {
 
   async updateAgent(
     agentId: string,
-    updates: { name?: string; labels?: Record<string, string> },
+    updates: { name?: string; labels?: Record<string, string | null> },
   ): Promise<void> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
@@ -3149,6 +3284,62 @@ export class DaemonClient {
     }
   }
 
+  async previewShareLink(agentId: string, redaction?: RedactionProfile): Promise<ShareSnapshot> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.preview.request", agentId, redaction },
+      responseType: "share.link.preview.response",
+    });
+    if (!payload.snapshot) throw new Error("Missing share preview");
+    return payload.snapshot;
+  }
+  async createShareLink(input: {
+    previewDigest?: string;
+    agentId: string;
+    title?: string;
+    expiresAt?: string | null;
+    redaction?: RedactionProfile;
+  }): Promise<{ share: ShareRecordPayload; url: string }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.create.request", ...input, mode: "snapshot" },
+      responseType: "share.link.create.response",
+    });
+    if (!payload.share || !payload.url) throw new Error("Missing share link");
+    return { share: payload.share, url: payload.url };
+  }
+  async listShareLinks(agentId?: string): Promise<ShareRecordPayload[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.list.request", agentId },
+      responseType: "share.link.list.response",
+    });
+    if (!payload.shares) throw new Error("Missing share records");
+    return payload.shares;
+  }
+  async updateShareLink(
+    shareId: string,
+    patch: { title?: string; expiresAt?: string | null },
+  ): Promise<ShareRecordPayload> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.update.request", shareId, ...patch },
+      responseType: "share.link.update.response",
+    });
+    if (!payload.share) throw new Error("Missing share record");
+    return payload.share;
+  }
+  async revokeShareLink(shareId: string): Promise<ShareRecordPayload> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.revoke.request", shareId },
+      responseType: "share.link.revoke.response",
+    });
+    if (!payload.share) throw new Error("Missing share record");
+    return payload.share;
+  }
+  async deleteShareLink(shareId: string): Promise<void> {
+    await this.sendCorrelatedSessionRequest({
+      message: { type: "share.link.delete.request", shareId },
+      responseType: "share.link.delete.response",
+    });
+  }
+
   async listGlobalStream(options: StreamListOptions = {}) {
     const payload = await this.sendCorrelatedSessionRequest({
       message: { type: "stream.list.request", ...options },
@@ -3164,6 +3355,16 @@ export class DaemonClient {
       responseType: "stream.entry.update.response",
     });
     if (!payload.accepted) throw new Error(payload.error ?? "Could not save Stream item");
+  }
+
+  /** Pin or unpin a Stream tag for one chat (agentId) or host-wide. Returns the new pinned list. */
+  async setStreamTagPinned(input: StreamTagPin): Promise<string[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "stream.tags.pin.request", ...input },
+      responseType: "stream.tags.pin.response",
+    });
+    if (!payload.accepted) throw new Error(payload.error ?? "Could not pin Stream tag");
+    return payload.pinnedTags;
   }
 
   async updateCompanionEntry(input: {
@@ -3721,7 +3922,7 @@ export class DaemonClient {
       },
     });
     if (!payload.accepted) {
-      throw new Error(payload.error ?? "sendAgentMessage rejected");
+      throw new AgentMessageRejectedError(payload.error ?? "sendAgentMessage rejected");
     }
     return { queued: payload.queued === true };
   }

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "../support/fixtures";
 import { clickNewTerminal, gotoWorkspace } from "../support/helpers/launcher";
-import { renameModalInput, renameModalSubmit } from "../support/helpers/rename";
+import { renameModalInput, renameModalSubmit, renameModalError } from "../support/helpers/rename";
 import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-client";
 
 async function fetchTerminalTitle(
@@ -51,6 +51,49 @@ async function readClipboard(page: Page): Promise<string> {
 }
 
 test.describe("Workspace terminal tab rename", () => {
+  test("top-bar rename handles terminals and keeps failed edits visible", async ({ page }) => {
+    test.setTimeout(120_000);
+    const workspace = await seedWorkspace({ repoPrefix: "workspace-header-terminal-rename-" });
+    let terminalId: string | null = null;
+    try {
+      await gotoWorkspace(page, workspace.workspaceId);
+      // A launcher has no editable title.
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      await expect(page.getByTestId("workspace-header-menu")).toBeVisible();
+      await expect(page.getByTestId("workspace-header-rename-tab")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await clickNewTerminal(page);
+      terminalId = await waitForCreatedTerminalId(workspace);
+      const tab = page.getByTestId(`workspace-tab-terminal_${terminalId}`).first();
+      await expect(tab).toBeVisible();
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      await page.getByTestId("workspace-header-rename-tab").click();
+      const prefix = `workspace-tab-rename-modal-terminal-${terminalId}`;
+      const input = renameModalInput(page, prefix);
+      await expect(input).toBeVisible();
+      await input.fill("Top-bar terminal");
+      await renameModalSubmit(page, prefix).click();
+      await expect(input).toHaveCount(0);
+      await expect(tab).toContainText("Top-bar terminal");
+      await expect.poll(() => fetchTerminalTitle(workspace, terminalId!)).toBe("Top-bar terminal");
+
+      await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+      await page.getByTestId("workspace-header-rename-tab").click();
+      await expect(input).toHaveValue("Top-bar terminal");
+      // The real daemon rejects a terminal that disappears while the dialog is open.
+      await workspace.client.killTerminal(terminalId);
+      await input.fill("Keep this edit");
+      await renameModalSubmit(page, prefix).click();
+      await expect(renameModalError(page, prefix)).toBeVisible();
+      await expect(input).toHaveValue("Keep this edit");
+      await expect(renameModalSubmit(page, prefix)).toBeEnabled();
+      await page.getByTestId(`${prefix}-cancel`).click();
+      await expect(input).toHaveCount(0);
+    } finally {
+      await cleanupTerminal(workspace, terminalId);
+    }
+  });
+
   test("right-click copy terminal id writes the terminal id to the clipboard", async ({
     context,
     page,

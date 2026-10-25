@@ -1,3 +1,4 @@
+import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
@@ -344,6 +345,7 @@ function useAgentPanelDescriptor(
   target: { kind: "agent"; agentId: string },
   context: { serverId: string },
 ): PanelDescriptor {
+  const { t } = useTranslation();
   const descriptorState = useSessionStore(
     useShallow((state) => {
       const session = state.sessions[context.serverId];
@@ -356,6 +358,7 @@ function useAgentPanelDescriptor(
         pendingPermissionCount: agent?.pendingPermissions.length ?? 0,
         requiresAttention: agent?.requiresAttention ?? false,
         attentionReason: agent?.attentionReason ?? null,
+        labels: agent?.labels,
         isTurnActive: selectAgentTurnPresentation(session, target.agentId).isActive,
       };
     }),
@@ -363,11 +366,15 @@ function useAgentPanelDescriptor(
   const provider = descriptorState.provider;
   const label = resolveWorkspaceAgentTabLabel(descriptorState.title);
   const icon = getProviderIcon(provider, context.serverId);
+  const marker = manualStatus(descriptorState.labels ?? {});
+  const baseTooltip = label ?? `${formatProviderLabel(provider)} agent`;
+  const tooltip =
+    marker === "clear" ? baseTooltip : `${baseTooltip} · ${t(`manualStatus.${marker}`)}`;
 
   return {
     label: label ?? "",
     subtitle: `${formatProviderLabel(provider)} agent`,
-    tooltip: label ?? `${formatProviderLabel(provider)} agent`,
+    tooltip,
     titleState: label ? "ready" : "loading",
     icon,
     statusBucket: descriptorState.status
@@ -376,6 +383,7 @@ function useAgentPanelDescriptor(
           pendingPermissionCount: descriptorState.pendingPermissionCount,
           requiresAttention: descriptorState.requiresAttention,
           attentionReason: descriptorState.attentionReason,
+          labels: descriptorState.labels,
         })
       : null,
   };

@@ -1,3 +1,5 @@
+import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
+import type { ManualStatusTarget } from "@/agent-status/model";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   useCallback,
@@ -11,6 +13,7 @@ import React, {
 } from "react";
 import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
+  Circle,
   CopyX,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -78,6 +81,7 @@ import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispat
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
+import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
 import {
   paneContentToolbarTrailingPadding,
   ToolbarButton,
@@ -129,6 +133,7 @@ const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
+const ThemedCircle = withUnistyles(Circle);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
@@ -479,6 +484,8 @@ function TabContextMenuItem({
         return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
       case "layout-panel-left":
         return <ThemedLayoutPanelLeft size={16} uniProps={mutedColorMapping} />;
+      case "circle":
+        return <ThemedCircle size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
@@ -816,6 +823,14 @@ function TabChip({
   dragHandleProps: DraggableListDragHandleProps | undefined;
 }) {
   const { closeButtonTestId, contextMenuTestId, menuEntries } = resolvedTab;
+  const statusTarget = useMemo<ManualStatusTarget | null>(
+    () =>
+      tab.target.kind === "agent"
+        ? { kind: "agent", serverId: tab.scope?.serverId ?? serverId, agentId: tab.target.agentId }
+        : null,
+    [serverId, tab],
+  );
+  const statusPages = useAgentStatusMenuPages(statusTarget);
   const { t } = useTranslation();
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
@@ -1002,7 +1017,13 @@ function TabChip({
           </View>
         ) : null}
 
-        <ContextMenuContent align="start" width={DROPDOWN_WIDTH} testID={contextMenuTestId}>
+        <ContextMenuContent
+          align="start"
+          width={DROPDOWN_WIDTH}
+          testID={contextMenuTestId}
+          pages={statusPages}
+        >
+          {statusTarget ? <AgentStatusMenuTrigger /> : null}
           {menuEntries.map((entry) =>
             entry.kind === "separator" ? (
               <ContextMenuSeparator key={entry.key} />
@@ -1582,15 +1603,25 @@ function ResolvedDesktopTabChip({
     workspaceId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const markUnreadEntries = useMarkTabUnreadMenuEntries({
+    tab: item.tab,
+    serverId,
+    workspaceId,
+    menuTestIDBase: baseResolvedTab.contextMenuTestId,
+  });
   const resolvedTab = useMemo(
     () =>
-      openInViewEntries.length === 0
+      openInViewEntries.length === 0 && markUnreadEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
-            menuEntries: [...openInViewEntries, ...baseResolvedTab.menuEntries],
+            menuEntries: [
+              ...markUnreadEntries,
+              ...openInViewEntries,
+              ...baseResolvedTab.menuEntries,
+            ],
           },
-    [baseResolvedTab, openInViewEntries],
+    [baseResolvedTab, markUnreadEntries, openInViewEntries],
   );
 
   const rawTooltipLabel =

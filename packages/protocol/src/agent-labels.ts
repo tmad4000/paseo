@@ -7,6 +7,7 @@ export const AUTO_OPEN_AGENT_TAB_LABEL = "paseo.auto-open-agent-tab";
 // "ready" for a human/orchestrator to review instead of just going idle.
 // Distinct from lifecycle: a review-ready agent is idle AND waiting on review.
 export const REVIEW_STATUS_LABEL = "paseo.review-status";
+export const MANUAL_NEEDS_INPUT_LABEL = "paseo.manual-needs-input";
 export const REVIEW_NOTE_LABEL = "paseo.review-note";
 const OPEN_AGENT_TAB_LABEL_PREFIX = "paseo.open-agent-tab.";
 
