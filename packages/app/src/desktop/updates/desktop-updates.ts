@@ -8,6 +8,7 @@ export interface DesktopAppUpdateCheckResult {
   readyToInstall: boolean;
   currentVersion: string | null;
   latestVersion: string | null;
+  publishedVersion?: string | null;
   body: string | null;
   date: string | null;
   errorMessage: string | null;
@@ -120,6 +121,7 @@ export async function checkDesktopAppUpdate({
     readyToInstall: result.readyToInstall === true,
     currentVersion: toStringOrNull(result.currentVersion),
     latestVersion: toStringOrNull(result.latestVersion),
+    publishedVersion: toStringOrNull(result.publishedVersion),
     body: toStringOrNull(result.body),
     date: toStringOrNull(result.date),
     errorMessage: toStringOrNull(result.errorMessage),

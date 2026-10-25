@@ -51,6 +51,7 @@ export function buildWorkspaceAgentActivityIndex(
       status: workspaceAgentStatus(agent),
       pendingPermissionCount: agent.pendingPermissions.length,
       requiresAttention: agent.requiresAttention,
+      labels: agent.labels,
       attentionReason: agent.attentionReason,
     });
     activityByWorkspaceId.set(agent.workspaceId, {

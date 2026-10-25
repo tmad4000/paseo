@@ -1,3 +1,4 @@
+import { HostShares } from "@/sharing/host-shares";
 import {
   ArrowDown,
   ArrowUp,
@@ -257,6 +258,7 @@ export function HostConnectionsPage({ serverId }: { serverId: string }) {
     <View>
       <HostConnectionError serverId={serverId} />
       <ConnectionsSection host={host} />
+      <HostShares serverId={serverId} />
     </View>
   );
 }

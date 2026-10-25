@@ -1,3 +1,4 @@
+import os from "node:os";
 import { configurationEnvironment } from "./config-environment.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -638,6 +639,7 @@ export function resolveConfigFromPersisted(
     relayUseTls: relay.useTls,
     relayPublicUseTls: relay.publicUseTls,
     serviceProxy,
+    sharing: resolveSharingConfig(env, persisted),
     webUi,
     appBaseUrl,
     auth: resolveAuthConfig(env, persisted),
@@ -754,6 +756,9 @@ function resolveServiceAndWebUiOverridePaths(
   cli: CliConfigOverrides | undefined,
 ): string[] {
   const paths: string[] = [];
+  if (env.PASEO_SHARING_LISTEN !== undefined) paths.push("daemon.sharing.listen");
+  if (env.PASEO_SHARING_PUBLIC_BASE_URL !== undefined) paths.push("daemon.sharing.publicBaseUrl");
+  if (env.PASEO_SHARING_OWNER_NAME !== undefined) paths.push("daemon.sharing.ownerDisplayName");
   const serviceProxyEnabled = parseBooleanEnv(env.PASEO_SERVICE_PROXY_ENABLED);
   if (serviceProxyEnabled !== undefined) paths.push("daemon.serviceProxy.enabled");
   if (env.PASEO_SERVICE_PROXY_LISTEN !== undefined || serviceProxyEnabled === false) {
@@ -856,4 +861,19 @@ function resolveSpeechOverrideControlledPaths(
     paths.push("features.voiceMode.stt.language");
   }
   return paths;
+}
+
+function resolveSharingConfig(
+  env: NodeJS.ProcessEnv,
+  persisted: PersistedConfig,
+): NonNullable<PaseoDaemonConfig["sharing"]> {
+  return {
+    listen: env.PASEO_SHARING_LISTEN ?? persisted.daemon?.sharing?.listen ?? null,
+    publicBaseUrl:
+      env.PASEO_SHARING_PUBLIC_BASE_URL ?? persisted.daemon?.sharing?.publicBaseUrl ?? null,
+    ownerDisplayName:
+      env.PASEO_SHARING_OWNER_NAME ??
+      persisted.daemon?.sharing?.ownerDisplayName ??
+      os.userInfo().username,
+  };
 }
