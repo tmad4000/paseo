@@ -280,6 +280,7 @@ export const PersistedConfigSchema = z
           .optional(),
         sharing: z
           .object({
+            trustForwardedFor: z.boolean().optional(),
             listen: z.string().optional(),
             publicBaseUrl: z.url().optional(),
             ownerDisplayName: z.string().optional(),

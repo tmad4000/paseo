@@ -1,0 +1,6 @@
+
+> paseo@0.10.0-beta.17 lint
+> oxlint
+
+Found 0 warnings and 0 errors.
+Finished in 1.0s on 4689 files with 177 rules using 10 threads.

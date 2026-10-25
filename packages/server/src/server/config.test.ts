@@ -92,6 +92,7 @@ describe("server config", () => {
       listen: null,
       publicBaseUrl: null,
       ownerDisplayName: expect.any(String),
+      trustForwardedFor: false,
     });
     await writeFile(
       path.join(paseoHome, "config.json"),
@@ -110,6 +111,7 @@ describe("server config", () => {
       listen: "127.0.0.1:8443",
       publicBaseUrl: "https://share.example",
       ownerDisplayName: "Jacob",
+      trustForwardedFor: false,
     });
     const config = loadConfig(paseoHome, {
       env: {
@@ -122,7 +124,27 @@ describe("server config", () => {
       listen: "127.0.0.1:9443",
       publicBaseUrl: "https://other.example",
       ownerDisplayName: "Owner",
+      trustForwardedFor: false,
     });
+  });
+  test("forwarded share limits default off, persist, and honor environment overrides", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-share-proxy-"));
+    roots.push(paseoHome);
+    expect(loadConfig(paseoHome, { env: {} }).sharing?.trustForwardedFor).toBe(false);
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({ version: 1, daemon: { sharing: { trustForwardedFor: true } } }),
+    );
+    expect(loadConfig(paseoHome, { env: {} }).sharing?.trustForwardedFor).toBe(true);
+    const config = loadConfig(paseoHome, { env: { PASEO_SHARING_TRUST_FORWARDED_FOR: "false" } });
+    expect(config.sharing?.trustForwardedFor).toBe(false);
+    expect(config.configReload?.overrideControlledPaths).toContain(
+      "daemon.sharing.trustForwardedFor",
+    );
+    expect(
+      loadConfig(paseoHome, { env: { PASEO_SHARING_TRUST_FORWARDED_FOR: "true" } }).sharing
+        ?.trustForwardedFor,
+    ).toBe(true);
   });
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));

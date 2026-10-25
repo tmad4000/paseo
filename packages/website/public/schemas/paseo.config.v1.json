@@ -190,6 +190,10 @@
                       }
                     }
                   ]
+                },
+                "trustForwardedFor": {
+                  "type": "boolean",
+                  "default": false
                 }
               },
               "additionalProperties": false

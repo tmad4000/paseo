@@ -137,9 +137,18 @@ guessed from request headers. `ownerDisplayName` defaults to the OS user name. T
 require a coordinated host restart; editing them does not start a listener immediately.
 
 Foreground deployments can use `PASEO_SHARING_LISTEN`, `PASEO_SHARING_PUBLIC_BASE_URL`, and
-`PASEO_SHARING_OWNER_NAME`. The share listener limits each connecting IP to 60 requests per minute
-and 10 unavailable-share requests. It does not trust forwarded IP headers; configure per-client
-limits on a reverse proxy when several guests share its connection address.
+`PASEO_SHARING_OWNER_NAME`. The share listener limits each client key to 60 requests per minute
+and 10 unavailable-share requests, plus a global ceiling of 600 requests per minute across all
+keys. The global ceiling also counts rejected paths, methods and requests over a client limit.
+Only GET and HEAD reach snapshot storage; raw request URLs longer than 256 characters return
+the unavailable page. HEAD returns GET's status and headers without a body and counts as a view.
+
+`daemon.sharing.trustForwardedFor` defaults to `false`: the socket peer is the client key.
+Set it to `true` (or use `PASEO_SHARING_TRUST_FORWARDED_FOR=true`) only behind a proxy that replaces
+untrusted incoming `X-Forwarded-For` headers. When enabled, a loopback or `100.64.0.0/10` socket peer
+can supply the client key through the first `X-Forwarded-For` hop. An invalid first IP or any
+other socket peer falls back to the socket address; later hops are ignored. The Worker publisher
+does not use this setting and needs no local listener or proxy.
 
 Open a conversation's **Share…** action to review its redacted snapshot, choose an expiry
 (default seven days), and create the link. Tool arguments, output, attachments and images are

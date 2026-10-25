@@ -1,0 +1,36 @@
+
+ RUN  v4.1.7 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+
+ ❯ packages/server/src/server/sharing/redaction-corpus.test.ts (142 tests | 1 failed) 14ms
+     × separate commands (exact text, counters, and idempotence) 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/server/sharing/redaction-corpus.test.ts > sharing redaction hardening corpus > separate commands (exact text, counters, and idempotence)
+AssertionError: expected { kind: 'user', id: 'm_1', …(3) } to match object { Object (text) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "text": "sshpass -p [secret hidden] && mkdir -p build",
++   "text": "sshpass -p [secret hidden] && mkdir -p [secret hidden]",
+  }
+
+ ❯ packages/server/src/server/sharing/redaction-corpus.test.ts:241:31
+    239|   it.each(corpus)("%s (exact text, counters, and idempotence)", (_name…
+    240|     const first = redact(input as string);
+    241|     expect(first.messages[0]).toMatchObject({ text: output });
+       |                               ^
+    242|     expect(first.redactionSummary).toEqual(summary);
+    243|     const second = redact(output as string);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 20 passed (142)
+   Start at  23:16:38
+   Duration  166ms (transform 45ms, setup 0ms, import 71ms, tests 14ms, environment 0ms)
+

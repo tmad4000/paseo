@@ -765,6 +765,30 @@ Cloudflare deployment remain separate operator steps.
   2026-10-24; fixes CVE-2022-21670). `14.3.3` (2026-10-16) is allowed after 2026-11-16. The app's
   markdown-it moves with it.
 
+### As built (Phase 1c follow-ups)
+
+`pspin-twk.14`, `twk.9`, `twk.8` and `twk.4` share one follow-up PR. This batch changes no
+Worker code or deployment and does not publish a local listener. See the
+[listener configuration](../../public-docs/configuration.md#conversation-share-links-paseo-fork)
+for the opt-in forwarded-header boundary and global request ceiling.
+
+The specified positive `Basic dXNlcjpwYXNz` has no padding or digit. In addition to the specified
+shape/context checks, the redactor recognizes canonical base64 UTF-8 `user:password` pairs of
+at least 12 encoded characters. This keeps that positive while preserving ordinary “Basic” prose.
+The old generic `command -p` corpus rows now use `sshpass`; a generic `command -p` is a negative.
+Context checks retain command context across earlier redaction placeholders and stop at shell
+command separators.
+
+Both workspaces pin markdown-it 14.3.2 and its types at 14.2.0. A scoped override moves
+`react-native-markdown-display`'s transitive markdown-it dependency too, so the old parser is not
+left in the app tree. npm publication dates were checked: 2026-09-12 and 2026-08-17 respectively;
+newly resolved transitive versions also satisfy the one-month policy.
+
+Exact server and app HTML snapshots were captured under markdown-it 10 before the upgrade.
+Their output is unchanged under 14.3.2. The app's typographer-on fixture drops `(p)`/`(P)` from the
+set of strings expected to be rewritten; markdown-it 14 leaves it literal. The typographer-off
+copy-preservation assertion still includes both.
+
 ### Acceptance, Phase 1c
 
 1. Corpus test passes with the exact outputs above; the Phase 1 redaction tests still pass.
