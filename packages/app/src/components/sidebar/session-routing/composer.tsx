@@ -815,6 +815,11 @@ export function SessionRoutingComposer({
     else setDraft("");
     dispatch({ type: "clear" });
   }, [cancelMatch, dispatch, setDraft, setSearchQuery]);
+  // Clear prompt keeps the caret in the prompt field, like ✕ in the find field.
+  const clearPrompt = useCallback(() => {
+    clearInput();
+    sendInput.current?.focus();
+  }, [clearInput]);
   // Same destination as Continue, created through Quick launch instead of navigating there. The
   // prompt moves into Quick launch so it cannot also be continued from here.
   const startWithoutLeaving = useCallback(() => {
@@ -1085,7 +1090,7 @@ export function SessionRoutingComposer({
               size="xs"
               variant="ghost"
               disabled={locked || (!state.sendDraft && state.phase.status === "idle")}
-              onPress={clearInput}
+              onPress={clearPrompt}
               accessibilityLabel={t("sidebar.routing.clearPrompt")}
               testID="routing-clear-input"
             >

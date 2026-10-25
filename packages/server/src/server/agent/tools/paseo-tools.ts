@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { TrackedAskInputSchema } from "@getpaseo/protocol/companion-stream";
+import { appendStreamTags, parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
@@ -2409,6 +2411,54 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           agentId: targetAgentId,
           entryId: `question:${questionId}`,
           status: status ?? "open",
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "pin_stream_quote",
+    {
+      title: "Pin a quote or note to Stream",
+      description:
+        "Save a quote, excerpt or note as a pin in this conversation's Stream and the global Stream. Tags become #hashtags appended to the text (lowercase letters, digits, - and _), so they show in the tag cloud and filter. Pass sourceId (for example msg:<messageId>) when quoting a chat item so the pin renders as a Quote that links back. Reuse pinId to edit the same pin after a lost acknowledgement. This records context only.",
+      inputSchema: {
+        agentId: z.string().optional().describe("Defaults to this calling agent."),
+        pinId: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Stable ID for this pin; reuse it to edit. Omitted: a new pin each call."),
+        text: z.string().min(1).max(4000),
+        tags: z.array(z.string().min(1).max(50)).max(20).optional(),
+        sourceId: z
+          .string()
+          .max(300)
+          .optional()
+          .describe("Chat item the quote comes from, such as msg:<messageId>."),
+      },
+    },
+    async ({ agentId, pinId, text, tags, sourceId }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) throw new Error("An agentId is required");
+      const entryId = pinId ?? randomUUID();
+      const pinText = appendStreamTags(text, tags ?? []);
+      if (pinText.length > 4000) throw new Error("Text and tags must fit in 4000 characters");
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId,
+        action: "add_pin",
+        text: pinText,
+        sourceId,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: targetAgentId,
+          entryId: `pin:${entryId}`,
+          tags: parseStreamHashtags(pinText),
+          accepted: true,
         }),
       };
     },

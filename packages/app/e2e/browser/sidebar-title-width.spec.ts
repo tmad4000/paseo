@@ -65,13 +65,14 @@ async function toggleTrailing(page: Page, label: "Diff stats" | "Last activity",
 
 async function expectTouchTitleWidth(page: Page) {
   const row = workspaceRow(page);
-  const withDiff = await titleWidth(row);
+  const withActivity = await titleWidth(row);
+  await toggleTrailing(page, "Diff stats", true);
+  expect(await titleWidth(row)).toBeCloseTo(withActivity, 0);
   await toggleTrailing(page, "Diff stats", true);
   const withoutStats = await titleWidth(row);
-  expect(withDiff).toBeCloseTo(withoutStats, 0);
+  expect(withActivity).toBeCloseTo(withoutStats, 0);
   await toggleTrailing(page, "Last activity", true);
   expect(await titleWidth(row)).toBeCloseTo(withoutStats, 0);
-  await toggleTrailing(page, "Diff stats", true);
 }
 
 let workspace: SeededWorkspace;
@@ -106,7 +107,8 @@ async function openDesktopWorkspaceList(page: Page) {
   await gotoAppShell(page);
   const row = workspaceRow(page);
   await expect(row).toBeVisible();
-  await page.mouse.move(0, 0);
+  // Last activity is the default slot; this test measures against the wider diff stat.
+  await toggleTrailing(page, "Diff stats");
   await expect(row.getByText("+12.3k", { exact: true })).toBeVisible();
   return titleWidth(row);
 }

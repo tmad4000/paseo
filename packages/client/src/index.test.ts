@@ -270,6 +270,7 @@ test("createPaseoApi borrows daemon capabilities without exposing connection own
     "observeEvents",
     "projects",
     "providers",
+    "shares",
     "terminals",
     "workspaces",
   ]);
@@ -1673,3 +1674,18 @@ test("canceled timeline handles and captured state are collectible while their A
   );
   expect(result.stdout).toContain('"phase":"API alive"');
 }, 20000);
+
+test("public SDK exposes typed snapshot sharing actions", async () => {
+  const driver = new DaemonClient({ url: "ws://unused", clientId: "share-api" });
+  const list = vi.spyOn(driver, "listShareLinks").mockResolvedValue([]);
+  const revoke = vi
+    .spyOn(driver, "revokeShareLink")
+    .mockRejectedValue(new Error("Share not found"));
+  const api = createPaseoApi(driver);
+  expect(await api.shares.list("agent")).toEqual([]);
+  expect(list).toHaveBeenCalledWith("agent");
+  await expect(api.shares.revoke("missing")).rejects.toThrow("Share not found");
+  expect(revoke).toHaveBeenCalledWith("missing");
+  await api.dispose();
+  await driver.close();
+});

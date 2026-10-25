@@ -196,6 +196,32 @@ untouched. Forging either makes a background resume look like the user read a wo
 agent worked in it just now, which rewrites the sidebar timestamp permanently — persisted
 `updatedAt` is what workspace `statusEnteredAt` is re-derived from on the next daemon start.
 
+### Manual input and review status
+
+The Status submenu on agent tabs and workspace rows exposes Needs input (manual), Ready for
+review, In review, Changes requested, Approved, and Clear manual status. Workspace actions show
+the session count and update all non-archived sessions owned by that workspace, including managed
+children. Same-directory sibling workspaces are unaffected. Tab actions target exactly that
+session, including tabs shown in a cross-workspace View.
+
+Needs input describes a required human response or action, even when there is no permission or
+question chooser. It is persisted as `paseo.manual-needs-input=true`; review states reuse
+`paseo.review-status`. These labels survive reading, focus changes, turn completion and daemon
+reload. Selecting another manual status replaces the prior marker; clearing deletes the marker
+and any review note. It never approves a permission, sends a message, changes lifecycle status,
+or clears ordinary unread attention. Mark as unread remains a separate action.
+
+Manual Needs input contributes to the existing needs-input group. Pending review states contribute
+to attention when idle, while real running/error/permission signals keep their normal priority.
+Approved removes review attention but leaves ordinary unread activity visible. A manually flagged
+child also contributes to its owning workspace so marking a visible child tab cannot hide the
+request inside a parent. Tab tooltips include the marker, and the submenu checks the saved value.
+
+The app gates these controls on `server_info.features.manualAgentStatus`; older hosts keep their
+existing read/unread actions and show an update hint only inside the new submenu. Label deletions
+use nullable values in `update_agent_request`; old string-only patches remain accepted. Failed
+bulk writes report how many sessions failed and reload the saved state for retry.
+
 ## The subagents track
 
 The track is a pill at the foot of an agent's pane (`packages/app/src/subagents/track.tsx`): a count you can read at a glance, and a panel behind it — a popover on wide screens, a sheet on compact ones — holding the rows. It floats over the transcript rather than sitting in a band above the composer, so the timeline scrolls underneath it; `packages/app/src/panels/agent-tracks.tsx` owns that placement, and the pill frame is shared with the task list in `packages/app/src/composer/tracks.tsx`.

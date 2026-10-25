@@ -45,6 +45,7 @@ export const CLIENT_CAPS = {
   pluginTimelineItems: "plugin_timeline_items",
   // COMPAT(workspaceSetupBlocked): added in v0.8.0, remove after 2027-03-07 once client floor >= v0.8.0.
   workspaceSetupBlocked: "workspace_setup_blocked",
+  conversationSharing: "conversation_sharing",
   browserHost: "browser_host",
 } as const;
 

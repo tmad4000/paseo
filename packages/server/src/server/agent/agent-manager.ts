@@ -6,8 +6,13 @@ import {
 } from "./message-activity.js";
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
 import { applyStreamEntryUpdate } from "./stream-entry-update.js";
-import type { StreamListOptions, StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import type {
+  StreamListOptions,
+  StreamEntryUpdate,
+  StreamTagPin,
+} from "@getpaseo/protocol/global-stream";
 import { listStreamRows, type StreamSource } from "./global-stream.js";
+import { applyTagPin, type StreamTagStore } from "./stream-tag-store.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { SessionSearchWriteBuffer } from "./session-search-write-buffer.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
@@ -350,6 +355,8 @@ export interface AgentManagerOptions {
   providerDefinitions?: ProviderEnabledMap;
   idFactory?: () => string;
   registry?: AgentStorage;
+  /** Host-wide pinned Stream tags; per-chat pins live on each agent record. */
+  streamTagStore?: StreamTagStore;
   onAgentAttention?: AgentAttentionCallback;
   onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   durableTimelineStore?: AgentTimelineStore;
@@ -770,6 +777,7 @@ export class AgentManager {
   private readonly subscribers = new Set<SubscriptionRecord>();
   private readonly idFactory: () => string;
   private readonly registry?: AgentStorage;
+  private readonly streamTagStore?: StreamTagStore;
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
   private readonly backgroundTasks = new Set<Promise<void>>();
@@ -802,6 +810,7 @@ export class AgentManager {
     this.pluginLifecycle = options.pluginLifecycle;
     this.idFactory = options?.idFactory ?? (() => randomUUID());
     this.registry = options?.registry;
+    this.streamTagStore = options.streamTagStore;
     this.durableTimelineStore = options?.durableTimelineStore;
     this.onAgentAttention = options?.onAgentAttention;
     this.onWorkspaceStateMayHaveChanged = options?.onWorkspaceStateMayHaveChanged;
@@ -2472,7 +2481,8 @@ export class AgentManager {
 
   async listGlobalStream(options: StreamListOptions) {
     const sources = new Map<string, StreamSource>();
-    for (const record of (await this.registry?.list()) ?? []) {
+    const records = (await this.registry?.list()) ?? [];
+    for (const record of records) {
       sources.set(record.id, { ...record, companionEntries: restoreCompanionEntries(record) });
     }
     for (const agent of this.agents.values()) {
@@ -2482,7 +2492,34 @@ export class AgentManager {
         archivedAt: sources.get(agent.id)?.archivedAt,
       });
     }
-    return listStreamRows(sources.values(), options);
+    const pinnedTags = options.agentId
+      ? (records.find((record) => record.id === options.agentId)?.pinnedStreamTags ?? [])
+      : await this.getGlobalPinnedStreamTags();
+    return { ...listStreamRows(sources.values(), options), pinnedTags };
+  }
+
+  private async getGlobalPinnedStreamTags(): Promise<string[]> {
+    try {
+      return (await this.streamTagStore?.getPinnedTags()) ?? [];
+    } catch (error) {
+      // An unreadable pin list must not hide the Stream itself.
+      this.logger.warn({ err: error }, "Pinned Stream tags unavailable");
+      return [];
+    }
+  }
+
+  /** Pin or unpin a tag in one chat's Stream (agentId) or the host-wide Stream. */
+  async setStreamTagPinned(input: StreamTagPin): Promise<string[]> {
+    if (!input.agentId) {
+      if (!this.streamTagStore) throw new Error("Stream tag storage unavailable");
+      return this.streamTagStore.setPinned(input.tag, input.pinned);
+    }
+    const agentId = input.agentId;
+    return this.runLifecycleMutation(agentId, () =>
+      this.requireRegistry().updatePinnedStreamTags(agentId, (tags) =>
+        applyTagPin(tags, input.tag, input.pinned),
+      ),
+    );
   }
 
   async updateCompanionEntry(input: StreamEntryUpdate): Promise<void> {

@@ -92,6 +92,7 @@ function createServerInfo(): DaemonServerInfo {
 function createRuntime(options?: {
   engine?: AudioEngine;
   getServerInfo?: (serverId: string) => DaemonServerInfo | null;
+  recordDiagnostic?: (input: unknown) => void;
 }) {
   const engine = options?.engine ?? createAudioEngineMock();
   const runtime = createVoiceRuntime({
@@ -99,6 +100,7 @@ function createRuntime(options?: {
     getServerInfo: options?.getServerInfo ?? (() => createServerInfo()),
     activateKeepAwake: vi.fn().mockResolvedValue(undefined),
     deactivateKeepAwake: vi.fn().mockResolvedValue(undefined),
+    recordDiagnostic: options?.recordDiagnostic,
   });
 
   return { runtime, engine };
@@ -973,6 +975,87 @@ describe("voice runtime", () => {
 
     expect(listener).not.toHaveBeenCalled();
     unsubscribe();
+  });
+});
+
+describe("voice failure diagnostics", () => {
+  it("records host input errors and failure kinds with the active agent and host", async () => {
+    const recordDiagnostic = vi.fn();
+    const adapter = createSessionAdapter();
+    const { runtime } = createRuntime({ recordDiagnostic });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    runtime.onInputError(
+      "server-1",
+      "Speech recognition failed. Stop and restart voice to reconnect.",
+    );
+    expect(recordDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "voice",
+        code: "host_input_error",
+        message: "Speech recognition failed. Stop and restart voice to reconnect.",
+        agentId: "agent-1",
+        serverId: "server-1",
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(recordDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "voice", code: "recognition-failed" }),
+      ),
+    );
+    await runtime.destroy();
+  });
+
+  it("records each distinct GPT Realtime error the overlay shows, once", async () => {
+    const recordDiagnostic = vi.fn();
+    const adapter = createSessionAdapter();
+    const realtime = {
+      provider: "openai-realtime" as const,
+      destination: "assistant" as const,
+      connection: "connected" as const,
+      mode: "conversation" as const,
+      epoch: "epoch-1",
+      draft: "",
+      muted: false,
+      error: null,
+      omittedContextEntries: 0,
+    };
+    vi.mocked(adapter.setVoiceMode).mockImplementation(async (_enabled, _agent, input) => ({
+      attachmentId: input?.attachmentId,
+      generation: "g1",
+      realtime,
+      isMuted: false,
+      voiceCommandsEnabled: false,
+    }));
+    const { runtime } = createRuntime({
+      recordDiagnostic,
+      getServerInfo: () => ({
+        ...createServerInfo(),
+        features: { voiceConcurrentInput: true, openaiRealtimeVoice: true },
+      }),
+    });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1", "openai-realtime");
+    const rejected = {
+      ...realtime,
+      connection: "unavailable" as const,
+      muted: true,
+      error:
+        "GPT Realtime rejected an event (conversation_already_has_active_response: busy). Microphone paused; retry or explicitly choose Paseo voice.",
+    };
+    runtime.onRealtimeState("server-1", rejected);
+    runtime.onRealtimeState("server-1", rejected);
+    const realtimeRecords = recordDiagnostic.mock.calls.filter(
+      ([input]) => (input as { code?: string }).code === "realtime_state_error",
+    );
+    expect(realtimeRecords).toHaveLength(1);
+    expect(realtimeRecords[0][0]).toMatchObject({
+      source: "voice",
+      operation: "realtime:unavailable",
+      message: rejected.error,
+      agentId: "agent-1",
+    });
+    await runtime.destroy();
   });
 });
 

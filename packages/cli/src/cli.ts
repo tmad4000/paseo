@@ -1,3 +1,4 @@
+import { createShareCommand } from "./commands/share.js";
 import { pairCommand } from "./commands/daemon/pair.js";
 import { Command, Option } from "commander";
 import { createAgentCommand } from "./commands/agent/index.js";
@@ -10,6 +11,8 @@ import { createScheduleCommand } from "./commands/schedule/index.js";
 import { createSpeechCommand } from "./commands/speech/index.js";
 import { createScriptCommand } from "./commands/script/index.js";
 import { createTerminalCommand } from "./commands/terminal/index.js";
+import { createQueueCommand } from "./commands/queue/index.js";
+import { createDiagnosticsCommand } from "./commands/diagnostics/index.js";
 import { createUiCommand } from "./commands/ui/index.js";
 import { createWorktreeCommand } from "./commands/worktree/index.js";
 import { createWorkspaceCommand } from "./commands/workspace/index.js";
@@ -138,6 +141,9 @@ export function createCli(): Command {
 
   // Terminal commands
   program.addCommand(createTerminalCommand());
+  program.addCommand(createQueueCommand());
+  program.addCommand(createShareCommand());
+  program.addCommand(createDiagnosticsCommand());
 
   // UI commands
   program.addCommand(createUiCommand());

@@ -78,9 +78,50 @@ Runtime-safe settings include relay enablement, MCP settings, browser tools, hos
 
 New homes keep relay disabled when you remove `daemon.relay.enabled`. A daemon whose config already omitted this field when it started keeps the legacy relay-enabled behavior for compatibility. Set `daemon.relay.enabled` explicitly when editing an older config.
 
-Listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
+Listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy and conversation-sharing settings, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
 
 Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, relay endpoints and TLS, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
+
+## Conversation share links (Paseo Fork)
+
+Sharing is off until you configure a separate share-only listener:
+
+```json
+{
+  "version": 1,
+  "daemon": {
+    "sharing": {
+      "listen": "127.0.0.1:8443",
+      "publicBaseUrl": "https://shares.example.com",
+      "ownerDisplayName": "Jacob"
+    }
+  }
+}
+```
+
+Publish **only that listener** through your reverse proxy or tunnel. Never publish the daemon's
+main listener for guest access. `publicBaseUrl` is the guest-facing HTTP(S) base URL; it is never
+guessed from request headers. `ownerDisplayName` defaults to the OS user name. These settings
+require a coordinated host restart; editing them does not start a listener immediately.
+
+Foreground deployments can use `PASEO_SHARING_LISTEN`, `PASEO_SHARING_PUBLIC_BASE_URL`, and
+`PASEO_SHARING_OWNER_NAME`. The share listener limits each connecting IP to 60 requests per minute
+and 10 unavailable-share requests. It does not trust forwarded IP headers; configure per-client
+limits on a reverse proxy when several guests share its connection address.
+
+Open a conversation's **Share…** action to review its redacted snapshot, choose an expiry
+(default seven days), and create the link. Tool arguments, output, attachments and images are
+never shared. Pattern-based redaction can miss secrets; review the preview. Changes after
+creation do not change the snapshot. **Manage shares** in the dialog or host connection settings
+shows views and lets you revoke or delete a link. Revocation takes effect on the next request.
+A guest who already copied the conversation can retain that copy.
+
+The link is a capability: anyone holding it can read that snapshot. Its token is returned once,
+never stored in plaintext, and cannot be copied again from Manage shares. Create another link
+if you lose it. URL path tokens can appear in reverse-proxy access logs; protect those logs.
+
+CLI: `paseo share create <agent> --expires 7d`, `paseo share preview <agent> --json`,
+`paseo share ls --json`, `paseo share revoke <share-id>`, and `paseo share delete <share-id>`.
 
 ## Agent providers
 

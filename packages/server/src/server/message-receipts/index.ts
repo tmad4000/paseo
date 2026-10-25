@@ -69,6 +69,34 @@ export class MessageReceipts {
       }));
   }
 
+  /** Newest first. Reads every receipt file; meant for occasional inspection, not hot paths. */
+  async listForAgent(
+    agentId: string,
+  ): Promise<Array<{ messageId: string; state: string; createdAt: string | null }>> {
+    const files = await readdir(this.directory).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+      throw error;
+    });
+    const records = await Promise.all(
+      files
+        .filter((name) => name.endsWith(".json"))
+        .map((name) => readReceipt(path.join(this.directory, name))),
+    );
+    return records
+      .filter((record): record is NonNullable<typeof record> => record !== null)
+      .filter((record) => record.agentId === agentId && !!record.messageId)
+      .map((record) => ({
+        messageId: record.messageId!,
+        state:
+          record.state === "pending" &&
+          this.pending.has(digest(["send", record.agentId, record.messageId]))
+            ? "sending"
+            : record.state,
+        createdAt: record.createdAt ?? null,
+      }))
+      .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+  }
+
   async get(
     agentId: string,
     messageId: string,

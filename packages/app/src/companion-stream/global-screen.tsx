@@ -20,7 +20,9 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
 import { EntryCard } from "./feed";
+import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
+import { useStreamTagFilter } from "./use-stream-tag-filter";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -36,13 +38,17 @@ export function GlobalStreamScreen() {
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
   const query = useGlobalStream({
     serverId: host === ALL_HOSTS_OPTION_ID ? null : host,
     filter,
     search: useDebouncedValue(search, 250),
+    tags,
     includeArchived,
     enabled: focused,
   });
+  const tagFilter = useStreamTagFilter(query, setTags);
+  const tagPress = query.supportsTags ? tagFilter.add : undefined;
   const {
     refetch,
     fetchNextPage,
@@ -60,8 +66,10 @@ export function GlobalStreamScreen() {
   }, [fetchNextPage]);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
   const renderItem = useCallback(
-    ({ item }: { item: GlobalStreamRow }) => <GlobalStreamCard row={item} onSaved={refresh} />,
-    [refresh],
+    ({ item }: { item: GlobalStreamRow }) => (
+      <GlobalStreamCard row={item} onSaved={refresh} onTagPress={tagPress} />
+    ),
+    [refresh, tagPress],
   );
   const tabs = useMemo(
     () => [
@@ -83,6 +91,16 @@ export function GlobalStreamScreen() {
           testID="global-stream-search"
         />
         <SegmentedControl value={filter} onValueChange={setFilter} options={tabs} />
+        {query.supportsTags ? (
+          <TagCloud
+            counts={query.tagCounts}
+            pinned={query.pinnedTags}
+            active={tags}
+            onToggle={tagFilter.toggle}
+            onTogglePin={tagFilter.setPinned}
+            error={tagFilter.error}
+          />
+        ) : null}
         <View style={styles.controls}>
           <HostFilter
             hosts={hosts}
@@ -116,6 +134,13 @@ export function GlobalStreamScreen() {
       refresh,
       isFetching,
       notices,
+      tags,
+      query.supportsTags,
+      query.tagCounts,
+      query.pinnedTags,
+      tagFilter.toggle,
+      tagFilter.setPinned,
+      tagFilter.error,
     ],
   );
   const empty = useMemo(
@@ -157,7 +182,15 @@ export function GlobalStreamScreen() {
   );
 }
 
-export function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSaved: () => void }) {
+export function GlobalStreamCard({
+  row,
+  onSaved,
+  onTagPress,
+}: {
+  row: GlobalStreamRow;
+  onSaved: () => void;
+  onTagPress?: (tag: string) => void;
+}) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
@@ -220,6 +253,7 @@ export function GlobalStreamCard({ row, onSaved }: { row: GlobalStreamRow; onSav
           onReplyInChat={openChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
+          onTagPress={onTagPress}
           disabled={busy || connection !== "online" || !supportsWrites}
         />
       ) : (
