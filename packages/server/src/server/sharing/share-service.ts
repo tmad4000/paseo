@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   DEFAULT_REDACTION,
   type RedactionProfile,
@@ -7,6 +7,7 @@ import {
 } from "@getpaseo/protocol/sharing";
 import type { AgentTimelineStore } from "../agent/agent-timeline-store-types.js";
 import { redactTimeline, type SnapshotMetadata } from "./redaction.js";
+import { prepareShareSnapshot } from "./render.js";
 import { ShareStore, hashToken, sharePayload } from "./share-store.js";
 
 export class SharingError extends Error {
@@ -48,7 +49,7 @@ export class ShareService {
       source,
       redaction,
     );
-    return { ...snapshot, sourceDigest: snapshotDigest(snapshot) };
+    return prepareShareSnapshot(snapshot).snapshot;
   }
   async create(
     source: ShareSource,
@@ -84,8 +85,8 @@ export class ShareService {
     validateExpiry(expiresAt);
     const rows = await this.timeline.getCommittedRows(source.agentId);
     const redaction = options.redaction ?? DEFAULT_REDACTION;
-    const snapshot = redactTimeline(rows, source, redaction);
-    snapshot.sourceDigest = snapshotDigest(snapshot);
+    const prepared = prepareShareSnapshot(redactTimeline(rows, source, redaction));
+    const snapshot = prepared.snapshot;
     if (options.previewDigest && options.previewDigest !== snapshot.sourceDigest)
       throw new SharingError(
         "sharing_preview_changed",
@@ -107,7 +108,7 @@ export class ShareService {
       viewCount: 0,
       lastViewedAt: null,
     };
-    await this.store.create(record, snapshot);
+    await this.store.create(record, prepared);
     const share = sharePayload(record);
     this.publish(share);
     return { share, url: `${options.publicBaseUrl.replace(/\/$/, "")}/s/${token}` };
@@ -167,9 +168,4 @@ export interface SharingSessionOptions {
   config?: { listen: string | null; publicBaseUrl: string | null; ownerDisplayName: string };
   /** False when the configured share listener failed to bind; create must refuse. */
   isListening?: () => boolean;
-}
-
-function snapshotDigest(snapshot: ShareSnapshot): string {
-  const { createdAt: _createdAt, sourceDigest: _digest, ...content } = snapshot;
-  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
 }

@@ -6,9 +6,10 @@ import {
   ShareRecordPayloadSchema,
   ShareSnapshotSchema,
   type ShareRecordPayload,
-  type ShareSnapshot,
 } from "@getpaseo/protocol/sharing";
-import { writeJsonFileAtomic } from "../atomic-file.js";
+import { writeFileAtomic, writeJsonFileAtomic } from "../atomic-file.js";
+
+import { renderShareArtifacts, type PreparedShareSnapshot, type ShareBytes } from "./render.js";
 
 export const ShareRecordSchema = ShareRecordPayloadSchema.extend({
   tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -27,9 +28,9 @@ export const shareIsActive = (record: ShareRecordPayload, now = Date.now()): boo
 export class ShareStore {
   private pending: Promise<unknown> = Promise.resolve();
   constructor(private readonly sharesDir: string) {}
-  private file(id: string, snapshot = false): string {
+  private file(id: string, kind: "record" | "json" | "html" = "record"): string {
     if (!/^shr_[a-f0-9]{16}$/.test(id)) throw new Error("Invalid share id");
-    return path.join(this.sharesDir, `${id}${snapshot ? ".snapshot" : ""}.json`);
+    return path.join(this.sharesDir, `${id}${kind === "record" ? ".json" : `.snapshot.${kind}`}`);
   }
   private serial<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.pending.then(operation);
@@ -65,12 +66,15 @@ export class ShareStore {
       (await this.readAll()).filter((r) => !agentId || r.agentId === agentId),
     );
   }
-  create(record: ShareRecord, snapshot: ShareSnapshot): Promise<void> {
+  create(record: ShareRecord, prepared: PreparedShareSnapshot): Promise<void> {
     return this.serial(async () => {
       const value = ShareRecordSchema.parse(record);
       if (await this.read(value.id)) throw new Error("Share already exists");
+      // Validate snapshot JSON on owner writes, never on a guest read.
+      ShareSnapshotSchema.parse(JSON.parse(prepared.json.toString("utf8")));
       // Publish the capability only after its complete snapshot is durable.
-      await writeJsonFileAtomic(this.file(value.id, true), ShareSnapshotSchema.parse(snapshot));
+      await writeFileAtomic(this.file(value.id, "html"), prepared.html);
+      await writeFileAtomic(this.file(value.id, "json"), prepared.json);
       await writeJsonFileAtomic(this.file(value.id), value);
     });
   }
@@ -79,6 +83,14 @@ export class ShareStore {
       const record = await this.read(id);
       if (!record) throw new Error("Share not found");
       const next = ShareRecordSchema.parse(change(record));
+      if (next.title !== record.title) {
+        const snapshot = ShareSnapshotSchema.parse(
+          JSON.parse(await fs.readFile(this.file(id, "json"), "utf8")),
+        );
+        const prepared = renderShareArtifacts({ ...snapshot, title: next.title });
+        await writeFileAtomic(this.file(id, "html"), prepared.html);
+        await writeFileAtomic(this.file(id, "json"), prepared.json);
+      }
       await writeJsonFileAtomic(this.file(id), next);
       return next;
     });
@@ -87,10 +99,11 @@ export class ShareStore {
     return this.serial(async () => {
       // Remove authority first; a leftover snapshot can never be served.
       await fs.rm(this.file(id), { force: true });
-      await fs.rm(this.file(id, true), { force: true });
+      await fs.rm(this.file(id, "json"), { force: true });
+      await fs.rm(this.file(id, "html"), { force: true });
     });
   }
-  view(token: string): Promise<ShareSnapshot | null> {
+  view(token: string): Promise<ShareBytes | null> {
     return this.serial(async () => {
       if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
       const digest = Buffer.from(hashToken(token), "hex");
@@ -98,16 +111,15 @@ export class ShareStore {
         timingSafeEqual(digest, Buffer.from(r.tokenHash, "hex")),
       );
       if (!record || !shareIsActive(record)) return null;
-      const snapshot = ShareSnapshotSchema.parse(
-        JSON.parse(await fs.readFile(this.file(record.id, true), "utf8")),
-      );
+      const html = await fs.readFile(this.file(record.id, "html"));
+      const json = await fs.readFile(this.file(record.id, "json"));
       // View accounting must not prevent reading an otherwise valid immutable snapshot.
       await writeJsonFileAtomic(this.file(record.id), {
         ...record,
         viewCount: record.viewCount + 1,
         lastViewedAt: new Date().toISOString(),
       }).catch(() => undefined);
-      return { ...snapshot, title: record.title };
+      return { html, json };
     });
   }
 }

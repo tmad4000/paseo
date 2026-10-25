@@ -44,6 +44,8 @@ export const zhCN: TranslationResources = {
       "30d": "30天",
     },
     omitted: {
+      earlier_one: "此快照未包含 {{count}} 条较早的消息",
+      earlier_other: "此快照未包含 {{count}} 条较早的消息",
       tool_calls_one: "已隐藏 {{count}} 次工具调用",
       tool_calls_other: "已隐藏 {{count}} 次工具调用",
       reasoning_one: "已隐藏 {{count}} 条推理",

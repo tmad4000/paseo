@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import net, { type AddressInfo } from "node:net";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -67,13 +68,22 @@ describe("snapshot sharing through the daemon", () => {
       const address = daemon.daemon.getShareAddress() as AddressInfo;
       const guestUrl = `http://127.0.0.1:${address.port}${new URL(result.url).pathname}`;
       const response = await fetch(guestUrl);
-      const html = await response.text();
+      const htmlBytes = Buffer.from(await response.arrayBuffer());
+      const html = htmlBytes.toString();
+      expect(htmlBytes).toEqual(
+        await readFile(path.join(daemon.paseoHome, "shares", `${result.share.id}.snapshot.html`)),
+      );
+      expect(html).toContain("<title>Shared conversation</title>");
       expect(response.status).toBe(200);
       expect(html).toContain("Explain snapshot sharing");
       expect(html).toContain("Only this fixed conversation is shared.");
       expect(html).toContain("1 tool call hidden");
       expect(html).not.toMatch(/sk-1234567890abcdefghijklmnop|private command/);
-      const snapshot = await (await fetch(`${guestUrl}.json`)).json();
+      const jsonBytes = Buffer.from(await (await fetch(`${guestUrl}.json`)).arrayBuffer());
+      expect(jsonBytes).toEqual(
+        await readFile(path.join(daemon.paseoHome, "shares", `${result.share.id}.snapshot.json`)),
+      );
+      const snapshot = JSON.parse(jsonBytes.toString());
       expect(snapshot.messages).toEqual(preview.messages);
       await clients[0]!.revokeShareLink(result.share.id);
       expect((await fetch(guestUrl)).status).toBe(404);

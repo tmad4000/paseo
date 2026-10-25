@@ -45,6 +45,8 @@ export const ja: TranslationResources = {
       "30d": "30日間",
     },
     omitted: {
+      earlier_one: "このスナップショットには以前のメッセージ{{count}}件が含まれていません",
+      earlier_other: "このスナップショットには以前のメッセージ{{count}}件が含まれていません",
       tool_calls_one: "ツール呼び出し {{count}} 件を非表示",
       tool_calls_other: "ツール呼び出し {{count}} 件を非表示",
       reasoning_one: "推論 {{count}} 件を非表示",

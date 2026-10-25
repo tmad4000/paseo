@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ShareService } from "./share-service.js";
+import { DEFAULT_REDACTION } from "@getpaseo/protocol/sharing";
+import { prepareShareSnapshot, MAX_SHARE_HTML_BYTES } from "./render.js";
+import { hashToken } from "./share-store.js";
 import type { AgentTimelineRow } from "../agent/agent-timeline-store-types.js";
 
 const source = {
@@ -27,7 +30,119 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 const tokenFrom = (url: string) => url.split("/").at(-1)!;
+const viewedSnapshot = async (url: string) => {
+  const bytes = await service.store.view(tokenFrom(url));
+  return bytes ? JSON.parse(bytes.json.toString("utf8")) : null;
+};
 describe("share service", () => {
+  it("stores the same bounded 5,000-row preview and publishes both artifacts before the record", async () => {
+    timeline = Array.from({ length: 5000 }, (_, i) => ({
+      seq: i + 1,
+      timestamp: source.createdAt,
+      item: { type: "user_message", messageId: `row${i}`, text: `Message ${i}` },
+    }));
+    const preview = await service.preview(source);
+    expect(preview.messages).toHaveLength(501);
+    expect(preview.messages[0]).toMatchObject({ kind: "omitted", reason: "earlier", count: 4500 });
+    expect(preview.messages[1]).toMatchObject({ text: "Message 4500" });
+    const result = await service.create(
+      { ...source, createdAt: "2026-10-25T12:00:00Z" },
+      { ...options, previewDigest: preview.sourceDigest },
+    );
+    expect((await viewedSnapshot(result.url)).messages).toEqual(preview.messages);
+    const html = await readFile(path.join(directory, `${result.share.id}.snapshot.html`));
+    const json = await readFile(path.join(directory, `${result.share.id}.snapshot.json`));
+    expect(html.toString()).toContain("4500 earlier messages are not included in this snapshot");
+    expect(await service.store.view(tokenFrom(result.url))).toEqual({ html, json });
+  });
+  it("uses the same rendered-byte bound in preview, create and stored JSON", async () => {
+    timeline = [0, 1, 2].map((index) => ({
+      seq: index + 1,
+      timestamp: source.createdAt,
+      item: {
+        type: "user_message",
+        messageId: `m${index}`,
+        text: index === 2 ? "Latest" : "🦉".repeat(300000),
+      },
+    }));
+    const preview = await service.preview(source);
+    const result = await service.create(source, {
+      ...options,
+      previewDigest: preview.sourceDigest,
+    });
+    const bytes = (await service.store.view(tokenFrom(result.url)))!;
+    expect(bytes.html.byteLength).toBeLessThanOrEqual(MAX_SHARE_HTML_BYTES);
+    expect(preview.messages).toMatchObject([
+      { reason: "earlier", count: 1 },
+      { id: "m1" },
+      { id: "m2" },
+    ]);
+    expect(JSON.parse(bytes.json.toString()).messages).toEqual(preview.messages);
+  });
+  it.each(["html", "json"])(
+    "does not publish authority if the %s artifact cannot be written",
+    async (extension) => {
+      const id = "shr_0123456789abcdef";
+      const token = "x".repeat(43);
+      await mkdir(path.join(directory, `${id}.snapshot.${extension}`));
+      const prepared = prepareShareSnapshot(await service.preview(source));
+      await expect(
+        service.store.create(
+          {
+            id,
+            agentId: source.agentId,
+            tokenHash: hashToken(token),
+            mode: "snapshot",
+            title: source.title,
+            redaction: DEFAULT_REDACTION,
+            createdAt: source.createdAt,
+            expiresAt: null,
+            revokedAt: null,
+            viewCount: 0,
+            lastViewedAt: null,
+          },
+          prepared,
+        ),
+      ).rejects.toThrow();
+      expect(await service.list()).toEqual([]);
+      expect(await service.store.view(token)).toBeNull();
+      await expect(readFile(path.join(directory, `${id}.json`))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+  it("rewrites HTML and JSON from the stored snapshot on title update, preserving its messages", async () => {
+    const result = await service.create(source, options);
+    const before = await viewedSnapshot(result.url);
+    timeline.push({
+      seq: 2,
+      timestamp: source.createdAt,
+      item: { type: "user_message", text: "not in the snapshot" },
+    });
+    await service.update(result.share.id, { title: "A new <title>" });
+    const bytes = (await service.store.view(tokenFrom(result.url)))!;
+    expect(bytes.html.toString()).toContain("<title>Shared conversation</title>");
+    expect(bytes.html.toString()).toContain("<h1>A new &lt;title&gt;</h1>");
+    expect(bytes.html.toString()).not.toContain("not in the snapshot");
+    expect(JSON.parse(bytes.json.toString())).toMatchObject({
+      title: "A new <title>",
+      messages: before.messages,
+    });
+    const original = bytes;
+    await expect(
+      service.update(result.share.id, { title: "🦉".repeat(MAX_SHARE_HTML_BYTES / 4) }),
+    ).rejects.toThrow("size limit");
+    expect(await service.store.view(tokenFrom(result.url))).toEqual(original);
+  });
+  it("does not render JSON-only older snapshots from a guest request", async () => {
+    const result = await service.create(source, options);
+    await rm(path.join(directory, `${result.share.id}.snapshot.html`));
+    await expect(service.store.view(tokenFrom(result.url))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await service.update(result.share.id, { title: "Owner regenerated" });
+    expect((await viewedSnapshot(result.url)).title).toBe("Owner regenerated");
+  });
   it("records the highest source sequence when projected display order differs", async () => {
     timeline = [
       {
@@ -62,7 +177,7 @@ describe("share service", () => {
       previewDigest: current.sourceDigest,
     });
     await service.update(result.share.id, { title: "password=hidden" });
-    expect(await service.store.view(tokenFrom(result.url))).toMatchObject({
+    expect(await viewedSnapshot(result.url)).toMatchObject({
       title: "password=[secret hidden]",
       messages: current.messages,
     });
@@ -86,12 +201,12 @@ describe("share service", () => {
       timestamp: source.createdAt,
       item: { type: "assistant_message", text: "later" },
     });
-    expect(JSON.stringify(await service.store.view(tokenFrom(result.url)))).not.toContain("later");
+    expect(JSON.stringify(await viewedSnapshot(result.url))).not.toContain("later");
     expect(await readFile(path.join(directory, `${result.share.id}.snapshot.json`), "utf8")).toBe(
       before,
     );
   });
-  it("revokes idempotently and deletes both files", async () => {
+  it("revokes idempotently and deletes the record and both artifacts", async () => {
     const result = await service.create(source, options);
     const revoked = await service.revoke(result.share.id);
     expect(await service.revoke(result.share.id)).toEqual(revoked);
@@ -119,7 +234,7 @@ describe("share service", () => {
       service.update(result.share.id, { redaction: result.share.redaction }),
     ).rejects.toMatchObject({ code: "snapshot_immutable" });
     await service.update(result.share.id, { title: "Changed", expiresAt: null });
-    expect(await service.store.view(tokenFrom(result.url))).toMatchObject({ title: "Changed" });
+    expect(await viewedSnapshot(result.url)).toMatchObject({ title: "Changed" });
   });
   it("serializes concurrent views, expiry updates and revoke without restoring access", async () => {
     const result = await service.create(source, options);
