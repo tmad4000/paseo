@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { formatMessageTimestamp } from "@/utils/time";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { describeEntry, splitEntryText } from "./entry-labels";
 import { HashtagText } from "./hashtag-text";
 
@@ -71,6 +72,7 @@ export function EntryCard({
       </View>
 
       <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
+      <PinLinks entry={entry} serverId={serverId} />
       {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
 
       {entry.truncated ? (
@@ -204,6 +206,44 @@ function EntryBody({
         <HashtagText text={rest} style={styles.body} numberOfLines={5} onTagPress={onTagPress} />
       ) : null}
       {answer}
+    </View>
+  );
+}
+
+/** Agent-curated pins (set_stream_pin) may carry a link and a source conversation. */
+function PinLinks({ entry, serverId }: { entry: CompanionEntry; serverId?: string }) {
+  const { t } = useTranslation();
+  const link = entry.kind === "pin" ? entry.link : undefined;
+  const sourceAgentId = entry.kind === "pin" ? entry.sourceAgentId : undefined;
+  const openLink = useCallback(() => {
+    if (link) void openExternalUrl(link);
+  }, [link]);
+  const openSource = useCallback(() => {
+    if (serverId && sourceAgentId) navigateToAgent({ serverId, agentId: sourceAgentId });
+  }, [serverId, sourceAgentId]);
+  if (!link && !sourceAgentId) return null;
+  return (
+    <View style={styles.details} testID="companion-entry-pin-links">
+      {link ? (
+        <Text selectable style={styles.description} numberOfLines={1}>
+          {link}
+        </Text>
+      ) : null}
+      {link ? (
+        <Button variant="outline" onPress={openLink}>
+          {t("agentPanel.stream.card.openLink")}
+        </Button>
+      ) : null}
+      {sourceAgentId && serverId ? (
+        <Button variant="outline" onPress={openSource}>
+          {t("agentPanel.stream.card.openPinSource")}
+        </Button>
+      ) : null}
+      {sourceAgentId && !serverId ? (
+        <Text selectable style={styles.description}>
+          {t("agentPanel.stream.card.pinSource", { id: sourceAgentId })}
+        </Text>
+      ) : null}
     </View>
   );
 }

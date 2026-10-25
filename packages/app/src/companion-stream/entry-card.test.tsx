@@ -47,9 +47,12 @@ vi.mock("@/components/markdown/renderer", () => ({
   MarkdownRenderer: ({ text }: { text: string }) => <div data-testid="markdown">{text}</div>,
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
+vi.mock("@/utils/open-external-url", () => ({ openExternalUrl: vi.fn() }));
 vi.mock("@/utils/time", () => ({ formatMessageTimestamp: () => "Oct 24, 2:10 PM" }));
 
 import { EntryCard } from "./entry-card";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { openExternalUrl } from "@/utils/open-external-url";
 
 const ask: CompanionEntry = {
   id: "ask:ship",
@@ -81,6 +84,16 @@ const quote: CompanionEntry = {
   timestamp: ask.timestamp,
   text: "The tension is the teaching.",
   truncated: false,
+};
+
+const curated: CompanionEntry = {
+  id: "pin:hub",
+  kind: "pin",
+  timestamp: ask.timestamp,
+  text: "Release checklist",
+  truncated: false,
+  link: "https://example.com/release",
+  sourceAgentId: "agent-source",
 };
 
 function renderCard(entry: CompanionEntry) {
@@ -162,5 +175,23 @@ describe("EntryCard", () => {
     expect(view.getByText("Remaining: Waiting for review")).toBeTruthy();
     expect(view.getByText("Evidence so far: Unit tests pass")).toBeTruthy();
     expect(view.getByText("Done").closest("button")?.disabled).toBe(true);
+  });
+
+  it("renders an agent pin's link and source conversation as actions", () => {
+    const view = render(
+      <EntryCard
+        entry={curated}
+        serverId="srv"
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(view.getByText("https://example.com/release")).toBeTruthy();
+    fireEvent.click(view.getByText("Open link"));
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/release");
+    fireEvent.click(view.getByText("Open source session"));
+    expect(navigateToAgent).toHaveBeenCalledWith({ serverId: "srv", agentId: "agent-source" });
   });
 });

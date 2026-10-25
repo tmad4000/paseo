@@ -595,6 +595,9 @@ export const es: TranslationResources = {
         remainingUnspecified: "Not yet specified",
         sourceMessage: "Source message: {{id}}",
         openDelegated: "Open delegated session",
+        openLink: "Open link",
+        openPinSource: "Open source session",
+        pinSource: "Source: {{id}}",
       },
     },
     states: {
