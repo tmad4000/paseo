@@ -151,7 +151,7 @@ Local revocation takes effect on the next request. At the external host, revocat
 within about a minute after a successful host deletion because KV changes propagate. If the host
 cannot be reached, **Revoke pending at the host** stays visible; retries wait one minute, five
 minutes, thirty minutes, then an hour between attempts. Jobs survive daemon restarts and local
-snapshot deletion. Expiry also applies at the host when the daemon is offline.
+snapshot deletion. If a host deletion fails, the pending record remains visible until it succeeds. Expiry also applies at the host when the daemon is offline.
 A guest who already copied the conversation can retain that copy.
 
 The link is a capability: anyone holding it can read that snapshot. Its token is returned once,

@@ -731,7 +731,8 @@ account/KV IDs, or secret is committed here. The Worker deployment guide owns pr
 
 The durable unpublish queue is `$PASEO_HOME/shares/unpublish-queue.json`. It holds hashes,
 original host URLs and retry clocks without plaintext tokens or admin secrets. Local pending
-records recover an interrupted enqueue. Deleted records leave their queued host cleanup intact.
+records recover an interrupted enqueue. Deletion removes local artifacts immediately and retains the revoked pending record until host
+cleanup succeeds. The queue persists that deletion intent across restarts.
 Changing publisher URLs retains the original job pending until that configuration is restored;
 revoked shares reject metadata edits to prevent republishing them.
 

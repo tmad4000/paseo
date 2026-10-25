@@ -54,7 +54,7 @@ describe("share service", () => {
     expect(await service.store.artifacts(result.share.id)).toEqual(before);
     expect((await service.list())[0]).toEqual(result.share);
   });
-  it("retains failed delete jobs across restarts, honors the backoff, and cleans up without the record", async () => {
+  it("retains pending delete records across restarts, removes local artifacts, and honors the backoff", async () => {
     let failing = true;
     const fetch = vi.fn(
       async (_url: string, init: RequestInit) =>
@@ -71,7 +71,13 @@ describe("share service", () => {
     const result = await service.create(source, { publicBaseUrl: null, configured: false });
     expect(result.url).toMatch(/^https:\/\/shares.example\/s\//);
     await service.delete(result.share.id);
-    expect(await service.list()).toEqual([]);
+    expect(await service.list()).toMatchObject([
+      { id: result.share.id, revokedAt: expect.any(String), publishState: "unpublish_pending" },
+    ]);
+    expect(await service.store.view(tokenFrom(result.url))).toBeNull();
+    await expect(service.store.artifacts(result.share.id)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await service.stop();
     service = new ShareService({ getCommittedRows: async () => timeline }, directory, publisher);
     await service.start();
@@ -84,10 +90,14 @@ describe("share service", () => {
       const before = fetch.mock.calls.length;
       await service.retryUnpublishes(entry.nextAt - 1);
       expect(fetch).toHaveBeenCalledTimes(before);
-      if (attempt === 4) failing = false;
-      await service.retryUnpublishes(entry.nextAt);
+      if (attempt === 4) {
+        failing = false;
+        // An explicit revoke can also finish an already queued deletion.
+        expect((await service.revoke(result.share.id)).publishState).toBeUndefined();
+      } else await service.retryUnpublishes(entry.nextAt);
     }
     expect(await queued()).toEqual([]);
+    expect(await service.list()).toEqual([]);
   });
   it("recovers local pending revocation after a crash before enqueue and refuses to republish revoked content", async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 204 }));

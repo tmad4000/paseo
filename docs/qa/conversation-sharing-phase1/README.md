@@ -26,7 +26,8 @@ redacted HTML/JSON equal stored artifacts; external URL construction; title and 
 failed PUT reports `share_publish_failed` with no extra record/artifacts; failed DELETE retains
 local revocation and a durable pending job; the real one-minute timer retries successfully and
 clears pending state. A second test proves publisher URL precedence with a working local listener.
-Service tests cover delete-job recovery after restart, crash recovery before enqueue, all backoff
+Service tests cover pending delete-record recovery after restart with local artifacts already removed,
+crash recovery before enqueue, all backoff
 steps, host-config changes, failed metadata publication, and refusal to republish revoked shares.
 Worker tests cover native Request handling, local-listener 404/body/security-header parity, expiry
 metadata, TTL bounds, malformed bodies and 3 MiB rejection, authentication, methods and rate limits.

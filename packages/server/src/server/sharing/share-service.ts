@@ -38,6 +38,7 @@ const QueueEntrySchema = z.object({
   baseUrl: z.string(),
   attempts: z.number().int().nonnegative(),
   nextAt: z.number(),
+  deleteAfter: z.boolean().optional(),
 });
 type QueueEntry = z.infer<typeof QueueEntrySchema>;
 const RETRY_DELAYS = [60_000, 300_000, 1_800_000, 3_600_000];
@@ -122,7 +123,10 @@ export class ShareService {
       return;
     }
     const record = (await this.store.list()).find((value) => value.id === entry.id);
-    if (record) {
+    if (entry.deleteAfter) {
+      await this.store.delete(entry.id);
+      this.publish(null, entry.id);
+    } else if (record) {
       const updated = await this.store.update(
         entry.id,
         ({ publishState: _state, ...current }) => current,
@@ -342,21 +346,32 @@ export class ShareService {
   }
   async revoke(id: string): Promise<ShareRecordPayload> {
     return this.serial(async () => {
-      await this.revokeLocal(id);
+      const revoked = await this.revokeLocal(id);
       const entry = this.queue.find((value) => value.id === id);
       if (entry) await this.unpublish(entry);
       this.schedule();
-      return sharePayload((await this.store.list()).find((record) => record.id === id)!);
+      const current = (await this.store.list()).find((record) => record.id === id);
+      if (current) return sharePayload(current);
+      // A retry of an earlier delete can finish during this explicit revoke.
+      const { publishState: _state, ...deleted } = revoked;
+      return sharePayload(deleted);
     });
   }
   async delete(id: string): Promise<void> {
     return this.serial(async () => {
       await this.revokeLocal(id);
-      // The queue retains the target and hash even after the local record is removed.
-      await this.store.delete(id);
-      this.publish(null, id);
       const entry = this.queue.find((value) => value.id === id);
-      if (entry) await this.unpublish(entry);
+      if (entry) {
+        // Retain a revoked pending record until the host confirms deletion. Persist
+        // deletion intent before removing local artifacts so restart can finish it.
+        entry.deleteAfter = true;
+        await this.saveQueue();
+        await this.store.deleteArtifacts(id);
+        await this.unpublish(entry);
+      } else {
+        await this.store.delete(id);
+        this.publish(null, id);
+      }
       this.schedule();
     });
   }

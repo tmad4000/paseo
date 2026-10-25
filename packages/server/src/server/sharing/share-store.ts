@@ -106,6 +106,12 @@ export class ShareStore {
       return next;
     });
   }
+  deleteArtifacts(id: string): Promise<void> {
+    return this.serial(async () => {
+      await fs.rm(this.file(id, "json"), { force: true });
+      await fs.rm(this.file(id, "html"), { force: true });
+    });
+  }
   delete(id: string): Promise<void> {
     return this.serial(async () => {
       // Remove authority first; a leftover snapshot can never be served.
