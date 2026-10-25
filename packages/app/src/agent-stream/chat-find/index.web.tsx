@@ -18,6 +18,7 @@ import { useRetainedPanelActive } from "@/components/retained-panel";
 import { hasActiveWebOverlay } from "@/lib/overlay-root";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { planTimelinePromptJump } from "@/timeline/timeline-sync-plan";
 import { ChatFindModel, type ChatFindFailure } from "./model";
 import { createFindViewport } from "./viewport.web";
@@ -70,6 +71,8 @@ export function ChatFind({
   const [highlightName] = useState(() => `paseo-chat-find-${++nextHighlightId}`);
   const { isInteractive } = usePaneFocus();
   const active = useRetainedPanelActive();
+  const requested = useAgentViewStore((state) => state.findOpen[`${serverId}:${agentId}`] ?? false);
+  const setFindOpen = useAgentViewStore((state) => state.setFindOpen);
   const model = useMemo(
     () =>
       new ChatFindModel({
@@ -99,8 +102,17 @@ export function ChatFind({
   }, [model, epoch, items]);
   useEffect(() => () => model.close(), [model]);
   useEffect(() => {
-    if (!active) model.close();
-  }, [active, model]);
+    if (!active) {
+      model.close();
+      setFindOpen(serverId, agentId, false);
+    }
+  }, [active, model, serverId, agentId, setFindOpen]);
+  useEffect(() => {
+    if (active && requested) {
+      model.open();
+      widget.current?.focus();
+    }
+  }, [active, requested, model]);
   useEffect(() => {
     if (!active || !isInteractive) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -108,6 +120,7 @@ export function ChatFind({
         return;
       if (isFindShortcut(event, findShortcutPlatform())) {
         event.preventDefault();
+        setFindOpen(serverId, agentId, true);
         model.open();
         widget.current?.focus();
       }
@@ -115,11 +128,12 @@ export function ChatFind({
     // React Native TextInput stops bubbling key events, including from the composer.
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [active, isInteractive, model]);
+  }, [active, isInteractive, model, serverId, agentId, setFindOpen]);
   const close = useCallback(() => {
+    setFindOpen(serverId, agentId, false);
     model.close();
     root.current?.focus({ preventScroll: true });
-  }, [model]);
+  }, [model, serverId, agentId, setFindOpen]);
   let status = "";
   if (state.phase === "searching") status = t("paneFind.searching");
   else if (state.phase === "loading") status = t("paneFind.loading");
@@ -133,7 +147,7 @@ export function ChatFind({
       <style>{`::highlight(${highlightName}) { background-color: ${styles.highlight.backgroundColor}; color: ${styles.highlight.color}; }`}</style>
       <SelectedMessage.Provider value={state.selectedItemId}>{children}</SelectedMessage.Provider>
       {state.open && (
-        <View style={styles.overlay} dataSet={WIDGET_DATASET}>
+        <View style={styles.overlay} dataSet={WIDGET_DATASET} pointerEvents="box-none">
           <PaneFind
             ref={widget}
             query={state.query}
@@ -162,8 +176,9 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     top: theme.spacing[2],
     right: theme.spacing[3],
+    left: theme.spacing[3],
     zIndex: 10,
-    maxWidth: "100%",
+    alignItems: "flex-end",
   },
   error: {
     flexDirection: "row",

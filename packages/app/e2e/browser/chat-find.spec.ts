@@ -119,6 +119,72 @@ async function closeFind(page: Page) {
     .toEqual([]);
 }
 
+test("opens Find beside the compact tab title without a keyboard shortcut", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const agent = await seedMockAgentWorkspace({
+    repoPrefix: "chat-find-mobile-",
+    title: "Mobile Find first chat",
+    initialPrompt: "Render the response",
+    featureValues: { mockAssistantResponse: "first-needle first-needle" },
+  });
+  try {
+    await agent.client.waitForFinish(agent.agentId, 15_000);
+    const second = await agent.client.createAgent({
+      provider: "mock",
+      cwd: agent.cwd,
+      workspaceId: agent.workspaceId,
+      title: "Mobile Find second chat",
+      modeId: "load-test",
+      initialPrompt: "Render the second response",
+      featureValues: { mockAssistantResponse: "second-needle" },
+    });
+    await agent.client.waitForFinish(second.id, 15_000);
+    await openAgentRoute(page, agent);
+    await fillComposerDraft(page, "Keep this mobile draft");
+    const find = page.getByRole("button", { name: "Find in chat", exact: true });
+    await expect(find).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("mobile-find-button.png") });
+    await find.click();
+    await expect(query(page)).toBeVisible();
+    await expect(page.getByTestId("agent-view-switcher")).not.toBeVisible();
+    await expectFindStatus(page, "first-needle", "1 of 2");
+    await page.getByRole("button", { name: "Next match", exact: true }).click();
+    await expect(status(page)).toHaveText("2 of 2");
+    await page.getByRole("button", { name: "Previous match", exact: true }).click();
+    await expect(status(page)).toHaveText("1 of 2");
+    await expectComposerDraft(page, "Keep this mobile draft");
+    await page.setViewportSize({ width: 320, height: 740 });
+    await expect(query(page)).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Close Find", exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+    await page.screenshot({ path: testInfo.outputPath("mobile-find-narrow.png") });
+    await page.getByRole("button", { name: "Close Find", exact: true }).click();
+    await expect(query(page)).toHaveCount(0);
+    await expect(page.getByTestId("agent-view-switcher")).toBeVisible();
+    await page.getByTestId("agent-view-artifacts").click();
+    await find.click();
+    await expect(query(page)).toBeVisible();
+    await page.getByRole("button", { name: "Close Find", exact: true }).click();
+
+    // A different tab in the same workspace must search its own conversation.
+    await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: second.id });
+    await find.click();
+    await expectFindStatus(page, "first-needle", "No matches");
+    await expectFindStatus(page, "second-needle", "1 of 1");
+    await page.getByRole("button", { name: "Close Find", exact: true }).click();
+
+    // Desktop retains its existing shortcut instead of duplicating the compact control.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(find).toHaveCount(0);
+  } finally {
+    await agent.cleanup();
+  }
+});
+
 test("loads older history through prompt navigation and finds repeated rendered Markdown", async ({
   page,
 }, testInfo) => {
