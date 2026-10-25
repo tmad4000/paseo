@@ -188,6 +188,10 @@ Save, Done, leaving the input, collapsing the queue, or leaving the workspace at
 changed text. The existing draft store retains the local text and host baseline until the host
 confirms the edit. A stale or failed edit stays recoverable; Done does not discard it.
 
+Clearing all the text of a message with no attachments turns Save into Remove: Save or Done then
+removes the item through the normal Remove path. Leaving the input or the screen with empty text
+keeps the empty draft open instead, so a stray tap cannot delete a message.
+
 Remove is available for host-accepted rows and rows waiting to sync. While removal is unconfirmed,
 the row shows pending or failure feedback and cannot be edited or sent now. Tap Remove to retry a
 failed removal; reconnect also retries it.
