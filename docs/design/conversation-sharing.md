@@ -788,6 +788,10 @@ Exact server and app HTML snapshots were captured under markdown-it 10 before th
 Their output is unchanged under 14.3.2. The app's typographer-on fixture drops `(p)`/`(P)` from the
 set of strings expected to be rewritten; markdown-it 14 leaves it literal. The typographer-off
 copy-preservation assertion still includes both.
+The splitter fixture for an escaped space in an unbracketed reference destination now expects
+literal paragraphs, matching markdown-it 14. Angle-bracket and percent-escaped destinations still
+fold as valid references. The fixture checks exact rendered HTML and whole-versus-split equivalence;
+no production splitter workaround restores the old acceptance.
 
 ### Acceptance, Phase 1c
 

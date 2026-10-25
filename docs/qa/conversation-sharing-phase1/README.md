@@ -15,7 +15,7 @@ The Worker deployment/round-trip status was reported by Fable; this batch did no
 | `packages/app/src/utils/markdown-parser.test.ts`              |      6 | [App Markdown](followups/app-markdown.txt) |
 | `packages/server/src/server/sharing/sharing.e2e.test.ts`      |      5 | [Daemon e2e](followups/e2e.txt)            |
 
-218 focused tests passed. Files ran individually using
+237 focused tests passed. Files ran individually using
 `npx vitest run <file> --bail=1 > /tmp/sharing-followups-<name>.txt 2>&1`.
 The [new prose negatives failed before the redaction fix](followups/redaction-corpus-before.txt);
 [HEAD failed before listener hardening](followups/listener-before.txt), and
@@ -29,9 +29,14 @@ HTTP is real and the daemon e2e uses isolated state. No production process was s
 Before upgrading, two exact HTML snapshots were generated with markdown-it 10:
 [server baseline run](followups/render-baseline.txt), [app baseline run](followups/app-markdown-baseline.txt).
 Those fixtures are unchanged under 14.3.2, including whitespace, Markdown structure, escaping,
-links and the shared page shell. The only existing fixture adjustment removes `(p)`/`(P)` from
+links and the shared page shell. The typographer fixture adjustment removes `(p)`/`(P)` from
 expected typographer-on rewrites because 14 no longer rewrites them; typographer-off literal
-preservation still asserts both. Three generic `command -p` corpus fixtures now name `sshpass`;
+preservation still asserts both. Initial CI also found an outdated escaped-space reference
+fixture ([job excerpt](followups/ci-app-failure.txt), [local reproduction](followups/split-markdown-before.txt)).
+Markdown-it 14 treats `[docs]: docs\ folder/readme` as literal text rather than a reference
+definition. The fixture now expects separate paragraphs and asserts the renderer's exact literal
+HTML plus whole-versus-split equivalence. Bracketed/percent-escaped destinations remain covered.
+No production splitter change was needed. Three generic `command -p` corpus fixtures now name `sshpass`;
 a generic `command -p` is explicitly negative. Canonical unpadded Basic `user:password` pairs
 remain recognized to preserve the supplied `Basic dXNlcjpwYXNz` positive.
 
