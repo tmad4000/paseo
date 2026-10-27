@@ -29,6 +29,7 @@ export type KeyboardActionId =
   | "navigation.forward"
   | "workspace.recent.switch"
   | "recent-sessions.open"
+  | "stream.needs-you.open"
   | "workspace.tab.close.current"
   | "workspace.tab.navigate.index"
   | "workspace.tab.navigate.relative"

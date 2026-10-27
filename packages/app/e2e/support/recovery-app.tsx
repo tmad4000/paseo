@@ -6,7 +6,7 @@ import { registerRootComponent } from "expo";
 import { Link, Redirect, Stack, type Href } from "expo-router";
 import { useCallback, useState, type ComponentProps } from "react";
 import { Button, Text, View } from "react-native";
-import { RootRouter } from "../../src/root-app";
+import { RootRouter } from "../../src/root-router";
 
 const screenOptions = { headerShown: false };
 function Layout() {

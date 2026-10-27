@@ -158,6 +158,26 @@ export function CommandCenterRootActions() {
   const actions = useMemo<CommandCenterContribution[]>(() => {
     const availableActions: CommandCenterContribution[] = [
       {
+        id: "needs-you",
+        group: "actions",
+        groupRank: 0,
+        rank: -1,
+        keywords: ["needs", "you", "input", "decision", "approval", "action", "stream"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          router.navigate("/stream?view=needs_you" as Href);
+        },
+        presentation: {
+          kind: "action",
+          title: t("globalStream.needsYou"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: CircleDashedIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("needs-you", overrides, shortcutPlatform) ?? undefined,
+        },
+      },
+      {
         id: "add-project",
         group: "actions",
         groupRank: 0,

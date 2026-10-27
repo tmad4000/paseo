@@ -4422,6 +4422,7 @@ export const ServerInfoStatusPayloadSchema = z
         streamTags: z.boolean().optional(),
         // COMPAT(streamAnswers): fork feature; tracked-question answers, anchors and seen state.
         streamAnswers: z.boolean().optional(),
+        streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.

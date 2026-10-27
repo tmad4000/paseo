@@ -2,6 +2,7 @@ import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
 import {
   isCompanionEntryPending,
   isUserQuestionEntry,
+  needsUserInput,
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
 import type {
@@ -34,13 +35,17 @@ export interface StreamPage {
 export function listStreamRows(
   sources: Iterable<StreamSource>,
   options: StreamListOptions,
+  serverId?: string,
 ): StreamPage {
+  if (Boolean(options.relatedAgentId) !== Boolean(options.relatedServerId))
+    throw new Error("Related session requires both host and agent identity");
   const search = options.search?.trim().toLocaleLowerCase() ?? "";
   const tags = normalizeStreamTags(options.tags ?? []);
+  const orderTasks = options.asksOnly || options.view === "tasks";
   const rank = (row: StreamRow) =>
-    options.asksOnly && row.item.kind === "entry" && row.item.entry.ask?.state === "done" ? 1 : 0;
+    orderTasks && row.item.kind === "entry" && row.item.entry.ask?.state === "done" ? 1 : 0;
   const compare = (a: StreamRow, b: StreamRow) => rank(a) - rank(b) || compareStreamRows(a, b);
-  const scoped = collectStreamRows(sources, options).filter(
+  const scoped = collectStreamRows(sources, options, serverId).filter(
     (row) =>
       !search ||
       [
@@ -55,20 +60,7 @@ export function listStreamRows(
   // Counts ignore the tag filter itself so the cloud stays put while tags are toggled.
   const tagCounts = countStreamTags(scoped);
   const sorted = scoped.filter((row) => matchesTags(row, tags)).sort(compare);
-  let after: { timestamp: string; id: string; rank: number } | undefined;
-  if (options.cursor) {
-    const decoded: unknown = JSON.parse(Buffer.from(options.cursor, "base64url").toString());
-    if (
-      !Array.isArray(decoded) ||
-      (decoded.length !== 2 && decoded.length !== 3) ||
-      typeof decoded[0] !== "string" ||
-      typeof decoded[1] !== "string" ||
-      (decoded.length === 3 && decoded[2] !== 0 && decoded[2] !== 1)
-    ) {
-      throw new Error("Invalid Stream cursor");
-    }
-    after = { timestamp: decoded[0], id: decoded[1], rank: decoded[2] === 1 ? 1 : 0 };
-  }
+  const after = decodeStreamCursor(options.cursor);
   const remaining = after
     ? sorted.filter((row) => (rank(row) - after!.rank || compareStreamRows(row, after!)) > 0)
     : sorted;
@@ -80,12 +72,28 @@ export function listStreamRows(
       last && remaining.length > page.length
         ? Buffer.from(
             JSON.stringify(
-              options.asksOnly ? [last.timestamp, last.id, rank(last)] : [last.timestamp, last.id],
+              orderTasks ? [last.timestamp, last.id, rank(last)] : [last.timestamp, last.id],
             ),
           ).toString("base64url")
         : null,
     tagCounts,
   };
+}
+
+function decodeStreamCursor(
+  cursor?: string,
+): { timestamp: string; id: string; rank: number } | undefined {
+  if (!cursor) return undefined;
+  const decoded: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString());
+  if (
+    !Array.isArray(decoded) ||
+    (decoded.length !== 2 && decoded.length !== 3) ||
+    typeof decoded[0] !== "string" ||
+    typeof decoded[1] !== "string" ||
+    (decoded.length === 3 && decoded[2] !== 0 && decoded[2] !== 1)
+  )
+    throw new Error("Invalid Stream cursor");
+  return { timestamp: decoded[0], id: decoded[1], rank: decoded[2] === 1 ? 1 : 0 };
 }
 
 function matchesTags(row: StreamRow, tags: readonly string[]): boolean {
@@ -115,18 +123,40 @@ function withTags(entry: CompanionEntry): CompanionEntry {
 }
 
 function matchesEntryFilters(entry: CompanionEntry, options: StreamListOptions): boolean {
+  if (options.view === "tasks" && (!entry.ask || entry.ask.canonicalTask)) return false;
+  if (options.view === "questions" && !isUserQuestionEntry(entry)) return false;
+  if (options.view === "needs_you" && !needsUserInput(entry)) return false;
+  if (options.view === "saved" && entry.kind !== "pin") return false;
   if (options.asksOnly && !entry.ask) return false;
   if (options.userQuestionsOnly && !isUserQuestionEntry(entry)) return false;
   if (options.filter === "pending" && !isCompanionEntryPending(entry)) return false;
   return options.filter !== "pinned" || entry.kind === "pin";
 }
 
+type TaskSessionIndex = ReadonlyMap<string, NonNullable<CompanionEntry["ask"]>["sessions"]>;
+type RowSource = Pick<StreamRow, "agentId" | "agentTitle" | "cwd" | "workspaceId" | "archived">;
+
+function indexTaskSessions(sources: readonly StreamSource[], serverId?: string): TaskSessionIndex {
+  const index = new Map<string, NonNullable<CompanionEntry["ask"]>["sessions"]>();
+  for (const source of sources) {
+    if (source.internal) continue;
+    for (const entry of source.companionEntries ?? []) {
+      if (entry.ask && !entry.ask.canonicalTask)
+        index.set(JSON.stringify([serverId, source.id, entry.id]), entry.ask.sessions);
+    }
+  }
+  return index;
+}
+
 function collectStreamRows(
   sources: Iterable<StreamSource>,
   options: StreamListOptions,
+  serverId?: string,
 ): StreamRow[] {
   const rows: StreamRow[] = [];
-  for (const source of sources) {
+  const allSources = [...sources];
+  const taskSessions = indexTaskSessions(allSources, serverId);
+  for (const source of allSources) {
     if (options.agentId && source.id !== options.agentId) continue;
     if (isHiddenSource(source, options)) continue;
     const base = {
@@ -139,26 +169,47 @@ function collectStreamRows(
     for (const stored of source.companionEntries ?? []) {
       const entry = withTags(stored);
       if (!matchesEntryFilters(entry, options)) continue;
-      rows.push({
-        ...base,
-        id: JSON.stringify([source.id, "entry", entry.id]),
-        timestamp: entry.timestamp,
-        item: { kind: "entry", entry },
-      });
+      if (!matchesRelatedSession(source, entry, options, serverId, taskSessions)) continue;
+      rows.push(projectEntryRow(base, entry, serverId));
     }
-    const entriesOnly = options.asksOnly || options.userQuestionsOnly;
-    if (!entriesOnly && (!options.filter || options.filter === "all")) {
-      for (const artifact of source.artifacts ?? []) {
+    if (includeSourceArtifacts(source, options, serverId)) {
+      for (const artifact of source.artifacts ?? [])
         rows.push({
           ...base,
           id: JSON.stringify([source.id, "artifact", artifact.path]),
           timestamp: artifact.updatedAt,
           item: { kind: "artifact", artifact },
         });
-      }
     }
   }
   return rows;
+}
+
+function projectEntryRow(base: RowSource, entry: CompanionEntry, serverId?: string): StreamRow {
+  const taskId = entry.ask
+    ? (entry.ask.taskId ?? JSON.stringify([serverId, base.agentId, entry.id]))
+    : undefined;
+  return {
+    ...base,
+    id: JSON.stringify([base.agentId, "entry", entry.id]),
+    timestamp: entry.timestamp,
+    taskId,
+    item: { kind: "entry", entry },
+  };
+}
+
+function includeSourceArtifacts(
+  source: StreamSource,
+  options: StreamListOptions,
+  serverId?: string,
+): boolean {
+  if (options.asksOnly || options.userQuestionsOnly) return false;
+  if (options.view && options.view !== "activity" && options.view !== "saved") return false;
+  if (options.filter && options.filter !== "all") return false;
+  return (
+    !options.relatedAgentId ||
+    (source.id === options.relatedAgentId && serverId === options.relatedServerId)
+  );
 }
 
 export function compareStreamRows(
@@ -169,5 +220,30 @@ export function compareStreamRows(
 }
 
 function isHiddenSource(source: StreamSource, options: StreamListOptions): boolean {
-  return Boolean(source.internal || (source.archivedAt && !options.includeArchived));
+  const includeArchived = options.includeArchived ?? Boolean(options.view);
+  return Boolean(source.internal || (source.archivedAt && !includeArchived));
+}
+
+/** Session is a projection of origin + explicit execution links, never a second task container. */
+function matchesRelatedSession(
+  source: StreamSource,
+  entry: CompanionEntry,
+  options: StreamListOptions,
+  serverId: string | undefined,
+  taskSessions: ReadonlyMap<string, NonNullable<CompanionEntry["ask"]>["sessions"]>,
+): boolean {
+  if (!options.relatedAgentId) return true;
+  if (!options.relatedServerId) throw new Error("Related session must include its host");
+  if (source.id === options.relatedAgentId && serverId === options.relatedServerId) return true;
+  const task = entry.inputRequest?.task;
+  const linkedSessions = task
+    ? taskSessions.get(JSON.stringify([task.serverId, task.agentId, task.entryId]))
+    : undefined;
+  const sessions = entry.ask?.sessions ?? linkedSessions;
+  return (
+    sessions?.some(
+      (session) =>
+        session.agentId === options.relatedAgentId && session.serverId === options.relatedServerId,
+    ) ?? false
+  );
 }

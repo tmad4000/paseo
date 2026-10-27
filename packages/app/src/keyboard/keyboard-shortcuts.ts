@@ -159,6 +159,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "search-files",
     "navigation-back",
     "navigation-forward",
+    "needs-you",
     "recent-sessions",
     "show-shortcuts",
     "toggle-settings",
@@ -229,6 +230,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "navigation-back": "common.actions.back",
   "navigation-forward": "common.actions.forward",
   "recent-sessions": "shell.recentSessions.title",
+  "needs-you": "globalStream.needsYou",
   "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
   "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
@@ -271,6 +273,20 @@ const SHORTCUT_HELP_NOTE_KEYS: Record<string, string> = {
 // --- Binding definitions ---
 
 const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  {
+    id: "needs-you-cmd-alt-y-mac",
+    action: "stream.needs-you.open",
+    combo: "Cmd+Alt+Y",
+    when: { mac: true, terminal: false, commandCenter: false, editable: false },
+    help: { id: "needs-you", section: "general", label: "Needs you" },
+  },
+  {
+    id: "needs-you-ctrl-alt-y-non-mac",
+    action: "stream.needs-you.open",
+    combo: "Ctrl+Alt+Y",
+    when: { mac: false, terminal: false, commandCenter: false, editable: false },
+    help: { id: "needs-you", section: "general", label: "Needs you" },
+  },
   // --- Open project ---
   // Open project moved from Cmd+Shift+O to Cmd+O. The binding ids intentionally
   // keep their original "cmd-shift-o" / "ctrl-shift-o" names: user shortcut

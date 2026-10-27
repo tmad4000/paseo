@@ -50,7 +50,11 @@ for (const width of [390, 1440]) {
       await expect(designChip).toHaveAccessibleName(`#${design}, 3 items`);
       await designChip.click();
       await expect(page.getByTestId("stream-tag-filters")).toContainText(`#${design}`);
-      await expect(page.getByText("An untagged note", { exact: true })).toHaveCount(0);
+      await expect(
+        page
+          .getByTestId(`global-stream-row-${agent.id}`)
+          .getByText("An untagged note", { exact: true }),
+      ).toHaveCount(0);
       await expect(page.getByText(`Same tag in another chat #${design}`)).toBeVisible();
 
       // Pin from the active filter chip; the cloud marks it pinned and the host keeps it.
@@ -58,7 +62,11 @@ for (const width of [390, 1440]) {
       await expect(designChip).toHaveAccessibleName(`Pinned tag #${design}, 3 items`);
       expect((await client.listGlobalStream({})).pinnedTags).toContain(design);
       await page.getByRole("button", { name: `Remove #${design} filter`, exact: true }).click();
-      await expect(page.getByText("An untagged note", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByTestId(`global-stream-row-${agent.id}`)
+          .getByText("An untagged note", { exact: true }),
+      ).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath(`global-stream-tags-${width}.png`),
         fullPage: true,
@@ -71,7 +79,7 @@ for (const width of [390, 1440]) {
         .getByRole("button", { name: /Tagged chat/ })
         .click();
       await page.getByTestId("agent-view-artifacts").click();
-      const feed = page.getByTestId("companion-stream");
+      const feed = page.getByTestId("local-stream-workflow");
       const cloud = feed.getByTestId("stream-tag-cloud");
       await expect(cloud.getByTestId(`stream-tag-${ux}`)).toBeVisible();
       await expect(feed.getByTestId("companion-entry-quote")).toHaveText(quoteText);
@@ -94,12 +102,14 @@ for (const width of [390, 1440]) {
       await feed.getByRole("button", { name: `Remove #${ux} filter`, exact: true }).click();
 
       // The note composer appends chosen tags; suggestions come from existing host tags.
-      await feed.getByRole("button", { name: "Pinned", exact: true }).click();
-      await feed.getByTestId("companion-stream-note-input").fill("Remember the launch window");
-      const tagInput = feed.getByTestId("companion-stream-note-tags-input");
+      await feed.getByRole("button", { name: "Saved", exact: true }).click();
+      await feed.getByTestId("stream-saved-input").fill("Remember the launch window");
+      const tagInput = feed
+        .getByTestId("companion-stream-note-tags-input")
+        .filter({ visible: true });
       await tagInput.fill(launch);
       await tagInput.press("Enter");
-      await feed.getByTestId(`stream-tag-suggestion-${quotes}`).click();
+      await feed.getByTestId(`stream-tag-suggestion-${quotes}`).filter({ visible: true }).click();
       await feed.getByRole("button", { name: "Add note", exact: true }).click();
       await expect
         .poll(async () => {

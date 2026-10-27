@@ -4,7 +4,11 @@ import {
   CompanionEntrySchema,
   TimelineAnchorSchema,
   TrackedAskInputSchema,
+  StreamInputRequestSchema,
 } from "./companion-stream.js";
+
+export const StreamViewSchema = z.enum(["activity", "tasks", "questions", "saved", "needs_you"]);
+export type StreamView = z.infer<typeof StreamViewSchema>;
 
 export const StreamFilterSchema = z.enum(["all", "pending", "pinned"]);
 export const StreamRowSchema = z.object({
@@ -15,6 +19,7 @@ export const StreamRowSchema = z.object({
   workspaceId: z.string().optional(),
   archived: z.boolean(),
   timestamp: z.string(),
+  taskId: z.string().optional(),
   item: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("entry"), entry: CompanionEntrySchema }),
     z.object({ kind: z.literal("artifact"), artifact: AgentArtifactSchema }),
@@ -26,6 +31,10 @@ export const StreamListRequestSchema = z.object({
   filter: StreamFilterSchema.optional(),
   agentId: z.string().optional(),
   asksOnly: z.boolean().optional(),
+  // COMPAT(streamWorkflow): only sent to hosts advertising features.streamWorkflow.
+  view: StreamViewSchema.optional(),
+  relatedAgentId: z.string().max(200).optional(),
+  relatedServerId: z.string().max(200).optional(),
   search: z.string().max(1000).optional(),
   includeArchived: z.boolean().optional(),
   cursor: z.string().max(10000).optional(),
@@ -69,6 +78,7 @@ export const StreamUpdateRequestSchema = z.object({
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().max(4000).optional(),
   ask: TrackedAskInputSchema.optional(),
+  inputRequest: StreamInputRequestSchema.optional(),
   expectedRevision: z.number().int().min(0).optional(),
   answerText: z.string().max(4000).optional(),
   sourceId: z.string().optional(),

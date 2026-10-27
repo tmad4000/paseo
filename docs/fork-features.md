@@ -20,6 +20,18 @@ Source prepared on `feat/live-routing-pspin-ng3`; not installed. See
 [session routing](session-routing.md#decision-routing-experiment-pspin-ng3) and
 [QA evidence](qa/decision-routing.md). Preserve this provider default and opt-in live suggestions during reconciliation.
 
+## Shared Stream workflow — pspin-tk3
+
+`stream-shared-workflow`: Needs you is a persistent sidebar entry and registered
+Cmd/Ctrl+Alt+Y command. Global and local Activity, Tasks, Q&A and Saved use the same
+Stream authority, with canonical task IDs and linked working sessions. Multiple human
+inputs remain independent of execution, answers and personal seen state. Preserve
+archived coverage, offline/incomplete notices, permission controls and canonical writes.
+Source prepared on `feat/global-stream-tk3`; not installed. See
+[design and compatibility](stream-workflow.md). Acceptance covers phone/desktop shared
+views, separate input resolution and failed/retried answer-seen writes. Native devices
+remain a release acceptance step.
+
 ## Feature register
 
 | ID                           | Behavior to preserve / quick acceptance check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

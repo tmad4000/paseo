@@ -17,6 +17,7 @@ import { useGlobalStream } from "./use-global-stream";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
+import { StreamWorkflowFeed } from "./global-screen";
 import { StreamNoteComposer } from "./note-composer";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
 
@@ -41,7 +42,37 @@ const NO_NOTICES: readonly string[] = [];
 type ViewTab = "checklist" | "stream" | "pinned";
 type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
 
-export function CompanionFeed({
+export function CompanionFeed(props: CompanionFeedProps) {
+  const supportsWorkflow = useSessionStore(
+    (state) => state.sessions[props.serverId]?.serverInfo?.features?.streamWorkflow === true,
+  );
+  const scope = useMemo(
+    () => ({ serverId: props.serverId, agentId: props.agentId }),
+    [props.serverId, props.agentId],
+  );
+  const localContext = useMemo(
+    () => ({
+      ...scope,
+      cwd: props.cwd,
+      artifactsSupported: props.artifactsSupported,
+      onOpenWorkspaceFile: props.onOpenWorkspaceFile,
+      onReturnToChat: props.onReturnToChat,
+      onReplyInChat: props.onReplyInChat,
+    }),
+    [
+      scope,
+      props.cwd,
+      props.artifactsSupported,
+      props.onOpenWorkspaceFile,
+      props.onReturnToChat,
+      props.onReplyInChat,
+    ],
+  );
+  if (supportsWorkflow) return <StreamWorkflowFeed scope={scope} localContext={localContext} />;
+  return <LegacyCompanionFeed {...props} />;
+}
+
+function LegacyCompanionFeed({
   serverId,
   agentId,
   cwd,

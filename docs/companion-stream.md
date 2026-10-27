@@ -172,10 +172,12 @@ the parsed tags.
 ## Durable ask checklist
 
 Per-chat Stream opens on **Activity**, including completed replies and saved pins.
-**Checklist** shows explicitly tracked asks; it is empty when no agent has recorded one,
-even when Activity contains captured replies. Its empty state links back to Activity.
-Use **Show unresolved only** to focus on outstanding entries, **Show completed too** to
-restore completed work, and **Load more** to read older pages. Pinned shows saved pins.
+On hosts with `streamWorkflow`, **Tasks** shows canonical tracked asks, **Q&A** shows
+your questions, **Saved** shows pins and file references, and **Needs you** shows concrete
+input dependencies. The same records appear globally and in linked worker chats; local
+scope is a filter. Current tasks precede completed history. Older hosts retain Activity
+and Saved with an update notice for new views. **Load more** reads older pages.
+See [shared workflow](stream-workflow.md) for identity, ownership and migration details.
 Refresh and reconnect reread durable records;
 offline pages remain readable with a stale-data notice. Cached data is not an offline archive.
 
@@ -221,7 +223,8 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 `packages/protocol/src/companion-stream.ts` defines the existing entry shapes;
 `global-stream.ts` defines additive `stream.list.request/response` and
 `stream.entry.update.request/response` RPCs. `server_info.features.globalStream` gates global
-reads and acknowledged writes; older hosts need updating. `streamTags` gates tag filters, counts, pinned
+reads and acknowledged writes; older hosts need updating. `streamWorkflow` gates the
+shared Tasks/Q&A/Needs you projections and cross-session scope. `streamTags` gates tag filters, counts, pinned
 tags and `stream.tags.pin.request`. `streamAnswers` gates replies (`reply`, `replySeenRevision`),
 `ask.expectsAnswer`, Q&A anchors and status, the `set_reply`/`mark_reply_seen` actions and
 `userQuestionsOnly` listing. The old mutation RPC remains

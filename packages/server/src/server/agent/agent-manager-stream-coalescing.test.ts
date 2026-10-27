@@ -247,10 +247,15 @@ interface Harness {
   cleanup: () => void;
 }
 
-function createHarness(options?: { provider?: AgentProvider; storage?: boolean }): Harness {
+function createHarness(options?: {
+  provider?: AgentProvider;
+  storage?: boolean;
+  serverId?: string;
+}): Harness {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stream-coalescing-"));
   const client = new TestAgentClient(options?.provider ?? "codex");
   const manager = new AgentManager({
+    serverId: options?.serverId,
     registry: options?.storage
       ? new AgentStorage(join(workdir, "agents"), createTestLogger())
       : undefined,
@@ -1572,6 +1577,30 @@ test("Stream mutations preserve independent questions and report missing items",
     });
     expect((await harness.manager.listGlobalStream({ filter: "pending" })).rows).toEqual([]);
     expect(harness.manager.getAgent(agentId)).toBeNull();
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("Stream local workflow pins use the selected origin host and never another host's global pins", async () => {
+  const harness = createHarness({ storage: true, serverId: "origin-host" });
+  try {
+    const { agentId } = await createManagedSession(harness);
+    await harness.manager.setStreamTagPinned({ agentId, tag: "local", pinned: true });
+    await harness.manager.setStreamTagPinned({ tag: "global", pinned: true });
+    const sameHost = await harness.manager.listGlobalStream({
+      relatedAgentId: agentId,
+      relatedServerId: "origin-host",
+      view: "activity",
+    });
+    expect(sameHost.pinnedTags).toEqual(["local"]);
+    const otherHost = await harness.manager.listGlobalStream({
+      relatedAgentId: agentId,
+      relatedServerId: "other-host",
+      view: "activity",
+    });
+    expect(otherHost.pinnedTags).toEqual([]);
+    expect((await harness.manager.listGlobalStream({})).pinnedTags).toEqual(["global"]);
   } finally {
     harness.cleanup();
   }

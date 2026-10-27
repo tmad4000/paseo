@@ -1365,3 +1365,37 @@ describe("direct new-tab target shortcuts", () => {
     ).toEqual([["ctrl", "shift", "H"]]);
   });
 });
+
+describe("Needs you shortcut", () => {
+  it.each([true, false])("opens the queue on Mac=%s", (isMac) => {
+    expectShortcutResolution({
+      event: { key: "y", code: "KeyY", altKey: true, metaKey: isMac, ctrlKey: !isMac },
+      context: { isMac },
+      action: "stream.needs-you.open",
+    });
+  });
+  it.each([
+    { isMac: false, focusScope: "message-input" as const },
+    { isMac: false, focusScope: "editable" as const },
+    { isMac: true, focusScope: "message-input" as const },
+    { isMac: true, focusScope: "editable" as const },
+  ])("preserves typed input on Mac=$isMac in $focusScope", ({ isMac, focusScope }) => {
+    // AltGr can arrive as Ctrl+Alt+KeyY, including a layout-specific character.
+    expectNoShortcutResolution({
+      event: {
+        key: isMac ? "y" : "←",
+        code: "KeyY",
+        altKey: true,
+        metaKey: isMac,
+        ctrlKey: !isMac,
+      },
+      context: { isMac, focusScope },
+    });
+  });
+  it("does not consume terminal input", () => {
+    expectNoShortcutResolution({
+      event: { key: "y", code: "KeyY", altKey: true, metaKey: true },
+      context: { isMac: true, focusScope: "terminal" },
+    });
+  });
+});
