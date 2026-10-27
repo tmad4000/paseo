@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("expo-router", () => ({
-  router: { navigate: vi.fn() },
-  usePathname: () => "/",
-}));
-
-import { createDefaultLayout } from "@/stores/workspace-layout-store";
 import {
+  createDefaultLayout,
   FOCUSED_PANE_PLACEMENT,
   collectAllTabs,
   createTabInLayout,
@@ -25,7 +20,7 @@ import {
   parseDesktopNavigationDirection,
   restoreNavigationFocusLocation,
   type RestoreNavigationFocusLocationDeps,
-} from "./focus-history-runtime";
+} from "./focus-history-actions";
 
 function makeDeps(): RestoreNavigationFocusLocationDeps {
   return {
