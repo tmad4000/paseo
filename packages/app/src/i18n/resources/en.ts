@@ -1507,6 +1507,7 @@ export const en = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} open tabs",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

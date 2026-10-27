@@ -1538,6 +1538,7 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} onglets ouverts",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

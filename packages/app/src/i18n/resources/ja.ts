@@ -1512,6 +1512,7 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} 個の開いているタブ",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

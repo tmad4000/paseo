@@ -1480,6 +1480,7 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} 个打开的标签页",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

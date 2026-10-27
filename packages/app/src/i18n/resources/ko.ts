@@ -1506,6 +1506,7 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "열린 탭 {{count}}개",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
