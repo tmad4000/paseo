@@ -78,6 +78,8 @@ regressed row visible until its restoration is verified; documenting it does not
 
 The desktop Fork badge has an adjacent keyboard/touch accessible version menu. The trigger shows the installed app version and a compact status; hover/focus and the menu expose full detail. The app and every host daemon are compared independently with the selected channel’s published feed. Unknown or failed checks never claim the app is current; a locally newer build is labeled newer, and downloaded updates are ready rather than installed. Automatic checks run on mount and every 30 minutes; the menu also offers an explicit check. This control does not install updates or restart processes; installation remains owned by the idle-only fleet controller. A staged, unpublished build is not discoverable in the public update feed.
 
+Verify that About settings can check for updates while the Fork indicator reports a failed check; the two controls must remain independently addressable.
+
 ## Combined beta.11 candidate (`code-9yr` / `code-c66`)
 
 Prepared from main `4357e22db` (including queue receipt fix PR56), Stream PR57
