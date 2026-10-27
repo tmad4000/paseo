@@ -303,9 +303,20 @@ it("uses the same query for local and global views without changing task or read
     includeArchived: true,
     serverId: null,
   });
+  fireEvent.click(rendered.getByText("agentPanel.stream.showUnresolved"));
+  expect(vi.mocked(useGlobalStream).mock.lastCall?.[0]).toMatchObject({
+    view: "tasks",
+    filter: "pending",
+  });
+  fireEvent.click(rendered.getByText("agentPanel.stream.showCompleted"));
+  expect(vi.mocked(useGlobalStream).mock.lastCall?.[0]).toMatchObject({
+    view: "tasks",
+    filter: "all",
+  });
   fireEvent.click(rendered.getByText("globalStream.needsYou"));
   expect(vi.mocked(useGlobalStream).mock.lastCall?.[0]).toMatchObject({
     view: "needs_you",
+    filter: "all",
     relatedAgentId: "worker",
   });
   fireEvent.click(rendered.getByText("globalStream.thisChat"));

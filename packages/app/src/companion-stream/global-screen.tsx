@@ -75,6 +75,7 @@ export function StreamWorkflowFeed({
   const [local, setLocal] = useState(Boolean(scope));
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(true);
+  const [unresolvedOnly, setUnresolvedOnly] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   // Navigation into Needs you updates the existing screen, without resetting search or drafts.
   useEffect(() => setView(initialView), [initialView]);
@@ -82,6 +83,7 @@ export function StreamWorkflowFeed({
   const query = useGlobalStream({
     serverId: host === ALL_HOSTS_OPTION_ID ? null : host,
     view,
+    filter: view === "tasks" && unresolvedOnly ? "pending" : "all",
     relatedAgentId: localScope?.agentId,
     relatedServerId: localScope?.serverId,
     search: useDebouncedValue(search, 250),
@@ -106,6 +108,7 @@ export function StreamWorkflowFeed({
   const loadMore = useCallback(() => {
     void fetchNextPage();
   }, [fetchNextPage]);
+  const toggleUnresolved = useCallback(() => setUnresolvedOnly((value) => !value), []);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
   const toggleScope = useCallback(() => setLocal((value) => !value), []);
   const chooseView = useCallback(
@@ -196,6 +199,15 @@ export function StreamWorkflowFeed({
             onSelectHost={setHost}
             triggerTestID="global-stream-host"
           />
+          {view === "tasks" ? (
+            <Button variant={unresolvedOnly ? "secondary" : "ghost"} onPress={toggleUnresolved}>
+              {t(
+                unresolvedOnly
+                  ? "agentPanel.stream.showCompleted"
+                  : "agentPanel.stream.showUnresolved",
+              )}
+            </Button>
+          ) : null}
           <Button variant={includeArchived ? "secondary" : "ghost"} onPress={toggleArchived}>
             {t("globalStream.archived")}
           </Button>
@@ -249,6 +261,8 @@ export function StreamWorkflowFeed({
       host,
       includeArchived,
       toggleArchived,
+      unresolvedOnly,
+      toggleUnresolved,
       refresh,
       isFetching,
       hasNextPage,

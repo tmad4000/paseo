@@ -65,6 +65,8 @@ an unrelated reply does not resolve any input or complete any task.
 ## Views and compatibility
 
 `stream.list.request.view` selects activity/tasks/questions/saved/needs_you.
+Tasks retain the existing unresolved-only/completed-history toggle; its filter does
+not leak into Q&A, Saved or Needs you.
 `relatedServerId` plus `relatedAgentId` selects a local projection across paired
 hosts. Workflow views include archived origins by default; the legacy API's default
 is unchanged. Search/tag filtering and stable pagination happen on each host before
