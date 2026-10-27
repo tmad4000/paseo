@@ -1365,3 +1365,19 @@ describe("direct new-tab target shortcuts", () => {
     ).toEqual([["ctrl", "shift", "H"]]);
   });
 });
+
+describe("Needs you shortcut", () => {
+  it.each([true, false])("opens the queue on Mac=%s", (isMac) => {
+    expectShortcutResolution({
+      event: { key: "y", code: "KeyY", altKey: true, metaKey: isMac, ctrlKey: !isMac },
+      context: { isMac },
+      action: "stream.needs-you.open",
+    });
+  });
+  it("does not consume terminal input", () => {
+    expectNoShortcutResolution({
+      event: { key: "y", code: "KeyY", altKey: true, metaKey: true },
+      context: { isMac: true, focusScope: "terminal" },
+    });
+  });
+});

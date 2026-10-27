@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import type { StreamFilter } from "@getpaseo/protocol/global-stream";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/ui/search-field";
@@ -19,33 +20,74 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
-import { EntryCard } from "./feed";
+import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { streamCardSource, hasUnseenReply } from "./card-source";
+import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
+import { WorkflowArtifact } from "./workflow-artifact";
+import { WorkflowComposer } from "./workflow-composer";
+import { parseWorkflowView, type WorkflowView } from "./workflow-view";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
-
+const KEEP_VISIBLE_CONTENT = { minIndexForVisible: 0 };
 const rowKey = (row: GlobalStreamRow) => JSON.stringify([row.serverId, row.id]);
 
 export function GlobalStreamScreen() {
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  const navigateView = useCallback((next: WorkflowView) => router.setParams({ view: next }), []);
+  return <StreamWorkflowFeed initialView={parseWorkflowView(view)} onViewChange={navigateView} />;
+}
+
+export interface WorkflowScope {
+  serverId: string;
+  agentId: string;
+}
+export interface WorkflowLocalContext extends WorkflowScope {
+  cwd: string;
+  artifactsSupported: boolean;
+  onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  onReturnToChat: () => void;
+  onReplyInChat: () => void;
+}
+
+/** Global and local views query the same canonical rows. Scope never owns another task store. */
+export function StreamWorkflowFeed({
+  initialView = "activity",
+  scope,
+  onViewChange,
+  localContext,
+}: {
+  onViewChange?: (view: WorkflowView) => void;
+  initialView?: WorkflowView;
+  scope?: WorkflowScope;
+  localContext?: WorkflowLocalContext;
+}) {
   const { t } = useTranslation();
   const focused = useIsFocused();
+  const panelActive = useRetainedPanelActive();
   const hosts = useHosts();
   const [host, setHost] = useState(ALL_HOSTS_OPTION_ID);
-  const [filter, setFilter] = useState<StreamFilter>("all");
+  const [view, setView] = useState<WorkflowView>(initialView);
+  const [local, setLocal] = useState(Boolean(scope));
   const [search, setSearch] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [includeArchived, setIncludeArchived] = useState(true);
   const [tags, setTags] = useState<string[]>([]);
+  // Navigation into Needs you updates the existing screen, without resetting search or drafts.
+  useEffect(() => setView(initialView), [initialView]);
+  const localScope = local ? scope : undefined;
   const query = useGlobalStream({
     serverId: host === ALL_HOSTS_OPTION_ID ? null : host,
-    filter,
+    view,
+    relatedAgentId: localScope?.agentId,
+    relatedServerId: localScope?.serverId,
     search: useDebouncedValue(search, 250),
     tags,
     includeArchived,
-    enabled: focused,
+    enabled: focused && panelActive,
   });
   const tagFilter = useStreamTagFilter(query, setTags);
   const tagPress = query.supportsTags ? tagFilter.add : undefined;
@@ -65,24 +107,71 @@ export function GlobalStreamScreen() {
     void fetchNextPage();
   }, [fetchNextPage]);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
+  const toggleScope = useCallback(() => setLocal((value) => !value), []);
+  const chooseView = useCallback(
+    (next: WorkflowView) => {
+      setView(next);
+      onViewChange?.(next);
+    },
+    [onViewChange],
+  );
+  const showNeedsYou = useCallback(() => chooseView("needs_you"), [chooseView]);
+  const needsYouSelected = useMemo(() => ({ selected: view === "needs_you" }), [view]);
+  const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
   const renderItem = useCallback(
     ({ item }: { item: GlobalStreamRow }) => (
-      <GlobalStreamCard row={item} onSaved={refresh} onTagPress={tagPress} />
+      <GlobalStreamCard
+        row={item}
+        onSaved={refresh}
+        onTagPress={tagPress}
+        localContext={localContext}
+      />
     ),
-    [refresh, tagPress],
+    [refresh, tagPress, localContext],
   );
   const tabs = useMemo(
     () => [
-      { value: "all" as const, label: t("globalStream.all") },
-      { value: "pending" as const, label: t("globalStream.pending") },
-      { value: "pinned" as const, label: t("globalStream.pinned") },
+      { value: "activity" as const, label: t("globalStream.activity") },
+      { value: "tasks" as const, label: t("globalStream.tasks") },
+      { value: "questions" as const, label: t("globalStream.questions") },
+      { value: "saved" as const, label: t("globalStream.saved") },
     ],
     [t],
   );
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <Text style={styles.description}>{t("globalStream.description")}</Text>
+        <View style={styles.controls}>
+          <Button
+            variant={view === "needs_you" ? "secondary" : "outline"}
+            onPress={showNeedsYou}
+            accessibilityState={needsYouSelected}
+            testID="stream-needs-you"
+          >
+            {t("globalStream.needsYou")}
+          </Button>
+          {scope ? (
+            <Button variant="ghost" onPress={toggleScope} testID="stream-scope">
+              {t(local ? "globalStream.thisChat" : "globalStream.allSessions")}
+            </Button>
+          ) : (
+            <Text style={styles.description}>{t("globalStream.allSessions")}</Text>
+          )}
+        </View>
+        <Text style={styles.description}>
+          {t(
+            view === "needs_you"
+              ? "globalStream.needsYouDescription"
+              : "globalStream.scopeDescription",
+          )}
+        </Text>
+        <SegmentedControl
+          value={view}
+          onValueChange={chooseView}
+          options={tabs}
+          textWrap
+          testID="stream-workflow-views"
+        />
         <SearchField
           value={search}
           onChangeText={setSearch}
@@ -90,7 +179,6 @@ export function GlobalStreamScreen() {
           clearAccessibilityLabel={t("globalStream.clearSearch")}
           testID="global-stream-search"
         />
-        <SegmentedControl value={filter} onValueChange={setFilter} options={tabs} />
         {query.supportsTags ? (
           <TagCloud
             counts={query.tagCounts}
@@ -115,6 +203,21 @@ export function GlobalStreamScreen() {
             {t("globalStream.refresh")}
           </Button>
         </View>
+        {scope ? (
+          <WorkflowComposer
+            scope={scope}
+            view={view}
+            visible={local}
+            onSaved={refresh}
+            supportsTags={query.supportsTags}
+            knownTags={knownTags}
+          />
+        ) : null}
+        <Text style={styles.description} testID="stream-loaded-count">
+          {t(hasNextPage ? "globalStream.partialCount" : "globalStream.loadedCount", {
+            count: query.rows.length,
+          })}
+        </Text>
         {notices.map((notice) => (
           <Text key={notice} style={styles.notice} accessibilityRole="alert">
             {notice}
@@ -124,23 +227,32 @@ export function GlobalStreamScreen() {
     ),
     [
       t,
+      view,
+      showNeedsYou,
+      chooseView,
+      needsYouSelected,
+      knownTags,
+      scope,
+      toggleScope,
+      local,
       search,
-      filter,
       tabs,
+      tags,
+      query.supportsTags,
+      query.tagCounts,
+      query.pinnedTags,
+      query.rows.length,
+      tagFilter.toggle,
+      tagFilter.setPinned,
+      tagFilter.error,
       hosts,
       host,
       includeArchived,
       toggleArchived,
       refresh,
       isFetching,
+      hasNextPage,
       notices,
-      tags,
-      query.supportsTags,
-      query.tagCounts,
-      query.pinnedTags,
-      tagFilter.toggle,
-      tagFilter.setPinned,
-      tagFilter.error,
     ],
   );
   const empty = useMemo(
@@ -164,10 +276,15 @@ export function GlobalStreamScreen() {
     [hasNextPage, loadMore, isFetchingNextPage, t],
   );
   return (
-    <View style={styles.root} testID="global-stream">
-      <MenuHeader title={t("globalStream.title")} />
+    <View style={styles.root} testID={scope ? "local-stream-workflow" : "global-stream"}>
+      {!scope ? (
+        <MenuHeader
+          title={t(view === "needs_you" ? "globalStream.needsYou" : "globalStream.title")}
+        />
+      ) : null}
       <FlatList
         data={query.rows}
+        maintainVisibleContentPosition={KEEP_VISIBLE_CONTENT}
         keyExtractor={rowKey}
         renderItem={renderItem}
         contentContainerStyle={styles.feed}
@@ -186,25 +303,47 @@ export function GlobalStreamCard({
   row,
   onSaved,
   onTagPress,
+  localContext,
 }: {
   row: GlobalStreamRow;
   onSaved: () => void;
   onTagPress?: (tag: string) => void;
+  localContext?: WorkflowLocalContext;
 }) {
   const { t } = useTranslation();
+  const {
+    entry,
+    copiedTask,
+    serverId: sourceServerId,
+    agentId: sourceAgentId,
+    workspaceId: sourceWorkspaceId,
+  } = streamCardSource(row);
+  const localSource = localContextForSource(localContext, sourceServerId, sourceAgentId);
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
   const supportsWrites = useSessionStore(
     (state) => state.sessions[row.serverId]?.serverInfo?.features?.globalStream === true,
   );
+  const supportsAnswers = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.streamAnswers === true,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openChat = useCallback(() => {
-    navigateToAgent({ serverId: row.serverId, agentId: row.agentId, workspaceId: row.workspaceId });
-  }, [row.serverId, row.agentId, row.workspaceId]);
+    if (localSource) {
+      localSource.onReturnToChat();
+      return;
+    }
+    navigateToAgent({
+      serverId: sourceServerId,
+      agentId: sourceAgentId,
+      workspaceId: sourceWorkspaceId,
+    });
+  }, [localSource, sourceServerId, sourceAgentId, sourceWorkspaceId]);
+  const replyInChat = localSource?.onReplyInChat ?? openChat;
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
-      if (!client || connection !== "online" || !supportsWrites || busy) return;
+      if (!client || connection !== "online" || !supportsWrites || busy || copiedTask) return;
       setBusy(true);
       setError(null);
       try {
@@ -222,7 +361,7 @@ export function GlobalStreamCard({
         setBusy(false);
       }
     },
-    [client, connection, supportsWrites, busy, row.agentId, row.item, onSaved, t],
+    [client, connection, supportsWrites, busy, copiedTask, row.agentId, row.item, onSaved, t],
   );
   const updateStatus = useCallback(
     (id: string, status: "open" | "reviewed" | "done") => {
@@ -236,12 +375,45 @@ export function GlobalStreamCard({
     },
     [update],
   );
+  const unseenAnswer = hasUnseenReply(entry);
+  const markAnswerSeen = useCallback(async () => {
+    if (
+      !entry?.reply ||
+      !client ||
+      connection !== "online" ||
+      !supportsAnswers ||
+      busy ||
+      copiedTask
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await client.updateStreamEntry({
+        agentId: row.agentId,
+        entryId: entry.id,
+        action: "mark_reply_seen",
+        replyRevision: entry.reply.revision,
+      });
+      onSaved();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t("globalStream.saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }, [entry, client, connection, supportsAnswers, busy, copiedTask, row.agentId, onSaved, t]);
   return (
     <View style={styles.row} testID={`global-stream-row-${row.agentId}`}>
       <Button variant="ghost" onPress={openChat} style={styles.source}>
-        {row.agentTitle} · {row.serverLabel}
+        {copiedTask ? t("globalStream.openTaskSource") : row.agentTitle} ·{" "}
+        {copiedTask ? sourceServerId : row.serverLabel}
         {row.archived ? ` · ${t("globalStream.archived")}` : ""}
       </Button>
+      {copiedTask ? (
+        <Text style={styles.notice} accessibilityRole="alert">
+          {t("globalStream.copiedTask")}
+        </Text>
+      ) : null}
       <Text style={styles.path} numberOfLines={1}>
         {row.cwd}
       </Text>
@@ -250,23 +422,31 @@ export function GlobalStreamCard({
           entry={row.item.entry}
           serverId={row.serverId}
           onReturnToChat={openChat}
-          onReplyInChat={openChat}
+          onReplyInChat={replyInChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
           onTagPress={onTagPress}
-          disabled={busy || connection !== "online" || !supportsWrites}
+          disabled={busy || copiedTask || connection !== "online" || !supportsWrites}
         />
       ) : (
-        <View style={styles.artifact}>
-          <Text style={styles.description}>{t("globalStream.artifact")}</Text>
-          <Text selectable style={styles.artifactPath}>
-            {row.item.artifact.path}
-          </Text>
-          <Button variant="outline" onPress={openChat}>
-            {t("globalStream.openChat")}
-          </Button>
-        </View>
+        <WorkflowArtifact
+          artifact={row.item.artifact}
+          row={row}
+          localContext={localContext}
+          onOpenChat={openChat}
+          onSaved={onSaved}
+        />
       )}
+      {unseenAnswer && supportsAnswers ? (
+        <Button
+          variant="outline"
+          onPress={markAnswerSeen}
+          disabled={busy || copiedTask || connection !== "online"}
+          testID="stream-mark-answer-seen"
+        >
+          {t("agentPanel.stream.answers.markSeen")}
+        </Button>
+      ) : null}
       {busy ? <Text style={styles.description}>{t("globalStream.saving")}</Text> : null}
       {error ? (
         <Text accessibilityRole="alert" style={styles.notice}>
@@ -275,6 +455,14 @@ export function GlobalStreamCard({
       ) : null}
     </View>
   );
+}
+
+function localContextForSource(
+  context: WorkflowLocalContext | undefined,
+  serverId: string,
+  agentId: string,
+) {
+  return context?.serverId === serverId && context.agentId === agentId ? context : undefined;
 }
 
 const styles = StyleSheet.create((theme) => ({

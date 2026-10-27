@@ -51,8 +51,7 @@ export function SubthreadsOpenButton(): ReactElement | null {
 }
 
 /**
- * Shows the session's linked checklist beside the chat. Present only once a checklist page has
- * been linked to the session (an agent or the CLI sets `paseo.checklist-url`).
+ * Opens the local projection of Stream beside Chat. A linked checklist page remains supported.
  */
 export function SessionChecklistButton(): ReactElement | null {
   const { t } = useTranslation();
@@ -65,7 +64,7 @@ export function SessionChecklistButton(): ReactElement | null {
     if (expanded) host.close();
     else host.openChecklist();
   }, [expanded, host]);
-  if (!host?.hasChecklistLink) return null;
+  if (!host) return null;
   return (
     <Button
       variant="ghost"

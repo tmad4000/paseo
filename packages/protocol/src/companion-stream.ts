@@ -1,6 +1,30 @@
 import { z } from "zod";
 
+/** Canonical source, not another copy of task/answer state. Always host-qualified. */
+export const StreamReferenceSchema = z.object({
+  serverId: z.string().min(1).max(200),
+  agentId: z.string().min(1).max(200),
+  entryId: z.string().min(1).max(300),
+});
+export const StreamSessionSchema = StreamReferenceSchema.omit({ entryId: true });
+export const StreamInputRequestSchema = z.object({
+  kind: z.enum(["input", "decision", "approval", "action"]),
+  recipient: z.enum(["user", "agent", "external"]),
+  /** Named person/agent when the recipient is not the account user. */
+  recipientId: z.string().min(1).max(200).optional(),
+  task: StreamReferenceSchema.optional(),
+  subtaskId: z.string().min(1).max(200).optional(),
+  sourceMessageId: z.string().min(1).max(200).optional(),
+});
+export type StreamReference = z.infer<typeof StreamReferenceSchema>;
+export type StreamInputRequest = z.infer<typeof StreamInputRequestSchema>;
+
 export const TrackedAskInputSchema = z.object({
+  // COMPAT(streamWorkflow): added 2026-10-27; remove gate after 2027-04-27.
+  /** Execution/provenance links; one canonical task can span multiple hosts and sessions. */
+  sessions: z.array(StreamSessionSchema).max(100).optional(),
+  /** Explicitly link an older duplicate to its canonical origin; never infer from matching text. */
+  canonicalTask: StreamReferenceSchema.optional(),
   state: z.enum(["open", "in_progress", "blocked", "done"]),
   remaining: z.string().max(4000),
   evidence: z.string().max(4000),
@@ -21,6 +45,9 @@ export const TrackedAskInputSchema = z.object({
   expectsAnswer: z.boolean().optional(),
 });
 export const TrackedAskSchema = TrackedAskInputSchema.extend({
+  /** Host-generated immutable identity. Legacy records receive an origin identity on read. */
+  taskId: z.string().min(1).max(500).optional(),
+  origin: StreamReferenceSchema.optional(),
   revision: z.number().int().min(1),
   provenance: z.literal("explicit"),
 });
@@ -57,6 +84,8 @@ const common = {
   text: z.string(),
   truncated: z.boolean(),
   ask: TrackedAskSchema.optional(),
+  // COMPAT(streamWorkflow): concrete input dependency, independent of execution and seen state.
+  inputRequest: StreamInputRequestSchema.optional(),
   // COMPAT(streamTags): fork feature; lowercase #hashtags parsed from text. Older hosts omit it.
   tags: z.array(z.string()).optional(),
   // COMPAT(streamAnswers): fork feature; older hosts omit these.
@@ -126,6 +155,7 @@ function headline(text: string): string {
  * (set_stream_question) are needed input, not user questions, and never count.
  */
 export function isUserQuestionEntry(entry: CompanionEntry): boolean {
+  if (entry.ask?.canonicalTask) return false;
   if (entry.kind === "q_and_a") return entry.status !== "done";
   if (entry.kind !== "question" || !entry.ask) return false;
   return Boolean(entry.reply || entry.ask.expectsAnswer || /[?？]$/.test(headline(entry.text)));
@@ -153,4 +183,15 @@ export function isCompanionEntryPending(entry: CompanionEntry): boolean {
     (entry.kind === "feature_request" && entry.status !== "done") ||
     (entry.kind === "permission" && entry.status === "pending")
   );
+}
+
+/** Human intervention only. A user's unanswered ask or unread result never belongs here. */
+export function needsUserInput(entry: CompanionEntry): boolean {
+  if (entry.ask || entry.kind === "q_and_a") return false;
+  if (entry.kind === "permission") return entry.status === "pending";
+  if (entry.kind !== "question" || entry.status === "done") return false;
+  if (entry.inputRequest) return entry.inputRequest.recipient === "user";
+  // Explicit legacy set_stream_question/manual inputs and expired provider questions only.
+  // Prose-inferred outcome:<turn>:question candidates are not proven human obligations.
+  return entry.id.startsWith("question:") || entry.id.startsWith("permission:");
 }

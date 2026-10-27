@@ -86,7 +86,7 @@ import { openHostOverview } from "@/navigation/settings-navigation";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
-import { SidebarViewsSection } from "@/views/sidebar-views-section";
+import { SidebarStreamNavigation, SidebarViewsSection } from "@/views/sidebar-views-section";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -594,9 +594,16 @@ function MobileSidebar({
     >
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
-        <SidebarNavRows style={styles.sidebarHeaderGroup} onBeforeNavigate={closeSidebar} />
+        <View style={styles.sidebarHeaderGroup}>
+          <SidebarStreamNavigation onBeforeNavigate={closeSidebar} />
+          <SidebarNavRows onBeforeNavigate={closeSidebar} />
+        </View>
         <SidebarSearchControls />
-        <WindowChromeSafeArea placement="inline" style={styles.mobileCloseButtonRow}>
+        <WindowChromeSafeArea
+          placement="inline"
+          style={styles.mobileCloseButtonRow}
+          pointerEvents="box-none"
+        >
           <Pressable
             style={styles.mobileCloseButton}
             onPress={closeSidebar}
@@ -798,7 +805,10 @@ function DesktopSidebar({
           ) : (
             <TitlebarDragRegion />
           )}
-          <SidebarNavRows style={sidebarHeaderGroupStyle} />
+          <View style={sidebarHeaderGroupStyle}>
+            <SidebarStreamNavigation />
+            <SidebarNavRows />
+          </View>
         </View>
         <SidebarSearchControls />
 

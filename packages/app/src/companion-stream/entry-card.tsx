@@ -71,6 +71,7 @@ export function EntryCard({
       </View>
 
       <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
+      {entry.inputRequest ? <InputRequestDetails entry={entry} /> : null}
       {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
 
       {entry.truncated ? (
@@ -105,6 +106,50 @@ export function EntryCard({
         ) : null}
       </View>
     </View>
+  );
+}
+
+function InputRequestDetails({ entry }: { entry: CompanionEntry }) {
+  const { t } = useTranslation();
+  const request = entry.inputRequest;
+  const task = request?.task;
+  const openTask = useCallback(() => {
+    if (task) navigateToAgent({ serverId: task.serverId, agentId: task.agentId });
+  }, [task]);
+  if (!request) return null;
+  return (
+    <View style={styles.text}>
+      <Text style={styles.description}>
+        {t(`globalStream.inputKinds.${request.kind}`)} ·{" "}
+        {t(`globalStream.recipients.${request.recipient}`)}
+        {request.recipientId ? ` · ${request.recipientId}` : ""}
+      </Text>
+      {request.subtaskId ? (
+        <Text selectable style={styles.description}>
+          {t("globalStream.subtask", { id: request.subtaskId })}
+        </Text>
+      ) : null}
+      {request.sourceMessageId ? (
+        <Text selectable style={styles.description}>
+          {t("agentPanel.stream.card.sourceMessage", { id: request.sourceMessageId })}
+        </Text>
+      ) : null}
+      {task ? (
+        <Button variant="ghost" onPress={openTask}>
+          {t("globalStream.openTaskSource")}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+function LinkedSession({ serverId, agentId }: { serverId: string; agentId: string }) {
+  const { t } = useTranslation();
+  const open = useCallback(() => navigateToAgent({ serverId, agentId }), [serverId, agentId]);
+  return (
+    <Button variant="ghost" onPress={open}>
+      {t("globalStream.openLinkedSession", { id: agentId })}
+    </Button>
   );
 }
 
@@ -250,6 +295,21 @@ function AskDetails({ ask, serverId }: { ask: TrackedAsk; serverId?: string }) {
             text: ask.remaining || t("agentPanel.stream.card.remainingUnspecified"),
           })}
         </Text>
+      ) : null}
+      {ask.taskId ? (
+        <Text selectable style={styles.description}>
+          {t("globalStream.taskIdentity", { id: ask.taskId })}
+        </Text>
+      ) : null}
+      {ask.sessions?.map((session) => (
+        <LinkedSession
+          key={JSON.stringify([session.serverId, session.agentId])}
+          serverId={session.serverId}
+          agentId={session.agentId}
+        />
+      ))}
+      {ask.canonicalTask ? (
+        <LinkedSession serverId={ask.canonicalTask.serverId} agentId={ask.canonicalTask.agentId} />
       ) : null}
       {ask.sourceMessageId ? (
         <Text selectable style={styles.description}>

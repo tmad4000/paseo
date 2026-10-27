@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { TrackedAskInputSchema } from "@getpaseo/protocol/companion-stream";
+import {
+  TrackedAskInputSchema,
+  StreamInputRequestSchema,
+} from "@getpaseo/protocol/companion-stream";
 import { appendStreamTags, parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
@@ -2297,7 +2300,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track a durable ask",
       description:
-        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
+        "Create or revise a canonical task stored with its source conversation. Keep one record across continuation/delegation: link execution sessions with ask.sessions, and edit this origin from other sessions using agentId. taskId returned on reads is immutable. Mark an existing mirrored ask with ask.canonicalTask only when its exact canonical host/agent/entry is known; the mirror becomes read-only history and leaves current-work views. Never deduplicate by text. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
       inputSchema: {
         agentId: z
           .string()
@@ -2352,18 +2355,33 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         unresolvedOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).optional(),
         questions: z.boolean().optional(),
+        global: z
+          .boolean()
+          .optional()
+          .describe(
+            "List canonical tasks across all saved sessions, including archived/dormant, without starting providers.",
+          ),
+        needsYou: z
+          .boolean()
+          .optional()
+          .describe(
+            "List concrete human intervention requests, not user questions waiting for agent answers.",
+          ),
       },
     },
-    async ({ agentId, cursor, unresolvedOnly, limit, questions }) => {
-      const targetAgentId = agentId ?? callerAgentId;
-      if (!targetAgentId) throw new Error("An agentId is required");
+    async ({ agentId, cursor, unresolvedOnly, limit, questions, global: globally, needsYou }) => {
+      const targetAgentId = globally ? undefined : (agentId ?? callerAgentId);
+      if (!globally && !targetAgentId) throw new Error("An agentId is required");
+      let view: "needs_you" | "questions" | "tasks" = "tasks";
+      if (questions) view = "questions";
+      if (needsYou) view = "needs_you";
       const page = await agentManager.listGlobalStream({
         agentId: targetAgentId,
-        ...(questions ? { userQuestionsOnly: true } : { asksOnly: true }),
+        view,
         includeArchived: true,
         cursor,
         limit,
-        filter: unresolvedOnly && !questions ? "pending" : "all",
+        filter: unresolvedOnly && !questions && !needsYou ? "pending" : "all",
       });
       return {
         content: [],
@@ -2442,7 +2460,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track an open Stream question",
       description:
-        "Keep one durable question in this conversation's Stream and the global Stream. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. This records context, never grants permission or sends a chat message.",
+        "Keep one concrete input/decision/approval/action request in Stream and global Needs you. inputRequest identifies its exact recipient, canonical task/subtask and source message. Multiple requests can remain open while agent work continues. Do not record the user's own questions here; use set_stream_ask expectsAnswer. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. This records context, never grants permission or sends a chat message.",
       inputSchema: {
         agentId: z.string().optional().describe("Defaults to this calling agent."),
         questionId: z
@@ -2452,9 +2470,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .describe("Stable ID for this particular question; reuse for edits and resolution."),
         text: z.string().min(1).max(4000),
         status: z.enum(["open", "reviewed", "done"]).optional(),
+        inputRequest: StreamInputRequestSchema.optional(),
       },
     },
-    async ({ agentId, questionId, text, status }) => {
+    async ({ agentId, questionId, text, status, inputRequest }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) throw new Error("An agentId is required");
       await agentManager.updateCompanionEntry({
@@ -2463,6 +2482,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         action: "add_question",
         text,
         status,
+        inputRequest,
       });
       return {
         content: [],

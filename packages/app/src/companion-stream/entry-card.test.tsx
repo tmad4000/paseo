@@ -50,6 +50,7 @@ vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
 vi.mock("@/utils/time", () => ({ formatMessageTimestamp: () => "Oct 24, 2:10 PM" }));
 
 import { EntryCard } from "./entry-card";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 
 const ask: CompanionEntry = {
   id: "ask:ship",
@@ -105,6 +106,28 @@ describe("EntryCard", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it("labels a concrete decision and opens its task source on the named host", () => {
+    const view = renderCard({
+      id: "question:choice",
+      kind: "question",
+      status: "open",
+      timestamp: ask.timestamp,
+      text: "Choose the publishing date",
+      truncated: false,
+      inputRequest: {
+        kind: "decision",
+        recipient: "user",
+        subtaskId: "publish",
+        sourceMessageId: "message-3",
+        task: { serverId: "m5", agentId: "owner", entryId: "ask:release" },
+      },
+    });
+    expect(view.getByText("Decision · Needs you").textContent).toBe("Decision · Needs you");
+    expect(view.getByText("Subtask: publish").textContent).toBe("Subtask: publish");
+    fireEvent.click(view.getByText("Open task source"));
+    expect(navigateToAgent).toHaveBeenLastCalledWith({ serverId: "m5", agentId: "owner" });
   });
 
   it("puts kind, state and time in one eyebrow and the text first line as headline", () => {

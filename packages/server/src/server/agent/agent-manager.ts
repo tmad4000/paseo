@@ -5,7 +5,7 @@ import {
   type MessageActivity,
 } from "./message-activity.js";
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
-import { applyStreamEntryUpdate } from "./stream-entry-update.js";
+import { applyStreamEntryUpdate, assertStreamWriteAuthority } from "./stream-entry-update.js";
 import { attachCandidateReplies, hasCandidateWork } from "./stream-answers.js";
 import type {
   StreamListOptions,
@@ -351,6 +351,7 @@ export interface CreateAgentOptions {
 }
 
 export interface AgentManagerOptions {
+  serverId?: string;
   pluginLifecycle?: PluginLifecycle;
   clients?: ProviderClientMap;
   providerDefinitions?: ProviderEnabledMap;
@@ -806,8 +807,10 @@ export class AgentManager {
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private acceptingAgentRegistrations = true;
+  private readonly serverId?: string;
 
   constructor(options: AgentManagerOptions) {
+    this.serverId = options.serverId;
     this.pluginLifecycle = options.pluginLifecycle;
     this.idFactory = options?.idFactory ?? (() => randomUUID());
     this.registry = options?.registry;
@@ -2493,10 +2496,13 @@ export class AgentManager {
         archivedAt: sources.get(agent.id)?.archivedAt,
       });
     }
-    const pinnedTags = options.agentId
-      ? (records.find((record) => record.id === options.agentId)?.pinnedStreamTags ?? [])
-      : await this.getGlobalPinnedStreamTags();
-    return { ...listStreamRows(sources.values(), options), pinnedTags };
+    let tagScopeAgentId = options.agentId;
+    if (options.relatedServerId === this.serverId) tagScopeAgentId = options.relatedAgentId;
+    let pinnedTags: string[] = [];
+    if (tagScopeAgentId)
+      pinnedTags = records.find((record) => record.id === tagScopeAgentId)?.pinnedStreamTags ?? [];
+    else if (!options.relatedAgentId) pinnedTags = await this.getGlobalPinnedStreamTags();
+    return { ...listStreamRows(sources.values(), options, this.serverId), pinnedTags };
   }
 
   private async getGlobalPinnedStreamTags(): Promise<string[]> {
@@ -2542,7 +2548,9 @@ export class AgentManager {
       entries = entries ?? [];
     }
 
-    let next = applyStreamEntryUpdate(entries, input);
+    assertStreamWriteAuthority(entries, input, this.serverId);
+    await this.validateStreamTaskReference(input);
+    let next = applyStreamEntryUpdate(entries, input, this.serverId);
     if (input.action === "add_q_and_a" && liveAgent) {
       // A question tracked after its reply arrived is answered now, not at the next turn.
       next = this.attachTrackedAnswers(liveAgent.id, next, liveAgent.lifecycle === "idle");
@@ -2559,6 +2567,20 @@ export class AgentManager {
     } else {
       await this.writeStoredMetadata(input.agentId, { companionEntries: next });
     }
+  }
+
+  private async validateStreamTaskReference(input: StreamEntryUpdate): Promise<void> {
+    const reference = input.ask?.canonicalTask ?? input.inputRequest?.task;
+    if (!reference || reference.serverId !== this.serverId) return;
+    const liveOrigin = this.agents.get(reference.agentId);
+    const storedOrigin = liveOrigin ? null : await this.registry?.get(reference.agentId);
+    const originEntries = liveOrigin?.companionEntries ?? storedOrigin?.companionEntries ?? [];
+    const referencedTask = originEntries.find((entry) => entry.id === reference.entryId);
+    if (!referencedTask?.ask || referencedTask.ask.canonicalTask)
+      throw new Error("Task reference must name a canonical task on this host");
+    const subtaskId = input.inputRequest?.subtaskId;
+    if (subtaskId && !referencedTask.ask.subtasks?.some((subtask) => subtask.id === subtaskId))
+      throw new Error("Input request subtask does not exist on its task");
   }
 
   async runAgent(

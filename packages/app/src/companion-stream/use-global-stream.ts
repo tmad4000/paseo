@@ -9,6 +9,7 @@ import { normalizeStreamTags, streamEntryTags } from "@getpaseo/protocol/stream-
 import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { useFetchQueries } from "@/data/query";
+import { deduplicateTasks } from "./task-identity";
 import { mergeTagCounts } from "./tag-model";
 
 export type GlobalStreamRow = StreamRow & { serverId: string; serverLabel: string };
@@ -19,6 +20,24 @@ interface HostPage {
   pinnedTags?: string[];
 }
 const NO_TAGS: string[] = [];
+
+function streamQueryKey(serverId: string, options: StreamListOptions, tags: string, depth: number) {
+  return [
+    "global-stream",
+    serverId,
+    options.agentId,
+    options.asksOnly,
+    options.view,
+    options.relatedAgentId,
+    options.relatedServerId,
+    options.userQuestionsOnly,
+    options.filter,
+    options.search,
+    options.includeArchived,
+    tags,
+    depth,
+  ];
+}
 
 /** Hosts without server-side tag filtering still get the AND filter applied to returned rows. */
 function rowHasTags(row: StreamRow, tags: readonly string[]): boolean {
@@ -52,25 +71,24 @@ export function useGlobalStream(
         : sessions[host.serverId]?.serverInfo?.features?.globalStream)
     )
       return "upgrade";
+    // COMPAT(streamWorkflow): fork feature, remove after 2027-04-27.
+    const needsWorkflow =
+      options.relatedAgentId ||
+      (options.view && options.view !== "activity" && options.view !== "saved");
+    if (needsWorkflow && !sessions[host.serverId]?.serverInfo?.features?.streamWorkflow)
+      return "workflow-upgrade";
     return "online";
   });
   // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
   const tagHosts = selected.map(
     (host) => sessions[host.serverId]?.serverInfo?.features?.streamTags === true,
   );
+  const workflowHosts = selected.map(
+    (host) => sessions[host.serverId]?.serverInfo?.features?.streamWorkflow === true,
+  );
   const results = useFetchQueries<HostPage>(
     selected.map((host, index) => ({
-      queryKey: [
-        "global-stream",
-        host.serverId,
-        options.agentId,
-        options.asksOnly,
-        options.filter,
-        options.search,
-        options.includeArchived,
-        tagKey,
-        depth,
-      ],
+      queryKey: streamQueryKey(host.serverId, options, tagKey, depth),
       dataShape: "value",
       staleTimeMs: 10_000,
       enabled: options.enabled && availability[index] === "online",
@@ -86,7 +104,15 @@ export function useGlobalStream(
           const result = await client.listGlobalStream({
             agentId: options.agentId,
             asksOnly: options.asksOnly,
-            filter: options.filter,
+            ...(workflowHosts[index]
+              ? {
+                  view: options.view,
+                  relatedAgentId: options.relatedAgentId,
+                  relatedServerId: options.relatedServerId,
+                }
+              : {}),
+            userQuestionsOnly: options.userQuestionsOnly,
+            filter: !workflowHosts[index] && options.view === "saved" ? "pinned" : options.filter,
             search: options.search,
             includeArchived: options.includeArchived,
             ...(tagHosts[index] && tags.length ? { tags } : {}),
@@ -114,17 +140,9 @@ export function useGlobalStream(
       const host = selected[index];
       let data = result.data;
       for (let prior = depth - 1; !data && prior > 0; prior--) {
-        data = queryClient.getQueryData<HostPage>([
-          "global-stream",
-          host.serverId,
-          options.agentId,
-          options.asksOnly,
-          options.filter,
-          options.search,
-          options.includeArchived,
-          tagKey,
-          prior,
-        ]);
+        data = queryClient.getQueryData<HostPage>(
+          streamQueryKey(host.serverId, options, tagKey, prior),
+        );
       }
       for (const row of data?.rows ?? [])
         byId.set(
@@ -132,24 +150,21 @@ export function useGlobalStream(
           Object.assign({}, row, { serverId: host.serverId, serverLabel: host.label }),
         );
     }
-    return [...byId.values()].sort(
+    const merged = [...byId.values()];
+    const projected =
+      options.view && options.view !== "activity" ? deduplicateTasks(merged) : merged;
+    const rank = (row: GlobalStreamRow) =>
+      options.view === "tasks" && row.item.kind === "entry" && row.item.entry.ask?.state === "done"
+        ? 1
+        : 0;
+    return projected.sort(
       (a, b) =>
+        rank(a) - rank(b) ||
         b.timestamp.localeCompare(a.timestamp) ||
         a.serverId.localeCompare(b.serverId) ||
         a.id.localeCompare(b.id),
     );
-  }, [
-    results,
-    selected,
-    depth,
-    queryClient,
-    options.agentId,
-    options.asksOnly,
-    options.filter,
-    options.search,
-    options.includeArchived,
-    tagKey,
-  ]);
+  }, [results, selected, depth, queryClient, options, tagKey]);
   const tagCounts = useMemo(
     () => mergeTagCounts(results.map((result) => result.data?.tagCounts ?? [])),
     [results],
@@ -169,18 +184,31 @@ export function useGlobalStream(
     async (tag: string, pinned: boolean) => {
       const writes = selected.flatMap((host, index) => {
         const client = runtime.getClient(host.serverId);
+        if (options.relatedServerId && options.relatedServerId !== host.serverId) return [];
         if (!client || !tagHosts[index] || availability[index] !== "online") return [];
-        return [client.setStreamTagPinned({ agentId: options.agentId, tag, pinned })];
+        const agentId = options.relatedAgentId ?? options.agentId;
+        return [client.setStreamTagPinned({ agentId, tag, pinned })];
       });
       if (!writes.length) throw new Error("No connected host supports Stream tags");
       await Promise.all(writes);
       await Promise.all(results.map((result) => result.refetch()));
     },
-    [selected, runtime, tagHosts, availability, options.agentId, results],
+    [
+      selected,
+      runtime,
+      tagHosts,
+      availability,
+      options.agentId,
+      options.relatedAgentId,
+      options.relatedServerId,
+      results,
+    ],
   );
   const notices = selected.flatMap((host, index) => {
     if (availability[index] === "offline")
       return [`${host.label}: offline — cached items may be out of date`];
+    if (availability[index] === "workflow-upgrade")
+      return [`${host.label}: update this host to use Tasks, Q&A and Needs you`];
     if (availability[index] === "upgrade")
       return [`${host.label}: update this host to use global Stream`];
     const error = results[index].error;
