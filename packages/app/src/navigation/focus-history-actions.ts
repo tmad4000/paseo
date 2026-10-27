@@ -3,7 +3,7 @@ import {
   findPaneById,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-actions";
-import type { navigateToWorkspace } from "@/stores/navigation-active-workspace-store/navigation";
+import type { NavigateToWorkspaceInput } from "@/stores/navigation-active-workspace-store/navigation";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import type {
   NavigationFocusHistoryDirection,
@@ -37,7 +37,7 @@ export function buildWorkspaceFocusLocation(input: {
 }
 
 export interface RestoreNavigationFocusLocationDeps {
-  navigateWorkspace: typeof navigateToWorkspace;
+  navigateWorkspace: (input: NavigateToWorkspaceInput) => string;
   navigateRoute: (pathname: string) => void;
   focusPane: (workspaceKey: string, paneId: string) => void;
   focusTab: (workspaceKey: string, tabId: string) => void;
