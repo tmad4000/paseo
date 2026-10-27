@@ -280,9 +280,21 @@ export const PersistedConfigSchema = z
           .optional(),
         sharing: z
           .object({
+            trustForwardedFor: z.boolean().optional(),
             listen: z.string().optional(),
             publicBaseUrl: z.url().optional(),
             ownerDisplayName: z.string().optional(),
+            publisher: z
+              .discriminatedUnion("kind", [
+                z
+                  .object({
+                    kind: z.literal("cloudflare-worker"),
+                    baseUrl: z.url(),
+                    adminTokenFile: z.string().optional(),
+                  })
+                  .strict(),
+              ])
+              .optional(),
           })
           .strict()
           .optional(),

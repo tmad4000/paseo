@@ -84,7 +84,39 @@ Deployment environment variables and legacy supervisor flags remain authoritativ
 
 ## Conversation share links (Paseo Fork)
 
-Sharing is off until you configure a separate share-only listener:
+Sharing is off until you configure a publisher or a separate share-only listener. The publisher
+keeps the owner's machine private: the daemon makes outbound requests and the Worker serves
+snapshots even while the daemon is offline.
+
+```json
+{
+  "version": 1,
+  "daemon": {
+    "sharing": {
+      "publisher": {
+        "kind": "cloudflare-worker",
+        "baseUrl": "https://paseo-share.<account>.workers.dev",
+        "adminTokenFile": "~/.config/paseo/share-admin-token"
+      },
+      "ownerDisplayName": "Jacob"
+    }
+  }
+}
+```
+
+Deploy the Worker using [the share host deployment guide](../packages/share-worker/README.md).
+Use a mode-600 token file matching the Worker's `ADMIN_TOKEN` secret. The daemon reads the file
+at startup and warns if group or other users can read it. Environment overrides are
+`PASEO_SHARING_PUBLISHER_BASE_URL`, `PASEO_SHARING_PUBLISHER_TOKEN_FILE`, and
+`PASEO_SHARING_PUBLISHER_TOKEN` (the inline token takes precedence over a file). The persisted
+publisher kind is `cloudflare-worker`; tokens are never saved in `config.json`.
+
+A publisher needs neither `listen` nor `publicBaseUrl`. If you configure both hosts, publisher
+URLs win and the local listener serves the same snapshots. Publisher settings require a
+coordinated host restart. Keep the original publisher configuration available until all its
+pending revocations finish; a changed URL cannot revoke shares on the original host.
+
+For a local listener:
 
 ```json
 {
@@ -105,20 +137,39 @@ guessed from request headers. `ownerDisplayName` defaults to the OS user name. T
 require a coordinated host restart; editing them does not start a listener immediately.
 
 Foreground deployments can use `PASEO_SHARING_LISTEN`, `PASEO_SHARING_PUBLIC_BASE_URL`, and
-`PASEO_SHARING_OWNER_NAME`. The share listener limits each connecting IP to 60 requests per minute
-and 10 unavailable-share requests. It does not trust forwarded IP headers; configure per-client
-limits on a reverse proxy when several guests share its connection address.
+`PASEO_SHARING_OWNER_NAME`. The share listener limits each client key to 60 requests per minute
+and 10 unavailable-share requests, plus a global ceiling of 600 requests per minute across all
+keys. The global ceiling also counts rejected paths, methods and requests over a client limit.
+Only GET and HEAD reach snapshot storage; raw request URLs longer than 256 characters return
+the unavailable page. HEAD returns GET's status and headers without a body and counts as a view.
+
+`daemon.sharing.trustForwardedFor` defaults to `false`: the socket peer is the client key.
+Set it to `true` (or use `PASEO_SHARING_TRUST_FORWARDED_FOR=true`) only behind a proxy that replaces
+untrusted incoming `X-Forwarded-For` headers. When enabled, a loopback or `100.64.0.0/10` socket peer
+can supply the client key through the first `X-Forwarded-For` hop. An invalid first IP or any
+other socket peer falls back to the socket address; later hops are ignored. The Worker publisher
+does not use this setting and needs no local listener or proxy.
 
 Open a conversation's **Share…** action to review its redacted snapshot, choose an expiry
 (default seven days), and create the link. Tool arguments, output, attachments and images are
 never shared. Pattern-based redaction can miss secrets; review the preview. Changes after
 creation do not change the snapshot. **Manage shares** in the dialog or host connection settings
-shows views and lets you revoke or delete a link. Revocation takes effect on the next request.
+shows local-listener views and lets you revoke or delete a link. Worker guest reads do not
+report view counts back to the daemon; publisher view counts remain local-listener counts.
+Local revocation takes effect on the next request. At the external host, revocation completes
+within about a minute after a successful host deletion because KV changes propagate. If the host
+cannot be reached, **Revoke pending at the host** stays visible; retries wait one minute, five
+minutes, thirty minutes, then an hour between attempts. Jobs survive daemon restarts and local
+snapshot deletion. If a host deletion fails, the pending record remains visible until it succeeds. Expiry also applies at the host when the daemon is offline.
 A guest who already copied the conversation can retain that copy.
 
 The link is a capability: anyone holding it can read that snapshot. Its token is returned once,
 never stored in plaintext, and cannot be copied again from Manage shares. Create another link
 if you lose it. URL path tokens can appear in reverse-proxy access logs; protect those logs.
+
+Pasting a share link into a messenger can make that service fetch the page to generate a preview.
+That fetch counts as a view on the local listener. The page uses the generic browser title “Shared conversation” and
+has no description or Open Graph metadata; the conversation title appears only in the page body.
 
 CLI: `paseo share create <agent> --expires 7d`, `paseo share preview <agent> --json`,
 `paseo share ls --json`, `paseo share revoke <share-id>`, and `paseo share delete <share-id>`.

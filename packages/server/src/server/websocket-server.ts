@@ -1995,6 +1995,8 @@ export class VoiceAssistantWebSocketServer {
         durableStream: true,
         // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
         streamTags: true,
+        // COMPAT(streamAnswers): fork feature; remove gate after 2027-04-26.
+        streamAnswers: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
         steerOnly: true,

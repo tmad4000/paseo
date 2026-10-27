@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
   sharing: {
+    unpublishPending: "Revocación pendiente en el servidor",
+    revokeDelay: "La revocación en el servidor se completa en aproximadamente un minuto.",
     deleteMessage: "¿Eliminar este enlace y su instantánea? Esta acción no se puede deshacer.",
     action: "Compartir…",
     title: "Compartir conversación",
@@ -26,7 +28,7 @@ export const es: TranslationResources = {
     loading: "Cargando vista previa…",
     updateHost: "Actualiza el host para compartir conversaciones.",
     summary:
-      "Ocultos: herramientas {{tools}}, razonamiento {{reasoning}} · Protegidos: secretos {{secrets}}, contactos {{contacts}} · Rutas abreviadas: {{paths}}",
+      "Ocultos: herramientas {{tools}}, razonamiento {{reasoning}} · Protegidos: secretos {{secrets}}, contactos {{contacts}}, hosts {{hosts}} · Rutas abreviadas: {{paths}}",
     shareMetadata:
       "Instantánea · {{views}} visitas · Caduca: {{expiry}} · Última visita: {{lastViewed}}",
     fields: {
@@ -34,6 +36,7 @@ export const es: TranslationResources = {
       reasoning: "Razonamiento",
       errors: "Errores",
       secrets: "Secretos",
+      hosts: "Nombres de host y direcciones IP",
       paths: "Rutas de archivos",
       contacts: "Correos y teléfonos",
     },
@@ -44,6 +47,8 @@ export const es: TranslationResources = {
       "30d": "30 días",
     },
     omitted: {
+      earlier_one: "Esta instantánea no incluye {{count}} mensaje anterior",
+      earlier_other: "Esta instantánea no incluye {{count}} mensajes anteriores",
       tool_calls_one: "{{count}} llamada oculta",
       tool_calls_other: "{{count}} llamadas ocultas",
       reasoning_one: "{{count}} razonamiento oculto",
@@ -100,6 +105,20 @@ export const es: TranslationResources = {
       failed: "No se pudo actualizar el proyecto",
       hostDisconnected: "El host no está conectado",
     },
+  },
+  threads: {
+    menuLabel: "Hilo de {{title}}",
+    replyInThread: "Responder en un hilo",
+    oneReply: "1 respuesta",
+    manyReplies: "{{count}} respuestas",
+    openThread: "Abrir el hilo {{title}}",
+    backToMain: "Volver al hilo principal: {{title}}",
+    sendToMainLabel: "Enviar la última respuesta de este hilo a {{title}}",
+    sentToMain: "Enviado a {{title}}",
+    sendToMainFailed: "No se pudo enviar al hilo principal",
+    sendToMainUpdateHost: "Actualiza el host para enviar al hilo principal.",
+    noReplyYet: "Espera primero la respuesta del hilo.",
+    parentUnavailable: "El hilo principal ya no está disponible.",
   },
   sessionPins: {
     title: "Sesiones fijadas",
@@ -195,6 +214,8 @@ export const es: TranslationResources = {
       daemonUnavailable: "Daemonno disponible",
       daemonClientUnavailable: "ClienteDaemonno disponible",
       daemonClientDisconnected: "El clienteDaemonestá desconectado",
+      connectionInterrupted:
+        "No se puede conectar con tu host ahora. Paseo se está reconectando; inténtalo de nuevo cuando vuelva.",
       noFileFound: "No se encontró ningún archivo para{{token}}",
       unexpectedDictationError: "Se produjo un error inesperado al manejar el dictado.",
     },
@@ -505,6 +526,7 @@ export const es: TranslationResources = {
       notePlaceholder: "Escribe una nota o un enlace…",
       addNote: "Añadir nota",
       answerLabel: "Respuesta:",
+      possibleAnswerLabel: "Posible respuesta:",
       unpin: "Desfijar",
       pinToStream: "Fijar en el stream",
       pinSelection: "Pin selected text to Stream",
@@ -518,6 +540,31 @@ export const es: TranslationResources = {
         "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
       showActivity: "Show activity",
       trackQAndA: "Registrar pregunta y respuesta",
+      answers: {
+        title: "Tus preguntas",
+        newCount: "{{count}} nuevas",
+        waitingCount: "{{count}} en espera",
+        newAnswer: "Respuesta nueva",
+        waiting: "Esperando respuesta",
+        possibleAnswer: "Posible respuesta",
+        candidateHint:
+          "La primera respuesta tras tu pregunta. El agente no ha confirmado que la responda.",
+        openChat: "Abrir el chat que respondió",
+        jumpQuestion: "Pregunta",
+        jumpAnswer: "Respuesta",
+        jumpQuestionLabel: "Ir a tu pregunta en el chat",
+        jumpAnswerLabel: "Ir a la respuesta en el chat",
+        markSeen: "Marcar como vista",
+        markSeenFailed: "No se pudo marcar la respuesta como vista",
+        stopTracking: "Dejar de seguir",
+        stopTrackingFailed: "No se pudo dejar de seguir esta pregunta",
+        collapse: "Contraer respuestas",
+        expand: "Mostrar respuestas",
+        dismiss: "Ocultar hasta que llegue una respuesta nueva",
+        tracked: "Siguiendo esta pregunta. Su respuesta aparece sobre el chat.",
+        trackFailed: "No se pudo seguir esta pregunta",
+        jumpUnavailable: "Ese mensaje ya no está en el historial cargado de este chat",
+      },
       checklistTab: "Checklist",
       checklistDescription:
         "Explicitly tracked asks. Turn endings never mark work done. Ask your agent to record progress, blockers and evidence.",

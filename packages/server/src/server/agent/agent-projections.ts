@@ -1,4 +1,4 @@
-import { restoreCompanionEntries } from "./companion-stream.js";
+import { restoreCompanionEntries, selectSnapshotCompanionEntries } from "./companion-stream.js";
 import type {
   AgentListItemPayload,
   AgentSnapshotPayload,
@@ -145,7 +145,7 @@ export function toAgentPayload(
     title: options?.title ?? null,
     labels: agent.labels,
     artifacts: agent.artifacts ?? [],
-    companionEntries: (agent.companionEntries ?? []).slice(-50),
+    companionEntries: selectSnapshotCompanionEntries(agent.companionEntries ?? []),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -257,7 +257,7 @@ export function buildStoredAgentPayload(
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],
-    companionEntries: restoreCompanionEntries(record).slice(-50),
+    companionEntries: selectSnapshotCompanionEntries(restoreCompanionEntries(record)),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

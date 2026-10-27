@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
   sharing: {
+    unpublishPending: "ホストでの取り消しを待機中",
+    revokeDelay: "ホストでの取り消しは約1分以内に完了します。",
     deleteMessage: "このリンクとスナップショットを削除しますか？元に戻せません。",
     action: "共有…",
     title: "会話を共有",
@@ -26,7 +28,7 @@ export const ja: TranslationResources = {
     loading: "プレビューを読み込み中…",
     updateHost: "会話を共有するにはホストを更新してください。",
     summary:
-      "非表示: ツール {{tools}} 件、推論 {{reasoning}} 件 · マスク: 秘密情報 {{secrets}} 件、連絡先 {{contacts}} 件 · 短縮パス {{paths}} 件",
+      "非表示: ツール {{tools}} 件、推論 {{reasoning}} 件 · マスク: 秘密情報 {{secrets}} 件、連絡先 {{contacts}}, ホスト {{hosts}} 件 · 短縮パス {{paths}} 件",
     shareMetadata:
       "スナップショット · 閲覧 {{views}} 回 · 有効期限: {{expiry}} · 最終閲覧: {{lastViewed}}",
     fields: {
@@ -34,6 +36,7 @@ export const ja: TranslationResources = {
       reasoning: "推論",
       errors: "エラー",
       secrets: "秘密情報",
+      hosts: "ホスト名とIPアドレス",
       paths: "ファイルパス",
       contacts: "メールアドレスと電話番号",
     },
@@ -44,6 +47,8 @@ export const ja: TranslationResources = {
       "30d": "30日間",
     },
     omitted: {
+      earlier_one: "このスナップショットには以前のメッセージ{{count}}件が含まれていません",
+      earlier_other: "このスナップショットには以前のメッセージ{{count}}件が含まれていません",
       tool_calls_one: "ツール呼び出し {{count}} 件を非表示",
       tool_calls_other: "ツール呼び出し {{count}} 件を非表示",
       reasoning_one: "推論 {{count}} 件を非表示",
@@ -99,6 +104,20 @@ export const ja: TranslationResources = {
       failed: "プロジェクトを更新できませんでした",
       hostDisconnected: "ホストに接続されていません",
     },
+  },
+  threads: {
+    menuLabel: "{{title}} からのスレッド",
+    replyInThread: "スレッドで返信",
+    oneReply: "返信 1 件",
+    manyReplies: "返信 {{count}} 件",
+    openThread: "スレッド {{title}} を開く",
+    backToMain: "メインスレッドに戻る: {{title}}",
+    sendToMainLabel: "このスレッドの最新の回答を {{title}} に送る",
+    sentToMain: "{{title}} に送信しました",
+    sendToMainFailed: "メインスレッドに送信できませんでした",
+    sendToMainUpdateHost: "メインスレッドに送るにはホストを更新してください。",
+    noReplyYet: "先にスレッドの回答を待ってください。",
+    parentUnavailable: "メインスレッドは利用できなくなりました。",
   },
   sessionPins: {
     title: "固定したセッション",
@@ -194,6 +213,8 @@ export const ja: TranslationResources = {
       daemonUnavailable: "デーモンが利用できません",
       daemonClientUnavailable: "デーモンクライアントが利用できません",
       daemonClientDisconnected: "デーモンクライアントが切断されています",
+      connectionInterrupted:
+        "現在ホストに接続できません。Paseo が再接続しています。接続が戻ったらもう一度お試しください。",
       noFileFound: "{{token}}のファイルが見つかりません",
       unexpectedDictationError: "音声入力処理中に予期しないエラーが発生しました。",
     },
@@ -501,6 +522,7 @@ export const ja: TranslationResources = {
       notePlaceholder: "メモまたはリンクを入力…",
       addNote: "メモを追加",
       answerLabel: "回答:",
+      possibleAnswerLabel: "回答の候補：",
       unpin: "ピン留めを解除",
       pinToStream: "ストリームにピン留め",
       pinSelection: "Pin selected text to Stream",
@@ -514,6 +536,30 @@ export const ja: TranslationResources = {
         "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
       showActivity: "Show activity",
       trackQAndA: "Q&Aを記録",
+      answers: {
+        title: "あなたの質問",
+        newCount: "新着 {{count}}",
+        waitingCount: "回答待ち {{count}}",
+        newAnswer: "新しい回答",
+        waiting: "回答待ち",
+        possibleAnswer: "回答の候補",
+        candidateHint: "質問の後の最初の返信です。回答であるとエージェントは確認していません。",
+        openChat: "回答したチャットを開く",
+        jumpQuestion: "質問",
+        jumpAnswer: "回答",
+        jumpQuestionLabel: "チャット内のあなたの質問へ移動",
+        jumpAnswerLabel: "チャット内の回答へ移動",
+        markSeen: "既読にする",
+        markSeenFailed: "回答を既読にできませんでした",
+        stopTracking: "記録をやめる",
+        stopTrackingFailed: "この質問の記録を停止できませんでした",
+        collapse: "回答を折りたたむ",
+        expand: "回答を表示",
+        dismiss: "新しい回答が届くまで非表示",
+        tracked: "この質問を記録しました。回答はチャットの上に表示されます。",
+        trackFailed: "この質問を記録できませんでした",
+        jumpUnavailable: "このメッセージは読み込まれた履歴にありません",
+      },
       checklistTab: "Checklist",
       checklistDescription:
         "Explicitly tracked asks. Turn endings never mark work done. Ask your agent to record progress, blockers and evidence.",
