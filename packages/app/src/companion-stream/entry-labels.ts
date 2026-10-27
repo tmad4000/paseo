@@ -17,6 +17,23 @@ const PERMISSION_KINDS = {
 
 /** The muted line above a Stream card: what this is and where it stands. Provenance stays in data. */
 export function describeEntry(entry: CompanionEntry, t: Translate): EntryEyebrow {
+  const base = describeEntryKind(entry, t);
+  // Source-message coverage is not semantic extraction or task completion.
+  if (entry.messageReview)
+    return {
+      kind: t("agentPanel.stream.inventory.userMessage"),
+      status: t(
+        entry.messageReview.state === "unreviewed"
+          ? "agentPanel.stream.inventory.needsReview"
+          : "agentPanel.stream.inventory.sourceReviewed",
+      ),
+    };
+  if (entry.source?.role === "agent" && !entry.ask)
+    return { ...base, kind: t("agentPanel.stream.inventory.agentMessage") };
+  return base;
+}
+
+function describeEntryKind(entry: CompanionEntry, t: Translate): EntryEyebrow {
   switch (entry.kind) {
     case "question":
       if (entry.ask)

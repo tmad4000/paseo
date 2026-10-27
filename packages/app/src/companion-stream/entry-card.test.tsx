@@ -83,6 +83,17 @@ const quote: CompanionEntry = {
   truncated: false,
 };
 
+const sourceMessage: CompanionEntry = {
+  id: "question:msg-1",
+  kind: "question",
+  status: "open",
+  timestamp: ask.timestamp,
+  text: "Fix filtering and add direct links.",
+  truncated: false,
+  source: { role: "user", messageId: "msg-1", seq: 4, epoch: "epoch-1" },
+  messageReview: { state: "unreviewed", revision: 0, note: "", askIds: [] },
+};
+
 function renderCard(entry: CompanionEntry) {
   return render(
     <EntryCard
@@ -162,5 +173,26 @@ describe("EntryCard", () => {
     expect(view.getByText("Remaining: Waiting for review")).toBeTruthy();
     expect(view.getByText("Evidence so far: Unit tests pass")).toBeTruthy();
     expect(view.getByText("Done").closest("button")?.disabled).toBe(true);
+  });
+
+  it("labels an unreviewed source message, hides tap-to-done and opens it in Chat", () => {
+    const onOpenSource = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={sourceMessage}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onOpenSource={onOpenSource}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(view.getByTestId("companion-entry-eyebrow").textContent).toBe(
+      "Your message · request inventory · Needs ask review · Oct 24, 2:10 PM",
+    );
+    expect(view.getByText("0 linked asks")).toBeTruthy();
+    expect(view.queryByText("Done")).toBeNull();
+    fireEvent.click(view.getByText("Open source message in Chat"));
+    expect(onOpenSource).toHaveBeenCalledWith(4, "epoch-1");
   });
 });

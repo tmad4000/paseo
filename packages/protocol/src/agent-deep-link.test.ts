@@ -6,6 +6,12 @@ import {
 } from "./agent-deep-link.js";
 
 describe("agent deep links", () => {
+  it("preserves the Stream selection through desktop/native deep-link parsing", () => {
+    const target = { serverId: "host/one", agentId: "session", view: "stream" as const };
+    expect(parseAgentDeepLink(buildAgentDeepLink(target))).toEqual(target);
+    expect(buildAgentDeepLinkRoute(target)).toBe("/h/host%2Fone/agent/session?view=stream");
+    expect(parseAgentDeepLink("paseo-fork://h/host/agent/session?view=unknown")).toBeNull();
+  });
   it("round-trips an existing agent target", () => {
     const target = { serverId: "server/main", agentId: "agent 123" };
 

@@ -1,3 +1,4 @@
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { HostRouteBootstrapBoundary } from "@/components/host-route-bootstrap-boundary";
@@ -23,6 +24,7 @@ function HostAgentReadyRouteContent() {
   const params = useLocalSearchParams<{
     serverId?: string;
     agentId?: string;
+    view?: string;
   }>();
   const handledNavigationRef = useRef<string | null>(null);
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
@@ -106,11 +108,16 @@ function HostAgentReadyRouteContent() {
     handledNavigationRef.current = navigationKey;
 
     if (resolution.kind === "resolved") {
+      if (params.view === "stream" || params.view === "chat") {
+        useAgentViewStore
+          .getState()
+          .setSelectedView(serverId, agentId, params.view === "stream" ? "artifacts" : "chat");
+      }
       navigateToAgent({ serverId, agentId, workspaceId: resolution.workspaceId });
       return;
     }
     router.replace(resolution.kind === "invalid" ? ("/" as Href) : buildHostRootRoute(serverId));
-  }, [agentId, resolution, router, serverId]);
+  }, [agentId, resolution, router, serverId, params.view]);
 
   const handleRetry = useCallback(() => {
     if (resolution.kind === "lookupError") {

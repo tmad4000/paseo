@@ -294,6 +294,7 @@ function renderLiveHeadStreamItem(input: {
 }
 
 export interface AgentStreamViewHandle {
+  jumpToSource(seq: number, epoch: string): void;
   scrollToBottom(reason?: BottomAnchorLocalRequest["reason"]): void;
   prepareForViewportChange(): void;
 }
@@ -691,6 +692,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     useImperativeHandle(
       ref,
       () => ({
+        jumpToSource(seq, epoch) {
+          if (timelineEpoch !== epoch) {
+            handleTimelineHistoryLoadError();
+            return;
+          }
+          chatOutline.jumpToPrompt(seq, epoch);
+        },
         scrollToBottom(reason = "jump-to-bottom") {
           viewportRef.current?.scrollToBottom(reason);
         },
@@ -698,7 +706,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           viewportRef.current?.prepareForViewportChange();
         },
       }),
-      [],
+      [chatOutline, timelineEpoch, handleTimelineHistoryLoadError],
     );
 
     const scrollToBottom = useCallback(() => {

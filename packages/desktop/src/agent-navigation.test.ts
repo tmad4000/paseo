@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
 describe("desktop agent navigation", () => {
+  it("preserves Stream view through cold launch and renderer readiness", () => {
+    const target = parseAgentDeepLinkFromArgv(["paseo-fork://h/host/agent/session?view=stream"]);
+    expect(target).toEqual({ serverId: "host", agentId: "session", view: "stream" });
+    const inbox = new AgentNavigationInbox();
+    expect(inbox.deliverOrQueue(7, target!)).toBeNull();
+    expect(inbox.windowReady(7)).toEqual(target);
+    expect(inbox.deliverOrQueue(7, target!)).toEqual(target);
+  });
   it("finds an agent deep link among Electron launch arguments", () => {
     expect(
       parseAgentDeepLinkFromArgv([

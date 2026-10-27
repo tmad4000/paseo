@@ -1993,6 +1993,7 @@ export class VoiceAssistantWebSocketServer {
         conversationSharing: true,
         globalStream: true,
         durableStream: true,
+        streamMessageInventory: true,
         // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
         streamTags: true,
         queueEdit: this.agentQueueService !== null,

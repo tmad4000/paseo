@@ -1,3 +1,4 @@
+import { indexStreamMessages } from "./stream-message-inventory.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -2480,6 +2481,23 @@ export class AgentManager {
   }
 
   async listGlobalStream(options: StreamListOptions) {
+    if (options.includeMessageInventory && options.agentId) {
+      await this.runLifecycleMutation(options.agentId, async () => {
+        const agent = this.agents.get(options.agentId!);
+        if (!agent || !this.timelineStore.has(agent.id)) return;
+        const entries = agent.companionEntries ?? [];
+        const indexed = indexStreamMessages(
+          entries,
+          this.timelineStore.getRows(agent.id),
+          this.timelineStore.getEpoch(agent.id),
+        );
+        if (indexed !== entries) {
+          agent.companionEntries = indexed;
+        }
+        // A read acknowledges durable coverage, including retry after a failed prior write.
+        await this.persistSnapshot(agent);
+      });
+    }
     const sources = new Map<string, StreamSource>();
     const records = (await this.registry?.list()) ?? [];
     for (const record of records) {
@@ -2495,7 +2513,13 @@ export class AgentManager {
     const pinnedTags = options.agentId
       ? (records.find((record) => record.id === options.agentId)?.pinnedStreamTags ?? [])
       : await this.getGlobalPinnedStreamTags();
-    return { ...listStreamRows(sources.values(), options), pinnedTags };
+    let coverage: "loaded_history" | "not_loaded" | undefined;
+    if (options.includeMessageInventory)
+      coverage =
+        options.agentId && this.agents.get(options.agentId)?.historyPrimed
+          ? "loaded_history"
+          : "not_loaded";
+    return { ...listStreamRows(sources.values(), options), coverage, pinnedTags };
   }
 
   private async getGlobalPinnedStreamTags(): Promise<string[]> {
@@ -5098,7 +5122,11 @@ export class AgentManager {
         clientMessageId,
         messageId,
       );
-      if (enriched) this.enqueueDurableTimelineUpdate(agent.id, enriched);
+      if (enriched) {
+        this.enqueueDurableTimelineUpdate(agent.id, enriched);
+        // Record the provider ID as a source alias before any restart replays history.
+        this.indexUserMessageSources(agent.id);
+      }
     }
     return existing;
   }
@@ -5169,7 +5197,24 @@ export class AgentManager {
     item = limitAgentTimelineItemContent(item);
     const row = this.timelineStore.append(agentId, item, options);
     this.enqueueDurableTimelineAppend(agentId, row);
+    if (item.type === "user_message") this.indexUserMessageSources(agentId);
     return row;
+  }
+
+  private indexUserMessageSources(agentId: string): void {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+    const entries = agent.companionEntries ?? [];
+    const indexed = indexStreamMessages(
+      entries,
+      this.timelineStore
+        .getRows(agentId)
+        .filter((timelineRow) => timelineRow.item.type === "user_message"),
+      this.timelineStore.getEpoch(agentId),
+    );
+    if (indexed === entries) return;
+    agent.companionEntries = indexed;
+    this.enqueueBackgroundPersist(agent);
   }
 
   private emitState(agent: ManagedAgent, options?: { persist?: boolean }): void {

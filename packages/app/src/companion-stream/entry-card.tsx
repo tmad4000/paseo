@@ -18,6 +18,8 @@ export interface EntryCardProps {
   disabled?: boolean;
   onReturnToChat: () => void;
   onReplyInChat: () => void;
+  /** Opens the source user/agent message in Chat (message-inventory entries). */
+  onOpenSource?: (seq: number, epoch: string) => void;
   onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
   onRemovePin: (id: string) => void;
   /** Tapping a #hashtag in the text adds it to the Stream tag filter. */
@@ -30,6 +32,7 @@ export function EntryCard({
   serverId,
   onReturnToChat,
   onReplyInChat,
+  onOpenSource,
   onUpdateStatus,
   onRemovePin,
   onTagPress,
@@ -71,7 +74,10 @@ export function EntryCard({
       </View>
 
       <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
-      {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
+      {entry.messageReview ? <MessageReviewNotice review={entry.messageReview} /> : null}
+      {expanded && entry.ask ? (
+        <AskDetails ask={entry.ask} serverId={serverId} hasSource={Boolean(entry.source)} />
+      ) : null}
 
       {entry.truncated ? (
         <Text style={styles.description}>{t("agentPanel.stream.excerpt")}</Text>
@@ -95,7 +101,8 @@ export function EntryCard({
         >
           {t(chatAction)}
         </Button>
-        {entry.kind === "question" || entry.kind === "feature_request" ? (
+        <OpenSourceButton source={entry.source} onOpenSource={onOpenSource} />
+        {hasStatusActions(entry) ? (
           <StatusActions
             entryId={entry.id}
             tracked={Boolean(entry.ask)}
@@ -208,7 +215,57 @@ function EntryBody({
   );
 }
 
-function AskDetails({ ask, serverId }: { ask: TrackedAsk; serverId?: string }) {
+/** Source-message records are reviewed by the agent, not marked done by a tap. */
+function hasStatusActions(entry: CompanionEntry): boolean {
+  return !entry.messageReview && (entry.kind === "question" || entry.kind === "feature_request");
+}
+
+function MessageReviewNotice({ review }: { review: NonNullable<CompanionEntry["messageReview"]> }) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.details} testID="companion-entry-message-review">
+      <Text selectable style={styles.description}>
+        {review.state === "unreviewed"
+          ? t("agentPanel.stream.inventory.unreviewedHint")
+          : review.note}
+      </Text>
+      <Text selectable style={styles.description}>
+        {t("agentPanel.stream.inventory.linkedAsks", { count: review.askIds.length })}
+      </Text>
+    </View>
+  );
+}
+
+function OpenSourceButton({
+  source,
+  onOpenSource,
+}: {
+  source: CompanionEntry["source"];
+  onOpenSource?: EntryCardProps["onOpenSource"];
+}) {
+  const { t } = useTranslation();
+  const seq = source?.seq;
+  const epoch = source?.epoch;
+  const open = useCallback(() => {
+    if (seq !== undefined && epoch) onOpenSource?.(seq, epoch);
+  }, [seq, epoch, onOpenSource]);
+  if (!onOpenSource || seq === undefined || !epoch) return null;
+  return (
+    <Button variant="outline" style={styles.touchTarget} onPress={open}>
+      {t("agentPanel.stream.inventory.openSourceMessage")}
+    </Button>
+  );
+}
+
+function AskDetails({
+  ask,
+  serverId,
+  hasSource,
+}: {
+  ask: TrackedAsk;
+  serverId?: string;
+  hasSource: boolean;
+}) {
   const { t } = useTranslation();
   const delegatedAgentId = ask.delegatedAgentId;
   const openDelegated = useCallback(() => {
@@ -245,7 +302,7 @@ function AskDetails({ ask, serverId }: { ask: TrackedAsk; serverId?: string }) {
           })}
         </Text>
       ) : null}
-      {ask.sourceMessageId ? (
+      {ask.sourceMessageId && !hasSource ? (
         <Text selectable style={styles.description}>
           {t("agentPanel.stream.card.sourceMessage", { id: ask.sourceMessageId })}
         </Text>

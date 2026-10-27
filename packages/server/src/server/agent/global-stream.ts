@@ -1,5 +1,9 @@
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
-import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import {
+  isCompanionEntryPending,
+  companionSourceRole,
+  type CompanionEntry,
+} from "@getpaseo/protocol/companion-stream";
 import type {
   StreamListOptions,
   StreamRow,
@@ -24,6 +28,15 @@ export interface StreamPage {
   rows: StreamRow[];
   nextCursor: string | null;
   tagCounts: StreamTagCount[];
+  counts: {
+    total: number;
+    open: number;
+    done: number;
+    user: number;
+    agent: number;
+    unknown: number;
+    matching: number;
+  };
 }
 
 /** A projection of existing records. Never starts a provider or replays a transcript. */
@@ -33,21 +46,45 @@ export function listStreamRows(
 ): StreamPage {
   const search = options.search?.trim().toLocaleLowerCase() ?? "";
   const tags = normalizeStreamTags(options.tags ?? []);
+  const rows = collectStreamRows(sources, {
+    ...options,
+    filter: options.filter === "pinned" ? "pinned" : "all",
+  });
+  const pending = (row: StreamRow) =>
+    row.item.kind === "entry" && isCompanionEntryPending(row.item.entry);
+  const role = (row: StreamRow) =>
+    row.item.kind === "entry" ? companionSourceRole(row.item.entry) : "agent";
+  const counts = {
+    total: rows.length,
+    open: rows.filter(pending).length,
+    done: rows.filter((row) => !pending(row)).length,
+    user: rows.filter((row) => role(row) === "user").length,
+    agent: rows.filter((row) => role(row) === "agent").length,
+    unknown: rows.filter((row) => role(row) === "unknown").length,
+    matching: 0,
+  };
   const rank = (row: StreamRow) =>
     options.asksOnly && row.item.kind === "entry" && row.item.entry.ask?.state === "done" ? 1 : 0;
   const compare = (a: StreamRow, b: StreamRow) => rank(a) - rank(b) || compareStreamRows(a, b);
-  const scoped = collectStreamRows(sources, options).filter(
-    (row) =>
-      !search ||
-      [
-        row.agentTitle,
-        row.cwd,
-        row.item.kind === "entry" ? row.item.entry.text : row.item.artifact.path,
-      ]
-        .join("\n")
-        .toLocaleLowerCase()
-        .includes(search),
-  );
+  const scoped = rows
+    .filter(
+      (row) =>
+        (!options.sourceRole || options.sourceRole === "all" || role(row) === options.sourceRole) &&
+        (!(options.state === "open" || options.filter === "pending") || pending(row)) &&
+        (options.state !== "done" || !pending(row)),
+    )
+    .filter(
+      (row) =>
+        !search ||
+        [
+          row.agentTitle,
+          row.cwd,
+          row.item.kind === "entry" ? row.item.entry.text : row.item.artifact.path,
+        ]
+          .join("\n")
+          .toLocaleLowerCase()
+          .includes(search),
+    );
   // Counts ignore the tag filter itself so the cloud stays put while tags are toggled.
   const tagCounts = countStreamTags(scoped);
   const sorted = scoped.filter((row) => matchesTags(row, tags)).sort(compare);
@@ -72,6 +109,7 @@ export function listStreamRows(
   const last = page.at(-1);
   return {
     rows: page,
+    counts: { ...counts, matching: sorted.length },
     nextCursor:
       last && remaining.length > page.length
         ? Buffer.from(
@@ -127,7 +165,7 @@ function collectStreamRows(
     };
     for (const stored of source.companionEntries ?? []) {
       const entry = withTags(stored);
-      if (options.asksOnly && !entry.ask) continue;
+      if (!includeEntry(entry, options)) continue;
       if (options.filter === "pending" && !isCompanionEntryPending(entry)) continue;
       if (options.filter === "pinned" && entry.kind !== "pin") continue;
       rows.push({
@@ -160,4 +198,10 @@ export function compareStreamRows(
 
 function isHiddenSource(source: StreamSource, options: StreamListOptions): boolean {
   return Boolean(source.internal || (source.archivedAt && !options.includeArchived));
+}
+
+function includeEntry(entry: CompanionEntry, options: StreamListOptions): boolean {
+  if (entry.source && !options.includeMessageInventory && !entry.ask) return false;
+  if (!options.asksOnly || entry.ask) return true;
+  return Boolean(options.includeMessageInventory && entry.messageReview?.state === "unreviewed");
 }

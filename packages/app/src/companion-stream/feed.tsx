@@ -1,5 +1,10 @@
+import { buildAgentDeepLink, buildAgentDeepLinkRoute } from "@getpaseo/protocol/agent-deep-link";
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
-import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import {
+  companionSourceRole,
+  isCompanionEntryPending,
+  type CompanionEntry,
+} from "@getpaseo/protocol/companion-stream";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -11,6 +16,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SearchField } from "@/components/ui/search-field";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useHostRuntimeConnectionStatus, useHostRuntimeClient } from "@/runtime/host-runtime";
+import { copyToClipboard } from "@/utils/copy-to-clipboard";
+import { isWeb, getIsElectron } from "@/constants/platform";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildCompanionFeed, type CompanionFeedItem } from "./model";
 import { useGlobalStream } from "./use-global-stream";
@@ -33,6 +40,7 @@ interface CompanionFeedProps {
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
   onReturnToChat: () => void;
   onReplyInChat: () => void;
+  onOpenSource?: (seq: number, epoch: string) => void;
 }
 
 const keyExtractor = (item: CompanionFeedItem) => item.id;
@@ -40,6 +48,23 @@ const NO_NOTICES: readonly string[] = [];
 
 type ViewTab = "checklist" | "stream" | "pinned";
 type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
+type StatusFilter = "all" | "open" | "done";
+type SourceRoleFilter = "all" | "user" | "agent";
+type StreamCounts = ReturnType<typeof useGlobalStream>["counts"];
+
+/** Client-side mirror of the host's status/source filters, for older hosts and snapshot entries. */
+function matchesStatusAndSource(
+  item: CompanionFeedItem,
+  status: StatusFilter,
+  sourceRole: SourceRoleFilter,
+): boolean {
+  const pending = item.kind === "entry" && isCompanionEntryPending(item.entry);
+  const role = item.kind === "entry" ? companionSourceRole(item.entry) : "agent";
+  if (sourceRole !== "all" && role !== sourceRole) return false;
+  if (status === "open") return pending;
+  if (status === "done") return !pending;
+  return true;
+}
 
 export function CompanionFeed({
   serverId,
@@ -52,6 +77,7 @@ export function CompanionFeed({
   onOpenWorkspaceFile,
   onReturnToChat,
   onReplyInChat,
+  onOpenSource,
 }: CompanionFeedProps) {
   const { t } = useTranslation();
   const connection = useHostRuntimeConnectionStatus(serverId);
@@ -72,6 +98,11 @@ export function CompanionFeed({
   const hostVersion = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.version ?? "?",
   );
+  // COMPAT(streamMessageInventory): fork feature; remove gate after 2027-04-24. Durable hosts without it
+  // still page Stream; they just lack source-message records and host-side status/source counts.
+  const supportsMessageInventory = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.streamMessageInventory === true,
+  );
   const olderHost = hostKnown && !supportsDurableStream;
   const [saving, setSaving] = useState(false);
   const artifactPins = useRef(new ArtifactPinOperations());
@@ -79,16 +110,47 @@ export function CompanionFeed({
 
   const [viewTab, setViewTab] = useState<ViewTab>("stream");
   const [filter, setFilter] = useState<StreamFilter>("all");
-  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [sourceRole, setSourceRole] = useState<SourceRoleFilter>("all");
   const [search, setSearch] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  const narrowed = status !== "all" || sourceRole !== "all";
+  const resetFilters = useCallback(() => {
+    setFilter("all");
+    setStatus("all");
+    setSourceRole("all");
+  }, []);
+  const copyStreamLink = useCallback(async () => {
+    try {
+      const target = { serverId, agentId, view: "stream" as const };
+      const link =
+        isWeb && !getIsElectron()
+          ? new URL(buildAgentDeepLinkRoute(target), window.location.origin).href
+          : buildAgentDeepLink(target);
+      await copyToClipboard(link);
+      setLinkNotice(t("agentPanel.stream.inventory.linkCopied"));
+    } catch {
+      setLinkNotice(t("agentPanel.stream.inventory.linkFailed"));
+    }
+  }, [serverId, agentId, t]);
+  const handleCopyStreamLink = useCallback(() => {
+    void copyStreamLink();
+  }, [copyStreamLink]);
 
-  const pendingFilter = onlyOpen ? "pending" : "all";
   const query = useGlobalStream({
     serverId,
     agentId,
     asksOnly: viewTab === "checklist",
-    filter: viewTab === "pinned" ? "pinned" : pendingFilter,
+    // "pending" keeps older hosts' Open filter working; newer hosts also honor state.
+    filter: hostListFilter(viewTab, status),
+    ...(supportsMessageInventory
+      ? {
+          includeMessageInventory: true,
+          state: viewTab === "pinned" ? ("all" as const) : status,
+          sourceRole: viewTab === "pinned" ? ("all" as const) : sourceRole,
+        }
+      : {}),
     search: useDebouncedValue(search, 250),
     tags,
     includeArchived: true,
@@ -121,32 +183,22 @@ export function CompanionFeed({
       if (viewTab === "pinned") {
         return item.kind === "entry" && item.entry.kind === "pin";
       } else {
-        // Stream / Queue
+        // Activity / Checklist
         if (item.kind === "entry" && item.entry.kind === "pin")
-          return viewTab === "stream" && filter === "all" && !onlyOpen;
+          return viewTab === "stream" && filter === "all" && !narrowed;
 
         if (item.kind === "artifact") {
-          return filter === "all" && !onlyOpen;
+          return filter === "all" && matchesStatusAndSource(item, status, sourceRole);
         }
 
         if (viewTab !== "checklist" && filter !== "all" && item.entry.kind !== filter) return false;
         // The durable query filters to explicit asks; legacy entries need the same rule here.
         if (viewTab === "checklist" && !supportsDurableStream && !item.entry.ask) return false;
 
-        if (onlyOpen) {
-          if (item.entry.kind === "question" || item.entry.kind === "feature_request") {
-            return isCompanionEntryPending(item.entry);
-          }
-          if (item.entry.kind === "permission") {
-            return item.entry.status === "pending";
-          }
-          return false;
-        }
-
-        return true;
+        return matchesStatusAndSource(item, status, sourceRole);
       }
     });
-  }, [items, viewTab, filter, onlyOpen, supportsDurableStream]);
+  }, [items, viewTab, filter, narrowed, status, sourceRole, supportsDurableStream]);
 
   const openArtifact = useCallback(
     (artifact: AgentArtifact) => {
@@ -175,12 +227,16 @@ export function CompanionFeed({
     [client, connection, supportsWrites, t, refetch],
   );
   const handleUpdateStatus = useCallback(
-    (entryId: string, status: "open" | "reviewed" | "done") => {
+    (entryId: string, nextStatus: "open" | "reviewed" | "done") => {
       const entry = items.find((item) => item.id === entryId);
       const expectedRevision = entry?.kind === "entry" ? entry.entry.ask?.revision : undefined;
-      void save({ agentId, entryId, action: "update_status", status, expectedRevision }).catch(
-        () => undefined,
-      );
+      void save({
+        agentId,
+        entryId,
+        action: "update_status",
+        status: nextStatus,
+        expectedRevision,
+      }).catch(() => undefined);
     },
     [save, agentId, items],
   );
@@ -214,6 +270,7 @@ export function CompanionFeed({
           serverId={serverId}
           onReturnToChat={onReturnToChat}
           onReplyInChat={onReplyInChat}
+          onOpenSource={onOpenSource}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
           onTagPress={query.supportsTags ? tagFilter.add : undefined}
@@ -227,6 +284,7 @@ export function CompanionFeed({
       handlePinArtifact,
       onReturnToChat,
       onReplyInChat,
+      onOpenSource,
       handleUpdateStatus,
       handleRemovePin,
       saving,
@@ -237,7 +295,6 @@ export function CompanionFeed({
     ],
   );
 
-  const handleToggleOnlyOpen = useCallback(() => setOnlyOpen((v) => !v), []);
   const handleSubmitNote = useCallback(
     ({ entryId, text }: { entryId: string; text: string }) =>
       save({
@@ -305,13 +362,23 @@ export function CompanionFeed({
           />
         ) : null}
 
-        <Button
-          variant="ghost"
-          onPress={refresh}
-          disabled={query.isFetching || connection !== "online"}
-        >
-          {t("globalStream.refresh")}
-        </Button>
+        <View style={styles.headerActions}>
+          <Button variant="outline" onPress={handleCopyStreamLink}>
+            {t("agentPanel.stream.inventory.copyLink")}
+          </Button>
+          <Button
+            variant="ghost"
+            onPress={refresh}
+            disabled={query.isFetching || connection !== "online"}
+          >
+            {t("globalStream.refresh")}
+          </Button>
+        </View>
+        {linkNotice ? (
+          <Text accessibilityRole="alert" style={styles.description}>
+            {linkNotice}
+          </Text>
+        ) : null}
         {notices.map((notice) => (
           <Text key={notice} accessibilityRole="alert" style={styles.description}>
             {notice}
@@ -346,16 +413,27 @@ export function CompanionFeed({
                 ]}
               />
             ) : null}
-            <Button
-              variant={onlyOpen ? "secondary" : "outline"}
-              style={styles.touchTarget}
-              onPress={handleToggleOnlyOpen}
-              testID="companion-stream-pending"
-            >
-              {t(onlyOpen ? "agentPanel.stream.showCompleted" : "agentPanel.stream.showUnresolved")}
-            </Button>
+            <StreamFilters
+              status={status}
+              setStatus={setStatus}
+              sourceRole={sourceRole}
+              setSourceRole={setSourceRole}
+              viewTab={viewTab}
+              counts={query.counts}
+              resetFilters={resetFilters}
+              canReset={narrowed || filter !== "all"}
+            />
           </View>
         )}
+        {supportsMessageInventory ? (
+          <Text style={styles.description} testID="stream-coverage">
+            {t(
+              query.coverage === "loaded_history"
+                ? "agentPanel.stream.inventory.coverageLoaded"
+                : "agentPanel.stream.inventory.coverageNotLoaded",
+            )}
+          </Text>
+        ) : null}
 
         {supportsWrites ? (
           <StreamNoteComposer
@@ -377,9 +455,16 @@ export function CompanionFeed({
       notices,
       viewTab,
       filter,
-      onlyOpen,
+      status,
+      sourceRole,
+      narrowed,
+      query.counts,
+      query.coverage,
+      resetFilters,
+      handleCopyStreamLink,
+      linkNotice,
+      supportsMessageInventory,
       t,
-      handleToggleOnlyOpen,
       handleSubmitNote,
       supportsWrites,
       saveError,
@@ -402,16 +487,29 @@ export function CompanionFeed({
 
   const showActivity = useCallback(() => {
     setViewTab("stream");
-    setFilter("all");
-    setOnlyOpen(false);
-  }, []);
+    resetFilters();
+  }, [resetFilters]);
 
   const empty = useMemo(
     () => (
       <View style={styles.empty} testID="companion-stream-empty">
         <Text style={styles.title}>
-          {t(viewTab === "pinned" ? "agentPanel.stream.noPinned" : "agentPanel.stream.noItems")}
+          {t(
+            emptyStreamLabelKey({
+              loading: query.isLoading,
+              connection,
+              notices: notices.length,
+              total: query.counts?.total,
+              narrowed: narrowed || filter !== "all",
+              viewTab,
+            }),
+          )}
         </Text>
+        {query.counts?.total && (narrowed || filter !== "all") ? (
+          <Button variant="outline" onPress={resetFilters}>
+            {t("agentPanel.stream.showAll")}
+          </Button>
+        ) : null}
         {viewTab === "checklist" ? (
           <>
             <Text style={styles.description}>{t("agentPanel.stream.noExplicitAsks")}</Text>
@@ -425,7 +523,19 @@ export function CompanionFeed({
         </Button>
       </View>
     ),
-    [viewTab, onReturnToChat, t, showActivity],
+    [
+      viewTab,
+      onReturnToChat,
+      t,
+      showActivity,
+      query.isLoading,
+      query.counts?.total,
+      connection,
+      notices.length,
+      narrowed,
+      filter,
+      resetFilters,
+    ],
   );
 
   const footer = useMemo(
@@ -494,6 +604,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[12],
   },
   header: { gap: theme.spacing[2], paddingBottom: theme.spacing[6] },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   notice: {
     padding: theme.spacing[3],
     gap: theme.spacing[2],
@@ -514,3 +625,111 @@ const styles = StyleSheet.create((theme) => ({
   },
   segmentContainer: { gap: theme.spacing[2], marginTop: theme.spacing[2] },
 }));
+
+function StreamFilters({
+  status,
+  setStatus,
+  sourceRole,
+  setSourceRole,
+  viewTab,
+  counts,
+  resetFilters,
+  canReset,
+}: {
+  status: StatusFilter;
+  setStatus: (value: StatusFilter) => void;
+  sourceRole: SourceRoleFilter;
+  setSourceRole: (value: SourceRoleFilter) => void;
+  viewTab: ViewTab;
+  counts: StreamCounts;
+  resetFilters: () => void;
+  canReset: boolean;
+}) {
+  const { t } = useTranslation();
+  const withCount = (label: string, count: number | undefined) =>
+    count === undefined ? label : `${label} (${count})`;
+  return (
+    <>
+      <Text style={styles.description}>{t("agentPanel.stream.inventory.statusLabel")}</Text>
+      <SegmentedControl
+        value={status}
+        onValueChange={setStatus}
+        size="sm"
+        testID="stream-status-filter"
+        options={[
+          {
+            value: "all",
+            label: withCount(t("agentPanel.stream.inventory.statusAll"), counts?.total),
+          },
+          {
+            value: "open",
+            label: withCount(t("agentPanel.stream.inventory.statusOpen"), counts?.open),
+          },
+          {
+            value: "done",
+            label: withCount(
+              t(
+                viewTab === "checklist"
+                  ? "agentPanel.stream.inventory.statusDone"
+                  : "agentPanel.stream.inventory.statusClosed",
+              ),
+              counts?.done,
+            ),
+          },
+        ]}
+      />
+      <Text style={styles.description}>{t("agentPanel.stream.inventory.sourceLabel")}</Text>
+      <SegmentedControl
+        value={sourceRole}
+        onValueChange={setSourceRole}
+        size="sm"
+        textWrap
+        testID="stream-source-filter"
+        options={[
+          { value: "all", label: t("agentPanel.stream.inventory.sourceAll") },
+          { value: "user", label: t("agentPanel.stream.inventory.sourceUser") },
+          { value: "agent", label: t("agentPanel.stream.inventory.sourceAgent") },
+        ]}
+      />
+      {counts ? (
+        <Text style={styles.description}>
+          {t("agentPanel.stream.inventory.summary", {
+            open: counts.open,
+            other: counts.total - counts.open,
+            matching: counts.matching,
+          })}
+          {counts.unknown
+            ? ` · ${t("agentPanel.stream.inventory.unattributed", { count: counts.unknown })}`
+            : ""}
+        </Text>
+      ) : null}
+      {canReset ? (
+        <Button variant="outline" onPress={resetFilters}>
+          {t("agentPanel.stream.inventory.clearFilters")}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
+function hostListFilter(viewTab: ViewTab, status: StatusFilter): "pinned" | "pending" | "all" {
+  if (viewTab === "pinned") return "pinned";
+  return status === "open" ? "pending" : "all";
+}
+
+function emptyStreamLabelKey(input: {
+  loading: boolean;
+  connection: string;
+  notices: number;
+  total: number | undefined;
+  narrowed: boolean;
+  viewTab: ViewTab;
+}): string {
+  if (input.viewTab === "pinned") return "agentPanel.stream.noPinned";
+  if (input.loading) return "agentPanel.stream.inventory.loading";
+  if (input.connection !== "online") return "agentPanel.stream.inventory.hostOffline";
+  if (input.notices) return "agentPanel.stream.inventory.loadFailed";
+  if (input.total || input.narrowed) return "agentPanel.stream.inventory.noMatches";
+  if (input.viewTab === "checklist") return "agentPanel.stream.inventory.noChecklistItems";
+  return "agentPanel.stream.inventory.noActivity";
+}

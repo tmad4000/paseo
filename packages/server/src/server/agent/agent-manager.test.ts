@@ -12306,3 +12306,84 @@ test("durable Stream pages and asks survive manager recreation with bounded wire
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("Stream user-message coverage persists without provider inference or task completion", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "stream-inventory-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {});
+  try {
+    for (let i = 0; i < 63; i++)
+      await manager.appendTimelineItem(agent.id, {
+        type: "user_message",
+        text: `Request ${i}: inspect and implement`,
+        messageId: `message-${i}`,
+      });
+    await manager.appendTimelineItem(agent.id, { type: "assistant_message", text: "All done?" });
+    await manager.flush();
+    const failedWrite = vi
+      .spyOn(storage, "applySnapshot")
+      .mockRejectedValueOnce(new Error("Inventory disk full"));
+    await expect(
+      manager.listGlobalStream({
+        agentId: agent.id,
+        includeMessageInventory: true,
+        asksOnly: true,
+      }),
+    ).rejects.toThrow("Inventory disk full");
+    failedWrite.mockRestore();
+    const page = await manager.listGlobalStream({
+      agentId: agent.id,
+      includeMessageInventory: true,
+      asksOnly: true,
+      limit: 100,
+    });
+    expect(page.rows).toHaveLength(63);
+    expect(
+      page.rows.every(
+        (row) =>
+          row.item.kind === "entry" &&
+          row.item.entry.messageReview?.state === "unreviewed" &&
+          !row.item.entry.ask,
+      ),
+    ).toBe(true);
+    await manager.closeAgent(agent.id);
+    await manager.flush();
+    const restarted = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: new AgentStorage(join(workdir, "agents"), logger),
+      logger,
+    });
+    const restored = await restarted.listGlobalStream({
+      agentId: agent.id,
+      includeMessageInventory: true,
+      asksOnly: true,
+      limit: 50,
+    });
+    const older = await restarted.listGlobalStream({
+      agentId: agent.id,
+      includeMessageInventory: true,
+      asksOnly: true,
+      cursor: restored.nextCursor!,
+      limit: 50,
+    });
+    expect(restored.rows).toHaveLength(50);
+    expect(older.rows).toHaveLength(13);
+    expect(restored.coverage).toBe("not_loaded");
+    expect(restarted.getAgent(agent.id)).toBeNull();
+    expect(
+      (await storage.get(agent.id))?.companionEntries?.filter(
+        (entry) => entry.source?.role === "agent",
+      ),
+    ).toHaveLength(1);
+    await restarted.flush();
+  } finally {
+    await manager.closeAgent(agent.id);
+    await manager.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

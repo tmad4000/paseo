@@ -157,7 +157,9 @@ The asymmetry is intentional: a subagent's persistent relationship lives in the 
 **Pin session / Unpin session** is always available beside the Chat / Stream controls.
 Pinned sessions appear above Workspaces in the main sidebar on mobile and desktop;
 selecting one opens that exact agent using the ordinary navigation path, preserving its
-current Chat/Stream selection (the existing view choice resets to Chat on app reload). Long names wrap and actions have text accessibility labels.
+current Chat/Stream selection. The client persists this selection per host and agent across
+app reloads; an explicit Chat/Stream deep link takes precedence over the saved choice.
+Long names wrap and actions have text accessibility labels.
 
 Favorites are separate from workspace pins, launch shortcuts, and layout `pinAgent` (open-tab
 retention). The existing agent label API persists `paseo.session-pinned-at` as an ISO timestamp

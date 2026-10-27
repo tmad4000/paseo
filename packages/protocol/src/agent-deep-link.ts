@@ -1,6 +1,7 @@
 export interface AgentDeepLinkTarget {
   serverId: string;
   agentId: string;
+  view?: "stream" | "chat";
 }
 
 function normalizeSegment(value: string): string {
@@ -13,14 +14,14 @@ function normalizeAgentDeepLinkTarget(target: AgentDeepLinkTarget): AgentDeepLin
   if (!serverId || !agentId) {
     throw new Error("Agent deep links require a server ID and agent ID.");
   }
-  return { serverId, agentId };
+  return { serverId, agentId, ...(target.view ? { view: target.view } : {}) };
 }
 
 export function buildAgentDeepLinkRoute(
   target: AgentDeepLinkTarget,
 ): `/h/${string}/agent/${string}` {
-  const { serverId, agentId } = normalizeAgentDeepLinkTarget(target);
-  return `/h/${encodeURIComponent(serverId)}/agent/${encodeURIComponent(agentId)}`;
+  const { serverId, agentId, view } = normalizeAgentDeepLinkTarget(target);
+  return `/h/${encodeURIComponent(serverId)}/agent/${encodeURIComponent(agentId)}${view ? `?view=${view}` : ""}`;
 }
 
 // This fork registers paseo-fork:// with the OS so it cannot hijack links that
@@ -48,7 +49,8 @@ export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
     url.username ||
     url.password ||
     url.port ||
-    url.search ||
+    [...url.searchParams.keys()].some((key) => key !== "view") ||
+    (url.searchParams.has("view") && !["stream", "chat"].includes(url.searchParams.get("view")!)) ||
     url.hash
   ) {
     return null;
@@ -62,7 +64,15 @@ export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
   try {
     const serverId = normalizeSegment(decodeURIComponent(segments[0] ?? ""));
     const agentId = normalizeSegment(decodeURIComponent(segments[2] ?? ""));
-    return serverId && agentId ? { serverId, agentId } : null;
+    return serverId && agentId
+      ? {
+          serverId,
+          agentId,
+          ...(url.searchParams.has("view")
+            ? { view: url.searchParams.get("view") as "stream" | "chat" }
+            : {}),
+        }
+      : null;
   } catch {
     return null;
   }

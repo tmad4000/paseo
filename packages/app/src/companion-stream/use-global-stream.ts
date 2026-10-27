@@ -15,6 +15,16 @@ export type GlobalStreamRow = StreamRow & { serverId: string; serverLabel: strin
 interface HostPage {
   rows: StreamRow[];
   hasMore: boolean;
+  counts?: {
+    total: number;
+    open: number;
+    done: number;
+    user: number;
+    agent: number;
+    unknown: number;
+    matching: number;
+  };
+  coverage?: "loaded_history" | "not_loaded";
   tagCounts?: StreamTagCount[];
   pinnedTags?: string[];
 }
@@ -65,6 +75,9 @@ export function useGlobalStream(
         host.serverId,
         options.agentId,
         options.asksOnly,
+        options.includeMessageInventory,
+        options.sourceRole,
+        options.state,
         options.filter,
         options.search,
         options.includeArchived,
@@ -80,12 +93,17 @@ export function useGlobalStream(
         if (!client) throw new Error("Host disconnected");
         const rows: StreamRow[] = [];
         let cursor: string | undefined;
+        let counts: HostPage["counts"];
+        let coverage: HostPage["coverage"];
         let tagCounts: StreamTagCount[] | undefined;
         let pinnedTags: string[] | undefined;
         for (let page = 0; page < depth; page++) {
           const result = await client.listGlobalStream({
             agentId: options.agentId,
             asksOnly: options.asksOnly,
+            includeMessageInventory: options.includeMessageInventory,
+            sourceRole: options.sourceRole,
+            state: options.state,
             filter: options.filter,
             search: options.search,
             includeArchived: options.includeArchived,
@@ -94,6 +112,8 @@ export function useGlobalStream(
             limit: 50,
           });
           rows.push(...result.rows);
+          counts = result.counts;
+          coverage = result.coverage;
           tagCounts ??= result.tagCounts;
           pinnedTags ??= result.pinnedTags;
           cursor = result.nextCursor ?? undefined;
@@ -101,6 +121,8 @@ export function useGlobalStream(
         }
         return {
           rows: tags.length ? rows.filter((row) => rowHasTags(row, tags)) : rows,
+          counts,
+          coverage,
           hasMore: Boolean(cursor),
           tagCounts,
           pinnedTags,
@@ -119,6 +141,9 @@ export function useGlobalStream(
           host.serverId,
           options.agentId,
           options.asksOnly,
+          options.includeMessageInventory,
+          options.sourceRole,
+          options.state,
           options.filter,
           options.search,
           options.includeArchived,
@@ -145,6 +170,9 @@ export function useGlobalStream(
     queryClient,
     options.agentId,
     options.asksOnly,
+    options.includeMessageInventory,
+    options.sourceRole,
+    options.state,
     options.filter,
     options.search,
     options.includeArchived,
@@ -198,6 +226,8 @@ export function useGlobalStream(
   const fetchNextPage = useCallback(() => setDepth((value) => value + 1), []);
   return {
     rows,
+    counts: results[0]?.data?.counts,
+    coverage: results[0]?.data?.coverage,
     notices,
     refetch,
     tagCounts,
