@@ -223,3 +223,7 @@ Existing checks still apply to code changes.
 
 Until those automation items land, the preservation matrix and release smoke receipt are process
 checks, not an automated guarantee that a regression will be blocked.
+
+### Top-right Fork version status (pspin-6d8)
+
+The desktop Fork badge has an adjacent keyboard/touch accessible version menu. The trigger shows the installed app version and a compact status; hover/focus and the menu expose full detail. The app and every host daemon are compared independently with the selected channel’s published feed. Unknown or failed checks never claim the app is current; a locally newer build is labeled newer, and downloaded updates are ready rather than installed. Automatic checks run on mount and every 30 minutes; the menu also offers an explicit check. Installation remains owned by the idle-only fleet controller. A staged, unpublished build is not discoverable in the public update feed.

@@ -1871,6 +1871,7 @@ export const fr: TranslationResources = {
     },
   },
   desktop: {
+    fork: en.desktop.fork,
     windowControls: {
       minimize: "Réduire la fenêtre",
       maximize: "Agrandir la fenêtre",

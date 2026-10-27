@@ -1838,6 +1838,7 @@ export const ko: TranslationResources = {
     },
   },
   desktop: {
+    fork: en.desktop.fork,
     windowControls: {
       minimize: "창 최소화",
       maximize: "창 최대화",

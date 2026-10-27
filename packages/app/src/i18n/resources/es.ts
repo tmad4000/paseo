@@ -1872,6 +1872,7 @@ export const es: TranslationResources = {
     },
   },
   desktop: {
+    fork: en.desktop.fork,
     windowControls: {
       minimize: "Minimizar ventana",
       maximize: "Maximizar ventana",

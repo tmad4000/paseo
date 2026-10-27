@@ -1827,6 +1827,7 @@ export const ar: TranslationResources = {
     },
   },
   desktop: {
+    fork: en.desktop.fork,
     windowControls: {
       minimize: "تصغير النافذة",
       maximize: "تكبير النافذة",
