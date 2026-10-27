@@ -7,6 +7,7 @@ import {
   matchSidebarTabTitles,
   mergeSidebarMessageHits,
   selectNestedTabMatches,
+  selectSidebarWorkspaceMatchTarget,
   splitSidebarMatch,
   sumSidebarMessageSearchCoverage,
   trimSidebarSnippetLead,
@@ -36,6 +37,17 @@ function hosts(...agents: SidebarTabSource[]) {
 }
 
 describe("tab title matching", () => {
+  it("opens the unique matching chat from its workspace row, and leaves ambiguous rows unbound", () => {
+    const tabs = collectSidebarTabTitles(
+      hosts(agent("relay", { title: "Relay reconnect" }), agent("billing", { title: "Billing" })),
+    );
+    const matches = matchSidebarTabTitles(tabs, "relay").get("host:ws-1")!;
+    expect(selectSidebarWorkspaceMatchTarget(matches)).toEqual({ kind: "agent", agentId: "relay" });
+    expect(selectSidebarWorkspaceMatchTarget([])).toBeUndefined();
+    expect(
+      selectSidebarWorkspaceMatchTarget([...matches, { ...matches[0]!, agentId: "second" }]),
+    ).toBeUndefined();
+  });
   it("finds a tab by a pasted session id or its short prefix, without a highlight", () => {
     const id = "9b8394eb-de93-4c1a-8f3e-0123456789ab";
     const tabs = collectSidebarTabTitles(
