@@ -27,7 +27,7 @@ import {
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
-import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
+import { SCRIM_WIDTH, TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import { WorkspaceTabCount } from "./workspace-tab-count";
 
@@ -38,6 +38,8 @@ const needsInputColorMapping = (theme: Theme) => ({
 });
 
 const ThemedCircleAlert = withUnistyles(CircleAlert);
+// Room for the mark-as-read check (18pt) on the scrim's solid end, beside the kebab.
+const WIDE_SCRIM_WIDTH = SCRIM_WIDTH + 18;
 const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedFolderGit2 = withUnistyles(FolderGit2);
@@ -332,10 +334,20 @@ export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
     alignItems: "flex-end",
     justifyContent: "flex-start",
   },
+  trailingActionSlotReservedWide: {
+    position: "relative",
+    minWidth: 38,
+    minHeight: 20,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
   trailingActionOverlay: {
     position: "absolute",
     top: 0,
     right: 0,
+    flexDirection: "row",
+    alignItems: "center",
   },
 }));
 
@@ -405,22 +417,21 @@ export function resolveTrailingActionVisibility({
 
 export function SidebarWorkspaceTrailingActionSlot({
   reserveWidth,
+  wide = false,
   children,
 }: {
   reserveWidth: boolean;
+  /** Reserve room for the mark-as-read check beside the kebab. */
+  wide?: boolean;
   children: ReactNode;
 }) {
-  return (
-    <View
-      style={
-        reserveWidth
-          ? sidebarWorkspaceRowStyles.trailingActionSlotReserved
-          : sidebarWorkspaceRowStyles.trailingActionSlot
-      }
-    >
-      {children}
-    </View>
-  );
+  let style = sidebarWorkspaceRowStyles.trailingActionSlot;
+  if (reserveWidth) {
+    style = wide
+      ? sidebarWorkspaceRowStyles.trailingActionSlotReservedWide
+      : sidebarWorkspaceRowStyles.trailingActionSlotReserved;
+  }
+  return <View style={style}>{children}</View>;
 }
 
 export function SidebarWorkspaceTrailingActionBase({
@@ -441,18 +452,25 @@ export function SidebarWorkspaceTrailingActionBase({
 export function SidebarWorkspaceTrailingActionOverlay({
   visible,
   scrimBackdrop,
+  wide = false,
   children,
 }: {
   visible: boolean;
   /** Fade the row into the kebab when something (the diff stat) is still rendered behind it. */
   scrimBackdrop?: SidebarSurfaceBackdrop;
+  /** The mark-as-read check sits beside the kebab, so the scrim covers both. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   if (!visible || !children) return null;
   return (
     <>
       {scrimBackdrop ? (
-        <TrailingActionScrim backdrop={scrimBackdrop} testID="sidebar-workspace-trailing-scrim" />
+        <TrailingActionScrim
+          backdrop={scrimBackdrop}
+          width={wide ? WIDE_SCRIM_WIDTH : undefined}
+          testID="sidebar-workspace-trailing-scrim"
+        />
       ) : null}
       <View style={sidebarWorkspaceRowStyles.trailingActionOverlay}>{children}</View>
     </>

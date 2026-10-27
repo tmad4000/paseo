@@ -1038,6 +1038,7 @@ export const ru: TranslationResources = {
         openFor: "Открыть меню для {{label}}",
         copyResumeCommand: "Копировать команду продолжения",
         copyAgentId: "Скопировать идентификатор агента",
+        markAsRead: "Отметить как прочитанное",
         markAsUnread: "Отметить как непрочитанное",
         copyTerminalId: "Скопировать идентификатор терминала",
         copyFilePath: "Скопировать путь к файлу",
@@ -1761,6 +1762,7 @@ export const ru: TranslationResources = {
         pending: "Ожидают: {{count}}",
       },
       actions: {
+        markAsRead: "Отметить как прочитанное",
         menu: "Действия рабочего пространства",
         newWorkspace: "Новое рабочее пространство",
         showMore: "Показать ещё",
@@ -2775,6 +2777,12 @@ export const ru: TranslationResources = {
         label: "Буфер прокрутки терминала",
         description: "Количество строк, сохраняемых во встроенном буфере терминала",
         accessibilityLabel: "Количество строк в буфере прокрутки терминала",
+      },
+      markReadOnOpen: {
+        section: "Статус прочтения",
+        label: "Отмечать чаты прочитанными при открытии",
+        description:
+          "Если выключено, чат остаётся непрочитанным, пока вы не отметите его прочитанным или не отправите сообщение",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",

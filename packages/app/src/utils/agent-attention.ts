@@ -7,6 +7,8 @@ interface ShouldClearAgentAttentionInput {
   attentionReason?: "finished" | "error" | "permission" | null | undefined;
   trigger?: AgentAttentionClearTrigger;
   hasDeferredFocusEntryClear?: boolean;
+  /** Off: only sending a prompt marks the chat read; opening, leaving or focusing it does not. */
+  markReadOnOpen?: boolean;
 }
 
 export type AgentAttentionClearTrigger =
@@ -72,6 +74,9 @@ export function shouldClearAgentAttention(input: ShouldClearAgentAttentionInput)
     return false;
   }
   if (input.attentionReason === "permission") {
+    return false;
+  }
+  if (input.markReadOnOpen === false && input.trigger !== "prompt-send") {
     return false;
   }
   if (input.trigger === "focus-entry" && input.hasDeferredFocusEntryClear === true) {

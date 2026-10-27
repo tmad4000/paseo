@@ -1020,6 +1020,7 @@ export const zhCN: TranslationResources = {
         openFor: "打开 {{label}} 的菜单",
         copyResumeCommand: "复制恢复命令",
         copyAgentId: "复制 Agent ID",
+        markAsRead: "标记为已读",
         markAsUnread: "标记为未读",
         copyTerminalId: "复制 Terminal ID",
         copyFilePath: "Copy file path",
@@ -1722,6 +1723,7 @@ export const zhCN: TranslationResources = {
         pending: "等待中: {{count}}",
       },
       actions: {
+        markAsRead: "标记为已读",
         menu: "Workspace 操作",
         newWorkspace: "新建 workspace",
         showMore: "显示更多",
@@ -2699,6 +2701,11 @@ export const zhCN: TranslationResources = {
         label: "终端回滚",
         description: "内置终端缓冲区保留的行数",
         accessibilityLabel: "终端回滚行数",
+      },
+      markReadOnOpen: {
+        section: "已读状态",
+        label: "打开聊天时标记为已读",
+        description: "关闭后，聊天会保持未读，直到你将其标记为已读或向其发送消息",
       },
       autoExpandReasoning: {
         label: "始终展开推理过程",

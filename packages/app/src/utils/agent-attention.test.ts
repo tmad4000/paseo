@@ -143,6 +143,56 @@ describe("shouldClearAgentAttention", () => {
   });
 });
 
+describe("shouldClearAgentAttention with explicit reads", () => {
+  const finished = {
+    agentId: "agent-1",
+    isConnected: true,
+    requiresAttention: true,
+    attentionReason: "finished",
+  } as const;
+
+  it("does not mark a chat read on open, composer focus or leaving it", () => {
+    for (const trigger of ["focus-entry", "input-focus", "agent-blur"] as const) {
+      expect(shouldClearAgentAttention({ ...finished, trigger, markReadOnOpen: false })).toBe(
+        false,
+      );
+    }
+  });
+
+  it("still marks a chat read when a prompt is sent to it", () => {
+    expect(
+      shouldClearAgentAttention({ ...finished, trigger: "prompt-send", markReadOnOpen: false }),
+    ).toBe(true);
+    expect(
+      shouldClearAgentAttention({
+        ...finished,
+        attentionReason: "error",
+        trigger: "prompt-send",
+        markReadOnOpen: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the legacy open-marks-read behavior when the setting is on", () => {
+    for (const trigger of ["focus-entry", "input-focus", "agent-blur", "prompt-send"] as const) {
+      expect(shouldClearAgentAttention({ ...finished, trigger, markReadOnOpen: true })).toBe(true);
+    }
+  });
+
+  it("never clears permission attention, whatever the setting", () => {
+    for (const markReadOnOpen of [true, false]) {
+      expect(
+        shouldClearAgentAttention({
+          ...finished,
+          attentionReason: "permission",
+          trigger: "prompt-send",
+          markReadOnOpen,
+        }),
+      ).toBe(false);
+    }
+  });
+});
+
 describe("pickAttentionAgent", () => {
   it("returns null for empty input", () => {
     expect(pickAttentionAgent([])).toBeNull();

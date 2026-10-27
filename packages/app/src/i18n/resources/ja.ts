@@ -1037,6 +1037,7 @@ export const ja: TranslationResources = {
         openFor: "{{label}}のメニューを開く",
         copyResumeCommand: "再開コマンドをコピー",
         copyAgentId: "エージェントIDをコピー",
+        markAsRead: "既読にする",
         markAsUnread: "未読にする",
         copyTerminalId: "ターミナルIDをコピー",
         copyFilePath: "ファイルパスをコピー",
@@ -1757,6 +1758,7 @@ export const ja: TranslationResources = {
         pending: "保留中: {{count}}",
       },
       actions: {
+        markAsRead: "既読にする",
         menu: "ワークスペースアクション",
         newWorkspace: "新しいワークスペース",
         showMore: "さらに表示",
@@ -2758,6 +2760,11 @@ export const ja: TranslationResources = {
         label: "ターミナルスクロールバック",
         description: "組み込みターミナルバッファに保持する行数",
         accessibilityLabel: "ターミナルスクロールバック行数",
+      },
+      markReadOnOpen: {
+        section: "既読状態",
+        label: "チャットを開いたときに既読にする",
+        description: "オフの場合、既読にするかメッセージを送信するまでチャットは未読のままです",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

@@ -21,6 +21,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import {
@@ -425,14 +426,24 @@ function WorkspaceRowTrailingActions({
         <Text style={styles.workspaceCreatingText}>{t("sidebar.workspace.status.creating")}</Text>
       ) : null}
       {renderSlot ? (
-        <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
+        <SidebarWorkspaceTrailingActionSlot
+          reserveWidth={reserveSlotWidth}
+          wide={Boolean(onMarkAsRead)}
+        >
           <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
             <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}
             scrimBackdrop={showScrim ? backdrop : undefined}
+            wide={Boolean(onMarkAsRead)}
           >
+            {onMarkAsRead ? (
+              <SidebarWorkspaceMarkReadButton
+                workspaceKey={workspace.workspaceKey}
+                onMarkAsRead={onMarkAsRead}
+              />
+            ) : null}
             {onArchive ? (
               <SidebarWorkspaceMenu
                 {...kebab.menuProps}

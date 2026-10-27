@@ -2,7 +2,7 @@ import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/
 import type { ManualStatusTarget } from "@/agent-status/model";
 import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { type PressableStateCallbackType } from "react-native";
+import { Pressable, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   Archive,
@@ -81,6 +81,45 @@ function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
     <ThemedMoreVertical
       size={14}
       uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
+    />
+  );
+}
+
+/**
+ * The row's one-tap "Mark as read", beside its kebab. Rendered only while the workspace holds
+ * finished or error attention; permission requests are never cleared by reading.
+ */
+export function SidebarWorkspaceMarkReadButton({
+  workspaceKey,
+  onMarkAsRead,
+}: {
+  workspaceKey: string;
+  onMarkAsRead: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Pressable
+      hitSlop={4}
+      style={markReadStyle}
+      // The row is itself a button on web, and a <button> cannot nest inside another.
+      accessibilityRole={isWeb ? undefined : "button"}
+      accessibilityLabel={t("sidebar.workspace.actions.markAsRead")}
+      onPress={onMarkAsRead}
+      testID={`sidebar-workspace-mark-as-read-${workspaceKey}`}
+    >
+      {renderMarkReadIcon}
+    </Pressable>
+  );
+}
+
+function renderMarkReadIcon({
+  hovered,
+  pressed,
+}: PressableStateCallbackType & { hovered?: boolean }) {
+  return (
+    <ThemedCircleCheck
+      size={14}
+      uniProps={hovered || pressed ? foregroundColorMapping : foregroundMutedColorMapping}
     />
   );
 }
@@ -204,7 +243,7 @@ function SidebarWorkspaceMenuItems({
           leading={markAsReadLeadingIcon}
           onSelect={onMarkAsRead}
         >
-          Mark as read
+          {t("sidebar.workspace.actions.markAsRead")}
         </WorkspaceMenuItem>
       ) : null}
       {onMarkAsUnread ? (
@@ -486,6 +525,10 @@ function triggerStyle({ hovered = false }: PressableStateCallbackType & { hovere
   return [styles.trigger, hovered && styles.triggerHovered];
 }
 
+function markReadStyle({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) {
+  return [styles.markRead, hovered && styles.triggerHovered];
+}
+
 const styles = StyleSheet.create((theme) => ({
   trigger: {
     padding: 2,
@@ -494,6 +537,10 @@ const styles = StyleSheet.create((theme) => ({
     // MoreVertical paints only around the center of its SVG. Keep the padded hit box, but
     // pull the painted dots through that unused view-box space onto the trailing-content rail.
     marginRight: -7,
+  },
+  markRead: {
+    padding: 2,
+    borderRadius: 4,
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,

@@ -90,6 +90,8 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
+  /** Opening, leaving or focusing a chat marks it read. Fork default off: read is explicit. */
+  markReadOnOpen: boolean;
   vimKeybindings: boolean;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
@@ -146,6 +148,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   toolCallDetailLevel: "overview",
   chatOutlineEnabled: true,
+  markReadOnOpen: false,
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
@@ -243,6 +246,7 @@ const StoredAppSettingsSchema = z
     // COMPAT(compactToolCalls): migrated in v0.1.105, remove after 2027-01-12.
     compactToolCalls: z.boolean().optional().catch(undefined),
     chatOutlineEnabled: z.boolean().catch(true),
+    markReadOnOpen: z.boolean().catch(false),
     vimKeybindings: z.boolean().catch(false),
     openInSidePane: z
       .object({

@@ -1,10 +1,11 @@
 import { useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
+  CircleCheck,
   Copy,
   FileCode2,
   Search,
@@ -34,8 +35,10 @@ const ThemedPencil = withUnistyles(Pencil);
 const ThemedX = withUnistyles(X);
 const ThemedFileCode2 = withUnistyles(FileCode2);
 const ThemedSearch = withUnistyles(Search);
+const ThemedCircleCheck = withUnistyles(CircleCheck);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const markReadLeadingIcon = <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
 
 function mobileTabMenuTriggerStyle({ open, pressed }: { open?: boolean; pressed?: boolean }) {
   return [
@@ -69,6 +72,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedFileCode2 size={16} uniProps={mutedColorMapping} />;
       case "search":
         return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
+      case "circle-check":
+        return <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
@@ -96,13 +101,16 @@ export function MobileTabTrailingAccessory({
   menuTestIDBase,
   presentationLabel,
   menuEntries,
+  onMarkRead,
 }: {
   menuTestIDBase: string;
   presentationLabel: string;
   menuEntries: WorkspaceTabMenuEntry[];
+  /** Shown as a check beside the menu while the tab has something to read. */
+  onMarkRead?: () => void;
 }): ReactElement {
   const { t } = useTranslation();
-  return (
+  const menu = (
     <DropdownMenu compactMode="sheet">
       <DropdownMenuTrigger
         testID={`${menuTestIDBase}-trigger`}
@@ -120,6 +128,18 @@ export function MobileTabTrailingAccessory({
         sheetTitle={presentationLabel}
         testID={menuTestIDBase}
       >
+        {onMarkRead ? (
+          <>
+            <DropdownMenuItem
+              testID={`${menuTestIDBase}-mark-as-read-item`}
+              leading={markReadLeadingIcon}
+              onSelect={onMarkRead}
+            >
+              {t("workspace.tabs.menu.markAsRead")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {menuEntries.map((entry) =>
           entry.kind === "separator" ? (
             <DropdownMenuSeparator key={entry.key} />
@@ -130,6 +150,22 @@ export function MobileTabTrailingAccessory({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+  if (!onMarkRead) return menu;
+  return (
+    <View style={styles.mobileTabTrailingRow}>
+      <Pressable
+        testID={`${menuTestIDBase}-mark-as-read`}
+        accessibilityRole="button"
+        accessibilityLabel={t("workspace.tabs.menu.markAsRead")}
+        hitSlop={8}
+        onPress={onMarkRead}
+        style={mobileTabMenuTriggerStyle}
+      >
+        <ThemedCircleCheck size={14} uniProps={mutedColorMapping} />
+      </Pressable>
+      {menu}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -139,6 +175,10 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
+  },
+  mobileTabTrailingRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   mobileTabMenuTriggerActive: {
     backgroundColor: theme.colors.surface2,

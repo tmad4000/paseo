@@ -38,6 +38,10 @@ export function ChatSection() {
     (autoExpandReasoning: boolean) => void updateSettings({ autoExpandReasoning }),
     [updateSettings],
   );
+  const changeMarkReadOnOpen = useCallback(
+    (markReadOnOpen: boolean) => void updateSettings({ markReadOnOpen }),
+    [updateSettings],
+  );
   const changeChatOutline = useCallback(
     (chatOutlineEnabled: boolean) => void updateSettings({ chatOutlineEnabled }),
     [updateSettings],
@@ -68,6 +72,17 @@ export function ChatSection() {
               onValueChange={changeChatOutline}
             />
           )}
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title={t("settings.general.markReadOnOpen.section")}>
+        <SettingsCard>
+          <SettingsSwitch
+            label={t("settings.general.markReadOnOpen.label")}
+            hint={t("settings.general.markReadOnOpen.description")}
+            value={settings.markReadOnOpen}
+            onValueChange={changeMarkReadOnOpen}
+            testID="settings-mark-read-on-open"
+          />
         </SettingsCard>
       </SettingsSection>
     </View>

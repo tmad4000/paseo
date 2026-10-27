@@ -7,10 +7,13 @@ import {
 } from "@/utils/agent-attention";
 import { getIsAppActivelyVisible } from "@/utils/app-visibility";
 import { isWeb } from "@/constants/platform";
+import { useSettings } from "@/hooks/use-settings";
+import { markAgentReadLocally } from "@/workspace/mark-read";
 
 type AttentionReason = "finished" | "error" | "permission" | null | undefined;
 
 interface UseAgentAttentionClearParams {
+  serverId: string;
   agentId: string | null | undefined;
   client: DaemonClient | null;
   isConnected: boolean;
@@ -26,6 +29,7 @@ interface AgentAttentionClearController {
 }
 
 export function useAgentAttentionClear({
+  serverId,
   agentId,
   client,
   isConnected,
@@ -33,6 +37,7 @@ export function useAgentAttentionClear({
   attentionReason,
   isScreenFocused,
 }: UseAgentAttentionClearParams): AgentAttentionClearController {
+  const markReadOnOpen = useSettings((settings) => settings.markReadOnOpen);
   const [isAppVisible, setIsAppVisible] = useState<boolean>(() => getIsAppActivelyVisible());
   const deferredFocusEntryClearRef = useRef(false);
   const prevRequiresAttentionRef = useRef(Boolean(requiresAttention));
@@ -54,6 +59,7 @@ export function useAgentAttentionClear({
           attentionReason,
           trigger,
           hasDeferredFocusEntryClear: deferredFocusEntryClearRef.current,
+          markReadOnOpen,
         })
       ) {
         return;
@@ -61,7 +67,7 @@ export function useAgentAttentionClear({
       deferredFocusEntryClearRef.current = false;
       client.clearAgentAttention(resolvedAgentId).catch(() => {});
     },
-    [agentId, attentionReason, client, isConnected, requiresAttention],
+    [agentId, attentionReason, client, isConnected, markReadOnOpen, requiresAttention],
   );
 
   useEffect(() => {
@@ -126,8 +132,13 @@ export function useAgentAttentionClear({
       clearAttention("input-focus");
     }, [clearAttention]),
     clearOnPromptSend: useCallback(() => {
+      // Sending is reading: the tab's unread dot goes too, even with no host attention to clear.
+      const resolvedAgentId = agentId?.trim();
+      if (serverId && resolvedAgentId) {
+        markAgentReadLocally({ serverId, agentId: resolvedAgentId });
+      }
       clearAttention("prompt-send");
-    }, [clearAttention]),
+    }, [agentId, clearAttention, serverId]),
     clearOnAgentBlur: useCallback(() => {
       clearAttention("agent-blur");
     }, [clearAttention]),

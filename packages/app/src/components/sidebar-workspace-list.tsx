@@ -94,6 +94,7 @@ import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
@@ -699,14 +700,24 @@ function WorkspaceRowRightGroup({
         <Text style={styles.workspaceCreatingText}>{t("sidebar.workspace.status.creating")}</Text>
       ) : null}
       {renderSlot ? (
-        <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
+        <SidebarWorkspaceTrailingActionSlot
+          reserveWidth={reserveSlotWidth}
+          wide={Boolean(onMarkAsRead)}
+        >
           <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
             <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}
             scrimBackdrop={showScrim ? backdrop : undefined}
+            wide={Boolean(onMarkAsRead)}
           >
+            {onMarkAsRead ? (
+              <SidebarWorkspaceMarkReadButton
+                workspaceKey={workspace.workspaceKey}
+                onMarkAsRead={onMarkAsRead}
+              />
+            ) : null}
             {onArchive ? (
               <SidebarWorkspaceMenu
                 {...kebab.menuProps}

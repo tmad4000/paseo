@@ -1041,6 +1041,7 @@ export const ptBR: TranslationResources = {
         openFor: "Abrir menu de {{label}}",
         copyResumeCommand: "Copiar comando de retomada",
         copyAgentId: "Copiar ID do agente",
+        markAsRead: "Marcar como lido",
         markAsUnread: "Marcar como não lido",
         copyTerminalId: "Copiar ID do terminal",
         copyFilePath: "Copiar caminho do arquivo",
@@ -1774,6 +1775,7 @@ export const ptBR: TranslationResources = {
         pending: "Pendentes: {{count}}",
       },
       actions: {
+        markAsRead: "Marcar como lido",
         menu: "Ações do workspace",
         newWorkspace: "Novo workspace",
         showMore: "Mostrar mais",
@@ -2778,6 +2780,12 @@ export const ptBR: TranslationResources = {
         label: "Scrollback do terminal",
         description: "Linhas mantidas no buffer do terminal integrado",
         accessibilityLabel: "Linhas do scrollback do terminal",
+      },
+      markReadOnOpen: {
+        section: "Status de leitura",
+        label: "Marcar chats como lidos ao abrir",
+        description:
+          "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

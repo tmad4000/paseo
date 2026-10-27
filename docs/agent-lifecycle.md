@@ -187,7 +187,7 @@ Running provider-native subagents contribute `running` to the workspace owned by
 
 A finished workspace can be marked unread after it has been reviewed. The daemon restores
 `finished` attention on its newest eligible workspace-root agent without sending a new completion
-notification. Opening the workspace clears that attention through the normal focus flow.
+notification. It stays unread until the user reads it again (see [Reading](#reading)).
 
 Attention is set by the agent finishing or failing and cleared by the client's
 `workspace.clear_attention`, which fires when the user reads the chat. Loading an agent's runtime is
@@ -195,6 +195,22 @@ neither, so resuming carries the stored attention and the stored last-activity t
 untouched. Forging either makes a background resume look like the user read a workspace and like the
 agent worked in it just now, which rewrites the sidebar timestamp permanently — persisted
 `updatedAt` is what workspace `statusEnteredAt` is re-derived from on the next daemon start.
+
+### Reading
+
+Reading is explicit by default. Opening, focusing or leaving a chat leaves it unread; the user
+reads it with the check on its sidebar row or tab (also "Mark as read" in their menus and the
+phone tab switcher), or by sending it a prompt. Settings → Chat → "Mark chats read when opened"
+restores the old focus-driven reads; the choice is per device (`AppSettings.markReadOnOpen`).
+
+- Reading clears `finished` and `error` attention. It never clears `permission` attention — a
+  pending permission is answered, not read.
+- A tab's unread dot is device-local and in memory. Explicit reads record the activity time read
+  through (`stores/agent-read-marks-store.ts`), so a read from the sidebar, a tab or the composer
+  clears every tab strip showing that agent, and newer activity raises the dot again. Activity
+  that arrives while a tab is on screen never raises it.
+- The policy lives in `shouldClearAgentAttention` (`packages/app/src/utils/agent-attention.ts`)
+  and `reconcileTabActivity` (`packages/app/src/screens/workspace/workspace-tab-activity.ts`).
 
 ### Manual input and review status
 

@@ -1028,6 +1028,7 @@ export const en = {
         openFor: "Open menu for {{label}}",
         copyResumeCommand: "Copy resume command",
         copyAgentId: "Copy agent id",
+        markAsRead: "Mark as read",
         markAsUnread: "Mark as unread",
         copyTerminalId: "Copy terminal id",
         copyFilePath: "Copy file path",
@@ -1751,6 +1752,7 @@ export const en = {
         pending: "Pending: {{count}}",
       },
       actions: {
+        markAsRead: "Mark as read",
         menu: "Workspace actions",
         newWorkspace: "New workspace",
         showMore: "Show more",
@@ -2862,6 +2864,11 @@ export const en = {
         label: "Terminal scrollback",
         description: "Lines kept in the built-in terminal buffer",
         accessibilityLabel: "Terminal scrollback lines",
+      },
+      markReadOnOpen: {
+        section: "Read status",
+        label: "Mark chats read when opened",
+        description: "When off, a chat stays unread until you mark it read or send it a message",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

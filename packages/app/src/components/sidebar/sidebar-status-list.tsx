@@ -76,6 +76,7 @@ import {
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { PinnedSectionHeader } from "@/components/sidebar/pinned-section-header";
@@ -1005,14 +1006,24 @@ function StatusWorkspaceActionSlot({
 }) {
   const kebab = useOpenKebabMenuVisibility(showKebab);
   return (
-    <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
+    <SidebarWorkspaceTrailingActionSlot
+      reserveWidth={reserveSlotWidth}
+      wide={Boolean(onMarkAsRead)}
+    >
       <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
         <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
       </SidebarWorkspaceTrailingActionBase>
       <SidebarWorkspaceTrailingActionOverlay
         visible={kebab.showKebab}
         scrimBackdrop={showScrim ? backdrop : undefined}
+        wide={Boolean(onMarkAsRead)}
       >
+        {onMarkAsRead ? (
+          <SidebarWorkspaceMarkReadButton
+            workspaceKey={workspace.workspaceKey}
+            onMarkAsRead={onMarkAsRead}
+          />
+        ) : null}
         {kebab.showKebab && onArchive ? (
           <SidebarWorkspaceMenu
             {...kebab.menuProps}

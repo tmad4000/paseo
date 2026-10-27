@@ -40,6 +40,13 @@ const test = base.extend<{ workspaces: FinishedWorkspaces }>({
   },
 });
 
+/** These flows predate explicit reads: opening, leaving or focusing a chat reads it. */
+async function useReadOnOpen(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem("@paseo:app-settings", JSON.stringify({ markReadOnOpen: true }));
+  });
+}
+
 function workspaceRow(page: Page, workspaceId: string) {
   return page.getByTestId(`sidebar-workspace-row-${getServerId()}:${workspaceId}`);
 }
@@ -201,6 +208,7 @@ test("manual unread survives departure and clears on reopening without changing 
   page,
   workspaces,
 }) => {
+  await useReadOnOpen(page);
   await gotoAppShell(page);
   await openWorkspace(page, workspaces.other.workspaceId);
   await markBackgroundWorkspaceAndReopen(page, workspaces.subject.workspaceId);
@@ -214,6 +222,7 @@ test("clicking a multi-agent workspace reveals and clears its marked agent", asy
   page,
   workspaces,
 }) => {
+  await useReadOnOpen(page);
   await openAgentRoute(page, workspaces.subject);
   await expectSelectedAgent(page, workspaces.subject.agentId);
   await openWorkspace(page, workspaces.other.workspaceId);
@@ -226,11 +235,76 @@ test("manual unread survives leaving the current workspace on compact layout", a
   page,
   workspaces,
 }) => {
+  await useReadOnOpen(page);
   await openCompactWorkspace(page, workspaces.subject);
   await leaveMarkedWorkspaceAndReadOnCompact(page, workspaces);
   await leaveMarkedWorkspaceAndReopenOnCompact(page, workspaces);
   await markUnreadThenResumeChat(page, workspaces.subject.workspaceId);
   await completeTurnAndLeaveOnCompact(page, workspaces);
+});
+
+test("by default a chat stays unread until its sidebar or tab check marks it read", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+
+  await test.step("opening, focusing the composer and leaving keep it unread", async () => {
+    await markAsUnread(page, subject.workspaceId);
+    await openWorkspace(page, subject.workspaceId);
+    await expectSelectedAgent(page, subject.agentId);
+    await page.getByRole("textbox", { name: "Message agent..." }).click();
+    await expectStatus(page, subject.workspaceId, "attention");
+    await openWorkspace(page, other.workspaceId);
+    await expectStatus(page, subject.workspaceId, "attention");
+  });
+
+  await test.step("the sidebar row check marks it read", async () => {
+    await workspaceRow(page, subject.workspaceId).hover();
+    const check = page.getByTestId(
+      `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
+    );
+    // Like the row's kebab, the check is a labelled control inside the row's own button on web.
+    await expect(check).toHaveAttribute("aria-label", "Mark as read");
+    await page.screenshot({ path: "test-results/explicit-read-sidebar-check.png" });
+    await check.click();
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(check).toHaveCount(0);
+    // The check reads the row in place; it does not open the workspace.
+    await expect(page).toHaveURL(new RegExp(`/workspace/${other.workspaceId}`));
+  });
+
+  await test.step("the open tab shows a check that marks it read", async () => {
+    await markAsUnread(page, subject.workspaceId);
+    await openWorkspace(page, subject.workspaceId);
+    const tabCheck = page.getByTestId(`workspace-tab-mark-as-read-agent_${subject.agentId}`);
+    await expect(tabCheck).toBeVisible();
+    await expect(tabCheck).toHaveAccessibleName("Mark as read");
+    await page.screenshot({ path: "test-results/explicit-read-tab-check.png" });
+    await tabCheck.click();
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(tabCheck).toHaveCount(0);
+  });
+});
+
+test("the read-on-open setting restores focus-driven reads", async ({ page, workspaces }) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await page.goto("/settings/chat");
+  const setting = page.getByRole("switch", { name: "Mark chats read when opened" });
+  await expect(setting).not.toBeChecked();
+  await setting.click();
+  await expect(setting).toBeChecked();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("@paseo:app-settings")))
+    .toContain('"markReadOnOpen":true');
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+  await markAsUnread(page, subject.workspaceId);
+  await openWorkspace(page, subject.workspaceId);
+  await expectStatus(page, subject.workspaceId, "done");
 });
 
 async function setWorkspaceManualStatus(page: Page, workspaceId: string, status: string) {
