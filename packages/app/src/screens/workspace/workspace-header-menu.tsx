@@ -4,6 +4,7 @@ import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import {
   Copy,
+  Link,
   Ellipsis,
   Globe,
   Import as ImportIcon,
@@ -39,6 +40,7 @@ import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedLink = withUnistyles(Link);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedGlobe = withUnistyles(Globe);
@@ -55,6 +57,7 @@ const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
 const MENU_RENAME_ICON = <ThemedPencil size={16} uniProps={mutedColorMapping} />;
 const MENU_FIRST_MESSAGE_ICON = <ThemedFirstMessage size={16} uniProps={mutedColorMapping} />;
+const MENU_LINK_ICON = <ThemedLink size={16} uniProps={mutedColorMapping} />;
 const MENU_SHARE_ICON = <ThemedShare size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
@@ -156,6 +159,9 @@ function workspaceHeaderMenuButtonStyle({
 }
 
 export interface WorkspaceHeaderTabActions {
+  canCopyTabLink: boolean;
+  onCopyTabLink: () => void;
+  onCopyWorkspaceLink: () => void;
   renameTabKind: "agent" | "terminal" | null;
   onRenameCurrentTab: () => void;
   sharingAvailability?: boolean | null;
@@ -164,6 +170,9 @@ export interface WorkspaceHeaderTabActions {
 }
 
 function WorkspaceHeaderTabActionItems({
+  canCopyTabLink,
+  onCopyTabLink,
+  onCopyWorkspaceLink,
   sharingAvailability,
   onShareConversation,
   onShowFirstMessage,
@@ -171,17 +180,34 @@ function WorkspaceHeaderTabActionItems({
   onRenameCurrentTab,
 }: WorkspaceHeaderTabActions) {
   const { t } = useTranslation();
-  if (!renameTabKind) return null;
   return (
     <>
+      {renameTabKind ? (
+        <DropdownMenuItem
+          testID="workspace-header-rename-tab"
+          leading={MENU_RENAME_ICON}
+          onSelect={onRenameCurrentTab}
+        >
+          {renameTabKind === "agent"
+            ? t("workspace.tabs.menu.renameAgent")
+            : t("workspace.tabs.menu.renameTerminal")}
+        </DropdownMenuItem>
+      ) : null}
+      {canCopyTabLink ? (
+        <DropdownMenuItem
+          testID="workspace-header-copy-tab-link"
+          leading={MENU_LINK_ICON}
+          onSelect={onCopyTabLink}
+        >
+          {t("workspace.header.actions.copyTabLink")}
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuItem
-        testID="workspace-header-rename-tab"
-        leading={MENU_RENAME_ICON}
-        onSelect={onRenameCurrentTab}
+        testID="workspace-header-copy-workspace-link"
+        leading={MENU_LINK_ICON}
+        onSelect={onCopyWorkspaceLink}
       >
-        {renameTabKind === "agent"
-          ? t("workspace.tabs.menu.renameAgent")
-          : t("workspace.tabs.menu.renameTerminal")}
+        {t("workspace.header.actions.copyWorkspaceLink")}
       </DropdownMenuItem>
       {renameTabKind === "agent" && onShowFirstMessage ? (
         <DropdownMenuItem
@@ -288,6 +314,9 @@ export function WorkspaceHeaderMenuMobile({
   onCreateTerminal,
   onCreateTerminalWithProfile,
   onCreateBrowser,
+  canCopyTabLink,
+  onCopyTabLink,
+  onCopyWorkspaceLink,
   renameTabKind,
   onRenameCurrentTab,
   sharingAvailability,
@@ -325,6 +354,9 @@ export function WorkspaceHeaderMenuMobile({
         sheetTitle={t("workspace.header.actions.workspaceActions")}
       >
         <WorkspaceHeaderTabActionItems
+          canCopyTabLink={canCopyTabLink}
+          onCopyTabLink={onCopyTabLink}
+          onCopyWorkspaceLink={onCopyWorkspaceLink}
           renameTabKind={renameTabKind}
           sharingAvailability={sharingAvailability}
           onShareConversation={onShareConversation}

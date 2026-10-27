@@ -1143,6 +1143,8 @@ export const es: TranslationResources = {
         newTerminal: "Nueva terminal",
         newBrowser: "Nueva pestaña del navegador",
         importSession: "Importar sesión",
+        copyWorkspaceLink: "Copiar enlace del espacio de trabajo",
+        copyTabLink: "Copiar enlace de la pestaña",
         copyPath: "Copiar ruta del espacio de trabajo",
         copyBranchName: "Copiar nombre de sucursal",
         showSetup: "Mostrar configuración",
@@ -1152,6 +1154,8 @@ export const es: TranslationResources = {
         branchNameUnavailable: "Nombre de la sucursal no disponible",
         terminalQueued:
           "Preparando el espacio de trabajo, abriendo la terminal cuando esté listo...",
+        workspaceLinkCopiedLabel: "Enlace del espacio de trabajo",
+        tabLinkCopiedLabel: "Enlace de la pestaña",
         workspacePathCopiedLabel: "RutaWorkspace",
         branchNameCopiedLabel: "Nombre de la sucursal",
       },

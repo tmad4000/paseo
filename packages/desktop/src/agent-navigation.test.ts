@@ -12,6 +12,22 @@ describe("desktop agent navigation", () => {
     ).toEqual({ serverId: "server-1", agentId: "agent-2" });
   });
 
+  it("queues workspace/tab links through the same cold and warm window lifecycle", () => {
+    const target = parseAgentDeepLinkFromArgv([
+      "Paseo Fork",
+      "paseo-fork://h/server-1/workspace/wks_1?open=terminal%3Aterm1",
+    ]);
+    expect(target).toEqual({ serverId: "server-1", workspaceId: "wks_1", open: "terminal:term1" });
+    const inbox = new AgentNavigationInbox();
+    expect(inbox.deliverOrQueue(9, target!)).toBeNull();
+    expect(inbox.windowReady(9)).toEqual(target);
+    expect(inbox.deliverOrQueue(9, target!)).toEqual(target);
+    inbox.windowLoading(9);
+    expect(inbox.deliverOrQueue(9, target!)).toBeNull();
+    inbox.removeWindow(9);
+    expect(inbox.windowReady(9)).toBeNull();
+  });
+
   it("holds navigation until the existing renderer is ready", () => {
     const inbox = new AgentNavigationInbox();
     const target = { serverId: "server-1", agentId: "agent-2" };

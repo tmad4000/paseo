@@ -1138,6 +1138,8 @@ export const ru: TranslationResources = {
         newTerminal: "Новый терминал",
         newBrowser: "Новая вкладка браузера",
         importSession: "Импортировать сессию",
+        copyWorkspaceLink: "Копировать ссылку на рабочую область",
+        copyTabLink: "Копировать ссылку на вкладку",
         copyPath: "Скопировать путь к рабочему пространству",
         copyBranchName: "Скопировать название ветки",
         showSetup: "Показать настройку рабочего пространства",
@@ -1147,6 +1149,8 @@ export const ru: TranslationResources = {
         branchNameUnavailable: "Имя ветки недоступно",
         terminalQueued:
           "Рабочее пространство подготавливается. Терминал откроется, когда оно будет готово...",
+        workspaceLinkCopiedLabel: "Ссылка на рабочую область",
+        tabLinkCopiedLabel: "Ссылка на вкладку",
         workspacePathCopiedLabel: "Путь к рабочему пространству",
         branchNameCopiedLabel: "Имя ветки",
       },
