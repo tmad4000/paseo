@@ -64,6 +64,7 @@ test("visible history dropdown reaches older sessions and preserves Back/Forward
     await visibleControl(page, "navigation-back-button-history-menu-button").click();
     const compactMenu = visibleControl(page, "navigation-back-button-history-content");
     await expect(compactMenu).toBeVisible();
+    await expect(compactMenu.getByRole("menuitem").first()).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("history-compact.png") });
     await compactMenu.getByRole("menuitem").filter({ hasText: second.title }).first().click();
     await expect(compactMenu).toBeHidden();
