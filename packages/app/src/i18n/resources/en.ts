@@ -516,6 +516,7 @@ export const en = {
       notePlaceholder: "Type a note or link…",
       addNote: "Add note",
       answerLabel: "Answer:",
+      possibleAnswerLabel: "Possible answer:",
       unpin: "Unpin",
       pinToStream: "Pin to stream",
       pinSelection: "Pin selected text to Stream",
@@ -535,6 +536,10 @@ export const en = {
         waitingCount: "{{count}} waiting",
         newAnswer: "New answer",
         waiting: "Waiting for answer",
+        possibleAnswer: "Possible answer",
+        candidateHint:
+          "The first reply after your question. The agent has not confirmed it answers it.",
+        openChat: "Open answering chat",
         jumpQuestion: "Question",
         jumpAnswer: "Answer",
         jumpQuestionLabel: "Jump to your question in Chat",

@@ -1,13 +1,16 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { CompanionEntry, TimelineAnchor } from "@getpaseo/protocol/companion-stream";
-import React, { useCallback } from "react";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
+import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import type { TimelinePosition } from "@/types/stream";
-import { trackedQuestionEntryId, type TrackedAnswerReview } from "./answers-model";
-import { TrackedAnswersPane } from "./answers-pane";
+import type { TimelineJump } from "@/agent-stream/use-timeline-anchor-jump";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { trackedQuestionEntryId } from "./answers-model";
+import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
 
 type TrackQuestionHandler = (
   text: string,
@@ -70,13 +73,13 @@ export function ChatTrackedAnswers({
   agentId,
   client,
   readOnly,
-  onJump,
+  jump,
 }: {
   serverId: string;
   agentId: string;
   client: DaemonClient | null;
   readOnly: boolean;
-  onJump: (anchor: TimelineAnchor) => void;
+  jump: TimelineJump;
 }) {
   const supported = useSupportsTrackedAnswers(serverId);
   const entries = useSessionStore((state) => {
@@ -86,13 +89,19 @@ export function ChatTrackedAnswers({
       NO_ENTRIES
     );
   });
-  const setStatus = useCallback(
-    async (entryId: string, status: TrackedAnswerReview) => {
+  const actions = useMemo<TrackedAnswerActions>(() => {
+    const update = async (input: Omit<StreamEntryUpdate, "agentId">) => {
       if (!client) throw new Error("Not connected");
-      await client.updateStreamEntry({ agentId, action: "update_status", entryId, status });
-    },
-    [agentId, client],
-  );
+      await client.updateStreamEntry({ agentId, ...input });
+    };
+    return {
+      ...jump,
+      openChat: (target) => navigateToAgent({ serverId, agentId: target }),
+      markSeen: (entryId, replyRevision) =>
+        update({ action: "mark_reply_seen", entryId, replyRevision }),
+      stopTracking: (entryId) => update({ action: "update_status", entryId, status: "done" }),
+    };
+  }, [agentId, client, jump, serverId]);
   if (!supported || readOnly) return null;
-  return <TrackedAnswersPane entries={entries} onJump={onJump} onSetStatus={setStatus} />;
+  return <TrackedAnswersPane entries={entries} agentId={agentId} actions={actions} />;
 }

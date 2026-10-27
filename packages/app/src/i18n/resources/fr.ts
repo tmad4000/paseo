@@ -528,6 +528,7 @@ export const fr: TranslationResources = {
       notePlaceholder: "Saisir une note ou un lien…",
       addNote: "Ajouter une note",
       answerLabel: "Réponse :",
+      possibleAnswerLabel: "Réponse possible :",
       unpin: "Désépingler",
       pinToStream: "Épingler dans le flux",
       pinSelection: "Pin selected text to Stream",
@@ -547,6 +548,10 @@ export const fr: TranslationResources = {
         waitingCount: "{{count}} en attente",
         newAnswer: "Nouvelle réponse",
         waiting: "En attente de réponse",
+        possibleAnswer: "Réponse possible",
+        candidateHint:
+          "La première réponse après votre question. L'agent n'a pas confirmé qu'elle y répond.",
+        openChat: "Ouvrir le chat qui a répondu",
         jumpQuestion: "Question",
         jumpAnswer: "Réponse",
         jumpQuestionLabel: "Aller à votre question dans le chat",

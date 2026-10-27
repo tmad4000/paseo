@@ -526,6 +526,7 @@ export const es: TranslationResources = {
       notePlaceholder: "Escribe una nota o un enlace…",
       addNote: "Añadir nota",
       answerLabel: "Respuesta:",
+      possibleAnswerLabel: "Posible respuesta:",
       unpin: "Desfijar",
       pinToStream: "Fijar en el stream",
       pinSelection: "Pin selected text to Stream",
@@ -545,6 +546,10 @@ export const es: TranslationResources = {
         waitingCount: "{{count}} en espera",
         newAnswer: "Respuesta nueva",
         waiting: "Esperando respuesta",
+        possibleAnswer: "Posible respuesta",
+        candidateHint:
+          "La primera respuesta tras tu pregunta. El agente no ha confirmado que la responda.",
+        openChat: "Abrir el chat que respondió",
         jumpQuestion: "Pregunta",
         jumpAnswer: "Respuesta",
         jumpQuestionLabel: "Ir a tu pregunta en el chat",

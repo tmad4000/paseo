@@ -62,47 +62,64 @@ Codex foreground turn IDs now include a fresh UUID. A recreated provider cannot 
 counter at the same ID and suppress new Stream outcomes. Duplicate delivery of the same turn
 still deduplicates. This does not repair previously missing historical cards.
 
-## Tracked answers
+## Answers to your questions
 
-**Track Q&A** on one of your own messages records it as a `q_and_a` entry. On hosts with
-`server_info.features.streamAnswers` the client sends the message's timeline position as
-`questionAnchor` and a stable `entryId` derived from it, so tracking the same message twice
-keeps one entry. Older hosts get the original unanchored record and no answers pane.
+Chat shows a floating **Your questions** pane listing questions you asked that need attention.
+Two kinds of existing Stream entries are your questions:
 
-The host attaches the answer (`qa-answers.ts`): the final response after the question, meaning
-assistant messages after the last tool call and before your next message. Narration before a
-tool call is progress, not an answer, and `[System Error]` rows from a failed turn never are.
-It attaches only once that span is closed: a completed turn, or another message from you. A
-failed or canceled turn leaves the question waiting. A question tracked after its reply arrived
-is answered immediately when the agent is idle. An attached answer is never replaced; Chat holds
-the full reply, Stream keeps 4,000 characters plus `answerAnchor`. Answers attach for chats whose
-timeline is loaded on the host. A reply that says "I'll check" is still the reply, so read it
-before marking it seen.
+- **Tracked asks** an agent records with `set_stream_ask` when the ask expects an answer:
+  `ask.expectsAnswer: true`, a headline ending in `?`, or an attached answer. These appear with
+  no tap from you. Agent questions to you (`set_stream_question`) are needed input, not your
+  questions, and never appear.
+- **Track Q&A** on one of your own messages (optional). On hosts with
+  `server_info.features.streamAnswers` the entry carries the message's timeline position as
+  `questionAnchor` and a stable ID derived from it, so tracking a message twice keeps one entry.
+  Q&A records without an anchor (older ones) stay in Stream and never ask for attention.
 
-A daemon restart or history reload starts a new timeline epoch and renumbers rows. A waiting
-question is found again by its provider message id (`questionMessageId`) and re-anchored; a
-provider without message ids leaves it waiting, and **Stop tracking** closes it. Q&A records
-saved without an anchor (before this feature, or from a message with no timeline position yet)
-stay in Stream and never ask for attention.
+The answer lives on the question's own entry as `reply` (`stream-answers.ts`), with its own
+`revision`, `answeredAt` and `provenance`:
 
-Seen is your own review state on the entry: `status: "reviewed"` through the existing
-`update_status` action. Arrival leaves it unseen, and an unanswered question cannot be marked
-seen. **Stop tracking** sets `done`, and an answer never reopens it. The wire snapshot carries up to 20 older waiting or unseen questions beyond its newest 50
-entries, so turn outcomes do not push them out of Chat.
+- **Explicit** answers come from `set_stream_answer` (MCP) or the `set_reply` update action,
+  addressed to the stable `askId` or Q&A `entryId`. Each question gets its own answer, so several
+  asks from one message stay distinct. An agent answers when it actually knows, including after
+  more chat or from a delegated child (`agentId` = the owning chat; the child is recorded as
+  `answeredByAgentId`). `replyRevision` is the revision last read: the same answer again is a
+  no-op, a stale revision is a conflict. An explicit answer replaces any candidate.
+- A **candidate** is the host's guess for a tracked message: the first settled response after
+  it, meaning assistant messages after the last tool call and before your next message, once a
+  turn completed or you sent another message. Failed or canceled turns and `[System Error]`
+  rows never become candidates. The pane labels it **Possible answer** with "The agent has not
+  confirmed it answers it", because "I'll check" is a candidate too. A candidate is never
+  replaced by another candidate, only by an explicit answer. Candidates attach for chats whose
+  timeline is loaded; after a timeline epoch change the message is found again by provider
+  message id.
 
-Chat shows a floating **Your questions** pane over its top edge, below the Chat/Stream switcher
-and clear of the composer. Rows are **New answer** (newest first), then **Waiting for answer**.
-**Question** and **Answer** scroll Chat to the anchored message, loading its history window when
-needed. A different timeline epoch reports that the message is no longer loaded. **Mark seen**
-(new answers) and **Stop tracking** (waiting questions) wait for the host; the row leaves only when the updated snapshot arrives, and a failed save
-stays visible. The header collapses the list (compact starts collapsed). **×** hides the pane
-until an answer arrives that was not showing when you hid it. Seen and resolved entries stay in
-Stream's Q&A filter.
+Seen is your own review state, kept apart from ask state: `replySeenRevision`, set only by
+**Mark seen** (`mark_reply_seen` with the revision shown). A new revision is unseen again
+without touching other entries. A finished ask is not seen, and an ask's state and evidence are
+never an answer: a done ask without an answer leaves the pane, a done ask with an unseen answer
+stays. Rewriting an ask keeps its answer and seen state. **Stop tracking** sets a Q&A message's
+status to `done`; no answer reopens it. The wire snapshot carries up to 20 older entries needing
+attention beyond its newest 50, so turn outcomes do not push them out of Chat.
 
-Evidence (`tracked-answers.spec.ts`): waiting and new answer at
+The pane sits over the top of Chat, below the Chat/Stream switcher and clear of the composer.
+Rows are **New answer**, then **Possible answer**, then **Waiting for answer**, newest first.
+**Question** jumps to the tracked message, loading its history window when needed; for an ask
+it jumps to `ask.sourceMessageId` when that message is loaded. **Answer** jumps to a
+candidate's anchor; **Open answering chat** opens the chat that wrote an explicit answer. Tap
+an answer to expand it. Mark seen and Stop tracking wait for the host; the row leaves only when
+the updated snapshot arrives, and a failed save stays visible. The header collapses the list
+(compact starts collapsed). **×** hides the pane until an answer, or a new revision, arrives
+that was not showing when you hid it. Seen and stopped entries stay in Stream.
+
+Agents list your questions with `list_stream_asks questions=true` (entry IDs, replies and
+seen revisions). Orchestrating agents should record each question you ask as an ask with
+`expectsAnswer` and answer it with `set_stream_answer`; the tool descriptions say so.
+
+Evidence (`tracked-answers.spec.ts`): waiting asks, a possible answer and a waiting message at
 [390](stream-answers/tracked-answers-waiting-390.png) /
-[1440](stream-answers/tracked-answers-waiting-1440.png); after the second answer and an answer
-jump at [390](stream-answers/tracked-answers-new-390.png) /
+[1440](stream-answers/tracked-answers-waiting-1440.png); explicit answers after a jump at
+[390](stream-answers/tracked-answers-new-390.png) /
 [1440](stream-answers/tracked-answers-new-1440.png).
 
 ## Cards
@@ -204,8 +221,9 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 `global-stream.ts` defines additive `stream.list.request/response` and
 `stream.entry.update.request/response` RPCs. `server_info.features.globalStream` gates global
 reads and acknowledged writes; older hosts need updating. `streamTags` gates tag filters, counts, pinned
-tags and `stream.tags.pin.request`. `streamAnswers` gates Q&A anchors, attached answers and
-seen state on the existing `q_and_a` kind. The old mutation RPC remains
+tags and `stream.tags.pin.request`. `streamAnswers` gates replies (`reply`, `replySeenRevision`),
+`ask.expectsAnswer`, Q&A anchors and status, the `set_reply`/`mark_reply_seen` actions and
+`userQuestionsOnly` listing. The old mutation RPC remains
 accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged.
 Ask data is optional metadata on the existing question shape, with open/done mirrored for older
 readers; no new entry kind or legacy status is emitted. `durableStream` gates per-chat pagination

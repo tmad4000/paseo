@@ -6,7 +6,7 @@ import {
 } from "./message-activity.js";
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
 import { applyStreamEntryUpdate } from "./stream-entry-update.js";
-import { attachQAndAAnswers } from "./qa-answers.js";
+import { attachCandidateReplies, hasCandidateWork } from "./stream-answers.js";
 import type {
   StreamListOptions,
   StreamEntryUpdate,
@@ -4985,17 +4985,14 @@ export class AgentManager {
     }
   }
 
-  /** Tracked questions get the reply already in the loaded timeline; see attachQAndAAnswers. */
+  /** Tracked messages get a candidate reply from the loaded timeline; see attachCandidateReplies. */
   private attachTrackedAnswers(
     agentId: string,
     entries: CompanionEntry[],
     turnSettled: boolean,
   ): CompanionEntry[] {
-    const awaiting = entries.some(
-      (entry) => entry.kind === "q_and_a" && entry.questionAnchor && !entry.answer?.trim(),
-    );
-    if (!awaiting || !this.timelineStore.has(agentId)) return entries;
-    return attachQAndAAnswers({
+    if (!hasCandidateWork(entries) || !this.timelineStore.has(agentId)) return entries;
+    return attachCandidateReplies({
       entries,
       rows: this.timelineStore.getRows(agentId),
       epoch: this.timelineStore.getEpoch(agentId),

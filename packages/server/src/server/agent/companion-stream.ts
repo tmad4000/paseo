@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getQAndAAttention, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { getAnswerAttention, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { AgentPermissionRequest, AgentStreamEvent } from "./agent-sdk-types.js";
 
 export const COMPANION_ENTRY_LIMIT = 50;
@@ -240,7 +240,7 @@ export function selectSnapshotCompanionEntries(entries: CompanionEntry[]): Compa
   const recentStart = entries.length - COMPANION_ENTRY_LIMIT;
   const older = entries
     .slice(0, recentStart)
-    .filter((entry) => getQAndAAttention(entry) !== null)
+    .filter((entry) => getAnswerAttention(entry) !== null)
     .slice(-SNAPSHOT_ATTENTION_LIMIT);
   return [...older, ...entries.slice(recentStart)];
 }

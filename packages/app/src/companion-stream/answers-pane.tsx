@@ -5,44 +5,60 @@ import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   hasUnhiddenAnswers,
   selectTrackedAnswers,
+  trackedAnswerLinks,
   trackedAnswersSignature,
   type TrackedAnswer,
-  type TrackedAnswerReview,
+  type TrackedAnswerLinks,
 } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
 
-interface TrackedAnswersPaneProps {
-  entries: readonly CompanionEntry[];
-  onJump: (anchor: TimelineAnchor) => void;
-  /** Resolves once the host has durably recorded the review: reviewed is seen, done stops tracking. */
-  onSetStatus: (entryId: string, status: TrackedAnswerReview) => Promise<void>;
+export interface TrackedAnswerActions {
+  jumpToAnchor: (anchor: TimelineAnchor) => void;
+  jumpToMessage: (messageId: string) => void;
+  openChat: (agentId: string) => void;
+  /** Resolve once the host has durably recorded the change. */
+  markSeen: (entryId: string, replyRevision: number) => Promise<void>;
+  stopTracking: (entryId: string) => Promise<void>;
 }
 
+interface TrackedAnswersPaneProps {
+  entries: readonly CompanionEntry[];
+  /** The chat showing the pane; answers written from another chat offer to open it. */
+  agentId: string;
+  actions: TrackedAnswerActions;
+}
+
+const BADGES = {
+  new_answer: { label: "agentPanel.stream.answers.newAnswer", variant: "success" },
+  candidate: { label: "agentPanel.stream.answers.possibleAnswer", variant: "warning" },
+  waiting: { label: "agentPanel.stream.answers.waiting", variant: "muted" },
+} as const satisfies Record<string, { label: string; variant: StatusBadgeVariant }>;
+
 /**
- * Floats over the top of Chat, clear of the composer, listing the asker's tracked questions
- * that still need attention: waiting for an answer, or answered and not yet seen. Entries
- * come from the agent's Stream snapshot; seen state changes only through Mark seen.
+ * Floats over the top of Chat, clear of the composer, listing questions the user asked that
+ * need attention: an answer or possible answer not yet seen, or a question still waiting.
+ * Entries come from the chat's Stream snapshot (tracked asks and tracked Q&A messages); seen
+ * state changes only through Mark seen, per answer revision.
  */
 export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   entries,
-  onJump,
-  onSetStatus,
+  agentId,
+  actions,
 }: TrackedAnswersPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const items = useMemo(() => selectTrackedAnswers(entries), [entries]);
   const [expanded, setExpanded] = useState(!isCompact);
   const [hiddenSignature, setHiddenSignature] = useState<string | null>(null);
-  const newCount = items.filter((item) => item.attention === "new_answer").length;
-  const waitingCount = items.length - newCount;
+  const waitingCount = items.filter((item) => item.attention === "waiting").length;
+  const newCount = items.length - waitingCount;
 
   const toggle = useCallback(() => setExpanded((value) => !value), []);
-  const toggleState = useMemo(() => ({ expanded }), [expanded]);
   const hide = useCallback(() => setHiddenSignature(trackedAnswersSignature(items)), [items]);
 
   if (items.length === 0 || !hasUnhiddenAnswers(items, hiddenSignature)) return null;
@@ -66,7 +82,7 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
             onPress={toggle}
             style={styles.headerToggle}
             accessibilityRole="button"
-            accessibilityState={toggleState}
+            aria-expanded={expanded}
             accessibilityLabel={`${t(
               expanded ? "agentPanel.stream.answers.collapse" : "agentPanel.stream.answers.expand",
             )}. ${summary}`}
@@ -103,8 +119,8 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
                 key={item.entry.id}
                 item={item}
                 first={index === 0}
-                onJump={onJump}
-                onSetStatus={onSetStatus}
+                agentId={agentId}
+                actions={actions}
               />
             ))}
           </ScrollView>
@@ -117,112 +133,151 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
 const TrackedAnswerRow = memo(function TrackedAnswerRow({
   item,
   first,
-  onJump,
-  onSetStatus,
+  agentId,
+  actions,
 }: {
   item: TrackedAnswer;
   first: boolean;
-  onJump: (anchor: TimelineAnchor) => void;
-  onSetStatus: (entryId: string, status: TrackedAnswerReview) => Promise<void>;
+  agentId: string;
+  actions: TrackedAnswerActions;
 }) {
   const { t } = useTranslation();
   const { entry, attention } = item;
-  const [saving, setSaving] = useState(false);
+  const [answerExpanded, setAnswerExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const question = splitEntryText(entry.text).headline || entry.text;
-  const answer = entry.answer?.trim() ?? "";
-
-  const jumpToQuestion = useCallback(() => {
-    if (entry.questionAnchor) onJump(entry.questionAnchor);
-  }, [entry.questionAnchor, onJump]);
-  const jumpToAnswer = useCallback(() => {
-    if (entry.answerAnchor) onJump(entry.answerAnchor);
-  }, [entry.answerAnchor, onJump]);
-  // An answered row is marked seen; a waiting row can stop being tracked.
-  const review: TrackedAnswerReview = attention === "new_answer" ? "reviewed" : "done";
-  const saveReview = useCallback(() => {
-    setSaving(true);
-    setError(null);
-    onSetStatus(entry.id, review)
-      .catch(() =>
-        setError(
-          t(
-            review === "reviewed"
-              ? "agentPanel.stream.answers.markSeenFailed"
-              : "agentPanel.stream.answers.stopTrackingFailed",
-          ),
-        ),
-      )
-      .finally(() => setSaving(false));
-  }, [entry.id, onSetStatus, review, t]);
+  const badge = BADGES[attention];
+  const links = useMemo(() => trackedAnswerLinks(entry, agentId), [agentId, entry]);
+  const toggleAnswer = useCallback(() => setAnswerExpanded((value) => !value), []);
 
   return (
     <View style={[styles.row, !first && styles.rowBorder]} testID={`tracked-answer-${entry.id}`}>
       <View style={styles.rowEyebrow}>
-        <StatusBadge
-          label={t(
-            attention === "new_answer"
-              ? "agentPanel.stream.answers.newAnswer"
-              : "agentPanel.stream.answers.waiting",
-          )}
-          variant={attention === "new_answer" ? "success" : "muted"}
-        />
+        <StatusBadge label={t(badge.label)} variant={badge.variant} />
       </View>
       <Text style={styles.question} numberOfLines={2}>
         {question}
       </Text>
-      {answer ? (
-        <Text style={styles.answer} numberOfLines={3}>
-          {answer}
-        </Text>
+      {entry.reply ? (
+        <Pressable
+          onPress={toggleAnswer}
+          accessibilityRole="button"
+          aria-expanded={answerExpanded}
+          testID="tracked-answer-text"
+        >
+          <Text style={styles.answer} numberOfLines={answerExpanded ? undefined : 3}>
+            {entry.reply.text}
+          </Text>
+        </Pressable>
+      ) : null}
+      {attention === "candidate" ? (
+        <Text style={styles.hint}>{t("agentPanel.stream.answers.candidateHint")}</Text>
       ) : null}
       {error ? (
         <Text style={styles.error} accessibilityRole="alert">
           {error}
         </Text>
       ) : null}
-      <View style={styles.actions}>
-        {entry.questionAnchor ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onPress={jumpToQuestion}
-            accessibilityLabel={t("agentPanel.stream.answers.jumpQuestionLabel")}
-            testID="tracked-answer-jump-question"
-          >
-            {t("agentPanel.stream.answers.jumpQuestion")}
-          </Button>
-        ) : null}
-        {entry.answerAnchor ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onPress={jumpToAnswer}
-            accessibilityLabel={t("agentPanel.stream.answers.jumpAnswerLabel")}
-            testID="tracked-answer-jump-answer"
-          >
-            {t("agentPanel.stream.answers.jumpAnswer")}
-          </Button>
-        ) : null}
-        <View style={styles.actionsSpacer} />
-        <Button
-          variant={review === "reviewed" ? "secondary" : "ghost"}
-          size="xs"
-          onPress={saveReview}
-          loading={saving}
-          disabled={saving}
-          testID={review === "reviewed" ? "tracked-answer-mark-seen" : "tracked-answer-stop"}
-        >
-          {t(
-            review === "reviewed"
-              ? "agentPanel.stream.answers.markSeen"
-              : "agentPanel.stream.answers.stopTracking",
-          )}
-        </Button>
-      </View>
+      <TrackedAnswerRowActions item={item} links={links} actions={actions} onError={setError} />
     </View>
   );
 });
+
+/** Jumps on the left; the one review action (Mark seen, or Stop tracking) on the right. */
+function TrackedAnswerRowActions({
+  item,
+  links,
+  actions,
+  onError,
+}: {
+  item: TrackedAnswer;
+  links: TrackedAnswerLinks;
+  actions: TrackedAnswerActions;
+  onError: (message: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const { entry, attention } = item;
+  const [saving, setSaving] = useState(false);
+  const reply = entry.reply;
+  const canStop = attention === "waiting" && entry.kind === "q_and_a";
+  const { questionAnchor, questionMessageId, answerAnchor, answeringAgentId } = links;
+
+  const jumpToQuestion = useCallback(() => {
+    if (questionAnchor) actions.jumpToAnchor(questionAnchor);
+    else if (questionMessageId) actions.jumpToMessage(questionMessageId);
+  }, [actions, questionAnchor, questionMessageId]);
+  const jumpToAnswer = useCallback(() => {
+    if (answerAnchor) actions.jumpToAnchor(answerAnchor);
+  }, [actions, answerAnchor]);
+  const openChat = useCallback(() => {
+    if (answeringAgentId) actions.openChat(answeringAgentId);
+  }, [actions, answeringAgentId]);
+  const save = useCallback(() => {
+    setSaving(true);
+    onError(null);
+    const pending = reply
+      ? actions.markSeen(entry.id, reply.revision)
+      : actions.stopTracking(entry.id);
+    pending
+      .catch(() =>
+        onError(
+          t(
+            reply
+              ? "agentPanel.stream.answers.markSeenFailed"
+              : "agentPanel.stream.answers.stopTrackingFailed",
+          ),
+        ),
+      )
+      .finally(() => setSaving(false));
+  }, [actions, entry.id, onError, reply, t]);
+
+  return (
+    <View style={styles.actions}>
+      {questionAnchor || questionMessageId ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          onPress={jumpToQuestion}
+          accessibilityLabel={t("agentPanel.stream.answers.jumpQuestionLabel")}
+          testID="tracked-answer-jump-question"
+        >
+          {t("agentPanel.stream.answers.jumpQuestion")}
+        </Button>
+      ) : null}
+      {answerAnchor ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          onPress={jumpToAnswer}
+          accessibilityLabel={t("agentPanel.stream.answers.jumpAnswerLabel")}
+          testID="tracked-answer-jump-answer"
+        >
+          {t("agentPanel.stream.answers.jumpAnswer")}
+        </Button>
+      ) : null}
+      {answeringAgentId ? (
+        <Button variant="ghost" size="xs" onPress={openChat} testID="tracked-answer-open-chat">
+          {t("agentPanel.stream.answers.openChat")}
+        </Button>
+      ) : null}
+      <View style={styles.actionsSpacer} />
+      {reply || canStop ? (
+        <Button
+          variant={reply ? "secondary" : "ghost"}
+          size="xs"
+          onPress={save}
+          loading={saving}
+          disabled={saving}
+          testID={reply ? "tracked-answer-mark-seen" : "tracked-answer-stop"}
+        >
+          {t(
+            reply ? "agentPanel.stream.answers.markSeen" : "agentPanel.stream.answers.stopTracking",
+          )}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
 
 const PANE_WIDTH = 340;
 
@@ -322,6 +377,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
+  },
+  hint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   error: {
     color: theme.colors.destructive,

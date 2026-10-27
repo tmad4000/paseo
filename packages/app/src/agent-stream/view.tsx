@@ -679,7 +679,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const handleAnchorUnavailable = useCallback(() => {
       toast?.error(t("agentPanel.stream.answers.jumpUnavailable"));
     }, [t, toast]);
-    const jumpToAnchor = useTimelineAnchorJump({
+    const timelineJump = useTimelineAnchorJump({
       agentId,
       serverId: resolvedServerId,
       timelineEpoch,
@@ -1251,7 +1251,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               agentId={agentId}
               client={client}
               readOnly={readOnly}
-              onJump={jumpToAnchor}
+              jump={timelineJump}
             />
             {(!isNearBottom || isTimelineDetached) && (
               <View style={scrollToBottomContainerStyle} pointerEvents="box-none">

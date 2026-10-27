@@ -2297,7 +2297,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track a durable ask",
       description:
-        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing. Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. This does not prompt or run any agent.",
+        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing. Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
       inputSchema: {
         agentId: z
           .string()
@@ -2345,24 +2345,25 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Read the durable ask checklist",
       description:
-        "Read explicit tracked asks and their revisions without starting a provider. Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change.",
+        "Read explicit tracked asks and their revisions without starting a provider. Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change. questions=true instead lists the user's questions (asks expecting an answer and tracked Q&A messages) with entryId, reply (text, provenance, revision) and replySeenRevision; use them with set_stream_answer.",
       inputSchema: {
         agentId: z.string().optional(),
         cursor: z.string().optional(),
         unresolvedOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).optional(),
+        questions: z.boolean().optional(),
       },
     },
-    async ({ agentId, cursor, unresolvedOnly, limit }) => {
+    async ({ agentId, cursor, unresolvedOnly, limit, questions }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) throw new Error("An agentId is required");
       const page = await agentManager.listGlobalStream({
         agentId: targetAgentId,
-        asksOnly: true,
+        ...(questions ? { userQuestionsOnly: true } : { asksOnly: true }),
         includeArchived: true,
         cursor,
         limit,
-        filter: unresolvedOnly ? "pending" : "all",
+        filter: unresolvedOnly && !questions ? "pending" : "all",
       });
       return {
         content: [],
@@ -2370,9 +2371,67 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...page,
           rows: page.rows.map((row) =>
             Object.assign({}, row, {
-              askId: row.item.kind === "entry" ? row.item.entry.id.slice(4) : null,
+              entryId: row.item.kind === "entry" ? row.item.entry.id : null,
+              askId:
+                row.item.kind === "entry" && row.item.entry.id.startsWith("ask:")
+                  ? row.item.entry.id.slice(4)
+                  : null,
             }),
           ),
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "set_stream_answer",
+    {
+      title: "Answer a question the user asked",
+      description:
+        "Attach your answer to a question the user asked, on its own Stream entry: a tracked ask (askId) or a tracked Q&A message (entryId from list_stream_asks questions=true). The user sees it in Chat's answers pane until they mark it seen. Answer each question separately, including several asks from one message, and answer late or from a delegated chat (pass the owning agentId) once you actually know. Do not attach acknowledgements such as \"I'll check\". replyRevision is the answer revision you last read (0 for none); repeating the same answer is a no-op, a stale revision is a conflict. A changed answer is shown to the user again. This does not change the ask's state or evidence (use set_stream_ask), and it is not for questions you ask the user (use set_stream_question).",
+      inputSchema: {
+        agentId: z
+          .string()
+          .optional()
+          .describe("Conversation that owns the question; defaults to caller."),
+        askId: z.string().min(1).max(200).optional().describe("Tracked ask ID, without ask:."),
+        entryId: z
+          .string()
+          .min(1)
+          .max(300)
+          .optional()
+          .describe("Stream entry ID, such as qa:<id> from list_stream_asks questions=true."),
+        answer: z.string().min(1).max(4000),
+        replyRevision: z.number().int().min(0),
+        sourceMessageId: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("The chat message that holds the answer, when known."),
+      },
+    },
+    async ({ agentId, askId, entryId, answer, replyRevision, sourceMessageId }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) throw new Error("An agentId is required");
+      if (Boolean(askId) === Boolean(entryId))
+        throw new Error("Pass exactly one of askId or entryId");
+      const targetEntryId = askId ? `ask:${askId}` : entryId!;
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId: targetEntryId,
+        action: "set_reply",
+        text: answer,
+        replyRevision,
+        sourceId: sourceMessageId ? `msg:${sourceMessageId}` : undefined,
+        answeredByAgentId:
+          callerAgentId && callerAgentId !== targetAgentId ? callerAgentId : undefined,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: targetAgentId,
+          entryId: targetEntryId,
+          accepted: true,
         }),
       };
     },

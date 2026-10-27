@@ -30,6 +30,9 @@ export const StreamListRequestSchema = z.object({
   includeArchived: z.boolean().optional(),
   cursor: z.string().max(10000).optional(),
   limit: z.number().int().min(1).max(100).optional(),
+  // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+  /** Only questions the user asked: tracked asks that expect an answer and tracked Q&A. */
+  userQuestionsOnly: z.boolean().optional(),
   // COMPAT(streamTags): only sent to hosts advertising features.streamTags. Entries must carry all.
   tags: z.array(z.string().max(100)).max(20).optional(),
 });
@@ -59,6 +62,9 @@ export const StreamUpdateRequestSchema = z.object({
     "add_q_and_a",
     "add_question",
     "set_ask",
+    // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+    "set_reply",
+    "mark_reply_seen",
   ]),
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().max(4000).optional(),
@@ -69,6 +75,10 @@ export const StreamUpdateRequestSchema = z.object({
   // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
   /** add_q_and_a: the question's timeline position, so the host can attach its answer. */
   questionAnchor: TimelineAnchorSchema.optional(),
+  /** set_reply: the reply revision last read (0 for none). mark_reply_seen: the revision seen. */
+  replyRevision: z.number().int().min(0).optional(),
+  /** set_reply: the conversation that answered, when it is not the owning one. */
+  answeredByAgentId: z.string().max(200).optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),

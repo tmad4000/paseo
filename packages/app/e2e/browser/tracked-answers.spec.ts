@@ -1,3 +1,4 @@
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible, fillComposerDraft } from "../support/helpers/composer";
 import { scrollChatAwayFromBottom } from "../support/helpers/agent-bottom-anchor";
@@ -11,24 +12,47 @@ async function send(page: Page, text: string): Promise<void> {
   await page.getByRole("button", { name: "Send message", exact: true }).click();
 }
 
-async function trackQuestion(page: Page, prompt: string): Promise<void> {
+async function trackQuestion(page: Page, prompt: string, compact: boolean): Promise<void> {
   const message = page.getByTestId("user-message").filter({ hasText: prompt });
-  await message.getByText(prompt, { exact: true }).hover();
-  await message.getByRole("button", { name: "Track Q&A", exact: true }).click();
+  // Center it, away from the floating switcher and pane at the top and the composer below.
+  await message.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const button = message.getByRole("button", { name: "Track Q&A", exact: true });
+  // Message actions are always shown on compact layouts and appear on hover elsewhere.
+  if (!compact) await message.getByText(prompt, { exact: true }).hover();
+  await button.click();
 }
 
-async function qAndAEntries(agent: Agent) {
-  const page = await agent.client.listGlobalStream({ agentId: agent.agentId });
-  return page.rows.flatMap((row) =>
-    row.item.kind === "entry" && row.item.entry.kind === "q_and_a" ? [row.item.entry] : [],
-  );
+// The expanded pane floats over Chat; collapse it to reach messages beneath, as a user would.
+async function setPaneExpanded(page: Page, expanded: boolean): Promise<void> {
+  const toggle = page.getByTestId("tracked-answers-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== String(expanded)) await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", String(expanded));
+}
+
+async function streamEntry(agent: Agent, id: string): Promise<CompanionEntry | undefined> {
+  const page = await agent.client.listGlobalStream({ agentId: agent.agentId, limit: 100 });
+  for (const row of page.rows) {
+    if (row.item.kind === "entry" && row.item.entry.id === id) return row.item.entry;
+  }
+  return undefined;
+}
+
+async function answer(agent: Agent, entryId: string, text: string, replyRevision: number) {
+  await agent.client.updateStreamEntry({
+    agentId: agent.agentId,
+    action: "set_reply",
+    entryId,
+    text,
+    replyRevision,
+  });
 }
 
 for (const width of [390, 1440]) {
-  test(`Tracked answers pane: waiting, new answer, jump, mark seen, hide at ${width}px`, async ({
+  test(`Answers pane: agent asks, Track Q&A candidates, revisions, seen and hide at ${width}px`, async ({
     page,
   }, testInfo) => {
-    test.setTimeout(150_000);
+    test.setTimeout(180_000);
+    const askText = `Staging ${width}: which database does it use?`;
     const first = `Which port does the preview use? (${width})`;
     const second = `Did the migration finish? (${width})`;
     const agent = await seedMockAgentWorkspace({
@@ -40,29 +64,42 @@ for (const width of [390, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await openAgentRoute(page, agent);
       await expectComposerVisible(page);
+      const pane = page.getByTestId("tracked-answers-pane");
+      const toggle = pane.getByTestId("tracked-answers-toggle");
 
-      // A question tracked after its reply settled is answered at once, and stays unseen.
+      // An ask the agent tracks waits in the pane with no tap from the user.
+      await agent.client.updateStreamEntry({
+        agentId: agent.agentId,
+        action: "set_ask",
+        entryId: "staging-db",
+        text: askText,
+        expectedRevision: 0,
+        ask: { state: "in_progress", remaining: "Check the staging config", evidence: "" },
+      });
+      await expect(toggle).toHaveAccessibleName(/1 waiting/);
+      // Compact starts collapsed so it never takes the chat over; desktop starts expanded.
+      await expect(toggle).toHaveAttribute("aria-expanded", String(width >= 768));
+      await setPaneExpanded(page, true);
+      const askRow = pane.getByTestId("tracked-answer-ask:staging-db");
+      await expect(askRow.getByText("Waiting for answer")).toBeVisible();
+      await setPaneExpanded(page, false);
+
+      // Tracking a message after its reply settled gives a candidate, labeled unconfirmed.
       await send(page, first);
       await expect(page.getByTestId("user-message").filter({ hasText: first })).toBeVisible();
       expect((await agent.client.waitForFinish(agent.agentId, 45_000)).status).toBe("idle");
-      await trackQuestion(page, first);
-      const pane = page.getByTestId("tracked-answers-pane");
-      const toggle = pane.getByTestId("tracked-answers-toggle");
-      await expect(toggle).toHaveAccessibleName(/1 new/);
-      if (width < 768) {
-        // Compact starts collapsed so it never takes the chat over; one tap expands it.
-        await expect(pane.getByText("New answer")).toHaveCount(0);
-        await toggle.click();
-      }
-      await expect(pane.getByText("New answer")).toBeVisible();
-      await expect(pane.getByText(first)).toBeVisible();
+      await trackQuestion(page, first, width < 768);
+      await expect(toggle).toHaveAccessibleName(/1 new · 1 waiting/);
+      await setPaneExpanded(page, true);
+      await expect(pane.getByText("Possible answer")).toBeVisible();
+      await expect(pane.getByText(/has not confirmed/)).toBeVisible();
+      await setPaneExpanded(page, false);
 
-      // A question tracked while its reply is still streaming waits for the turn to settle.
+      // A message tracked while its reply streams waits until the turn completes.
       await send(page, second);
       await expect(page.getByTestId("user-message").filter({ hasText: second })).toBeVisible();
-      await trackQuestion(page, second);
-      await expect(pane.getByText("Waiting for answer")).toBeVisible();
-      await expect(toggle).toHaveAccessibleName(/1 new · 1 waiting/);
+      await trackQuestion(page, second, width < 768);
+      await setPaneExpanded(page, true);
       await page.screenshot({ path: testInfo.outputPath(`tracked-answers-waiting-${width}.png`) });
 
       // The pane floats over the top of Chat and never covers the composer.
@@ -72,48 +109,52 @@ for (const width of [390, 1440]) {
         .first()
         .boundingBox();
       expect(paneBox && composerBox && paneBox.y + paneBox.height <= composerBox.y).toBe(true);
-
       expect((await agent.client.waitForFinish(agent.agentId, 45_000)).status).toBe("idle");
-      await expect(toggle).toHaveAccessibleName(/2 new/);
-      const entries = await qAndAEntries(agent);
-      expect(entries.map((entry) => [entry.text, Boolean(entry.answer), entry.status])).toEqual(
-        expect.arrayContaining([
-          [first, true, "open"],
-          [second, true, "open"],
-        ]),
-      );
-      expect(entries).toHaveLength(2);
+      await expect(toggle).toHaveAccessibleName(/2 new · 1 waiting/);
 
-      // Jump to the exact question message after the reader has scrolled elsewhere.
+      // The agent attaches the actual answer to its ask: explicit, unseen, other rows untouched.
+      await answer(agent, "ask:staging-db", "Postgres 16 on the shared cluster.", 0);
+      await expect(askRow.getByText("New answer")).toBeVisible();
+      await expect(askRow.getByText("Postgres 16 on the shared cluster.")).toBeVisible();
+
+      // A late explicit answer replaces the candidate for a tracked message.
+      const firstId = (
+        await agent.client.listGlobalStream({ agentId: agent.agentId, limit: 100 })
+      ).rows.flatMap((row) =>
+        row.item.kind === "entry" && row.item.entry.text === first ? [row.item.entry.id] : [],
+      )[0]!;
+      await answer(agent, firstId, "Port 7420, set in the preview config.", 1);
+      const firstRow = pane.getByTestId(`tracked-answer-${firstId}`);
+      await expect(firstRow.getByText("New answer")).toBeVisible();
+      await expect(firstRow.getByText("Port 7420, set in the preview config.")).toBeVisible();
+
+      // Jump to the exact tracked message after the reader has scrolled elsewhere.
       await scrollChatAwayFromBottom(page, { deltaY: -900, minDistanceFromBottom: 200 }).catch(
         () => undefined,
-      );
-      const firstRow = pane.locator(
-        `[data-testid="tracked-answer-${entries.find((entry) => entry.text === first)!.id}"]`,
       );
       await firstRow.getByTestId("tracked-answer-jump-question").click();
       await expect(
         page.getByTestId("user-message").filter({ hasText: first }).first(),
       ).toBeInViewport();
-      await firstRow.getByTestId("tracked-answer-jump-answer").click();
       await page.screenshot({ path: testInfo.outputPath(`tracked-answers-new-${width}.png`) });
 
-      // Mark seen is explicit and durable: the row leaves the pane, the entry stays in Stream.
-      await firstRow.getByTestId("tracked-answer-mark-seen").click();
-      await expect(pane.getByText(first)).toHaveCount(0);
+      // Mark seen is explicit, durable and per revision; a revised answer is new again.
+      await askRow.getByTestId("tracked-answer-mark-seen").click();
+      await expect(askRow).toHaveCount(0);
       await expect
-        .poll(async () => (await qAndAEntries(agent)).find((entry) => entry.text === first)?.status)
-        .toBe("reviewed");
-      await expect(toggle).toHaveAccessibleName(/1 new/);
+        .poll(async () => (await streamEntry(agent, "ask:staging-db"))?.replySeenRevision)
+        .toBe(1);
+      expect((await streamEntry(agent, firstId))?.replySeenRevision).toBeUndefined();
+      await answer(agent, "ask:staging-db", "Postgres 16.4 after the upgrade.", 1);
+      await expect(askRow.getByText("New answer")).toBeVisible();
 
-      // Collapse keeps the summary; hiding removes the pane until a new answer arrives.
+      // Collapse keeps the summary; hiding lasts until an answer arrives that was not showing.
       await toggle.click();
       await expect(pane.getByText(second)).toHaveCount(0);
       await pane.getByTestId("tracked-answers-dismiss").click();
       await expect(pane).toHaveCount(0);
-      expect((await qAndAEntries(agent)).find((entry) => entry.text === second)?.status).toBe(
-        "open",
-      );
+      await answer(agent, "ask:staging-db", "Postgres 16.4 on the shared cluster.", 2);
+      await expect(pane).toBeVisible();
     } finally {
       await agent.cleanup();
     }

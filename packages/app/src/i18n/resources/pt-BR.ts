@@ -525,6 +525,7 @@ export const ptBR: TranslationResources = {
       notePlaceholder: "Digite uma nota ou um link…",
       addNote: "Adicionar nota",
       answerLabel: "Resposta:",
+      possibleAnswerLabel: "Possível resposta:",
       unpin: "Desafixar",
       pinToStream: "Fixar no stream",
       pinSelection: "Pin selected text to Stream",
@@ -544,6 +545,10 @@ export const ptBR: TranslationResources = {
         waitingCount: "{{count}} aguardando",
         newAnswer: "Nova resposta",
         waiting: "Aguardando resposta",
+        possibleAnswer: "Possível resposta",
+        candidateHint:
+          "A primeira resposta após sua pergunta. O agente não confirmou que ela responde.",
+        openChat: "Abrir o chat que respondeu",
         jumpQuestion: "Pergunta",
         jumpAnswer: "Resposta",
         jumpQuestionLabel: "Ir para sua pergunta no chat",

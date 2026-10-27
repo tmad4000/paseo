@@ -41,6 +41,24 @@ export function findAnchoredItem(
   });
 }
 
+/** A loaded user message by provider or client message id, as recorded on a tracked ask. */
+export function findMessageItem(
+  items: readonly StreamItem[],
+  messageId: string,
+): StreamItem | undefined {
+  return items.find(
+    (item) =>
+      item.kind === "user_message" &&
+      (item.messageId === messageId || item.clientMessageId === messageId),
+  );
+}
+
+export interface TimelineJump {
+  jumpToAnchor: (anchor: TimelineAnchor) => void;
+  /** Only messages already loaded in Chat; a message id carries no timeline position. */
+  jumpToMessage: (messageId: string) => void;
+}
+
 /**
  * Scrolls Chat to a Stream entry's timeline anchor. Like the outline's prompt jump, an
  * anchor outside the loaded window fetches the window around it and scrolls once it lands.
@@ -55,7 +73,7 @@ export function useTimelineAnchorJump({
   visibleMessageIds,
   revealLoadedMessage,
   onUnavailable,
-}: UseTimelineAnchorJumpInput): (anchor: TimelineAnchor) => void {
+}: UseTimelineAnchorJumpInput): TimelineJump {
   const [pendingJump, setPendingJump] = useState<PendingAnchorJump | null>(null);
   const nextRequestIdRef = useRef(0);
   const loadedItems = useMemo(() => [...tail, ...(head ?? NO_STREAM_ITEMS)], [head, tail]);
@@ -93,7 +111,7 @@ export function useTimelineAnchorJump({
     }
   }, [loadedItems, onUnavailable, pendingJump, scrollTo]);
 
-  return useCallback(
+  const jumpToAnchor = useCallback(
     (anchor: TimelineAnchor) => {
       nextRequestIdRef.current += 1;
       const requestId = nextRequestIdRef.current;
@@ -127,4 +145,15 @@ export function useTimelineAnchorJump({
     },
     [agentId, loadedItems, onUnavailable, scrollTo, serverId, timelineEpoch],
   );
+  const jumpToMessage = useCallback(
+    (messageId: string) => {
+      nextRequestIdRef.current += 1;
+      setPendingJump(null);
+      const loaded = findMessageItem(loadedItems, messageId);
+      if (loaded) scrollTo(loaded);
+      else onUnavailable();
+    },
+    [loadedItems, onUnavailable, scrollTo],
+  );
+  return useMemo(() => ({ jumpToAnchor, jumpToMessage }), [jumpToAnchor, jumpToMessage]);
 }

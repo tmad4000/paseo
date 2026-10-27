@@ -40,6 +40,7 @@ vi.mock("lucide-react-native", () => ({
   HelpCircle: () => null,
   X: () => null,
 }));
+vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
 vi.mock("@/components/ui/status-badge", () => ({
   StatusBadge: ({ label }: { label: string }) => <span>{label}</span>,
@@ -62,7 +63,7 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
-import { TrackedAnswersPane } from "./answers-pane";
+import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
 
 const anchor = (startSeq: number, endSeq = startSeq) => ({ epoch: "e1", startSeq, endSeq });
 
@@ -74,18 +75,59 @@ const waiting: CompanionEntry = {
   truncated: false,
   questionAnchor: anchor(4),
 };
-const answered: CompanionEntry = {
+const candidate: CompanionEntry = {
   id: "qa:e1:1",
   kind: "q_and_a",
   timestamp: "2026-10-26T19:00:00Z",
   text: "Which port does it use?",
   truncated: false,
   questionAnchor: anchor(1),
-  answer: "It listens on 7420.",
-  answerAnchor: anchor(2, 3),
-  answeredAt: "2026-10-26T19:01:00Z",
-  status: "open",
+  reply: {
+    text: "I'll check the config.",
+    provenance: "candidate",
+    revision: 1,
+    answeredAt: "2026-10-26T19:01:00Z",
+    anchor: anchor(2, 3),
+  },
 };
+const askAnswered: CompanionEntry = {
+  id: "ask:db",
+  kind: "question",
+  status: "open",
+  timestamp: "2026-10-26T18:00:00Z",
+  text: "Which database does staging use?",
+  truncated: false,
+  ask: {
+    state: "in_progress",
+    remaining: "",
+    evidence: "",
+    sourceMessageId: "m7",
+    revision: 1,
+    provenance: "explicit",
+  },
+  reply: {
+    text: "Postgres 16.",
+    provenance: "explicit",
+    revision: 2,
+    answeredAt: "2026-10-26T19:30:00Z",
+    answeredByAgentId: "child-1",
+  },
+};
+
+function actions(overrides: Partial<TrackedAnswerActions> = {}): TrackedAnswerActions {
+  return {
+    jumpToAnchor: vi.fn(),
+    jumpToMessage: vi.fn(),
+    openChat: vi.fn(),
+    markSeen: vi.fn().mockResolvedValue(undefined),
+    stopTracking: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function renderPane(entries: CompanionEntry[], handlers = actions()) {
+  return render(<TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} />);
+}
 
 beforeAll(async () => {
   await i18n.changeLanguage("en");
@@ -93,88 +135,86 @@ beforeAll(async () => {
 afterEach(cleanup);
 
 describe("TrackedAnswersPane", () => {
-  it("separates unseen answers from questions still waiting", () => {
-    render(
-      <TrackedAnswersPane entries={[waiting, answered]} onJump={vi.fn()} onSetStatus={vi.fn()} />,
-    );
-    expect(screen.getByText("1 new · 1 waiting")).toBeTruthy();
+  it("labels confirmed answers, unconfirmed possible answers and waiting questions", () => {
+    renderPane([waiting, candidate, askAnswered]);
+    expect(screen.getByText("2 new · 1 waiting")).toBeTruthy();
     expect(screen.getByText("New answer")).toBeTruthy();
+    expect(screen.getByText("Possible answer")).toBeTruthy();
+    expect(screen.getByText(/has not confirmed/)).toBeTruthy();
     expect(screen.getByText("Waiting for answer")).toBeTruthy();
-    expect(screen.getByText("It listens on 7420.")).toBeTruthy();
-    expect(screen.getAllByTestId("tracked-answer-mark-seen")).toHaveLength(1);
+    expect(screen.getAllByTestId("tracked-answer-mark-seen")).toHaveLength(2);
     expect(screen.getAllByTestId("tracked-answer-stop")).toHaveLength(1);
   });
 
-  it("renders nothing for seen, resolved or untracked entries", () => {
-    const { container } = render(
-      <TrackedAnswersPane
-        entries={[
-          { ...answered, status: "reviewed" },
-          { ...waiting, status: "done" },
-          {
-            id: "turn:1",
-            kind: "outcome",
-            timestamp: "",
-            text: "Done",
-            truncated: false,
-            status: "completed",
-          },
-        ]}
-        onJump={vi.fn()}
-        onSetStatus={vi.fn()}
-      />,
-    );
+  it("renders nothing for seen answers, stopped questions or other entries", () => {
+    const { container } = renderPane([
+      { ...askAnswered, replySeenRevision: 2 },
+      { ...waiting, status: "done" },
+      {
+        id: "turn:1",
+        kind: "outcome",
+        timestamp: "",
+        text: "Done",
+        truncated: false,
+        status: "completed",
+      },
+    ]);
     expect(container.innerHTML).toBe("");
   });
 
-  it("lets a waiting question stop being tracked instead of being marked seen", () => {
-    const onSetStatus = vi.fn().mockResolvedValue(undefined);
-    render(<TrackedAnswersPane entries={[waiting]} onJump={vi.fn()} onSetStatus={onSetStatus} />);
-    expect(screen.queryByTestId("tracked-answer-mark-seen")).toBeNull();
-    fireEvent.click(screen.getByTestId("tracked-answer-stop"));
-    expect(onSetStatus).toHaveBeenCalledWith("qa:e1:4", "done");
+  it("marks the shown revision seen, and stops tracking a waiting message", async () => {
+    const handlers = actions();
+    renderPane([askAnswered, waiting], handlers);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("tracked-answer-mark-seen"));
+      fireEvent.click(screen.getByTestId("tracked-answer-stop"));
+    });
+    expect(handlers.markSeen).toHaveBeenCalledWith("ask:db", 2);
+    expect(handlers.stopTracking).toHaveBeenCalledWith("qa:e1:4");
   });
 
-  it("jumps to the exact question and answer anchors", () => {
-    const onJump = vi.fn();
-    render(<TrackedAnswersPane entries={[answered]} onJump={onJump} onSetStatus={vi.fn()} />);
+  it("jumps to anchors, to an ask's source message, and opens the answering chat", () => {
+    const handlers = actions();
+    renderPane([candidate], handlers);
     fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
     fireEvent.click(screen.getByTestId("tracked-answer-jump-answer"));
-    expect(onJump.mock.calls).toEqual([[anchor(1)], [anchor(2, 3)]]);
+    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(1, anchor(1));
+    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(2, anchor(2, 3));
+    cleanup();
+    renderPane([askAnswered], handlers);
+    expect(screen.queryByTestId("tracked-answer-jump-answer")).toBeNull();
+    fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
+    fireEvent.click(screen.getByTestId("tracked-answer-open-chat"));
+    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m7");
+    expect(handlers.openChat).toHaveBeenCalledWith("child-1");
   });
 
   it("keeps the answer listed until the host records it seen, and shows a failed save", async () => {
-    const onSetStatus = vi.fn().mockRejectedValueOnce(new Error("offline"));
-    render(<TrackedAnswersPane entries={[answered]} onJump={vi.fn()} onSetStatus={onSetStatus} />);
+    renderPane(
+      [askAnswered],
+      actions({ markSeen: vi.fn().mockRejectedValueOnce(new Error("offline")) }),
+    );
     await act(async () => {
       fireEvent.click(screen.getByTestId("tracked-answer-mark-seen"));
     });
-    expect(onSetStatus).toHaveBeenCalledWith("qa:e1:1", "reviewed");
-    expect(screen.getByText("It listens on 7420.")).toBeTruthy();
+    expect(screen.getByText("Postgres 16.")).toBeTruthy();
     expect(screen.getByText("Could not mark the answer seen")).toBeTruthy();
   });
 
-  it("collapses, and hiding lasts only until a new answer arrives", () => {
-    const { rerender, container } = render(
-      <TrackedAnswersPane entries={[answered]} onJump={vi.fn()} onSetStatus={vi.fn()} />,
+  it("collapses, and hiding lasts until a new or revised answer arrives", () => {
+    const handlers = actions();
+    const view = (entries: CompanionEntry[]) => (
+      <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} />
     );
+    const { rerender, container } = render(view([askAnswered]));
     fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
-    expect(screen.queryByText("It listens on 7420.")).toBeNull();
+    expect(screen.queryByText("Postgres 16.")).toBeNull();
     fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
     expect(container.innerHTML).toBe("");
-    rerender(
-      <TrackedAnswersPane entries={[answered, waiting]} onJump={vi.fn()} onSetStatus={vi.fn()} />,
-    );
+    rerender(view([askAnswered, waiting]));
     expect(container.innerHTML).toBe("");
-    const second = {
-      ...waiting,
-      answer: "Yes, at 20:05.",
-      answerAnchor: anchor(5),
-      status: "open" as const,
-    };
-    rerender(
-      <TrackedAnswersPane entries={[answered, second]} onJump={vi.fn()} onSetStatus={vi.fn()} />,
-    );
+    const revised = { ...askAnswered, reply: { ...askAnswered.reply!, revision: 3 } };
+    rerender(view([revised, waiting]));
     expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
   });
 });
