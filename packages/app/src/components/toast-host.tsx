@@ -1,5 +1,6 @@
 import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import { resolveAppVersion } from "@/utils/app-version";
+import { isConnectionErrorMessage, toDisplayErrorMessage } from "@/utils/error-messages";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -66,6 +67,24 @@ const successIcon = (theme: Theme) => ({ color: theme.colors.primary });
 const warningIcon = (theme: Theme) => ({ color: theme.colors.palette.amber[500] });
 const errorIcon = (theme: Theme) => ({ color: theme.colors.destructive });
 
+// A dropped connection is expected on flaky networks: say so plainly, as a
+// warning. The caller records the raw transport text as a diagnostic first.
+function presentToast(
+  rawContent: ReactNode,
+  rawMessage: string | null,
+  requestedVariant: ToastVariant,
+): { content: ReactNode; nativeMessage: string | null; variant: ToastVariant } {
+  if (
+    rawMessage === null ||
+    requestedVariant !== "error" ||
+    !isConnectionErrorMessage(rawMessage)
+  ) {
+    return { content: rawContent, nativeMessage: rawMessage, variant: requestedVariant };
+  }
+  const message = toDisplayErrorMessage(rawMessage);
+  return { content: message, nativeMessage: message, variant: "warning" };
+}
+
 export function useToastHost(): {
   api: ToastApi;
   toast: ToastState | null;
@@ -75,22 +94,27 @@ export function useToastHost(): {
   const [toast, setToast] = useState<ToastState | null>(null);
   const idRef = useRef(0);
 
-  const show = useCallback((content: ReactNode, options?: ToastShowOptions) => {
-    const nativeMessage = typeof content === "string" ? content.trim() : null;
-    if (!content || nativeMessage === "") {
+  const show = useCallback((rawContent: ReactNode, options?: ToastShowOptions) => {
+    const rawMessage = typeof rawContent === "string" ? rawContent.trim() : null;
+    if (!rawContent || rawMessage === "") {
       return;
     }
 
-    const variant = options?.variant ?? "default";
+    const requestedVariant = options?.variant ?? "default";
     // Every error or warning the person sees is also a diagnostic the host can read later.
-    if (nativeMessage && (variant === "error" || variant === "warning")) {
+    if (rawMessage && (requestedVariant === "error" || requestedVariant === "warning")) {
       recordClientDiagnostic({
         source: "toast",
-        severity: variant,
-        message: nativeMessage,
+        severity: requestedVariant,
+        message: rawMessage,
         appVersion: resolveAppVersion(),
       });
     }
+    const { content, nativeMessage, variant } = presentToast(
+      rawContent,
+      rawMessage,
+      requestedVariant,
+    );
     const durationMs = options?.durationMs === undefined ? DEFAULT_DURATION_MS : options.durationMs;
     const nativeAndroid = options?.nativeAndroid ?? false;
 

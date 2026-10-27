@@ -6,6 +6,7 @@ import {
   shouldPruneWorkspaceAgentTab,
   workspaceAgentVisibilityEqual,
 } from "@/workspace-tabs/agent-visibility";
+import { threadLabels } from "@/threads/model";
 
 function makeAgent(input: {
   id: string;
@@ -62,6 +63,25 @@ function makeAgent(input: {
 const WORKSPACE_ID = "ws-1";
 
 describe("workspace agent visibility", () => {
+  it("keeps a thread active but opens it only on request", () => {
+    const parent = makeAgent({ id: "parent-agent", cwd: "/repo", workspaceId: WORKSPACE_ID });
+    const thread = makeAgent({
+      id: "thread-agent",
+      cwd: "/repo",
+      workspaceId: WORKSPACE_ID,
+      labels: threadLabels({ parentAgentId: "parent-agent", anchor: "msg-1" }),
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map<string, Agent>([
+        [parent.id, parent],
+        [thread.id, thread],
+      ]),
+      workspaceId: WORKSPACE_ID,
+    });
+    expect(result.activeAgentIds).toEqual(new Set(["parent-agent", "thread-agent"]));
+    expect(result.autoOpenAgentIds).toEqual(new Set(["parent-agent"]));
+  });
+
   it("keeps subagents active while excluding them from auto-open", () => {
     const parent = makeAgent({
       id: "parent-agent",

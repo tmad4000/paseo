@@ -4408,6 +4408,8 @@ export const ServerInfoStatusPayloadSchema = z
         durableStream: z.boolean().optional(),
         // COMPAT(streamTags): fork feature; #hashtag filters, tag counts and pinned tags.
         streamTags: z.boolean().optional(),
+        // COMPAT(streamAnswers): fork feature; tracked-question answers, anchors and seen state.
+        streamAnswers: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.

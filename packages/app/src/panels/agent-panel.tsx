@@ -39,6 +39,8 @@ import {
 } from "@/composer/pill-styles";
 import { getActiveMessageSubmissions } from "@/composer/submission/model";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
+import { ThreadsHostProvider } from "@/threads/context";
+import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
 import { useToastHost, type ToastApi, type ToastState } from "@/components/toast-host";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
@@ -1388,6 +1390,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     ],
     [t],
   );
+  // Threads open and live in the layout that shows this chat (a split session's may differ).
+  const threadsLayoutWorkspaceId = usePaneContext().layoutWorkspaceId ?? workspaceId;
   const viewSwitcherStyle = useMemo(
     () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
     [isChatVisible],
@@ -1399,49 +1403,62 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       setText={agentInputDraft.replaceText}
       onRewindComplete={handleRewindComplete}
     >
-      <View style={styles.root}>
-        {/* Floats over the chat instead of sitting in its vertical stack: the host
+      <ThreadsHostProvider
+        serverId={serverId}
+        agentId={agentId}
+        layoutWorkspaceId={threadsLayoutWorkspaceId}
+      >
+        <View style={styles.root}>
+          {/* Floats over the chat instead of sitting in its vertical stack: the host
             capability can arrive after the first prompt has painted, and a band that
             appears then would shift every row (upstream's hydration specs pin that). */}
-        <View style={viewSwitcherStyle} pointerEvents="box-none">
-          {showViewSwitcher ? (
-            <SegmentedControl
-              options={viewOptions}
-              value={visibleView}
-              onValueChange={handleSetSelectedView}
-              size={isCompact ? "sm" : "xs"}
-              testID="agent-view-switcher"
-              segmentStyle={isCompact ? styles.compactSegment : undefined}
+          <View style={viewSwitcherStyle} pointerEvents="box-none">
+            {showViewSwitcher ? (
+              <SegmentedControl
+                options={viewOptions}
+                value={visibleView}
+                onValueChange={handleSetSelectedView}
+                size={isCompact ? "sm" : "xs"}
+                testID="agent-view-switcher"
+                segmentStyle={isCompact ? styles.compactSegment : undefined}
+              />
+            ) : null}
+            <SessionPinButton serverId={serverId} agentId={agentId} />
+            <ThreadOriginControls
+              serverId={serverId}
+              agentId={agentId}
+              layoutWorkspaceId={threadsLayoutWorkspaceId}
+            />
+            <SubthreadsOpenButton />
+            <SessionChecklistButton />
+          </View>
+          {dock}
+          {!isChatVisible ? (
+            <CompanionFeed
+              serverId={serverId}
+              agentId={agentId}
+              cwd={cwd}
+              entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
+              artifacts={artifacts}
+              isSupported={companionStreamAvailability === true}
+              artifactsSupported={artifactFeedAvailability === true}
+              onOpenWorkspaceFile={onOpenWorkspaceFile}
+              onReturnToChat={handleReturnToChat}
+              onReplyInChat={handleReplyInChat}
             />
           ) : null}
-          <SessionPinButton serverId={serverId} agentId={agentId} />
-          <SubthreadsOpenButton />
-          <SessionChecklistButton />
-        </View>
-        {dock}
-        {!isChatVisible ? (
-          <CompanionFeed
-            serverId={serverId}
-            agentId={agentId}
-            cwd={cwd}
-            entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
-            artifacts={artifacts}
-            isSupported={companionStreamAvailability === true}
-            artifactsSupported={artifactFeedAvailability === true}
-            onOpenWorkspaceFile={onOpenWorkspaceFile}
-            onReturnToChat={handleReturnToChat}
-            onReplyInChat={handleReplyInChat}
-          />
-        ) : null}
 
-        {isArchivingCurrentAgent ? (
-          <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
-            <ThemedLoadingSpinner size="large" uniProps={foregroundColorMapping} />
-            <Text style={styles.archivingTitle}>{t("agentPanel.states.archivingTitle")}</Text>
-            <Text style={styles.archivingSubtitle}>{t("agentPanel.states.archivingSubtitle")}</Text>
-          </View>
-        ) : null}
-      </View>
+          {isArchivingCurrentAgent ? (
+            <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
+              <ThemedLoadingSpinner size="large" uniProps={foregroundColorMapping} />
+              <Text style={styles.archivingTitle}>{t("agentPanel.states.archivingTitle")}</Text>
+              <Text style={styles.archivingSubtitle}>
+                {t("agentPanel.states.archivingSubtitle")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </ThreadsHostProvider>
     </RewindComposerRestoreProvider>
   );
 });

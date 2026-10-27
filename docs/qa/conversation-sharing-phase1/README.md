@@ -1,4 +1,104 @@
-# Conversation sharing Phase 1 QA
+# Conversation sharing QA
+
+## Phase 1c follow-ups — 2026-10-24
+
+M4 macOS, `feat/sharing-followups`, Beads `pspin-twk.14`, `twk.9`, `twk.8`, `twk.4`.
+No main-daemon access, deployment, tunnel changes, UI string changes or local Playwright run.
+The Worker deployment/round-trip status was reported by Fable; this batch did not probe it.
+
+| Focused test file                                             | Passed | Output                                     |
+| ------------------------------------------------------------- | -----: | ------------------------------------------ |
+| `packages/server/src/server/sharing/redaction-corpus.test.ts` |    148 | [Corpus](followups/redaction-corpus.txt)   |
+| `packages/server/src/server/sharing/share-listener.test.ts`   |     34 | [Listener](followups/listener.txt)         |
+| `packages/server/src/server/sharing/render.test.ts`           |     12 | [Render](followups/render.txt)             |
+| `packages/server/src/server/config.test.ts`                   |     13 | [Config](followups/config.txt)             |
+| `packages/app/src/utils/markdown-parser.test.ts`              |      6 | [App Markdown](followups/app-markdown.txt) |
+| `packages/server/src/server/sharing/sharing.e2e.test.ts`      |      5 | [Daemon e2e](followups/e2e.txt)            |
+
+237 focused tests passed. Files ran individually using
+`npx vitest run <file> --bail=1 > /tmp/sharing-followups-<name>.txt 2>&1`.
+The [new prose negatives failed before the redaction fix](followups/redaction-corpus-before.txt);
+[HEAD failed before listener hardening](followups/listener-before.txt), and
+[CONNECT failed before its explicit rejection](followups/listener-connect-before.txt).
+The passing cases check exact text, counters, idempotence, trusted/untrusted peers including
+IPv4-mapped IPv6 and CIDR boundaries, raw URL/method rejection before storage, HEAD header/body
+parity, server timeout/header settings and 600 successful HTTP requests across forwarded keys
+followed by a globally limited request. A fake reader is injected through the reader interface;
+HTTP is real and the daemon e2e uses isolated state. No production process was started or stopped.
+
+Before upgrading, two exact HTML snapshots were generated with markdown-it 10:
+[server baseline run](followups/render-baseline.txt), [app baseline run](followups/app-markdown-baseline.txt).
+Those fixtures are unchanged under 14.3.2, including whitespace, Markdown structure, escaping,
+links and the shared page shell. The typographer fixture adjustment removes `(p)`/`(P)` from
+expected typographer-on rewrites because 14 no longer rewrites them; typographer-off literal
+preservation still asserts both. Initial CI also found an outdated escaped-space reference
+fixture ([job excerpt](followups/ci-app-failure.txt), [local reproduction](followups/split-markdown-before.txt)).
+Markdown-it 14 treats `[docs]: docs\ folder/readme` as literal text rather than a reference
+definition. The fixture now expects separate paragraphs and asserts the renderer's exact literal
+HTML plus whole-versus-split equivalence. Bracketed/percent-escaped destinations remain covered.
+No production splitter change was needed. Three generic `command -p` corpus fixtures now name `sshpass`;
+a generic `command -p` is explicitly negative. Canonical unpadded Basic `user:password` pairs
+remain recognized to preserve the supplied `Basic dXNlcjpwYXNz` positive.
+
+The [resolved dependency tree](followups/markdown-dependencies.txt) contains only markdown-it
+14.3.2, including the scoped `react-native-markdown-display` override. Both workspaces use
+`@types/markdown-it` 14.2.0. [npm publication dates](followups/dependency-dates.txt) verify the
+one-month policy for every newly resolved version; 14.3.3 was not selected.
+`npm install` / the targeted `npm update markdown-it` used `--ignore-scripts --no-audit --no-fund`.
+The targeted update was needed to apply the new override to an existing lockfile.
+
+Required checks: [build:server](followups/build-server.txt), [typecheck](followups/typecheck.txt),
+[lint](followups/lint.txt), [format](followups/format.txt). Full-suite verification belongs to PR CI.
+
+## Phase 1c publisher — 2026-10-24
+
+M4 macOS, `feat/sharing-publisher`, Beads `pspin-twk.13`, source version
+`0.10.0-beta.17`. No deployment, installation, main-daemon access or restart was performed.
+
+| Focused test file                                          | Passed | Output                                       |
+| ---------------------------------------------------------- | -----: | -------------------------------------------- |
+| `packages/share-worker/src/index.test.ts`                  |     18 | [Worker](publisher/worker-tests.txt)         |
+| `packages/server/src/server/sharing/share-host.test.ts`    |      4 | [Host](publisher/host-tests.txt)             |
+| `packages/server/src/server/sharing/share-service.test.ts` |     19 | [Service](publisher/service-tests.txt)       |
+| `packages/server/src/server/sharing/sharing.e2e.test.ts`   |      5 | [Daemon e2e](publisher/e2e-tests.txt)        |
+| `packages/server/src/server/config.test.ts`                |     12 | [Config](publisher/config-tests.txt)         |
+| `packages/cli/src/commands/share.test.ts`                  |      4 | [CLI](publisher/cli-tests.txt)               |
+| `packages/app/src/i18n/resources.test.ts`                  |     36 | [Nine locales](publisher/i18n-tests.txt)     |
+| `scripts/ci-workflow.test.mjs` (Node)                      |      9 | [CI routing](publisher/ci-routing-tests.txt) |
+| `packages/app/e2e/browser/conversation-sharing.spec.ts`    |      3 | [Browser](publisher/browser-tests.txt)       |
+
+Vitest files used `npx vitest run <file> --bail=1`, with output redirected to individual
+`/tmp/sharing-*-tests.txt` files. No full local suite ran. The Worker file also passes
+through its own workspace script, matching the reused `relay-tests` CI job.
+
+Observed in the isolated daemon harness with an HTTP fake Worker: create with no share listener;
+redacted HTML/JSON equal stored artifacts; external URL construction; title and expiry republish;
+failed PUT reports `share_publish_failed` with no extra record/artifacts; failed DELETE retains
+local revocation and a durable pending job; the real one-minute timer retries successfully and
+clears pending state. A second test proves publisher URL precedence with a working local listener.
+Service tests cover pending delete-record recovery after restart with local artifacts already removed,
+crash recovery before enqueue, all backoff
+steps, host-config changes, failed metadata publication, and refusal to republish revoked shares.
+Worker tests cover native Request handling, local-listener 404/body/security-header parity, expiry
+metadata, TTL bounds, malformed bodies and 3 MiB rejection, authentication, methods and rate limits.
+
+The browser spec ran from `packages/app` with
+`TMPDIR="$PWD/../../artifacts/sharing-publisher/tmp" npm run test:e2e -- e2e/browser/conversation-sharing.spec.ts`.
+At 1440px and 390px, it exercises preview → create → guest → revoke and older-host gating.
+The real local daemon's share records are decorated on the browser socket with publisher metadata
+and pending state to verify the external-host copy; the daemon e2e above proves actual host failure
+and recovery. Screenshots were inspected: [desktop layout](publisher/revoke-pending-1440.png),
+[compact layout](publisher/revoke-pending-390.png). Native iOS/Android and installed Electron were
+not exercised. The harness stopped its own browser, worker daemon and Metro server.
+
+Required checks passed: [build:server](publisher/build-server.txt),
+[typecheck](publisher/typecheck.txt), [lint](publisher/lint.txt), [format](publisher/format.txt).
+The final PR CI remains the full-suite authority. New workspace dependencies reuse the lockfile's
+Wrangler 4.90.0 (npm publication: 2026-05-07T18:57:37.909Z) and existing Vitest; no resolved package
+version changed. Live Cloudflare consistency, permissions and deployment remain operator checks;
+[the deployment guide](../../../packages/share-worker/README.md) lists prerequisites.
+
+## Phase 1 — earlier evidence
 
 2026-10-24 · M4 macOS · branch `feat/conversation-sharing-phase1` · Beads `pspin-twk.2`.
 The source version remains `0.10.0-beta.16`; the release owner owns the version bump.

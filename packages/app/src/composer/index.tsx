@@ -176,6 +176,7 @@ import { useComposerForgeAutoAttach } from "./forge-auto-attach";
 import { readClipboardImage } from "./clipboard-image";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
+import { isConnectionErrorMessage, toDisplayErrorMessage } from "@/utils/error-messages";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
 import {
   appendWorkspaceFileAttachment,
@@ -965,33 +966,55 @@ function QueuedMessageRow({
     editingRef.current = true;
     setIsEditing(true);
   }, [item.text, preserveDraft]);
-  const handleSave = useCallback(async () => {
-    if (savingRef.current || !editingRef.current) return;
-    savingRef.current = true;
-    setIsSaving(true);
-    const text = editInputRef.current?.getText() ?? draftRef.current;
-    preserveDraft(text);
-    try {
-      await flushDraftPersistStorage();
-      if (
-        text === expectedTextRef.current ||
-        (await onSave(item.id, expectedTextRef.current, text))
-      ) {
-        if (useDraftStore.getState().drafts[draftKey]?.version !== draftVersionRef.current) return;
-        expectedTextRef.current = text;
-        if (draftRef.current === text) {
-          clearSavedDraft();
-          editingRef.current = false;
-          setIsEditing(false);
-        } else {
-          preserveDraft(draftRef.current);
+  const handleSave = useCallback(
+    async (intent: "commit" | "leave" = "leave") => {
+      if (savingRef.current || !editingRef.current) return;
+      const text = editInputRef.current?.getText() ?? draftRef.current;
+      if (!text.trim() && item.attachments.length === 0) {
+        // An emptied message has nothing left to send. Done/Save removes it;
+        // a blur or leaving the screen keeps the draft so a stray tap cannot delete.
+        preserveDraft(text);
+        if (intent !== "commit") return;
+        savingRef.current = true;
+        setIsSaving(true);
+        try {
+          if (await onRemove(item.id)) {
+            clearSavedDraft();
+            editingRef.current = false;
+          }
+        } finally {
+          savingRef.current = false;
+          setIsSaving(false);
         }
+        return;
       }
-    } finally {
-      savingRef.current = false;
-      setIsSaving(false);
-    }
-  }, [clearSavedDraft, draftKey, item.id, onSave, preserveDraft]);
+      savingRef.current = true;
+      setIsSaving(true);
+      preserveDraft(text);
+      try {
+        await flushDraftPersistStorage();
+        if (
+          text === expectedTextRef.current ||
+          (await onSave(item.id, expectedTextRef.current, text))
+        ) {
+          if (useDraftStore.getState().drafts[draftKey]?.version !== draftVersionRef.current)
+            return;
+          expectedTextRef.current = text;
+          if (draftRef.current === text) {
+            clearSavedDraft();
+            editingRef.current = false;
+            setIsEditing(false);
+          } else {
+            preserveDraft(draftRef.current);
+          }
+        }
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [clearSavedDraft, draftKey, item.attachments.length, item.id, onRemove, onSave, preserveDraft],
+  );
   useEffect(() => {
     let active = true;
     void useDraftStore
@@ -1032,6 +1055,10 @@ function QueuedMessageRow({
   const saveFromUI = useCallback(() => {
     void handleSave().catch(() => {});
   }, [handleSave]);
+  const commitFromUI = useCallback(() => {
+    void handleSave("commit").catch(() => {});
+  }, [handleSave]);
+  const removesOnSave = !draft.trim() && item.attachments.length === 0;
   const removeFromUI = useCallback(() => {
     void handleRemove().catch(() => {});
   }, [handleRemove]);
@@ -1055,7 +1082,7 @@ function QueuedMessageRow({
         />
         <View style={styles.queueActions}>
           <Pressable
-            onPress={saveFromUI}
+            onPress={commitFromUI}
             disabled={isSaving}
             style={styles.queueEditTextButton}
             accessibilityRole="button"
@@ -1064,13 +1091,22 @@ function QueuedMessageRow({
             <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
           </Pressable>
           <Pressable
-            onPress={saveFromUI}
+            onPress={commitFromUI}
             disabled={isSaving}
-            style={[styles.queueEditTextButton, styles.queueEditSaveButton]}
+            style={[
+              styles.queueEditTextButton,
+              removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={saveLabel}
+            accessibilityLabel={removesOnSave ? removeLabel : saveLabel}
           >
-            <Text style={styles.queueEditSaveButtonLabel}>{saveLabel}</Text>
+            <Text
+              style={
+                removesOnSave ? styles.queueEditRemoveButtonLabel : styles.queueEditSaveButtonLabel
+              }
+            >
+              {removesOnSave ? removeLabel : saveLabel}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -1853,6 +1889,12 @@ function ComposerContentImpl({
   const isUploadingFile = pendingFiles.length > 0;
   const [pendingNativeImagePastes, setPendingNativeImagePastes] = useState(0);
   const [sendError, setSendError] = useState<string | null>(null);
+  // A connection failure stops being true once the host is back; don't leave it on screen.
+  useEffect(() => {
+    if (isConnected) {
+      setSendError((current) => (current && isConnectionErrorMessage(current) ? null : current));
+    }
+  }, [isConnected]);
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
@@ -3188,14 +3230,22 @@ function ComposerContentImpl({
 
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
+  const dismissSendError = useCallback(() => setSendError(null), []);
   const sendErrorNode = useMemo(
     () =>
       sendError ? (
-        <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
-        </Text>
+        <Pressable
+          onPress={dismissSendError}
+          accessibilityRole="button"
+          accessibilityHint={t("common.actions.dismiss")}
+          testID="composer-send-error"
+        >
+          <Text accessibilityRole="alert" style={styles.sendErrorText}>
+            {toDisplayErrorMessage(sendError)}
+          </Text>
+        </Pressable>
       ) : null,
-    [sendError],
+    [dismissSendError, sendError, t],
   );
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")
@@ -3504,6 +3554,13 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   queueEditSaveButtonLabel: {
     color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.sm,
+  },
+  queueEditRemoveButton: {
+    backgroundColor: theme.colors.destructive,
+  },
+  queueEditRemoveButtonLabel: {
+    color: theme.colors.destructiveForeground,
     fontSize: theme.fontSize.sm,
   },
   queueText: {

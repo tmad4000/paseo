@@ -292,21 +292,35 @@ never shared in Phase 1.
 
 ### Step 2: text scrubbers (applied to shown text)
 
-- **Secrets** (`scrub.secrets`): high-confidence patterns replaced by `[secret hidden]`: `sk-…`,
-  `sk-ant-…`, `ghp_`/`gho_`/`github_pat_`, `AKIA[0-9A-Z]{16}`, `xox[abprs]-…`, `AIza…`, JWTs
-  (`eyJ…\.…\.…`), `-----BEGIN … PRIVATE KEY-----` blocks, `Bearer <token>`, URL query values for
-  `token|key|secret|password|sig|signature|access_token`, `password=`/`passwd:` assignments, and any
-  base64url/hex run ≥ 32 chars adjacent to `key|token|secret|auth` within 20 chars. Patterns live in
-  one module with table-driven tests; false negatives are expected, so this is defense in depth,
-  not the reason tool output is hidden.
+Pass order is owner literals → secrets → hosts → paths → contacts. Every pass skips existing
+`[secret hidden]`, `[credentials]`, `[host]`, `[ip]`, `[email]` and `[phone]` markers.
+
+- **Extra patterns**: owner-supplied literal strings, masked first as `[secret hidden]`.
+- **Secrets** (`scrub.secrets`): provider keys (`sk-…`, GitHub, AWS, Slack, Google), JWTs,
+  private-key blocks, Bearer tokens, sensitive URL query values, and labelled
+  `KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL` assignments. Also covers Basic auth, prose
+  `password|passphrase|passcode|pin is|was|:|= …`, credential flags (`-p`, `--password`, `--token`,
+  `--api-key`, `--secret`, `--key`), and base64/hex runs ≥ 32 characters (including `/`, `+`, `=`)
+  within 20 characters of `key|secret|token|password|auth|credential`. Values become
+  `[secret hidden]`; labels and flags stay. URL userinfo becomes `[credentials]`, keeping the
+  scheme, `@`, host, port and path. Each replacement increments `secretsMasked`.
+- **Hosts** (`scrub.hosts`, absent means on): IPv4 (four octets ≤ 255) and IPv6, including `::`,
+  become `[ip]`. Ports stay. Internal hostnames ending `.ts.net`, `.local`, `.internal`, `.lan`,
+  `.home.arpa`, `.localdomain`, plus `localhost`, become `[host]`. Public FQDNs stay. Version
+  strings such as `0.10.0-beta.16`, `v1.2.3.4` and `14.3.2`, and filenames such as `x.y.ts` stay.
+  Each address or hostname increments the optional `hostsMasked` counter. When contacts are
+  hidden, an email domain is left for the contacts pass to consume the whole email;
+  masking only its host would expose the username.
 - **Paths** (`scrub.paths`): absolute local paths (`/Users/<u>/…`, `/home/<u>/…`, `/Volumes/…`,
-  `/private/…`, `/tmp/…`, `C:\Users\…`, `~/…`) collapse to `…/<last two segments>`. Paths inside
-  fenced code blocks are collapsed too. Repository-relative paths (no leading `/`, `~` or drive) are
-  kept; they are usually the point of the message.
-- **Contacts** (`scrub.contacts`): emails → `[email]`, E.164-looking phone numbers → `[phone]`,
-  except the owner's own display name and any string in an owner allowlist. Names are not
-  redacted automatically (no reliable rule); per-message exclusion and `extraPatterns` cover them.
-- **Extra patterns**: owner-supplied literal strings, masked everywhere.
+  `/private/…`, `/tmp/…`, `C:\Users\…`, `~/…`) collapse to `…/<last two segments>`, including
+  fenced code and quoted paths. Repository-relative paths stay.
+- **Contacts** (`scrub.contacts`): emails become `[email]`; E.164 and NANP phone formats
+  (`617-555-0199`, `(415) 555-0123`, dotted or spaced equivalents) become `[phone]`. The owner's
+  display name is kept unless explicitly scrubbed. Names are not detected automatically;
+  per-message exclusion and `extraPatterns` cover them.
+
+The rules live in one module with a table-driven corpus. False negatives remain possible;
+review the preview before sharing. Tool payloads remain structurally excluded.
 
 ### Step 3: summary and preview
 
@@ -637,8 +651,7 @@ plus negatives: `0.10.0-beta.16`, `v1.2.3.4`, `src/x.y.ts`, `https://github.com/
   messages are not included in this snapshot". Then render; if HTML exceeds 2 MiB, drop the oldest
   rows and re-render until it fits. The JSON stored is the same bounded list.
 - Store `{id}.snapshot.html` and `{id}.snapshot.json` atomically, then the record (unchanged
-  publish-after-durable order). `ShareStore.view(token)` returns `{ html: Buffer, json: Buffer,
-title }`; the listener streams bytes with `Content-Length`.
+  publish-after-durable order). `ShareStore.view(token)` returns `{ html: Buffer, json: Buffer }`; the listener streams bytes with `Content-Length`.
 - Title update re-renders from the stored JSON and rewrites the HTML (owner-triggered, cheap).
 - twk.11: `<title>` is the literal "Shared conversation"; no `description`/`og:*` meta; the real
   title appears only in the body `<h1>`. Document in `public-docs/configuration.md` that pasting a
@@ -709,6 +722,35 @@ Config (`persisted-config.ts`, env equivalents, schema file, docs):
   Workers-scoped token is the clean path and is a Jacob step if needed). Record the deployed URL
   and the admin-token file path in `public-docs/configuration.md` and in the ops memory.
 
+### As built (Phase 1c publisher)
+
+`pspin-twk.13` adds an outbound-only Cloudflare publisher and the private
+`@getpaseo/share-worker` workspace. Deployment remains with Fable after merge; no deployed URL,
+account/KV IDs, or secret is committed here. The Worker deployment guide owns prerequisites:
+[`packages/share-worker/README.md`](../../packages/share-worker/README.md).
+
+The durable unpublish queue is `$PASEO_HOME/shares/unpublish-queue.json`. It holds hashes,
+original host URLs and retry clocks without plaintext tokens or admin secrets. Local pending
+records recover an interrupted enqueue. Deletion removes local artifacts immediately and retains the revoked pending record until host
+cleanup succeeds. The queue persists that deletion intent across restarts.
+Changing publisher URLs retains the original job pending until that configuration is restored;
+revoked shares reject metadata edits to prevent republishing them.
+
+Divergences and limits:
+
+- Wrangler cannot substitute a KV binding ID through `--var`. The deployment guide uses an
+  ignored config copy for the namespace ID and `CLOUDFLARE_ACCOUNT_ID` for the account.
+- The unavailable page shell/CSS is copied verbatim; its CSP hash is precomputed for the Worker.
+  A parity test compares it to the server source and listener headers.
+- Worker reads do not update local view counts; no callback reaches the owner's daemon.
+- Expiry metadata is checked on every Worker read, including when the minimum 60-second KV TTL
+  exceeds the requested expiry. Three rate-limit bindings implement the three thresholds;
+  Cloudflare enforces them per IP per location.
+
+Focused verification and platform coverage are recorded in the publisher PR and
+[sharing QA](../qa/conversation-sharing-phase1/README.md). Installed-app verification and live
+Cloudflare deployment remain separate operator steps.
+
 ### Small follow-ups
 
 - **twk.9** listener surface: `app.set("query parser", false)`; `server.headersTimeout = 15_000`,
@@ -722,6 +764,34 @@ Config (`persisted-config.ts`, env equivalents, schema file, docs):
 - **twk.8** markdown-it: upgrade to `14.3.2` (released 2026-09-12, policy-compliant on
   2026-10-24; fixes CVE-2022-21670). `14.3.3` (2026-10-16) is allowed after 2026-11-16. The app's
   markdown-it moves with it.
+
+### As built (Phase 1c follow-ups)
+
+`pspin-twk.14`, `twk.9`, `twk.8` and `twk.4` share one follow-up PR. This batch changes no
+Worker code or deployment and does not publish a local listener. See the
+[listener configuration](../../public-docs/configuration.md#conversation-share-links-paseo-fork)
+for the opt-in forwarded-header boundary and global request ceiling.
+
+The specified positive `Basic dXNlcjpwYXNz` has no padding or digit. In addition to the specified
+shape/context checks, the redactor recognizes canonical base64 UTF-8 `user:password` pairs of
+at least 12 encoded characters. This keeps that positive while preserving ordinary “Basic” prose.
+The old generic `command -p` corpus rows now use `sshpass`; a generic `command -p` is a negative.
+Context checks retain command context across earlier redaction placeholders and stop at shell
+command separators.
+
+Both workspaces pin markdown-it 14.3.2 and its types at 14.2.0. A scoped override moves
+`react-native-markdown-display`'s transitive markdown-it dependency too, so the old parser is not
+left in the app tree. npm publication dates were checked: 2026-09-12 and 2026-08-17 respectively;
+newly resolved transitive versions also satisfy the one-month policy.
+
+Exact server and app HTML snapshots were captured under markdown-it 10 before the upgrade.
+Their output is unchanged under 14.3.2. The app's typographer-on fixture drops `(p)`/`(P)` from the
+set of strings expected to be rewritten; markdown-it 14 leaves it literal. The typographer-off
+copy-preservation assertion still includes both.
+The splitter fixture for an escaped space in an unbracketed reference destination now expects
+literal paragraphs, matching markdown-it 14. Angle-bracket and percent-escaped destinations still
+fold as valid references. The fixture checks exact rendered HTML and whole-versus-split equivalence;
+no production splitter workaround restores the old acceptance.
 
 ### Acceptance, Phase 1c
 
@@ -769,7 +839,8 @@ Config (`persisted-config.ts`, env equivalents, schema file, docs):
 
 ## As built (Phase 1)
 
-Phase 1 implements snapshot links only (`pspin-twk.2`). [QA evidence](../qa/conversation-sharing-phase1/README.md) records source and browser checks. Configuration instructions live in
+Phase 1 implements snapshot links only (`pspin-twk.2`), with redaction hardening (`pspin-twk.10`)
+and bounded static artifacts (`pspin-twk.7`, `pspin-twk.11`). [QA evidence](../qa/conversation-sharing-phase1/README.md) records source and browser checks. Configuration instructions live in
 [public configuration](../../public-docs/configuration.md#conversation-share-links-paseo-fork).
 
 Differences from the proposal:
@@ -781,6 +852,17 @@ Differences from the proposal:
 - The app preview displays the snapshot's text directly, including Markdown source. The guest
   page renders Markdown with the app's existing `markdown-it` version, raw HTML and images
   disabled. This keeps the preview free of remote image loads and rich tool rendering.
+- Preview and create retain the latest 500 rows plus one earlier-omission row. A suffix search
+  finds the largest set that fits the 2 MiB UTF-8 HTML budget; it produces the same result as
+  dropping oldest rows one at a time, with fewer Markdown renders.
+- HTML and JSON are stored before the record grants access. Guest reads serve those bytes;
+  title edits re-render from stored JSON. A metadata-only page that cannot fit is rejected.
+  A title edit that would exceed the cap is rejected without dropping more snapshot messages.
+- `render.ts` owns Markdown and re-exports the CSS/CSP. The shared shell, stylesheet and CSP
+  remain in Markdown-free `view/page.ts`, which the listener can import independently.
+- Older JSON-only snapshots fail closed. An owner title change can regenerate HTML only if
+  the stored message list already fits both limits; otherwise create a new link. A guest
+  request never generates a missing HTML artifact.
 - The guest page needs no JavaScript. Its inline stylesheet is authorized by an exact CSP hash;
   all other sources are blocked. This avoids extra public routes or a weaker inline-style policy.
 - Share change events require an advertised client capability and an owned event subscription,

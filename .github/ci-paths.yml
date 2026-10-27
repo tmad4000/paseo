@@ -81,6 +81,7 @@ browser:
 
 relay:
   - "packages/relay/**"
+  - "packages/share-worker/**"
 
 cli:
   - "packages/cli/**"
