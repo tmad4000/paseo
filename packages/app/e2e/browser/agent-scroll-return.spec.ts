@@ -1,10 +1,12 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "../support/fixtures";
 import {
+  expectScrollStaysFixed,
   readScrollMetrics,
   scrollChatAwayFromBottom,
 } from "../support/helpers/agent-bottom-anchor";
 import { getServerId } from "../support/helpers/server-id";
+import { composerLocator, submitMessage } from "../support/helpers/composer";
 import { seedMockAgentWorkspace, type MockAgentWorkspace } from "../support/helpers/mock-agent";
 import {
   continueToNextQuestion,
@@ -26,6 +28,57 @@ async function expectChatAtBottom(page: Page): Promise<void> {
       timeout: 10_000,
     })
     .toBeLessThanOrEqual(72);
+}
+
+const sendReadingPositionCases = [
+  { width: 1280, send: submitMessage },
+  {
+    width: 390,
+    send: async (page: Page, text: string) => {
+      await composerLocator(page).fill(text);
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+    },
+  },
+];
+
+for (const { width, send } of sendReadingPositionCases) {
+  test(`sending preserves the reading position and explicit bottom navigation at width ${width}`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const chat = await seedLongMockAgentTimeline({ turns: 30 });
+    try {
+      await page.setViewportSize({ width, height: 844 });
+      await openAgentTimeline(page, chat);
+      await expectTimelinePromptVisible(page, chat.newestPrompt);
+      const readingPosition = await scrollChatAwayFromBottom(page, {
+        deltaY: -900,
+        minDistanceFromBottom: 300,
+      });
+      const prompt = "Continue while I read the earlier messages";
+      await send(page, prompt);
+      await expect(composerLocator(page)).toHaveValue("");
+      await expectScrollStaysFixed(page, readingPosition);
+      await chat.client.waitForFinish(chat.agentId, 20_000);
+      await expect
+        .poll(async () =>
+          Math.abs((await readScrollMetrics(page)).offsetY - readingPosition.offsetY),
+        )
+        .toBeLessThanOrEqual(24);
+
+      await page.getByRole("button", { name: "Scroll to bottom", exact: true }).click();
+      await expectTimelinePromptVisible(page, prompt);
+      await expectChatAtBottom(page);
+
+      const nextPrompt = "Continue following this conversation";
+      await send(page, nextPrompt);
+      await expectTimelinePromptVisible(page, nextPrompt);
+      await chat.client.waitForFinish(chat.agentId, 20_000);
+      await expectChatAtBottom(page);
+    } finally {
+      await chat.cleanup();
+    }
+  });
 }
 
 async function openCompactWorkspace(
