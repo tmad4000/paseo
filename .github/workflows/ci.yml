@@ -193,7 +193,9 @@ jobs:
     name: server-tests (macos-14, file observation)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false') }}
-    runs-on: macos-14
+    # Keep the required-check name stable. The arm64 pool failed to acquire a
+    # runner; Intel still exercises Darwin's native recursive watcher backend.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 
