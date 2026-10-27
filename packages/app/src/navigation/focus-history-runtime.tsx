@@ -97,10 +97,15 @@ export function restoreNavigationFocusLocation(
     return;
   }
 
+  // Empty tabs have an instance id, not a reopenable resource identity. Route
+  // without opening a target or an attention agent, then focus that exact id.
+  const preserveTabFocus = location.target?.kind === "new_tab";
+  const target = preserveTabFocus ? null : location.target;
   deps.navigateWorkspace({
     serverId: location.serverId,
     workspaceId: location.workspaceId,
-    ...(location.target ? { target: location.target } : {}),
+    ...(target ? { target } : {}),
+    ...(preserveTabFocus ? { preserveTabFocus: true } : {}),
   });
 
   const workspaceKey = buildWorkspaceTabPersistenceKey(location);

@@ -44,6 +44,11 @@ function targetsEqual(left: WorkspaceTabTarget | null, right: WorkspaceTabTarget
   if (!left || !right) {
     return left === right;
   }
+  // Opening an empty tab must allocate a fresh instance, so resource equality
+  // intentionally excludes it. History has already compared the exact tabId.
+  if (left.kind === "new_tab" && right.kind === "new_tab") {
+    return true;
+  }
   return workspaceTabTargetsEqual(left, right);
 }
 

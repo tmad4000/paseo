@@ -29,6 +29,8 @@ export interface NavigateToWorkspaceInput {
   target?: WorkspaceTabTarget;
   pin?: boolean;
   placement?: WorkspaceTabPlacement;
+  /** Leave implicit tab selection to a caller restoring a concrete local instance. */
+  preserveTabFocus?: boolean;
 }
 
 export interface NavigateToWorkspaceDeps extends PrepareWorkspaceTabDeps {
@@ -98,7 +100,7 @@ export function navigateToWorkspace(
     if (!shouldDeferAgentOpen) {
       prepareWorkspaceTab({ ...input, target: input.target }, deps);
     }
-  } else {
+  } else if (!input.preserveTabFocus) {
     const workspaceAgents = resolvedWorkspaceId
       ? Array.from(deps.getSessionAgents(input.serverId)).filter(
           (agent) => normalizeWorkspaceOpaqueId(agent.workspaceId) === resolvedWorkspaceId,
