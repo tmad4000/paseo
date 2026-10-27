@@ -6,13 +6,14 @@ function agentTab(page: Page, agentId: string) {
   return page.getByTestId(`workspace-tab-agent_${agentId}`).filter({ visible: true }).first();
 }
 
+test.describe.configure({ timeout: 120_000 });
+
 const visibleControl = (page: Page, testID: string) =>
   page.getByTestId(testID).filter({ visible: true }).first();
 
 test("visible history dropdown reaches older sessions and preserves Back/Forward order", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120_000);
   const workspace = await seedWorkspace({ repoPrefix: "navigation-history-dropdown-" });
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
