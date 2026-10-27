@@ -1039,6 +1039,7 @@ export const ru: TranslationResources = {
         copyResumeCommand: "Копировать команду продолжения",
         copyAgentId: "Скопировать идентификатор агента",
         markAsRead: "Отметить как прочитанное",
+        markAsReadNamed: "Отметить «{{name}}» как прочитанное",
         markAsUnread: "Отметить как непрочитанное",
         copyTerminalId: "Скопировать идентификатор терминала",
         copyFilePath: "Скопировать путь к файлу",
@@ -1763,6 +1764,7 @@ export const ru: TranslationResources = {
       },
       actions: {
         markAsRead: "Отметить как прочитанное",
+        markAsReadNamed: "Отметить «{{name}}» как прочитанное",
         menu: "Действия рабочего пространства",
         newWorkspace: "Новое рабочее пространство",
         showMore: "Показать ещё",

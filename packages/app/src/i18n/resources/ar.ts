@@ -1028,6 +1028,7 @@ export const ar: TranslationResources = {
         copyResumeCommand: "نسخ أمر السيرة الذاتية",
         copyAgentId: "نسخ معرف الوكيل",
         markAsRead: "تعليم كمقروء",
+        markAsReadNamed: "تعليم {{name}} كمقروء",
         markAsUnread: "تعليم كغير مقروء",
         copyTerminalId: "نسخ معرف المحطة",
         copyFilePath: "Copy file path",
@@ -1741,6 +1742,7 @@ export const ar: TranslationResources = {
       },
       actions: {
         markAsRead: "تعليم كمقروء",
+        markAsReadNamed: "تعليم {{name}} كمقروء",
         menu: "إجراءات Workspace",
         newWorkspace: "مساحة عمل جديدة",
         showMore: "عرض المزيد",

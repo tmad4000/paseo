@@ -1042,6 +1042,7 @@ export const ptBR: TranslationResources = {
         copyResumeCommand: "Copiar comando de retomada",
         copyAgentId: "Copiar ID do agente",
         markAsRead: "Marcar como lido",
+        markAsReadNamed: "Marcar {{name}} como lido",
         markAsUnread: "Marcar como não lido",
         copyTerminalId: "Copiar ID do terminal",
         copyFilePath: "Copiar caminho do arquivo",
@@ -1776,6 +1777,7 @@ export const ptBR: TranslationResources = {
       },
       actions: {
         markAsRead: "Marcar como lido",
+        markAsReadNamed: "Marcar {{name}} como lido",
         menu: "Ações do workspace",
         newWorkspace: "Novo workspace",
         showMore: "Mostrar mais",

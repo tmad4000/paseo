@@ -15,7 +15,8 @@ import {
   PinOff,
   Tag,
 } from "lucide-react-native";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -40,7 +41,10 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { workspaceLastActiveAt } from "@/components/sidebar/workspace-trailing";
 import { formatMessageTimestamp } from "@/utils/time";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
-import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
+import {
+  resolveSidebarWorkspaceAccessibilityLabel,
+  resolveSidebarWorkspacePrimaryLabel,
+} from "@/components/sidebar/sidebar-workspace-title";
 import {
   workspaceServiceLabelKey,
   type WorkspaceServiceSummary,
@@ -90,22 +94,27 @@ function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
  * finished or error attention; permission requests are never cleared by reading.
  */
 export function SidebarWorkspaceMarkReadButton({
-  workspaceKey,
+  workspace,
   onMarkAsRead,
 }: {
-  workspaceKey: string;
+  workspace: SidebarWorkspaceEntry;
   onMarkAsRead: () => void;
 }) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const workspaceTitleSource = useAppSettings().settings.workspaceTitleSource;
+  const name = resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource });
+  // Touch has no hover to aim with, so the check gets a full 44pt target (32pt box + slop).
+  const isTouch = isNative || isCompact;
   return (
     <Pressable
-      hitSlop={4}
-      style={markReadStyle}
+      hitSlop={isTouch ? 6 : 4}
+      style={isTouch ? markReadTouchStyle : markReadStyle}
       // The row is itself a button on web, and a <button> cannot nest inside another.
       accessibilityRole={isWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.workspace.actions.markAsRead")}
+      accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name })}
       onPress={onMarkAsRead}
-      testID={`sidebar-workspace-mark-as-read-${workspaceKey}`}
+      testID={`sidebar-workspace-mark-as-read-${workspace.workspaceKey}`}
     >
       {renderMarkReadIcon}
     </Pressable>
@@ -529,6 +538,10 @@ function markReadStyle({ hovered = false }: PressableStateCallbackType & { hover
   return [styles.markRead, hovered && styles.triggerHovered];
 }
 
+function markReadTouchStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.markReadTouch, pressed && styles.triggerHovered];
+}
+
 const styles = StyleSheet.create((theme) => ({
   trigger: {
     padding: 2,
@@ -541,6 +554,14 @@ const styles = StyleSheet.create((theme) => ({
   markRead: {
     padding: 2,
     borderRadius: 4,
+  },
+  markReadTouch: {
+    width: 32,
+    height: 32,
+    marginVertical: -6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 6,
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,

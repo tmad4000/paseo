@@ -1033,6 +1033,7 @@ export const ko: TranslationResources = {
         copyResumeCommand: "재개 명령 복사",
         copyAgentId: "에이전트 ID 복사",
         markAsRead: "읽음으로 표시",
+        markAsReadNamed: "{{name}} 읽음으로 표시",
         markAsUnread: "읽지 않음으로 표시",
         copyTerminalId: "터미널 ID 복사",
         viewArtifacts: "산출물 보기",
@@ -1752,6 +1753,7 @@ export const ko: TranslationResources = {
       },
       actions: {
         markAsRead: "읽음으로 표시",
+        markAsReadNamed: "{{name}} 읽음으로 표시",
         menu: "워크스페이스 작업",
         newWorkspace: "새 워크스페이스",
         showMore: "더 보기",

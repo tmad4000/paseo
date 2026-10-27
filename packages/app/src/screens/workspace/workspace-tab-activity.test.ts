@@ -49,9 +49,10 @@ describe("workspace tab activity", () => {
   });
 
   describe("with explicit reads", () => {
-    const explicit = (readThrough: [string, number][] = []) => ({
+    const explicit = (readThrough: [string, number][] = [], attention: string[] = []) => ({
       viewingMarksRead: false,
       readThroughByAgentId: new Map(readThrough),
+      attentionAgentIds: new Set(attention),
     });
     const at = (time: number) =>
       new Map([
@@ -86,16 +87,70 @@ describe("workspace tab activity", () => {
       expect(again.get("b")?.unread).toBe(true);
     });
 
+    it("shows host attention on a strip that was not mounted when it arrived (cold start)", () => {
+      const cold = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        new Set(["a"]),
+        explicit([], ["b"]),
+      );
+      expect(cold.get("b")?.unread).toBe(true);
+      expect(cold.get("c")?.unread).toBe(false);
+    });
+
+    it("keeps the open tab's host attention until it is read, then raises it again", () => {
+      const open = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        new Set(["b"]),
+        explicit([], ["b"]),
+      );
+      expect(open.get("b")?.unread).toBe(true);
+      // The host clears attention on the explicit read, and the read mark covers the activity.
+      const read = reconcileTabActivity(open, tabs, at(20), new Set(["b"]), explicit([["b", 20]]));
+      expect(read.get("b")?.unread).toBe(false);
+      const finishedAgain = reconcileTabActivity(
+        read,
+        tabs,
+        at(30),
+        new Set(["b"]),
+        explicit([["b", 20]], ["b"]),
+      );
+      expect(finishedAgain.get("b")?.unread).toBe(true);
+    });
+
+    it("raises no read dot for attention the host does not count as readable", () => {
+      // Permission attention is never in the readable set, so a strip shows no dot for it.
+      const permission = reconcileTabActivity(new Map(), tabs, at(20), new Set(["a"]), explicit());
+      expect(permission.get("a")?.unread).toBe(false);
+      expect(permission.get("b")?.unread).toBe(false);
+      expect(permission.get("c")?.unread).toBe(false);
+    });
+
     it("lets an explicit read clear a background tab in the legacy mode too", () => {
-      const legacy = (readThrough: [string, number][]) => ({
+      const legacy = (readThrough: [string, number][], attention: string[] = []) => ({
         viewingMarksRead: true,
         readThroughByAgentId: new Map(readThrough),
+        attentionAgentIds: new Set(attention),
       });
       const baseline = reconcileTabActivity(new Map(), tabs, at(10), new Set(["a"]), legacy([]));
       const moved = reconcileTabActivity(baseline, tabs, at(20), new Set(["a"]), legacy([]));
       expect(moved.get("b")?.unread).toBe(true);
       const read = reconcileTabActivity(moved, tabs, at(20), new Set(["a"]), legacy([["b", 20]]));
       expect(read.get("b")?.unread).toBe(false);
+    });
+
+    it("never dots the on-screen tab in the legacy mode, even with host attention", () => {
+      const legacy = {
+        viewingMarksRead: true,
+        readThroughByAgentId: new Map(),
+        attentionAgentIds: new Set(["a", "b"]),
+      };
+      const state = reconcileTabActivity(new Map(), tabs, at(20), new Set(["a"]), legacy);
+      expect(state.get("a")?.unread).toBe(false);
+      expect(state.get("b")?.unread).toBe(true);
     });
   });
 

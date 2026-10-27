@@ -1038,6 +1038,7 @@ export const ja: TranslationResources = {
         copyResumeCommand: "再開コマンドをコピー",
         copyAgentId: "エージェントIDをコピー",
         markAsRead: "既読にする",
+        markAsReadNamed: "{{name}} を既読にする",
         markAsUnread: "未読にする",
         copyTerminalId: "ターミナルIDをコピー",
         copyFilePath: "ファイルパスをコピー",
@@ -1759,6 +1760,7 @@ export const ja: TranslationResources = {
       },
       actions: {
         markAsRead: "既読にする",
+        markAsReadNamed: "{{name}} を既読にする",
         menu: "ワークスペースアクション",
         newWorkspace: "新しいワークスペース",
         showMore: "さらに表示",

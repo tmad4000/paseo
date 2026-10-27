@@ -2085,12 +2085,20 @@ export class DaemonClient {
     }
   }
 
-  async clearAgentAttention(agentId: string | string[]): Promise<void> {
+  /**
+   * Pass `read` when a user read the chat: the host then keeps permission attention and anything
+   * raised after `read.seenAttentionAt`. Without it the clear is unconditional.
+   */
+  async clearAgentAttention(
+    agentId: string | string[],
+    options?: { read?: { seenAttentionAt?: string } },
+  ): Promise<void> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
       type: "clear_agent_attention",
       agentId,
       requestId,
+      ...(options?.read ? { read: options.read } : {}),
     });
     await this.sendRequest({
       requestId,

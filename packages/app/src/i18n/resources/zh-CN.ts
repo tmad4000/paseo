@@ -1021,6 +1021,7 @@ export const zhCN: TranslationResources = {
         copyResumeCommand: "复制恢复命令",
         copyAgentId: "复制 Agent ID",
         markAsRead: "标记为已读",
+        markAsReadNamed: "将 {{name}} 标记为已读",
         markAsUnread: "标记为未读",
         copyTerminalId: "复制 Terminal ID",
         copyFilePath: "Copy file path",
@@ -1724,6 +1725,7 @@ export const zhCN: TranslationResources = {
       },
       actions: {
         markAsRead: "标记为已读",
+        markAsReadNamed: "将 {{name}} 标记为已读",
         menu: "Workspace 操作",
         newWorkspace: "新建 workspace",
         showMore: "显示更多",

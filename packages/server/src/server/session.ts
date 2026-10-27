@@ -305,6 +305,11 @@ type ProviderSubagentManagerEvent = Extract<
 const LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"]);
 const MIN_VERSION_ALL_PROVIDERS = "0.1.45";
 const MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY = "0.1.105";
+/** An unparseable time yields an invalid Date, which bounds the read to nothing rather than everything. */
+function parseReadSeenAt(read: { seenAttentionAt?: string }): Date | undefined {
+  return read.seenAttentionAt === undefined ? undefined : new Date(read.seenAttentionAt);
+}
+
 function errorToFriendlyMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -2965,7 +2970,7 @@ export class Session {
       case "agent_permission_response":
         return this.handleAgentPermissionResponse(msg.agentId, msg.requestId, msg.response);
       case "clear_agent_attention":
-        return this.handleClearAgentAttention(msg.agentId, msg.requestId);
+        return this.handleClearAgentAttention(msg.agentId, msg.requestId, msg.read);
       default:
         return undefined;
     }
@@ -5556,6 +5561,7 @@ export class Session {
   private async handleClearAgentAttention(
     agentId: string | string[],
     requestId?: string,
+    read?: { seenAttentionAt?: string },
   ): Promise<void> {
     const agentIds = Array.isArray(agentId) ? agentId : [agentId];
 
@@ -5569,7 +5575,8 @@ export class Session {
           }),
         ),
       );
-      await Promise.all(agentIds.map((id) => this.agentManager.clearAgentAttention(id)));
+      const options = read ? { read: { seenAttentionAt: parseReadSeenAt(read) } } : undefined;
+      await Promise.all(agentIds.map((id) => this.agentManager.clearAgentAttention(id, options)));
       if (requestId) {
         const agents = (
           await Promise.all(

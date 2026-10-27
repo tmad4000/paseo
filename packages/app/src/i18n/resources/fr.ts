@@ -1042,6 +1042,7 @@ export const fr: TranslationResources = {
         copyResumeCommand: "Copier la commande de reprise",
         copyAgentId: "Copier l'identifiant de l'agent",
         markAsRead: "Marquer comme lu",
+        markAsReadNamed: "Marquer {{name}} comme lu",
         markAsUnread: "Marquer comme non lu",
         copyTerminalId: "Copier l'identifiant du terminal",
         copyFilePath: "Copy file path",
@@ -1785,6 +1786,7 @@ export const fr: TranslationResources = {
       },
       actions: {
         markAsRead: "Marquer comme lu",
+        markAsReadNamed: "Marquer {{name}} comme lu",
         menu: "ActionsWorkspace",
         newWorkspace: "Nouvel espace de travail",
         showMore: "Afficher plus",

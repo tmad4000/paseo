@@ -1029,6 +1029,7 @@ export const en = {
         copyResumeCommand: "Copy resume command",
         copyAgentId: "Copy agent id",
         markAsRead: "Mark as read",
+        markAsReadNamed: "Mark {{name}} as read",
         markAsUnread: "Mark as unread",
         copyTerminalId: "Copy terminal id",
         copyFilePath: "Copy file path",
@@ -1753,6 +1754,7 @@ export const en = {
       },
       actions: {
         markAsRead: "Mark as read",
+        markAsReadNamed: "Mark {{name}} as read",
         menu: "Workspace actions",
         newWorkspace: "New workspace",
         showMore: "Show more",

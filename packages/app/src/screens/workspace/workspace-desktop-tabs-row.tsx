@@ -117,6 +117,8 @@ const PANE_MAXIMIZE_ACTION_RESERVED_WIDTH = smallIconButtonChromeFrameSize(false
 // Tabs and the adjacent New Tab trigger are one control family. Keep their outer box and corner
 // token identical; only their horizontal sizing differs (content-width chip versus square icon).
 const TAB_CHIP_HORIZONTAL_PADDING = 8;
+// The read check spans 24-42pt from the chip's trailing edge; the chip's own padding covers the rest.
+const TAB_READ_CONTROL_SPACE = 42 - TAB_CHIP_HORIZONTAL_PADDING;
 const TAB_CHIP_GAP = 4;
 const TAB_ROW_PADDING_HORIZONTAL = 4;
 const TAB_ICON_WIDTH = 14;
@@ -570,10 +572,13 @@ function completeWorkspaceTabLabelWidths(
     }
     // Both dots sit in the content row, so the label must truncate before either one.
     const dotAllowance = Number(modified) + Number(unread);
+    // An unread tab also reserves room for its read check (see `tabReadControlSpace`).
+    const readControlAllowance = unread ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
     widths.push(
       measurement.width +
         TAB_LABEL_LAYOUT_ALLOWANCE +
-        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE),
+        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE) +
+        readControlAllowance,
     );
   }
   return widths;
@@ -746,6 +751,7 @@ function TabHandleContent({
   tabLabelStyle,
   modifiedTestId,
   unread,
+  reserveReadControl,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -755,6 +761,8 @@ function TabHandleContent({
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
   unread: boolean;
+  /** Keep the title clear of the read check, which the overlay draws without a solid scrim. */
+  reserveReadControl: boolean;
 }) {
   const { t } = useTranslation();
   const tabHandleDataSet = useMemo(
@@ -787,6 +795,7 @@ function TabHandleContent({
       {unread ? (
         <View style={styles.tabUnreadDot} testID={`workspace-tab-unread-${presentation.key}`} />
       ) : null}
+      {reserveReadControl ? <View style={styles.tabReadControlSpace} /> : null}
     </View>
   );
 }
@@ -805,6 +814,7 @@ const closeButtonDragBlockers = isWeb
 
 function TabTrailingControls({
   tab,
+  tabLabel,
   testIdentity,
   backdrop,
   isActive,
@@ -817,6 +827,8 @@ function TabTrailingControls({
   onCloseTab,
 }: {
   tab: WorkspaceTabDescriptor;
+  /** Names the tab in the check's label, so a screen reader's list of checks is not ambiguous. */
+  tabLabel: string;
   testIdentity: string;
   backdrop: SurfaceBackdrop;
   isActive: boolean;
@@ -884,7 +896,7 @@ function TabTrailingControls({
           {...(closeButtonDragBlockers as object | undefined)}
           testID={`workspace-tab-mark-as-read-${testIdentity}`}
           accessibilityRole="button"
-          accessibilityLabel={t("workspace.tabs.menu.markAsRead")}
+          accessibilityLabel={t("workspace.tabs.menu.markAsReadNamed", { name: tabLabel })}
           onPressIn={handleCloseButtonPressIn}
           onPress={handleReadButtonPress}
           style={readSitsBesideClose ? styles.tabReadButton : styles.tabReadButtonTrailing}
@@ -1077,6 +1089,7 @@ function TabChip({
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
                 unread={unread}
+                reserveReadControl={readAction.canMarkRead}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>
@@ -1101,6 +1114,7 @@ function TabChip({
 
         <TabTrailingControls
           tab={tab}
+          tabLabel={accessibilityLabel}
           testIdentity={testIdentity}
           backdrop={chipBackdrop}
           isActive={isActive}
@@ -1955,6 +1969,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,
+  },
+  tabReadControlSpace: {
+    width: TAB_READ_CONTROL_SPACE,
+    flexShrink: 0,
   },
   tabCloseButtonHidden: {
     position: "absolute",

@@ -8,7 +8,8 @@ import {
 import { getIsAppActivelyVisible } from "@/utils/app-visibility";
 import { isWeb } from "@/constants/platform";
 import { useSettings } from "@/hooks/use-settings";
-import { markAgentReadLocally } from "@/workspace/mark-read";
+import { useSessionStore } from "@/stores/session-store";
+import { agentReadClearOptions, markAgentReadLocally } from "@/workspace/mark-read";
 
 type AttentionReason = "finished" | "error" | "permission" | null | undefined;
 
@@ -65,9 +66,12 @@ export function useAgentAttentionClear({
         return;
       }
       deferredFocusEntryClearRef.current = false;
-      client.clearAgentAttention(resolvedAgentId).catch(() => {});
+      // Every trigger here is the user reading the chat, so the host keeps a permission that
+      // raced in and anything newer than the attention this device showed.
+      const shown = useSessionStore.getState().sessions[serverId]?.agents?.get(resolvedAgentId);
+      client.clearAgentAttention(resolvedAgentId, agentReadClearOptions(shown)).catch(() => {});
     },
-    [agentId, attentionReason, client, isConnected, markReadOnOpen, requiresAttention],
+    [agentId, attentionReason, client, isConnected, markReadOnOpen, requiresAttention, serverId],
   );
 
   useEffect(() => {

@@ -156,7 +156,7 @@ export function MobileTabTrailingAccessory({
       <Pressable
         testID={`${menuTestIDBase}-mark-as-read`}
         accessibilityRole="button"
-        accessibilityLabel={t("workspace.tabs.menu.markAsRead")}
+        accessibilityLabel={t("workspace.tabs.menu.markAsReadNamed", { name: presentationLabel })}
         hitSlop={8}
         onPress={onMarkRead}
         style={mobileTabMenuTriggerStyle}

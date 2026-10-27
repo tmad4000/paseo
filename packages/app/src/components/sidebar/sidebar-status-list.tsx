@@ -1019,10 +1019,7 @@ function StatusWorkspaceActionSlot({
         wide={Boolean(onMarkAsRead)}
       >
         {onMarkAsRead ? (
-          <SidebarWorkspaceMarkReadButton
-            workspaceKey={workspace.workspaceKey}
-            onMarkAsRead={onMarkAsRead}
-          />
+          <SidebarWorkspaceMarkReadButton workspace={workspace} onMarkAsRead={onMarkAsRead} />
         ) : null}
         {kebab.showKebab && onArchive ? (
           <SidebarWorkspaceMenu

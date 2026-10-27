@@ -1,8 +1,9 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
-import { Text, View, type ViewStyle } from "react-native";
+import { Text, View, type BlurEvent, type FocusEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
+import { isWeb } from "@/constants/platform";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
   WorkspaceMetaRow,
@@ -44,6 +45,31 @@ const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedFolderGit2 = withUnistyles(FolderGit2);
 
+export interface SidebarRowRevealHandlers {
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  onFocus?: (event: FocusEvent) => void;
+  onBlur?: (event: BlurEvent) => void;
+}
+
+/** The DOM focus event react-native-web delivers; these handlers are only attached on web. */
+interface DomFocusEvent {
+  target: { matches?: (selector: string) => boolean } | null;
+  currentTarget: { contains?: (node: unknown) => boolean } | null;
+  relatedTarget?: unknown;
+}
+
+function isKeyboardFocusEvent(event: FocusEvent): boolean {
+  const { target } = event as unknown as DomFocusEvent;
+  return target?.matches?.(":focus-visible") === true;
+}
+
+/** Focus moving between the row's own controls keeps them revealed. */
+function isFocusLeavingRow(event: BlurEvent): boolean {
+  const { currentTarget, relatedTarget } = event as unknown as DomFocusEvent;
+  return !(relatedTarget && currentTarget?.contains?.(relatedTarget));
+}
+
 export function SidebarWorkspaceRowFrame({
   workspace,
   isDragging = false,
@@ -55,10 +81,11 @@ export function SidebarWorkspaceRowFrame({
     isHovered: boolean;
     contextMenuOpen: boolean;
     onContextMenuOpenChange: (open: boolean) => void;
-    hoverHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
+    hoverHandlers: SidebarRowRevealHandlers;
   }) => ReactNode;
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isKeyboardFocusWithin, setIsKeyboardFocusWithin] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const handlePointerEnter = useCallback(() => {
     if (!contextMenuOpen) setIsHovered(true);
@@ -68,9 +95,21 @@ export function SidebarWorkspaceRowFrame({
     setContextMenuOpen(open);
     if (open) setIsHovered(false);
   }, []);
-  const hoverHandlers = useMemo(
-    () => ({ onPointerEnter: handlePointerEnter, onPointerLeave: handlePointerLeave }),
-    [handlePointerEnter, handlePointerLeave],
+  // Keyboard focus inside the row reveals its trailing actions the way hover does, so the
+  // mark-as-read check and the kebab can be reached with Tab. Mouse focus from a click does not.
+  const handleFocus = useCallback((event: FocusEvent) => {
+    if (isKeyboardFocusEvent(event)) setIsKeyboardFocusWithin(true);
+  }, []);
+  const handleBlur = useCallback((event: BlurEvent) => {
+    if (isFocusLeavingRow(event)) setIsKeyboardFocusWithin(false);
+  }, []);
+  const hoverHandlers = useMemo<SidebarRowRevealHandlers>(
+    () => ({
+      onPointerEnter: handlePointerEnter,
+      onPointerLeave: handlePointerLeave,
+      ...(isWeb ? { onFocus: handleFocus, onBlur: handleBlur } : {}),
+    }),
+    [handleBlur, handleFocus, handlePointerEnter, handlePointerLeave],
   );
 
   return (
@@ -81,7 +120,7 @@ export function SidebarWorkspaceRowFrame({
       disabled={contextMenuOpen}
     >
       {children({
-        isHovered: isHovered && !contextMenuOpen && !isDragging,
+        isHovered: (isHovered || isKeyboardFocusWithin) && !contextMenuOpen && !isDragging,
         contextMenuOpen,
         onContextMenuOpenChange: handleContextMenuOpenChange,
         hoverHandlers,
@@ -336,7 +375,8 @@ export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
   },
   trailingActionSlotReservedWide: {
     position: "relative",
-    minWidth: 38,
+    // Touch-sized check (32) beside the kebab.
+    minWidth: 48,
     minHeight: 20,
     flexShrink: 0,
     alignItems: "flex-end",

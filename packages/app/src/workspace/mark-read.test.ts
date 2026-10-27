@@ -64,13 +64,23 @@ afterEach(() => {
 });
 
 describe("markAgentRead", () => {
-  it("clears finished attention on the host and reads the tab through current activity", async () => {
-    seedAgents([agent({ id: "a", requiresAttention: true, attentionReason: "finished" })]);
+  it("clears finished attention on the host as a read bounded by what was shown", async () => {
+    const shownAt = new Date("2026-10-27T10:00:00.000Z");
+    seedAgents([
+      agent({
+        id: "a",
+        requiresAttention: true,
+        attentionReason: "finished",
+        attentionTimestamp: shownAt,
+      }),
+    ]);
     const client = recordingClient();
 
     await markAgentRead({ serverId: SERVER_ID, agentId: "a", client });
 
-    expect(client.clearAgentAttention).toHaveBeenCalledWith("a");
+    expect(client.clearAgentAttention).toHaveBeenCalledWith("a", {
+      read: { seenAttentionAt: shownAt.toISOString() },
+    });
     expect(readThrough("a")).toBe(1_000);
   });
 
@@ -80,17 +90,17 @@ describe("markAgentRead", () => {
 
     await markAgentRead({ serverId: SERVER_ID, agentId: "a", client });
 
-    expect(client.clearAgentAttention).toHaveBeenCalledWith("a");
+    expect(client.clearAgentAttention).toHaveBeenCalledWith("a", { read: {} });
   });
 
-  it("never clears a pending permission, but still reads the tab dot", async () => {
+  it("does nothing for a chat waiting on a permission", async () => {
     seedAgents([agent({ id: "a", requiresAttention: true, attentionReason: "permission" })]);
     const client = recordingClient();
 
     await markAgentRead({ serverId: SERVER_ID, agentId: "a", client });
 
     expect(client.clearAgentAttention).not.toHaveBeenCalled();
-    expect(readThrough("a")).toBe(1_000);
+    expect(readThrough("a")).toBeUndefined();
   });
 
   it("reads only the tab dot when the host holds no attention", async () => {
@@ -103,17 +113,32 @@ describe("markAgentRead", () => {
     expect(readThrough("a")).toBe(1_000);
   });
 
-  it("fails when the host is disconnected and attention needs clearing", async () => {
+  it("keeps the tab unread when the host is disconnected", async () => {
     seedAgents([agent({ id: "a", requiresAttention: true, attentionReason: "finished" })]);
 
     await expect(
       markAgentRead({ serverId: SERVER_ID, agentId: "a", client: null }),
     ).rejects.toThrow();
+    expect(readThrough("a")).toBeUndefined();
+  });
+
+  it("keeps the tab unread when the host clear fails", async () => {
+    seedAgents([agent({ id: "a", requiresAttention: true, attentionReason: "error" })]);
+    const client = {
+      clearAgentAttention: vi.fn<DaemonClient["clearAgentAttention"]>(async () => {
+        throw new Error("write failed");
+      }),
+    };
+
+    await expect(markAgentRead({ serverId: SERVER_ID, agentId: "a", client })).rejects.toThrow(
+      "write failed",
+    );
+    expect(readThrough("a")).toBeUndefined();
   });
 });
 
 describe("markAgentReadLocally", () => {
-  it("reads through the newest live activity, and newer activity is not covered", () => {
+  it("reads through the newest live activity and never moves a mark backwards", () => {
     seedAgents([agent({ id: "a" })]);
     useSessionStore.setState((state) => ({
       ...state,

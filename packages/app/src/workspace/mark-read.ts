@@ -26,11 +26,29 @@ export function readAgentActivityAt(
 export function hasClearableAgentAttention(
   agent: Pick<Agent, "requiresAttention" | "attentionReason" | "pendingPermissions"> | undefined,
 ): boolean {
+  return agent?.requiresAttention === true && !isAwaitingPermission(agent);
+}
+
+/** A chat waiting on a permission is answered, not read: no read control or read mark applies. */
+export function isAwaitingPermission(
+  agent: Pick<Agent, "requiresAttention" | "attentionReason" | "pendingPermissions"> | undefined,
+): boolean {
   return (
-    agent?.requiresAttention === true &&
-    agent.attentionReason !== "permission" &&
-    agent.pendingPermissions.length === 0
+    agent !== undefined &&
+    ((agent.requiresAttention === true && agent.attentionReason === "permission") ||
+      agent.pendingPermissions.length > 0)
   );
+}
+
+/**
+ * The host-side half of a read: keep permission attention, and only clear attention raised at or
+ * before what this device showed. See `clear_agent_attention.read`.
+ */
+export function agentReadClearOptions(agent: Pick<Agent, "attentionTimestamp"> | undefined): {
+  read: { seenAttentionAt?: string };
+} {
+  const seen = agent?.attentionTimestamp;
+  return { read: seen ? { seenAttentionAt: seen.toISOString() } : {} };
 }
 
 /** Mark this agent's tab dots read on this device, through the activity seen right now. */
@@ -40,8 +58,9 @@ export function markAgentReadLocally(input: { serverId: string; agentId: string 
 }
 
 /**
- * Explicit "Mark as read" for one agent, from its tab or switcher row: clears the tab's unread
- * dot and the host's finished/error attention. Permission attention is left alone.
+ * Explicit "Mark as read" for one agent, from its tab or switcher row: clears the host's
+ * finished/error attention, then the tab's unread dot. When the host clear fails, nothing is
+ * marked, so the tab and the sidebar keep agreeing that the chat is unread.
  */
 export async function markAgentRead(input: {
   serverId: string;
@@ -50,15 +69,17 @@ export async function markAgentRead(input: {
   client?: Pick<DaemonClient, "clearAgentAttention"> | null;
 }): Promise<void> {
   const { serverId, agentId } = input;
-  markAgentReadLocally({ serverId, agentId });
   const agent = useSessionStore.getState().sessions[serverId]?.agents?.get(agentId);
-  if (!hasClearableAgentAttention(agent)) {
+  if (isAwaitingPermission(agent)) {
     return;
   }
-  const client =
-    input.client === undefined ? getHostRuntimeStore().getClient(serverId) : input.client;
-  if (!client) {
-    throw new Error(i18n.t("workspace.terminal.hostDisconnected"));
+  if (hasClearableAgentAttention(agent)) {
+    const client =
+      input.client === undefined ? getHostRuntimeStore().getClient(serverId) : input.client;
+    if (!client) {
+      throw new Error(i18n.t("workspace.terminal.hostDisconnected"));
+    }
+    await client.clearAgentAttention(agentId, agentReadClearOptions(agent));
   }
-  await client.clearAgentAttention(agentId);
+  markAgentReadLocally({ serverId, agentId });
 }
