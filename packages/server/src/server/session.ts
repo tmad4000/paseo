@@ -7,6 +7,7 @@ import {
 import os from "node:os";
 import { type SharingSessionOptions } from "./sharing/share-service.js";
 import { createCodexSessionSearchGeneration } from "./agent/providers/codex/session-search-generation.js";
+import { rankWithDecisionFallback } from "./session-decision-routing.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import {
   searchExistingSessions,
@@ -8498,6 +8499,7 @@ export class Session {
     this.sessionSearchActive?.abort();
     const active = new AbortController();
     this.sessionSearchActive = active;
+    const searchStarted = performance.now();
     const signal = AbortSignal.any([
       active.signal,
       this.sessionSearchAbort.signal,
@@ -8556,29 +8558,50 @@ export class Session {
         });
         signal.throwIfAborted();
       }
+      let routing: Awaited<ReturnType<typeof rankWithDecisionFallback>>["routing"] | undefined;
       const result = await searchExistingSessions({
         query: msg.query,
         workspaceIds: msg.workspaceIds,
         candidates,
+        candidateLimit: msg.routingProvider && msg.routingProvider !== "codex" ? 40 : 100,
         readContext: async (agentId) => {
           signal.throwIfAborted();
           return this.agentManager.readSessionSearchText(agentId, msg.query);
         },
-        generate: ({ cwd, prompt, schema }) =>
-          this.sessionSearchGeneration.generate({
-            cwd,
-            prompt,
-            schema,
-            schemaName: "SessionSearchRanking",
-            agentTitle: "Conversation matcher",
+        generate: async ({ cwd, prompt, schema, query, candidates: rankedCandidates }) => {
+          const ranked = await rankWithDecisionFallback({
+            provider: msg.routingProvider ?? "codex",
+            query,
+            candidates: rankedCandidates,
             signal,
-          }),
+            fallback: () =>
+              this.sessionSearchGeneration.generate({
+                cwd,
+                prompt,
+                schema,
+                schemaName: "SessionSearchRanking",
+                agentTitle: "Conversation matcher",
+                signal,
+              }),
+          });
+          routing = ranked.routing;
+          return ranked.ranking;
+        },
       });
       signal.throwIfAborted();
       this.emitForSource(
         {
           type: "session.search.response",
-          payload: { requestId: msg.requestId, ...result, error: null },
+          payload: {
+            requestId: msg.requestId,
+            ...result,
+            error: null,
+            ...(routing
+              ? {
+                  routing: { ...routing, elapsedMs: Math.round(performance.now() - searchStarted) },
+                }
+              : {}),
+          },
         },
         source,
       );

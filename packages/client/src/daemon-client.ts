@@ -3700,7 +3700,11 @@ export class DaemonClient {
     return { seq: payload.seq, epoch: payload.epoch };
   }
 
-  async searchSessions(input: { query: string; workspaceIds: string[] }) {
+  async searchSessions(input: {
+    query: string;
+    workspaceIds: string[];
+    routingProvider?: "codex" | "jev" | "openai-decisions";
+  }) {
     const payload = await this.sendNamespacedCorrelatedSessionRequest<"session.search.response">({
       message: { type: "session.search.request", ...input },
       timeout: 50000,

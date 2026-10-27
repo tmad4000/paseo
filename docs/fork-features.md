@@ -10,6 +10,16 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Decision routing experiment — pspin-ng3
+
+`decision-routing`: General → Sending selects Current LLM, Jev with OpenAI Decisions fallback,
+or OpenAI Decisions. Optional live suggestions find chats after typing pauses and never send.
+Verify provider/time/fallback labels, stale-result cancellation, scope preservation, and explicit
+choice for uncalibrated decision probabilities. Old hosts keep Current LLM and manual choice.
+Source prepared on `feat/live-routing-pspin-ng3`; not installed. See
+[session routing](session-routing.md#decision-routing-experiment-pspin-ng3) and
+[QA evidence](qa/decision-routing.md). Preserve this opt-in behavior during reconciliation.
+
 ## Feature register
 
 | ID                           | Behavior to preserve / quick acceptance check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

@@ -97,10 +97,13 @@ export interface SessionSearchInput {
   workspaceIds: readonly string[];
   candidates: readonly SessionSearchCandidate[];
   readContext: (agentId: string) => Promise<SessionSearchExcerpt[]>;
+  candidateLimit?: number;
   generate: (input: {
     cwd: string;
     prompt: string;
     schema: typeof RankingSchema;
+    query: string;
+    candidates: readonly SessionSearchCandidate[];
   }) => Promise<SessionSearchRanking>;
 }
 
@@ -151,7 +154,7 @@ export async function searchExistingSessions(input: SessionSearchInput) {
   }
   const shortlisted = [...scoped]
     .sort((a, b) => relevance(b) - relevance(a) || b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 100);
+    .slice(0, input.candidateLimit ?? 100);
   const candidates: SessionSearchCandidate[] = [];
   for (const candidate of shortlisted) {
     const context = await input.readContext(candidate.agentId);
@@ -177,7 +180,13 @@ export async function searchExistingSessions(input: SessionSearchInput) {
     }),
   ].join("\n");
   const ranking = RankingSchema.parse(
-    await input.generate({ cwd: first.cwd, prompt, schema: RankingSchema }),
+    await input.generate({
+      cwd: first.cwd,
+      prompt,
+      schema: RankingSchema,
+      query: input.query,
+      candidates,
+    }),
   );
   const byId = new Map(candidates.map((candidate) => [candidate.agentId, candidate]));
   const seen = new Set<string>();

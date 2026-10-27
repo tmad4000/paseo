@@ -2713,11 +2713,15 @@ export const SessionSearchResultSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const SessionRoutingProviderSchema = z.enum(["codex", "jev", "openai-decisions"]);
+export type SessionRoutingProvider = z.infer<typeof SessionRoutingProviderSchema>;
+
 export const SessionSearchRequestSchema = z.object({
   type: z.literal("session.search.request"),
   requestId: z.string(),
   query: z.string().min(1).max(16000),
   workspaceIds: z.array(z.string()).max(1000),
+  routingProvider: SessionRoutingProviderSchema.optional(),
 });
 
 export const SessionSearchResponseSchema = z.object({
@@ -2728,6 +2732,13 @@ export const SessionSearchResponseSchema = z.object({
     searchedCount: z.number().int().nonnegative(),
     totalCount: z.number().int().nonnegative(),
     error: z.string().nullable(),
+    routing: z
+      .object({
+        provider: SessionRoutingProviderSchema,
+        elapsedMs: z.number().nonnegative(),
+        fallback: z.boolean(),
+      })
+      .optional(),
   }),
 });
 
@@ -4374,6 +4385,7 @@ export const ServerInfoStatusPayloadSchema = z
         agentHistorySearch: z.boolean().optional(),
         // COMPAT(sessionSearch): added in v0.10.0, remove gate after 2027-04-04.
         sessionSearch: z.boolean().optional(),
+        sessionDecisionRouting: z.boolean().optional(),
         // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
         sessionTextSearch: z.boolean().optional(),
         // COMPAT(conversationMessageActivity): added in v0.10.0; remove gate after 2027-04-06.
