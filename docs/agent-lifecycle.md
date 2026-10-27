@@ -198,7 +198,7 @@ agent worked in it just now, which rewrites the sidebar timestamp permanently â€
 
 ### Manual input and review status
 
-The Status submenu on agent tabs and workspace rows exposes Needs input (manual), Ready for
+The Status submenu on agent tabs, inline Review sessions and workspace rows exposes Needs input (manual), Ready for
 review, In review, Changes requested, Approved, and Clear manual status. Workspace actions show
 the session count and update all non-archived sessions owned by that workspace, including managed
 children. Same-directory sibling workspaces are unaffected. Tab actions target exactly that
@@ -216,6 +216,8 @@ to attention when idle, while real running/error/permission signals keep their n
 Approved removes review attention but leaves ordinary unread activity visible. A manually flagged
 child also contributes to its owning workspace so marking a visible child tab cannot hide the
 request inside a parent. Tab tooltips include the marker, and the submenu checks the saved value.
+Inline Review rows show the marker and Unread separately, and expose the same actions through
+right-click/long-press or a visible menu button. See [review navigation](sidebar-sorting.md#reviewing-sessions).
 
 The app gates these controls on `server_info.features.manualAgentStatus`; older hosts keep their
 existing read/unread actions and show an update hint only inside the new submenu. Label deletions

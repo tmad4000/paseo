@@ -339,3 +339,73 @@ test("older hosts keep unread controls and explain unavailable manual statuses",
   ).toBeVisible();
   await expect(page.getByTestId("manual-status-needs_input")).toHaveCount(0);
 });
+
+test("inline review names exact sessions, preserves collapse and separates unread from review", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  const sibling = await addFinishedAgent(subject);
+  await subject.client.updateAgent(subject.agentId, { labels: { "paseo.review-status": "ready" } });
+  await subject.client.updateAgent(sibling.id, { labels: { "paseo.review-status": "in_review" } });
+  await openAgentRoute(page, other);
+  const list = page.getByTestId(`workspace-review-list-${getServerId()}-${subject.workspaceId}`);
+  const subjectRow = page.getByTestId(`workspace-review-agent-${subject.agentId}`);
+  const siblingRow = page.getByTestId(`workspace-review-agent-${sibling.id}`);
+  await expect(subjectRow).toContainText("Ready for review");
+  await expect(siblingRow).toContainText("In review");
+  await siblingRow.click();
+  await expectSelectedAgent(page, sibling.id);
+  await expect(siblingRow).toBeVisible();
+  await list.getByRole("button", { name: "Review (2)", exact: true }).click();
+  await expect(subjectRow).not.toBeVisible();
+  await page.reload();
+  await expect(list.getByRole("button", { name: "Review (2)", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await list.getByRole("button", { name: "Review (2)", exact: true }).click();
+  await subjectRow.click();
+  await expectSelectedAgent(page, subject.agentId);
+  await subjectRow.click({ button: "right" });
+  await page.getByTestId(`review-${subject.agentId}-mark-as-unread`).click();
+  await expect(subjectRow).toContainText("Ready for review · Unread");
+  await openWorkspace(page, other.workspaceId);
+  await expect(subjectRow).toContainText("Ready for review · Unread");
+  await subjectRow.click();
+  await expectSelectedAgent(page, subject.agentId);
+  await expect(subjectRow).toContainText("Ready for review");
+  await expect(subjectRow).not.toContainText("Ready for review · Unread");
+  await page.screenshot({ path: "test-results/review-flow-desktop.png" });
+  await page.getByTestId(`workspace-review-actions-${subject.agentId}`).click();
+  await page.getByTestId("manual-status-menu").click();
+  await page.getByTestId("manual-status-approved").click();
+  await expect(subjectRow).not.toBeVisible();
+  await expect(siblingRow).toBeVisible();
+});
+
+test("compact inline review bounds its preview and opens the exact chat from its menu", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject } = workspaces;
+  await subject.client.updateAgent(subject.agentId, { labels: { "paseo.review-status": "ready" } });
+  for (let index = 1; index <= 3; index++) {
+    const agent = await addFinishedAgent(subject);
+    await subject.client.updateAgent(agent.id, {
+      name: `Review session ${index}`,
+      labels: { "paseo.review-status": "ready" },
+    });
+  }
+  await openCompactWorkspace(page, subject);
+  const list = page.getByTestId(`workspace-review-list-${getServerId()}-${subject.workspaceId}`);
+  await expect(list.locator('[data-testid^="workspace-review-agent-"]')).toHaveCount(3);
+  await list.getByRole("button", { name: "+1 more", exact: false }).click();
+  await expect(list.locator('[data-testid^="workspace-review-agent-"]')).toHaveCount(4);
+  await page.screenshot({ path: "test-results/review-flow-compact.png" });
+  await page.getByTestId(`workspace-review-actions-${subject.agentId}`).click();
+  await page.getByTestId("manual-status-menu").click();
+  await expect(page.getByTestId("manual-status-ready")).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("manual-status-in_review").click();
+  await expect(page.getByTestId("manual-status-in_review")).toHaveAttribute("aria-checked", "true");
+});

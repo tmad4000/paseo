@@ -1,3 +1,4 @@
+import { createWorkspaceReviewSelector, type ReviewAgent } from "./workspace-review-model";
 import { describe, expect, it } from "vitest";
 import type { SessionTextSearchHit } from "@getpaseo/protocol/messages";
 import {
@@ -212,5 +213,108 @@ it("sums message-search coverage across hosts and flags any partial host", () =>
     searchedCount: 0,
     totalCount: 0,
     truncated: false,
+  });
+});
+
+describe("workspace review identities", () => {
+  const workspaceReviewAgents = createWorkspaceReviewSelector<ReviewAgent>();
+  function reviewAgent(id: string, overrides: Partial<ReviewAgent> = {}): ReviewAgent {
+    return {
+      id,
+      workspaceId: "ws-1",
+      parentAgentId: null,
+      archivedAt: null,
+      labels: {},
+      status: "idle",
+      turn: { phase: "idle", cancellationRequestId: null },
+      pendingPermissions: [],
+      requiresAttention: true,
+      attentionReason: "finished",
+      ...overrides,
+    };
+  }
+  function select(...agents: ReviewAgent[]) {
+    return workspaceReviewAgents(new Map(agents.map((a) => [a.id, a])), "ws-1").map((a) => a.id);
+  }
+  it("reuses a directory index across workspace selectors and invalidates on immutable updates", () => {
+    const first = reviewAgent("first");
+    const second = reviewAgent("second", { workspaceId: "ws-2" });
+    const directory = new Map([
+      [first.id, first],
+      [second.id, second],
+    ]);
+    const selected = workspaceReviewAgents(directory, "ws-1");
+    expect(workspaceReviewAgents(directory, "ws-2")).toEqual([second]);
+    expect(workspaceReviewAgents(directory, "ws-1")).toBe(selected);
+    const next = new Map(directory);
+    next.set(first.id, { ...first, requiresAttention: false });
+    expect(workspaceReviewAgents(next, "ws-1")).toEqual([]);
+    expect(workspaceReviewAgents(directory, "ws-1")).toBe(selected);
+  });
+  it("lists unread completions and persistent review states, without treating read as approval", () => {
+    const ready = reviewAgent("ready", {
+      requiresAttention: false,
+      attentionReason: null,
+      labels: { "paseo.review-status": "ready" },
+    });
+    expect(
+      select(
+        reviewAgent("unread"),
+        ready,
+        reviewAgent("read", { requiresAttention: false }),
+        reviewAgent("approved", {
+          requiresAttention: false,
+          labels: { "paseo.review-status": "approved" },
+        }),
+      ),
+    ).toEqual(["ready", "unread"]);
+    expect(select({ ...ready, labels: {} })).toEqual([]);
+  });
+  it("keeps root/auto-opened/explicitly marked children in scope and excludes hidden children and other workspaces", () => {
+    expect(
+      select(
+        reviewAgent("root"),
+        reviewAgent("child", { parentAgentId: "root" }),
+        reviewAgent("marked", {
+          parentAgentId: "root",
+          labels: { "paseo.review-status": "in_review" },
+        }),
+        reviewAgent("tab", {
+          parentAgentId: "root",
+          labels: { "paseo.auto-open-agent-tab": "true" },
+        }),
+        reviewAgent("other", { workspaceId: "ws-2" }),
+        reviewAgent("archived", { archivedAt: new Date() }),
+      ),
+    ).toEqual(["marked", "root", "tab"]);
+  });
+  it("preserves running, failure and needs-input priority; finished siblings still appear", () => {
+    expect(
+      select(
+        reviewAgent("ready"),
+        reviewAgent("running", {
+          turn: { phase: "open", turnId: "t", startedAt: null, cancellationRequestId: null },
+        }),
+        reviewAgent("failed", { status: "error" }),
+        reviewAgent("input", { labels: { "paseo.manual-needs-input": "true" } }),
+        reviewAgent("permission", { attentionReason: "permission" }),
+        reviewAgent("stale-running", { status: "running" }),
+      ),
+    ).toEqual(["ready", "stale-running"]);
+  });
+  it("orders by completed assistant replies with unknown times last and deterministic ties", () => {
+    const clock = (lastAssistantMessageAt: string) => ({
+      lastAssistantMessageAt,
+      lastUserMessageAt: null,
+    });
+    expect(
+      select(
+        reviewAgent("unknown"),
+        reviewAgent("older", { messageActivity: clock("2026-10-01T01:00:00Z") }),
+        reviewAgent("newer-b", { messageActivity: clock("2026-10-01T02:00:00Z") }),
+        reviewAgent("newer-a", { messageActivity: clock("2026-10-01T02:00:00Z") }),
+      ),
+    ).toEqual(["newer-a", "newer-b", "older", "unknown"]);
+    expect(workspaceReviewAgents(undefined, "ws-1")).toEqual([]);
   });
 });

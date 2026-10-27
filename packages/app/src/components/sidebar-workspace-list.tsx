@@ -1,3 +1,4 @@
+import { WorkspaceReviewList } from "@/components/sidebar/workspace-review-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -1479,6 +1480,11 @@ function WorkspaceRowItem({
         drag={drag ?? noop}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceReviewList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       {/* Tab-title matches from the sidebar filter; renders nothing when there are none. */}
       <SidebarWorkspaceTabMatches
