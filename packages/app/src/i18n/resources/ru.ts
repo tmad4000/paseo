@@ -1518,6 +1518,8 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    reviewActions: "Действия проверки для {{title}}",
+    reviewSessions: "Проверка ({{count}})",
     openTabs: "Открытых вкладок: {{count}}",
     routing: {
       findMode: "Find chats mode",

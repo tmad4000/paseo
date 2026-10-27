@@ -1532,6 +1532,8 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    reviewActions: "Ações de revisão para {{title}}",
+    reviewSessions: "Revisar ({{count}})",
     openTabs: "{{count}} abas abertas",
     routing: {
       findMode: "Find chats mode",

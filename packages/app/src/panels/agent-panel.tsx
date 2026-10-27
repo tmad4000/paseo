@@ -871,9 +871,6 @@ function ChatAgentContent({
     attentionReason: agentState.attentionReason,
     isScreenFocused: isPaneFocused,
   });
-  useEffect(() => {
-    clearOnAgentBlurRef.current = attentionController.clearOnAgentBlur;
-  }, [attentionController.clearOnAgentBlur]);
 
   const isArchivingCurrentAgent = Boolean(agentId && isArchivingAgent({ serverId, agentId }));
 
@@ -883,6 +880,13 @@ function ChatAgentContent({
     }
     wasPaneFocusedRef.current = isPaneFocused;
   }, [isPaneFocused]);
+
+  // Blur consumes only attention seen while the pane was focused. A manual unread RPC can
+  // arrive in the same React commit as unfocus; installing its callback before the blur effect
+  // would immediately consume the new marker. Keep this update after that effect.
+  useEffect(() => {
+    clearOnAgentBlurRef.current = attentionController.clearOnAgentBlur;
+  }, [attentionController.clearOnAgentBlur]);
 
   useEffect(() => {
     return () => {
