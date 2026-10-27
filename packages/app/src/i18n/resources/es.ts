@@ -191,8 +191,10 @@ export const es: TranslationResources = {
     actions: {
       back: "Atrás",
       navigateBack: "Volver",
+      backHistory: "Historial hacia atrás",
       forward: "Adelante",
       navigateForward: "Avanzar",
+      forwardHistory: "Historial hacia adelante",
       cancel: "Cancelar",
       close: "Cerrar",
       copy: "Copiar",

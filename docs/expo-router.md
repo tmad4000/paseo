@@ -124,6 +124,14 @@ workspace deck entries and tab panels remain mounted, so restoring their focus
 also preserves live scroll and selection state without duplicating that state
 in the history stack.
 
+The chevron beside each header Back/Forward arrow opens every retained entry in
+that direction (up to the focus-history model's 50-entry bound), nearest first.
+The arrow itself still moves one step. Right-click and long-press open the same
+menu; compact layouts use a scrollable sheet. A multi-step menu jump moves every
+skipped location to the opposite stack, so Forward retraces them in order. This
+focus history is in memory; the separate Recent sessions clock menu uses the
+persisted visit list and survives reload.
+
 ## Agent Targets
 
 Notifications and agent URLs enter the router with different authoritative

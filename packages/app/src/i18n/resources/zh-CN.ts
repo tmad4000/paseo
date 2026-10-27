@@ -187,8 +187,10 @@ export const zhCN: TranslationResources = {
     actions: {
       back: "返回",
       navigateBack: "返回上一步",
+      backHistory: "后退历史记录",
       forward: "前进",
       navigateForward: "前进到下一步",
+      forwardHistory: "前进历史记录",
       cancel: "取消",
       close: "关闭",
       copy: "复制",

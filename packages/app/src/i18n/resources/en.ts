@@ -184,8 +184,10 @@ export const en = {
     actions: {
       back: "Back",
       navigateBack: "Go back",
+      backHistory: "Back history",
       forward: "Forward",
       navigateForward: "Go forward",
+      forwardHistory: "Forward history",
       cancel: "Cancel",
       close: "Close",
       copy: "Copy",

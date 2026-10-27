@@ -187,8 +187,10 @@ export const ko: TranslationResources = {
     actions: {
       back: "뒤로",
       navigateBack: "뒤로 가기",
+      backHistory: "뒤로 가기 기록",
       forward: "앞으로",
       navigateForward: "앞으로 가기",
+      forwardHistory: "앞으로 가기 기록",
       cancel: "취소",
       close: "닫기",
       copy: "복사",
