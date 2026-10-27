@@ -1540,6 +1540,8 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    reviewActions: "Acciones de revisión para {{title}}",
+    reviewSessions: "Revisar ({{count}})",
     openTabs: "{{count}} pestañas abiertas",
     routing: {
       findMode: "Find chats mode",

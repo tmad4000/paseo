@@ -1495,6 +1495,8 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    reviewActions: "إجراءات مراجعة {{title}}",
+    reviewSessions: "مراجعة ({{count}})",
     openTabs: "{{count}} علامات تبويب مفتوحة",
     routing: {
       findMode: "Find chats mode",

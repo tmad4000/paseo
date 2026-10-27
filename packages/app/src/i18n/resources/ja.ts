@@ -1512,6 +1512,8 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    reviewActions: "{{title}} のレビュー操作",
+    reviewSessions: "レビュー ({{count}})",
     openTabs: "{{count}} 個の開いているタブ",
     routing: {
       findMode: "Find chats mode",

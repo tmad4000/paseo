@@ -26,6 +26,24 @@ creation time when its assistant clock is unknown. A known original timestamp wi
 when it predates an imported conversation's creation time. Reopening, refreshing undated history,
 or reconnecting does not synthesize new activity.
 
+## Reviewing sessions
+
+Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;
+new tabs are inserted by the opening action and you can drag them. Completing a turn does not
+move a tab under your pointer.
+
+Each workspace has an inline Review preview naming up to three sessions with unread completions
+or pending review markers. Expand for the rest or collapse the preview; collapse is saved on this
+device. Each row opens that exact session. Search retains its existing title-match rows instead
+of also showing the preview. A finished session remains discoverable when another session makes
+the workspace's overall status Working.
+
+Review rows use **AI’s last reply, newest first**, independently of workspace sorting. Only dated,
+completed assistant replies establish that order; unknown historical times stay last. Reading,
+renaming and changing a review label do not invent a completion timestamp. The top tabs keep their
+arrangement. [The end-to-end review proposal](design/review-flow.html) compares additional queue
+sorts and an optional review view within the existing sidebar; those controls remain proposals.
+
 ## Pinned projects
 
 Pinned projects lead the project list in every sort mode, above a divider, the way pinned rows
