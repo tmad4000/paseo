@@ -23,6 +23,13 @@ export const TrackedAskSchema = TrackedAskInputSchema.extend({
 });
 export type TrackedAskInput = z.infer<typeof TrackedAskInputSchema>;
 
+/** A span of one timeline epoch's rows; a message is the projected range it was built from. */
+export const TimelineAnchorSchema = z.object({
+  epoch: z.string().max(200),
+  startSeq: z.number().int().min(0),
+  endSeq: z.number().int().min(0),
+});
+
 const common = {
   id: z.string(),
   timestamp: z.string(),
@@ -67,10 +74,26 @@ export const CompanionEntrySchema = z.discriminatedUnion("kind", [
     answer: z.string().optional(),
     questionMessageId: z.string().optional(),
     answerMessageId: z.string().optional(),
+    // COMPAT(streamAnswers): fork feature; older hosts omit these and never attach answers.
+    /** Personal review of the current answer: reviewed means seen. Absent means open. */
+    status: z.enum(["open", "reviewed", "done"]).optional(),
+    questionAnchor: TimelineAnchorSchema.optional(),
+    answerAnchor: TimelineAnchorSchema.optional(),
+    answeredAt: z.string().optional(),
   }),
 ]);
 
 export type CompanionEntry = z.infer<typeof CompanionEntrySchema>;
+export type TimelineAnchor = z.infer<typeof TimelineAnchorSchema>;
+export type QAndAEntry = Extract<CompanionEntry, { kind: "q_and_a" }>;
+export type QAndAAttention = "waiting" | "new_answer";
+
+/** Where a tracked question stands for its asker: no answer yet, or an answer not yet seen. */
+export function getQAndAAttention(entry: CompanionEntry): QAndAAttention | null {
+  if (entry.kind !== "q_and_a" || entry.status === "done") return null;
+  if (!entry.answer?.trim()) return "waiting";
+  return entry.status === "reviewed" ? null : "new_answer";
+}
 
 export function isCompanionEntryPending(entry: CompanionEntry): boolean {
   return (

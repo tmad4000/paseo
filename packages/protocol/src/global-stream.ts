@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { AgentArtifactSchema } from "./agent-artifact.js";
-import { CompanionEntrySchema, TrackedAskInputSchema } from "./companion-stream.js";
+import {
+  CompanionEntrySchema,
+  TimelineAnchorSchema,
+  TrackedAskInputSchema,
+} from "./companion-stream.js";
 
 export const StreamFilterSchema = z.enum(["all", "pending", "pinned"]);
 export const StreamRowSchema = z.object({
@@ -62,6 +66,9 @@ export const StreamUpdateRequestSchema = z.object({
   expectedRevision: z.number().int().min(0).optional(),
   answerText: z.string().max(4000).optional(),
   sourceId: z.string().optional(),
+  // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+  /** add_q_and_a: the question's timeline position, so the host can attach its answer. */
+  questionAnchor: TimelineAnchorSchema.optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),

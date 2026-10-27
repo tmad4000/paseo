@@ -76,6 +76,8 @@ import { resolveStreamRenderStrategy } from "./strategy-resolver";
 import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strategy";
 import { ChatOutlineRail } from "@/agent-stream/chat-outline/rail";
 import { useChatOutline } from "@/agent-stream/chat-outline/use-chat-outline";
+import { ChatTrackedAnswers, useTrackQuestion } from "@/companion-stream/use-tracked-answers";
+import { useTimelineAnchorJump } from "./use-timeline-anchor-jump";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import {
@@ -478,20 +480,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const handlePin = useMessagePin(resolvedServerId, agentId, client, readOnly);
 
-    const handleQAndA = useCallback(
-      (text: string, messageId?: string) => {
-        if (!agentId || !client) return;
-        client
-          .updateCompanionEntry({
-            agentId,
-            action: "add_q_and_a",
-            text,
-            sourceId: messageId ? `msg:${messageId}` : undefined,
-          })
-          .catch(() => {});
-      },
-      [agentId, client],
-    );
+    const handleQAndA = useTrackQuestion(resolvedServerId, agentId, client, toast);
 
     const handleInlinePathPress = useStableEvent(
       (target: InlinePathTarget, disposition: OpenFileDisposition) => {
@@ -687,6 +676,20 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       visibleMessageIds,
       revealLoadedMessage: revealLoadedHistory,
     });
+    const handleAnchorUnavailable = useCallback(() => {
+      toast?.error(t("agentPanel.stream.answers.jumpUnavailable"));
+    }, [t, toast]);
+    const jumpToAnchor = useTimelineAnchorJump({
+      agentId,
+      serverId: resolvedServerId,
+      timelineEpoch,
+      tail: effectiveStreamItems,
+      head: effectiveStreamHead,
+      viewportRef,
+      visibleMessageIds,
+      revealLoadedMessage: revealLoadedHistory,
+      onUnavailable: handleAnchorUnavailable,
+    });
 
     useImperativeHandle(
       ref,
@@ -789,6 +792,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 onDeliveryAttentionPress={handleDeliveryAttention}
                 onPin={handlePin}
                 onQAndA={handleQAndA}
+                timelineCursor={item.timelineCursor}
               />
             )}
           </ChatFindExpansion>
@@ -1241,6 +1245,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               prompts={chatOutline.prompts}
               activePrompt={chatOutline.activePrompt}
               onJumpToPrompt={chatOutline.jumpToPrompt}
+            />
+            <ChatTrackedAnswers
+              serverId={resolvedServerId}
+              agentId={agentId}
+              client={client}
+              readOnly={readOnly}
+              onJump={jumpToAnchor}
             />
             {(!isNearBottom || isTimelineDetached) && (
               <View style={scrollToBottomContainerStyle} pointerEvents="box-none">

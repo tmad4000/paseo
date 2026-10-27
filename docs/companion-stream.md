@@ -62,6 +62,41 @@ Codex foreground turn IDs now include a fresh UUID. A recreated provider cannot 
 counter at the same ID and suppress new Stream outcomes. Duplicate delivery of the same turn
 still deduplicates. This does not repair previously missing historical cards.
 
+## Tracked answers
+
+**Track Q&A** on one of your own messages records it as a `q_and_a` entry. On hosts with
+`server_info.features.streamAnswers` the client sends the message's timeline position as
+`questionAnchor` and a stable `entryId` derived from it, so tracking the same message twice
+keeps one entry. Older hosts get the original unanchored record and no answers pane.
+
+The host attaches the answer (`qa-answers.ts`): the final response after the question, meaning
+assistant messages after the last tool call and before your next message. Narration before a
+tool call is progress, not an answer. It attaches only once that span is closed: the turn
+settled, or you sent another message. A question tracked after its reply arrived is answered
+immediately. An attached answer is never replaced; Chat holds the full reply, Stream keeps
+4,000 characters plus `answerAnchor`. Answers attach for chats whose timeline is loaded on the
+host. A reply that says "I'll check" is still the reply, so read it before marking it seen.
+
+Seen is your own review state on the entry: `status: "reviewed"` through the existing
+`update_status` action. Arrival leaves it unseen, and an unanswered question cannot be marked
+seen. The wire snapshot carries up to 20 older waiting or unseen questions beyond its newest 50
+entries, so turn outcomes do not push them out of Chat.
+
+Chat shows a floating **Your questions** pane over its top edge, below the Chat/Stream switcher
+and clear of the composer. Rows are **New answer** (newest first), then **Waiting for answer**.
+**Question** and **Answer** scroll Chat to the anchored message, loading its history window when
+needed. A different timeline epoch reports that the message is no longer loaded. **Mark seen**
+waits for the host; the row leaves only when the updated snapshot arrives, and a failed save
+stays visible. The header collapses the list (compact starts collapsed). **×** hides the pane
+until an answer arrives that was not showing when you hid it. Seen and resolved entries stay in
+Stream's Q&A filter.
+
+Evidence (`tracked-answers.spec.ts`): waiting and new answer at
+[390](stream-answers/tracked-answers-waiting-390.png) /
+[1440](stream-answers/tracked-answers-waiting-1440.png); after the second answer and an answer
+jump at [390](stream-answers/tracked-answers-new-390.png) /
+[1440](stream-answers/tracked-answers-new-1440.png).
+
 ## Cards
 
 Each card leads with its content. One muted eyebrow line combines kind, state and time
@@ -161,7 +196,8 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 `global-stream.ts` defines additive `stream.list.request/response` and
 `stream.entry.update.request/response` RPCs. `server_info.features.globalStream` gates global
 reads and acknowledged writes; older hosts need updating. `streamTags` gates tag filters, counts, pinned
-tags and `stream.tags.pin.request`. The old mutation RPC remains
+tags and `stream.tags.pin.request`. `streamAnswers` gates Q&A anchors, attached answers and
+seen state on the existing `q_and_a` kind. The old mutation RPC remains
 accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged.
 Ask data is optional metadata on the existing question shape, with open/done mirrored for older
 readers; no new entry kind or legacy status is emitted. `durableStream` gates per-chat pagination

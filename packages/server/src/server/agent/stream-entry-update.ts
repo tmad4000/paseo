@@ -22,6 +22,7 @@ export function applyStreamEntryUpdate(
   if (input.action === "update_status") {
     if (!input.status) throw new Error("Status is required");
     const target = entries.find((entry) => entry.id === input.entryId);
+    if (target?.kind === "q_and_a") return setQAndAStatus(entries, target, input.status);
     if (!target || (target.kind !== "question" && target.kind !== "feature_request"))
       throw new Error("Stream item no longer exists or cannot be changed");
     if (target.ask) {
@@ -86,10 +87,45 @@ function createEntry(
       };
     }
     case "add_q_and_a":
-      return { ...common, id: `qa:${randomUUID()}`, kind: "q_and_a", answer: input.answerText };
+      return createQAndA(entries, input, common);
     default:
       throw new Error("Unknown Stream action");
   }
+}
+
+type QAndAEntry = Extract<CompanionEntry, { kind: "q_and_a" }>;
+
+/** The asker's own review of the current answer; an unanswered question cannot be seen. */
+function setQAndAStatus(
+  entries: CompanionEntry[],
+  target: QAndAEntry,
+  status: "open" | "reviewed" | "done",
+): CompanionEntry[] {
+  if (status === "reviewed" && !target.answer?.trim())
+    throw new Error("This question has no answer to mark seen yet");
+  return entries.map((entry) => (entry === target ? { ...target, status } : entry));
+}
+
+function createQAndA(
+  entries: CompanionEntry[],
+  input: StreamEntryUpdate,
+  common: Pick<QAndAEntry, "timestamp" | "text" | "truncated" | "tags">,
+): CompanionEntry {
+  // A stable ID makes tracking the same message again a no-op instead of a second card.
+  const id = `qa:${input.entryId ?? randomUUID()}`;
+  const existing = entries.find((entry) => entry.id === id);
+  if (existing?.kind === "q_and_a") return existing;
+  const questionMessageId = input.sourceId?.startsWith("msg:")
+    ? input.sourceId.slice(4)
+    : undefined;
+  return {
+    ...common,
+    id,
+    kind: "q_and_a",
+    answer: input.answerText,
+    ...(questionMessageId ? { questionMessageId } : {}),
+    ...(input.questionAnchor ? { questionAnchor: input.questionAnchor } : {}),
+  };
 }
 
 function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
