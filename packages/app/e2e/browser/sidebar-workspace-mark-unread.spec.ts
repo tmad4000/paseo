@@ -7,6 +7,7 @@ import {
   seedMockAgentWorkspace,
   type MockAgentWorkspace,
 } from "../support/helpers/mock-agent";
+import { enableReadOnOpen } from "../support/helpers/read-on-open";
 import { getServerId } from "../support/helpers/server-id";
 import { closeMobileAgentSidebar, openMobileAgentSidebar } from "../support/helpers/sidebar";
 
@@ -39,13 +40,6 @@ const test = base.extend<{ workspaces: FinishedWorkspaces }>({
     }
   },
 });
-
-/** These flows predate explicit reads: opening, leaving or focusing a chat reads it. */
-async function useReadOnOpen(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem("@paseo:app-settings", JSON.stringify({ markReadOnOpen: true }));
-  });
-}
 
 function workspaceRow(page: Page, workspaceId: string) {
   return page.getByTestId(`sidebar-workspace-row-${getServerId()}:${workspaceId}`);
@@ -208,7 +202,7 @@ test("manual unread survives departure and clears on reopening without changing 
   page,
   workspaces,
 }) => {
-  await useReadOnOpen(page);
+  await enableReadOnOpen(page);
   await gotoAppShell(page);
   await openWorkspace(page, workspaces.other.workspaceId);
   await markBackgroundWorkspaceAndReopen(page, workspaces.subject.workspaceId);
@@ -222,7 +216,7 @@ test("clicking a multi-agent workspace reveals and clears its marked agent", asy
   page,
   workspaces,
 }) => {
-  await useReadOnOpen(page);
+  await enableReadOnOpen(page);
   await openAgentRoute(page, workspaces.subject);
   await expectSelectedAgent(page, workspaces.subject.agentId);
   await openWorkspace(page, workspaces.other.workspaceId);
@@ -235,7 +229,7 @@ test("manual unread survives leaving the current workspace on compact layout", a
   page,
   workspaces,
 }) => {
-  await useReadOnOpen(page);
+  await enableReadOnOpen(page);
   await openCompactWorkspace(page, workspaces.subject);
   await leaveMarkedWorkspaceAndReadOnCompact(page, workspaces);
   await leaveMarkedWorkspaceAndReopenOnCompact(page, workspaces);
@@ -580,7 +574,7 @@ test("inline review names exact sessions, preserves collapse and separates unrea
   workspaces,
 }) => {
   // Its final steps read a session by opening it, which needs the read-on-open setting.
-  await useReadOnOpen(page);
+  await enableReadOnOpen(page);
   const { subject, other } = workspaces;
   const sibling = await addFinishedAgent(subject);
   await subject.client.updateAgent(subject.agentId, { labels: { "paseo.review-status": "ready" } });
