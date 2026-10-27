@@ -4,6 +4,8 @@
 
 ### Added
 
+- Global Tasks keep their identity across linked chats, and Needs you surfaces waiting human input in Stream and each chat (Cmd/Ctrl+Alt+Y) ([#133](https://github.com/tmad4000/paseo/pull/133))
+- Stream separates chronological Activity, current Tasks, Q&A and Saved material while preserving existing asks and completed history ([#133](https://github.com/tmad4000/paseo/pull/133))
 - Visible Back/Forward history dropdowns let you jump directly to any retained visit, with keyboard and touch access ([#132](https://github.com/tmad4000/paseo/pull/132))
 - The top-right Fork control shows the installed app version and update status, with hover details and a menu that lists host daemon versions separately ([#131](https://github.com/tmad4000/paseo/pull/131))
 - Floating answers for tracked asks and Q&A, First message recall, workspace/tab links, and sidebar counts for workspaces with multiple tabs (#99, #92, #120, #121, #122)
