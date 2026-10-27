@@ -38,7 +38,6 @@ const ThemedSearch = withUnistyles(Search);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const markReadLeadingIcon = <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
 
 function mobileTabMenuTriggerStyle({ open, pressed }: { open?: boolean; pressed?: boolean }) {
   return [
@@ -110,6 +109,10 @@ export function MobileTabTrailingAccessory({
   onMarkRead?: () => void;
 }): ReactElement {
   const { t } = useTranslation();
+  const markReadLeadingIcon = useMemo(
+    () => <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />,
+    [],
+  );
   const menu = (
     <DropdownMenu compactMode="sheet">
       <DropdownMenuTrigger
