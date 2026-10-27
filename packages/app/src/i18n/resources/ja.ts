@@ -190,8 +190,10 @@ export const ja: TranslationResources = {
     actions: {
       back: "戻る",
       navigateBack: "戻る",
+      backHistory: "戻る履歴",
       forward: "進む",
       navigateForward: "進む",
+      forwardHistory: "進む履歴",
       cancel: "キャンセル",
       close: "閉じる",
       copy: "コピー",

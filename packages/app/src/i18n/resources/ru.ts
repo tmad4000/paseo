@@ -190,8 +190,10 @@ export const ru: TranslationResources = {
     actions: {
       back: "Назад",
       navigateBack: "Назад",
+      backHistory: "История переходов назад",
       forward: "Вперёд",
       navigateForward: "Вперёд",
+      forwardHistory: "История переходов вперёд",
       cancel: "Отмена",
       close: "Закрыть",
       copy: "Копировать",

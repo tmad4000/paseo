@@ -187,8 +187,10 @@ export const ar: TranslationResources = {
     actions: {
       back: "خلف",
       navigateBack: "الرجوع",
+      backHistory: "سجل الرجوع",
       forward: "للأمام",
       navigateForward: "التقدم للأمام",
+      forwardHistory: "سجل التقدم",
       cancel: "يلغي",
       close: "يغلق",
       copy: "ينسخ",

@@ -189,8 +189,10 @@ export const fr: TranslationResources = {
     actions: {
       back: "Dos",
       navigateBack: "Revenir en arrière",
+      backHistory: "Historique précédent",
       forward: "Suivant",
       navigateForward: "Aller en avant",
+      forwardHistory: "Historique suivant",
       cancel: "Annuler",
       close: "Fermer",
       copy: "Copie",
