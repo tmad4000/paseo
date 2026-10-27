@@ -14,12 +14,17 @@ async function send(page: Page, text: string): Promise<void> {
 
 async function trackQuestion(page: Page, prompt: string, compact: boolean): Promise<void> {
   const message = page.getByTestId("user-message").filter({ hasText: prompt });
-  // Center it, away from the floating switcher and pane at the top and the composer below.
-  await message.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const button = message.getByRole("button", { name: "Track Q&A", exact: true });
-  // Message actions are always shown on compact layouts and appear on hover elsewhere.
-  if (!compact) await message.getByText(prompt, { exact: true }).hover();
-  await button.click();
+  // While a reply streams, Chat follows the output and moves the message out from under the
+  // pointer, which hides its hover-only actions. Center, hover and click as one retried step;
+  // tracking has a stable ID, so a repeated click cannot add a second entry.
+  await expect(async () => {
+    // Center it, away from the floating switcher and pane at the top and the composer below.
+    await message.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    // Message actions are always shown on compact layouts and appear on hover elsewhere.
+    if (!compact) await message.getByText(prompt, { exact: true }).hover({ timeout: 2_000 });
+    await button.click({ timeout: 2_000 });
+  }).toPass({ timeout: 45_000 });
 }
 
 // The expanded pane floats over Chat; collapse it to reach messages beneath, as a user would.
