@@ -3396,6 +3396,15 @@ export const ClearAgentAttentionMessageSchema = z.object({
   type: z.literal("clear_agent_attention"),
   agentId: z.union([z.string(), z.array(z.string())]),
   requestId: z.string().optional(),
+  /**
+   * The user read the chat. The host keeps permission attention and anything raised after
+   * `seenAttentionAt` (the attention time the user saw). Older hosts ignore this and clear.
+   */
+  read: z
+    .object({
+      seenAttentionAt: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const ClientHeartbeatMessageSchema = z.object({

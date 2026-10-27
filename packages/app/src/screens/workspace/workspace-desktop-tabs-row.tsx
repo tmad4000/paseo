@@ -14,6 +14,7 @@ import React, {
 import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
   Circle,
+  CircleCheck,
   CopyX,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -82,6 +83,12 @@ import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-ta
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
 import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
+import { resolveTabTrailingControls } from "@/screens/workspace/workspace-tab-trailing-controls";
+import {
+  buildMarkReadMenuEntries,
+  useAgentReadAction,
+  type AgentReadAction,
+} from "@/workspace/use-agent-read-action";
 import {
   paneContentToolbarTrailingPadding,
   ToolbarButton,
@@ -110,6 +117,8 @@ const PANE_MAXIMIZE_ACTION_RESERVED_WIDTH = smallIconButtonChromeFrameSize(false
 // Tabs and the adjacent New Tab trigger are one control family. Keep their outer box and corner
 // token identical; only their horizontal sizing differs (content-width chip versus square icon).
 const TAB_CHIP_HORIZONTAL_PADDING = 8;
+// The read check spans 24-42pt from the chip's trailing edge; the chip's own padding covers the rest.
+const TAB_READ_CONTROL_SPACE = 42 - TAB_CHIP_HORIZONTAL_PADDING;
 const TAB_CHIP_GAP = 4;
 const TAB_ROW_PADDING_HORIZONTAL = 4;
 const TAB_ICON_WIDTH = 14;
@@ -134,6 +143,7 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedCircle = withUnistyles(Circle);
+const ThemedCircleCheck = withUnistyles(CircleCheck);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
@@ -486,6 +496,8 @@ function TabContextMenuItem({
         return <ThemedLayoutPanelLeft size={16} uniProps={mutedColorMapping} />;
       case "circle":
         return <ThemedCircle size={16} uniProps={mutedColorMapping} />;
+      case "circle-check":
+        return <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
@@ -560,10 +572,13 @@ function completeWorkspaceTabLabelWidths(
     }
     // Both dots sit in the content row, so the label must truncate before either one.
     const dotAllowance = Number(modified) + Number(unread);
+    // An unread tab also reserves room for its read check (see `tabReadControlSpace`).
+    const readControlAllowance = unread ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
     widths.push(
       measurement.width +
         TAB_LABEL_LAYOUT_ALLOWANCE +
-        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE),
+        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE) +
+        readControlAllowance,
     );
   }
   return widths;
@@ -736,6 +751,7 @@ function TabHandleContent({
   tabLabelStyle,
   modifiedTestId,
   unread,
+  reserveReadControl,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -745,6 +761,8 @@ function TabHandleContent({
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
   unread: boolean;
+  /** Keep the title clear of the read check, which the overlay draws without a solid scrim. */
+  reserveReadControl: boolean;
 }) {
   const { t } = useTranslation();
   const tabHandleDataSet = useMemo(
@@ -777,6 +795,154 @@ function TabHandleContent({
       {unread ? (
         <View style={styles.tabUnreadDot} testID={`workspace-tab-unread-${presentation.key}`} />
       ) : null}
+      {reserveReadControl ? <View style={styles.tabReadControlSpace} /> : null}
+    </View>
+  );
+}
+
+// Pressing a trailing control must not start a tab drag.
+const closeButtonDragBlockers = isWeb
+  ? ({
+      onPointerDown: (event: { stopPropagation?: () => void }) => {
+        event.stopPropagation?.();
+      },
+      onMouseDown: (event: { stopPropagation?: () => void }) => {
+        event.stopPropagation?.();
+      },
+    } as const)
+  : undefined;
+
+function TabTrailingControls({
+  tab,
+  tabLabel,
+  testIdentity,
+  backdrop,
+  isActive,
+  isHovered,
+  isClosingTab,
+  showCloseButton,
+  closeButtonTestId,
+  readAction,
+  setHoveredCloseTabKey,
+  onCloseTab,
+}: {
+  tab: WorkspaceTabDescriptor;
+  /** Names the tab in the check's label, so a screen reader's list of checks is not ambiguous. */
+  tabLabel: string;
+  testIdentity: string;
+  backdrop: SurfaceBackdrop;
+  isActive: boolean;
+  isHovered: boolean;
+  isClosingTab: boolean;
+  showCloseButton: boolean;
+  closeButtonTestId: string;
+  readAction: AgentReadAction;
+  setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
+  onCloseTab: (tabId: string) => Promise<void> | void;
+}) {
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const { showReadControl, showCloseControl, showTrailingOverlay, readSitsBesideClose } =
+    resolveTabTrailingControls({
+      canMarkRead: readAction.canMarkRead,
+      showCloseButton,
+      isActive,
+      isHovered,
+      isClosingTab,
+      isTouch: isNative || isCompact,
+    });
+
+  const handleCloseButtonPressIn = useCallback((event: { stopPropagation?: () => void }) => {
+    event.stopPropagation?.();
+  }, []);
+
+  const handleCloseButtonHoverIn = useCallback(() => {
+    setHoveredCloseTabKey(tab.key);
+  }, [setHoveredCloseTabKey, tab.key]);
+
+  const handleCloseButtonHoverOut = useCallback(() => {
+    setHoveredCloseTabKey((current) => (current === tab.key ? null : current));
+  }, [setHoveredCloseTabKey, tab.key]);
+
+  const handleReadButtonPress = useCallback(
+    (event: { stopPropagation?: () => void }) => {
+      event.stopPropagation?.();
+      readAction.markRead();
+    },
+    [readAction],
+  );
+
+  const handleCloseButtonPress = useCallback(
+    (event: { stopPropagation?: () => void }) => {
+      event.stopPropagation?.();
+      void onCloseTab(tab.tabId);
+    },
+    [onCloseTab, tab.tabId],
+  );
+
+  if (!showCloseButton && !readAction.canMarkRead) return null;
+  return (
+    <View
+      pointerEvents={showTrailingOverlay ? "box-none" : "none"}
+      style={[
+        styles.tabTrailingOverlay,
+        readSitsBesideClose && styles.tabTrailingOverlayWide,
+        showTrailingOverlay ? styles.tabTrailingOverlayShown : styles.tabTrailingOverlayHidden,
+      ]}
+    >
+      <TrailingActionScrim backdrop={backdrop} />
+      {showReadControl ? (
+        <Pressable
+          {...(closeButtonDragBlockers as object | undefined)}
+          testID={`workspace-tab-mark-as-read-${testIdentity}`}
+          accessibilityRole="button"
+          accessibilityLabel={t("workspace.tabs.menu.markAsReadNamed", { name: tabLabel })}
+          onPressIn={handleCloseButtonPressIn}
+          onPress={handleReadButtonPress}
+          style={readSitsBesideClose ? styles.tabReadButton : styles.tabReadButtonTrailing}
+        >
+          {({ hovered: readHovered, pressed }) => (
+            <ThemedCircleCheck
+              size={12}
+              uniProps={readHovered || pressed ? foregroundColorMapping : mutedColorMapping}
+            />
+          )}
+        </Pressable>
+      ) : null}
+      {showCloseButton ? (
+        <Pressable
+          {...(closeButtonDragBlockers as object | undefined)}
+          testID={closeButtonTestId}
+          accessibilityRole="button"
+          accessibilityLabel={t("workspace.tabs.menu.close")}
+          disabled={isClosingTab}
+          onPressIn={handleCloseButtonPressIn}
+          onHoverIn={handleCloseButtonHoverIn}
+          onHoverOut={handleCloseButtonHoverOut}
+          onPress={handleCloseButtonPress}
+          // The open tab's check can show the overlay on its own; the close button stays hidden and
+          // out of reach until the chip is hovered.
+          style={showCloseControl ? styles.tabCloseButton : styles.tabCloseButtonHidden}
+        >
+          {({ hovered: closeHovered, pressed }) => {
+            const highlighted = closeHovered || pressed;
+            if (isClosingTab) {
+              return (
+                <ThemedLoadingSpinner
+                  size={12}
+                  uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
+                />
+              );
+            }
+            return (
+              <ThemedX
+                size={12}
+                uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
+              />
+            );
+          }}
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -786,6 +952,7 @@ function TabChip({
   tab,
   isActive,
   unread,
+  readAction,
   isDragging,
   isFocused,
   resolvedTabWidth,
@@ -806,6 +973,7 @@ function TabChip({
   tab: WorkspaceTabDescriptor;
   isActive: boolean;
   unread: boolean;
+  readAction: AgentReadAction;
   isDragging: boolean;
   isFocused: boolean;
   resolvedTabWidth: number;
@@ -835,7 +1003,6 @@ function TabChip({
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
   );
-  const isCompact = useIsCompactFormFactor();
   const [hovered, setHovered] = useState(false);
   // An active tab in a pane that does not have focus stays legible but quiet: it keeps the fill of
   // a hovered chip and the muted label, so only one chip in the window reads as the live one.
@@ -846,17 +1013,6 @@ function TabChip({
     isActiveFocused,
     isFilled: isActive || isHovered,
   });
-  const showCloseControl = showCloseButton && (isHovered || isNative || isCompact || isClosingTab);
-  const closeButtonDragBlockers = isWeb
-    ? ({
-        onPointerDown: (event: { stopPropagation?: () => void }) => {
-          event.stopPropagation?.();
-        },
-        onMouseDown: (event: { stopPropagation?: () => void }) => {
-          event.stopPropagation?.();
-        },
-      } as const)
-    : undefined;
 
   const tabChipStyle = useCallback(
     () => [
@@ -885,26 +1041,6 @@ function TabChip({
   const handleNavigateTab = useCallback(() => {
     onNavigateTab(tab.tabId);
   }, [onNavigateTab, tab.tabId]);
-
-  const handleCloseButtonPressIn = useCallback((event: { stopPropagation?: () => void }) => {
-    event.stopPropagation?.();
-  }, []);
-
-  const handleCloseButtonHoverIn = useCallback(() => {
-    setHoveredCloseTabKey(tab.key);
-  }, [setHoveredCloseTabKey, tab.key]);
-
-  const handleCloseButtonHoverOut = useCallback(() => {
-    setHoveredCloseTabKey((current) => (current === tab.key ? null : current));
-  }, [setHoveredCloseTabKey, tab.key]);
-
-  const handleCloseButtonPress = useCallback(
-    (event: { stopPropagation?: () => void }) => {
-      event.stopPropagation?.();
-      void onCloseTab(tab.tabId);
-    },
-    [onCloseTab, tab.tabId],
-  );
 
   const tabAccessibilityState = useMemo(() => ({ selected: isActive }), [isActive]);
   const testIdentity =
@@ -953,6 +1089,7 @@ function TabChip({
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
                 unread={unread}
+                reserveReadControl={readAction.canMarkRead}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>
@@ -975,47 +1112,20 @@ function TabChip({
           </TooltipContent>
         </Tooltip>
 
-        {showCloseButton ? (
-          <View
-            pointerEvents={showCloseControl ? "box-none" : "none"}
-            style={[
-              styles.tabTrailingOverlay,
-              showCloseControl ? styles.tabTrailingOverlayShown : styles.tabTrailingOverlayHidden,
-            ]}
-          >
-            <TrailingActionScrim backdrop={chipBackdrop} />
-            <Pressable
-              {...(closeButtonDragBlockers as object | undefined)}
-              testID={closeButtonTestId}
-              accessibilityRole="button"
-              accessibilityLabel={t("workspace.tabs.menu.close")}
-              disabled={isClosingTab}
-              onPressIn={handleCloseButtonPressIn}
-              onHoverIn={handleCloseButtonHoverIn}
-              onHoverOut={handleCloseButtonHoverOut}
-              onPress={handleCloseButtonPress}
-              style={styles.tabCloseButton}
-            >
-              {({ hovered: closeHovered, pressed }) => {
-                const highlighted = closeHovered || pressed;
-                if (isClosingTab) {
-                  return (
-                    <ThemedLoadingSpinner
-                      size={12}
-                      uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
-                    />
-                  );
-                }
-                return (
-                  <ThemedX
-                    size={12}
-                    uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
-                  />
-                );
-              }}
-            </Pressable>
-          </View>
-        ) : null}
+        <TabTrailingControls
+          tab={tab}
+          tabLabel={accessibilityLabel}
+          testIdentity={testIdentity}
+          backdrop={chipBackdrop}
+          isActive={isActive}
+          isHovered={isHovered}
+          isClosingTab={isClosingTab}
+          showCloseButton={showCloseButton}
+          closeButtonTestId={closeButtonTestId}
+          readAction={readAction}
+          setHoveredCloseTabKey={setHoveredCloseTabKey}
+          onCloseTab={onCloseTab}
+        />
 
         <ContextMenuContent
           align="start"
@@ -1609,19 +1719,36 @@ function ResolvedDesktopTabChip({
     workspaceId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const readAction = useAgentReadAction({
+    serverId: item.tab.scope?.serverId ?? serverId,
+    agentId: item.tab.target.kind === "agent" ? item.tab.target.agentId : null,
+    unread: item.unread,
+  });
+  const markReadEntries = useMemo(
+    () =>
+      buildMarkReadMenuEntries({
+        action: readAction,
+        label: t("workspace.tabs.menu.markAsRead"),
+        menuTestIDBase: baseResolvedTab.contextMenuTestId,
+      }),
+    [baseResolvedTab.contextMenuTestId, readAction, t],
+  );
   const resolvedTab = useMemo(
     () =>
-      openInViewEntries.length === 0 && markUnreadEntries.length === 0
+      openInViewEntries.length === 0 &&
+      markUnreadEntries.length === 0 &&
+      markReadEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
             menuEntries: [
+              ...markReadEntries,
               ...markUnreadEntries,
               ...openInViewEntries,
               ...baseResolvedTab.menuEntries,
             ],
           },
-    [baseResolvedTab, markUnreadEntries, openInViewEntries],
+    [baseResolvedTab, markReadEntries, markUnreadEntries, openInViewEntries],
   );
 
   const rawTooltipLabel =
@@ -1645,6 +1772,7 @@ function ResolvedDesktopTabChip({
         tab={item.tab}
         isActive={item.isActive}
         unread={item.unread}
+        readAction={readAction}
         isDragging={isDragging}
         isFocused={isFocused}
         resolvedTabWidth={resolvedTabWidth}
@@ -1823,6 +1951,9 @@ const styles = StyleSheet.create((theme) => ({
     zIndex: 2,
     overflow: "hidden",
   },
+  tabTrailingOverlayWide: {
+    width: 68,
+  },
   tabTrailingOverlayShown: {
     opacity: 1,
   },
@@ -1830,6 +1961,39 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0,
   },
   tabCloseButton: {
+    position: "absolute",
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabReadControlSpace: {
+    width: TAB_READ_CONTROL_SPACE,
+    flexShrink: 0,
+  },
+  tabCloseButtonHidden: {
+    position: "absolute",
+    right: 4,
+    width: 18,
+    height: 18,
+    zIndex: 1,
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  tabReadButton: {
+    position: "absolute",
+    right: 24,
+    width: 18,
+    height: 18,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabReadButtonTrailing: {
     position: "absolute",
     right: 4,
     width: 18,

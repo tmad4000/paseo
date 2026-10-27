@@ -151,6 +151,8 @@ import {
   sortTabsByActivity,
   type TabActivityState,
 } from "@/screens/workspace/workspace-tab-activity";
+import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
+import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import {
   resolveWorkspaceExplorerToggleOwner,
   WorkspaceExplorerToggle,
@@ -612,6 +614,11 @@ function MobileWorkspaceTabOption({
     [t],
   );
   const menuTestIDBase = `workspace-tab-menu-${tab.tabId}`;
+  const readAction = useAgentReadAction({
+    serverId: tab.scope?.serverId ?? normalizedServerId,
+    agentId: tab.target.kind === "agent" ? tab.target.agentId : null,
+    unread,
+  });
   const menuEntries = buildWorkspaceTabMenuEntries({
     surface: "mobile",
     tab,
@@ -654,9 +661,10 @@ function MobileWorkspaceTabOption({
         menuTestIDBase={menuTestIDBase}
         presentationLabel={fallbackLabel}
         menuEntries={menuEntries}
+        onMarkRead={readAction.canMarkRead ? readAction.markRead : undefined}
       />
     ),
-    [menuTestIDBase, fallbackLabel, menuEntries],
+    [menuTestIDBase, fallbackLabel, menuEntries, readAction.canMarkRead, readAction.markRead],
   );
 
   const renderPresentation = useCallback(
@@ -2231,12 +2239,19 @@ function WorkspaceScreenContent({
       ).map(({ tab }) => tab),
     [activityByAgentId, tabs],
   );
+  const tabReadPolicy = useTabReadPolicy(allActivityTabs, normalizedServerId);
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
-      reconcileTabActivity(previous, allActivityTabs, activityByAgentId, viewedTabIds),
+      reconcileTabActivity(
+        previous,
+        allActivityTabs,
+        activityByAgentId,
+        viewedTabIds,
+        tabReadPolicy,
+      ),
     );
-  }, [activityByAgentId, allActivityTabs, viewedTabIds]);
+  }, [activityByAgentId, allActivityTabs, tabReadPolicy, viewedTabIds]);
   const unreadTabIds = useMemo(
     () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
     [tabActivity],

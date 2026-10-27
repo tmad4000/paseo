@@ -67,6 +67,7 @@ export interface SeedDaemonClient {
   }>;
   setWorkspacePinned(workspaceId: string, pinned: boolean): Promise<{ pinnedAt: string | null }>;
   clearWorkspaceAttention(workspaceId: string): Promise<void>;
+  markWorkspaceUnread(workspaceId: string): Promise<void>;
   setWorkspaceLabel(input: {
     workspaceId: string;
     label: { name: string; color: "red" };

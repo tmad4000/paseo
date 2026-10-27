@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12305,4 +12305,97 @@ test("durable Stream pages and asks survive manager recreation with bounded wire
     await manager.closeAgent(agent.id);
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+describe("clearAgentAttention as a read", () => {
+  async function liveAgent() {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-manager-read-clear-"));
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: new AgentStorage(join(workdir, "agents"), logger),
+      logger,
+    });
+    const snapshot = await manager.createAgent(
+      { provider: "codex", cwd: workdir, title: "Read clear" },
+      undefined,
+      { workspaceId: undefined },
+    );
+    // getAgent returns a copy; these tests set attention on the live record the manager reads.
+    const agent = (manager as unknown as { agents: Map<string, ManagedAgent> }).agents.get(
+      snapshot.id,
+    )!;
+    return { manager, agent };
+  }
+  const seenAt = new Date("2026-10-27T10:00:00.000Z");
+
+  test("clears finished attention the reader saw", async () => {
+    const { manager, agent } = await liveAgent();
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "finished",
+      attentionTimestamp: seenAt,
+    };
+    await manager.clearAgentAttention(agent.id, { read: { seenAttentionAt: seenAt } });
+    expect(agent.attention).toEqual({ requiresAttention: false });
+  });
+
+  test("keeps permission attention that replaced what the reader saw", async () => {
+    const { manager, agent } = await liveAgent();
+    const permission = {
+      requiresAttention: true as const,
+      attentionReason: "permission" as const,
+      attentionTimestamp: new Date("2026-10-27T09:00:00.000Z"),
+    };
+    agent.attention = permission;
+    await manager.clearAgentAttention(agent.id, { read: { seenAttentionAt: seenAt } });
+    expect(agent.attention).toEqual(permission);
+  });
+
+  test("keeps attention while a permission is pending", async () => {
+    const { manager, agent } = await liveAgent();
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "finished",
+      attentionTimestamp: seenAt,
+    };
+    agent.pendingPermissions.set("perm-1", {
+      id: "perm-1",
+      provider: "codex",
+      name: "Bash",
+      kind: "tool",
+      input: {},
+    });
+    await manager.clearAgentAttention(agent.id, { read: {} });
+    expect(agent.attention.requiresAttention).toBe(true);
+  });
+
+  test("keeps attention raised after the reader saw it", async () => {
+    const { manager, agent } = await liveAgent();
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "error",
+      attentionTimestamp: new Date(seenAt.getTime() + 1),
+    };
+    await manager.clearAgentAttention(agent.id, { read: { seenAttentionAt: seenAt } });
+    expect(agent.attention.requiresAttention).toBe(true);
+  });
+
+  test("an unparseable seen time clears nothing, and a clear without read stays unconditional", async () => {
+    const { manager, agent } = await liveAgent();
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "finished",
+      attentionTimestamp: seenAt,
+    };
+    await manager.clearAgentAttention(agent.id, { read: { seenAttentionAt: new Date("nope") } });
+    expect(agent.attention.requiresAttention).toBe(true);
+
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "permission",
+      attentionTimestamp: seenAt,
+    };
+    await manager.clearAgentAttention(agent.id);
+    expect(agent.attention).toEqual({ requiresAttention: false });
+  });
 });

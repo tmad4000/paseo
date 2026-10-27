@@ -14,6 +14,7 @@ import {
 } from "@/screens/workspace/workspace-tab-activity";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { useSessionStore } from "@/stores/session-store";
+import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
 import { collectAllPanes } from "@/stores/workspace-layout-actions";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import {
@@ -105,12 +106,13 @@ function ViewScreenContent({ viewId }: { viewId: string }) {
         .map((pane) => pane.focusedTabId as string),
     );
   }, [view]);
+  const tabReadPolicy = useTabReadPolicy(descriptors, null);
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
-      reconcileTabActivity(previous, descriptors, activityByAgentId, viewedTabIds),
+      reconcileTabActivity(previous, descriptors, activityByAgentId, viewedTabIds, tabReadPolicy),
     );
-  }, [activityByAgentId, descriptors, viewedTabIds]);
+  }, [activityByAgentId, descriptors, tabReadPolicy, viewedTabIds]);
   const unreadTabIds = useMemo(
     () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
     [tabActivity],

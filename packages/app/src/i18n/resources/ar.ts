@@ -1063,6 +1063,8 @@ export const ar: TranslationResources = {
         openFor: "فتح القائمة لـ{{label}}",
         copyResumeCommand: "نسخ أمر السيرة الذاتية",
         copyAgentId: "نسخ معرف الوكيل",
+        markAsRead: "تعليم كمقروء",
+        markAsReadNamed: "تعليم {{name}} كمقروء",
         markAsUnread: "تعليم كغير مقروء",
         copyTerminalId: "نسخ معرف المحطة",
         copyFilePath: "Copy file path",
@@ -1777,6 +1779,8 @@ export const ar: TranslationResources = {
         pending: "قيد الانتظار: {{count}}",
       },
       actions: {
+        markAsRead: "تعليم كمقروء",
+        markAsReadNamed: "تعليم {{name}} كمقروء",
         menu: "إجراءات Workspace",
         newWorkspace: "مساحة عمل جديدة",
         showMore: "عرض المزيد",
@@ -2773,6 +2777,11 @@ export const ar: TranslationResources = {
         label: "التمرير Terminal",
         description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",
         accessibilityLabel: "خطوط التمرير Terminal",
+      },
+      markReadOnOpen: {
+        section: "حالة القراءة",
+        label: "تعليم المحادثات كمقروءة عند فتحها",
+        description: "عند الإيقاف، تبقى المحادثة غير مقروءة حتى تعلّمها كمقروءة أو ترسل إليها رسالة",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

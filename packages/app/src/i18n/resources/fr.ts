@@ -1077,6 +1077,8 @@ export const fr: TranslationResources = {
         openFor: "Ouvrir le menu pour{{label}}",
         copyResumeCommand: "Copier la commande de reprise",
         copyAgentId: "Copier l'identifiant de l'agent",
+        markAsRead: "Marquer comme lu",
+        markAsReadNamed: "Marquer {{name}} comme lu",
         markAsUnread: "Marquer comme non lu",
         copyTerminalId: "Copier l'identifiant du terminal",
         copyFilePath: "Copy file path",
@@ -1821,6 +1823,8 @@ export const fr: TranslationResources = {
         pending: "En attente : {{count}}",
       },
       actions: {
+        markAsRead: "Marquer comme lu",
+        markAsReadNamed: "Marquer {{name}} comme lu",
         menu: "ActionsWorkspace",
         newWorkspace: "Nouvel espace de travail",
         showMore: "Afficher plus",
@@ -2840,6 +2844,12 @@ export const fr: TranslationResources = {
         label: "DéfilementTerminal",
         description: "Lignes conservées dans le tampon du terminal intégré",
         accessibilityLabel: "Lignes de défilementTerminal",
+      },
+      markReadOnOpen: {
+        section: "Statut de lecture",
+        label: "Marquer les discussions comme lues à l'ouverture",
+        description:
+          "Désactivé, une discussion reste non lue jusqu'à ce que vous la marquiez comme lue ou lui envoyiez un message",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

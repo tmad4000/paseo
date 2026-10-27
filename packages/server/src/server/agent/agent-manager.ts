@@ -411,6 +411,27 @@ export type AttentionState =
       attentionTimestamp: Date;
     };
 
+export interface ClearAgentAttentionOptions {
+  /** A user's read rather than an internal clear; see `isReadClearable`. */
+  read?: { seenAttentionAt?: Date };
+}
+
+/**
+ * A read answers nothing: it leaves a pending permission's attention in place, and it only
+ * covers attention raised at or before the time the reader saw.
+ */
+function isReadClearable(
+  agent: Pick<ManagedAgentBase, "attention" | "pendingPermissions">,
+  read: { seenAttentionAt?: Date },
+): boolean {
+  if (agent.pendingPermissions.size > 0) return false;
+  const { attention } = agent;
+  if (!attention.requiresAttention) return true;
+  if (attention.attentionReason === "permission") return false;
+  const seen = read.seenAttentionAt?.getTime();
+  return seen === undefined || attention.attentionTimestamp.getTime() <= seen;
+}
+
 function resolveInitialAttention(input: AttentionState | undefined): AttentionState {
   if (input == null || !input.requiresAttention) {
     return { requiresAttention: false };
@@ -2284,8 +2305,11 @@ export class AgentManager {
     this.emitState(agent);
   }
 
-  async clearAgentAttention(agentId: string): Promise<void> {
+  async clearAgentAttention(agentId: string, options?: ClearAgentAttentionOptions): Promise<void> {
     const agent = this.requireAgent(agentId);
+    if (options?.read && !isReadClearable(agent, options.read)) {
+      return;
+    }
     if (agent.attention.requiresAttention) {
       agent.attention = { requiresAttention: false };
       await this.persistSnapshot(agent);

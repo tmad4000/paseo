@@ -7,6 +7,7 @@ import {
   seedMockAgentWorkspace,
   type MockAgentWorkspace,
 } from "../support/helpers/mock-agent";
+import { enableReadOnOpen } from "../support/helpers/read-on-open";
 import { getServerId } from "../support/helpers/server-id";
 import { closeMobileAgentSidebar, openMobileAgentSidebar } from "../support/helpers/sidebar";
 
@@ -201,6 +202,7 @@ test("manual unread survives departure and clears on reopening without changing 
   page,
   workspaces,
 }) => {
+  await enableReadOnOpen(page);
   await gotoAppShell(page);
   await openWorkspace(page, workspaces.other.workspaceId);
   await markBackgroundWorkspaceAndReopen(page, workspaces.subject.workspaceId);
@@ -214,6 +216,7 @@ test("clicking a multi-agent workspace reveals and clears its marked agent", asy
   page,
   workspaces,
 }) => {
+  await enableReadOnOpen(page);
   await openAgentRoute(page, workspaces.subject);
   await expectSelectedAgent(page, workspaces.subject.agentId);
   await openWorkspace(page, workspaces.other.workspaceId);
@@ -226,11 +229,237 @@ test("manual unread survives leaving the current workspace on compact layout", a
   page,
   workspaces,
 }) => {
+  await enableReadOnOpen(page);
   await openCompactWorkspace(page, workspaces.subject);
   await leaveMarkedWorkspaceAndReadOnCompact(page, workspaces);
   await leaveMarkedWorkspaceAndReopenOnCompact(page, workspaces);
   await markUnreadThenResumeChat(page, workspaces.subject.workspaceId);
   await completeTurnAndLeaveOnCompact(page, workspaces);
+});
+
+test("by default a chat stays unread until its sidebar or tab check marks it read", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+
+  await test.step("opening, focusing the composer and leaving keep it unread", async () => {
+    await markAsUnread(page, subject.workspaceId);
+    await openWorkspace(page, subject.workspaceId);
+    await expectSelectedAgent(page, subject.agentId);
+    await page.getByRole("textbox", { name: "Message agent..." }).click();
+    await expectStatus(page, subject.workspaceId, "attention");
+    await openWorkspace(page, other.workspaceId);
+    await expectStatus(page, subject.workspaceId, "attention");
+  });
+
+  await test.step("the sidebar row check marks it read", async () => {
+    await workspaceRow(page, subject.workspaceId).hover();
+    const check = page.getByTestId(
+      `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
+    );
+    // Like the row's kebab, the check is a labelled control inside the row's own button on web.
+    await expect(check).toHaveAttribute("aria-label", "Mark main as read");
+    await page.screenshot({ path: "test-results/explicit-read-sidebar-check.png" });
+    await check.click();
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(check).toHaveCount(0);
+    // The check reads the row in place; it does not open the workspace.
+    await expect(page).toHaveURL(new RegExp(`/workspace/${other.workspaceId}`));
+  });
+
+  await test.step("the open tab shows a check that marks it read", async () => {
+    await markAsUnread(page, subject.workspaceId);
+    await openWorkspace(page, subject.workspaceId);
+    const tabCheck = page.getByTestId(`workspace-tab-mark-as-read-agent_${subject.agentId}`);
+    await expect(tabCheck).toBeVisible();
+    await expect(tabCheck).toHaveAccessibleName(/^Mark .*Unread subject.* as read$/);
+    await page.screenshot({ path: "test-results/explicit-read-tab-check.png" });
+    await tabCheck.click();
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(tabCheck).toHaveCount(0);
+  });
+});
+
+function agentTab(page: Page, agentId: string) {
+  return page.getByTestId(`workspace-tab-agent_${agentId}`).first();
+}
+
+function tabReadCheck(page: Page, agentId: string) {
+  return page.getByTestId(`workspace-tab-mark-as-read-agent_${agentId}`);
+}
+
+async function finishRealTurn(workspace: MockAgentWorkspace, prompt: string) {
+  await workspace.client.sendAgentMessage(workspace.agentId, prompt);
+  await workspace.client.waitForFinish(workspace.agentId, 20_000);
+}
+
+/** The open tab's check must sit clear of its title, not over it. */
+async function expectCheckClearOfTitle(page: Page, agentId: string, title: string) {
+  const titleBox = await agentTab(page, agentId).getByText(title, { exact: true }).boundingBox();
+  const checkBox = await tabReadCheck(page, agentId).boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(checkBox).not.toBeNull();
+  expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(checkBox!.x);
+}
+
+test("a real finished turn stays unread across leaving and a reload until its tab check reads it", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+
+  await test.step("the turn finishes while another workspace is open", async () => {
+    await finishRealTurn(subject, "Finish a turn in the background.");
+    await expectStatus(page, subject.workspaceId, "attention");
+  });
+
+  await test.step("a cold reload still shows the tab as unread", async () => {
+    await page.reload();
+    await openWorkspace(page, subject.workspaceId);
+    await expectSelectedAgent(page, subject.agentId);
+    await expect(
+      agentTab(page, subject.agentId).getByTestId(/^workspace-tab-unread-/),
+    ).toBeVisible();
+    await expectStatus(page, subject.workspaceId, "attention");
+    await expectCheckClearOfTitle(page, subject.agentId, "Unread subject");
+    await page.screenshot({ path: "test-results/explicit-read-tab-check-1x.png" });
+  });
+
+  await test.step("the tab check reads it, and newer activity makes it unread again", async () => {
+    await tabReadCheck(page, subject.agentId).click();
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(agentTab(page, subject.agentId).getByTestId(/^workspace-tab-unread-/)).toHaveCount(
+      0,
+    );
+    await finishRealTurn(subject, "Finish one more turn while open.");
+    await expectStatus(page, subject.workspaceId, "attention");
+    await expect(
+      agentTab(page, subject.agentId).getByTestId(/^workspace-tab-unread-/),
+    ).toBeVisible();
+  });
+});
+
+test("sending a prompt reads the chat with a bounded read clear", async ({ page, workspaces }) => {
+  const { subject, other } = workspaces;
+  const clears: Array<Record<string, unknown>> = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const envelope = JSON.parse(payload.toString());
+      if (envelope.type === "session" && envelope.message?.type === "clear_agent_attention") {
+        clears.push(envelope.message);
+      }
+    }),
+  );
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+  await finishRealTurn(subject, "Finish before the reply.");
+  await openWorkspace(page, subject.workspaceId);
+  await expectStatus(page, subject.workspaceId, "attention");
+  // Opening alone sent no read.
+  expect(clears).toEqual([]);
+
+  const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
+  await composer.fill("Replying reads this chat.");
+  await composer.press("Enter");
+  await expect
+    .poll(() => clears.find((message) => message.agentId === subject.agentId))
+    .toMatchObject({ read: { seenAttentionAt: expect.any(String) } });
+});
+
+test("the sidebar check is reachable and usable from the keyboard", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+  // Marked through the host, not the row's menu: a used kebab menu leaves the row revealed (a
+  // pre-existing hover quirk), and this test needs a row that is neither hovered nor focused.
+  await subject.client.markWorkspaceUnread(subject.workspaceId);
+  await expectStatus(page, subject.workspaceId, "attention");
+  await page.getByRole("textbox", { name: "Message agent..." }).first().click();
+  await page.mouse.move(0, 0);
+
+  const check = page.getByTestId(
+    `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
+  );
+  await expect(check).toHaveCount(0);
+  // A keypress first, so the row's focus counts as keyboard focus (:focus-visible).
+  await page.keyboard.press("Shift");
+  await workspaceRow(page, subject.workspaceId).focus();
+  await expect(check).toBeVisible();
+  for (let presses = 0; presses < 4; presses += 1) {
+    if (await check.evaluate((node) => node === document.activeElement)) break;
+    await page.keyboard.press("Tab");
+  }
+  await expect(check).toBeFocused();
+  await expect(check).toHaveAttribute("aria-label", "Mark main as read");
+  await page.keyboard.press("Enter");
+  await expectStatus(page, subject.workspaceId, "done");
+});
+
+test("on a touch layout the sidebar check shows without hover and is touch sized", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await openCompactWorkspace(page, other);
+  await markAsUnread(page, subject.workspaceId);
+  const check = page.getByTestId(
+    `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
+  );
+  await page.mouse.move(0, 0);
+  await expect(check).toBeVisible();
+  const box = await check.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(32);
+  expect(box!.height).toBeGreaterThanOrEqual(32);
+  // The row keeps its kebab beside the check.
+  const kebab = page.getByTestId(`sidebar-workspace-kebab-${getServerId()}:${subject.workspaceId}`);
+  await expect(kebab).toBeVisible();
+  const kebabBox = await kebab.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(kebabBox!.x + 1);
+  await expect(page.getByText("Workspace actions", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/explicit-read-sidebar-check-compact.png" });
+  await check.click();
+  await expectStatus(page, subject.workspaceId, "done");
+});
+
+test.describe("at 2x", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("the open tab's check stays clear of its title", async ({ page, workspaces }) => {
+    const { subject, other } = workspaces;
+    await gotoAppShell(page);
+    await openWorkspace(page, other.workspaceId);
+    await markAsUnread(page, subject.workspaceId);
+    await openWorkspace(page, subject.workspaceId);
+    await expect(tabReadCheck(page, subject.agentId)).toBeVisible();
+    await expectCheckClearOfTitle(page, subject.agentId, "Unread subject");
+    await page.screenshot({ path: "test-results/explicit-read-tab-check-2x.png" });
+  });
+});
+
+test("the read-on-open setting restores focus-driven reads", async ({ page, workspaces }) => {
+  const { subject, other } = workspaces;
+  await gotoAppShell(page);
+  await page.goto("/settings/chat");
+  const setting = page.getByRole("switch", { name: "Mark chats read when opened" });
+  await expect(setting).not.toBeChecked();
+  await setting.click();
+  await expect(setting).toBeChecked();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("@paseo:app-settings")))
+    .toContain('"markReadOnOpen":true');
+  await gotoAppShell(page);
+  await openWorkspace(page, other.workspaceId);
+  await markAsUnread(page, subject.workspaceId);
+  await openWorkspace(page, subject.workspaceId);
+  await expectStatus(page, subject.workspaceId, "done");
 });
 
 async function setWorkspaceManualStatus(page: Page, workspaceId: string, status: string) {
@@ -344,6 +573,8 @@ test("inline review names exact sessions, preserves collapse and separates unrea
   page,
   workspaces,
 }) => {
+  // Its final steps read a session by opening it, which needs the read-on-open setting.
+  await enableReadOnOpen(page);
   const { subject, other } = workspaces;
   const sibling = await addFinishedAgent(subject);
   await subject.client.updateAgent(subject.agentId, { labels: { "paseo.review-status": "ready" } });
@@ -382,6 +613,26 @@ test("inline review names exact sessions, preserves collapse and separates unrea
   await page.getByTestId("manual-status-approved").click();
   await expect(subjectRow).not.toBeVisible();
   await expect(siblingRow).toBeVisible();
+});
+
+test("by default an inline review session stays Unread after opening until its menu reads it", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  await subject.client.updateAgent(subject.agentId, { labels: { "paseo.review-status": "ready" } });
+  await subject.client.markWorkspaceUnread(subject.workspaceId);
+  await openAgentRoute(page, other);
+  const subjectRow = page.getByTestId(`workspace-review-agent-${subject.agentId}`);
+  await expect(subjectRow).toContainText("Ready for review · Unread");
+  await subjectRow.click();
+  await expectSelectedAgent(page, subject.agentId);
+  await expect(subjectRow).toContainText("Ready for review · Unread");
+  await page.getByTestId(`workspace-review-actions-${subject.agentId}`).click();
+  await page.getByTestId(`review-${subject.agentId}-mark-as-read`).click();
+  await expect(subjectRow).toContainText("Ready for review");
+  // The session's title is "Unread subject", so match the meta text, not the bare word.
+  await expect(subjectRow).not.toContainText("Ready for review · Unread");
 });
 
 test("compact inline review bounds its preview and opens the exact chat from its menu", async ({

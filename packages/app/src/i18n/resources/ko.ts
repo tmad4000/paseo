@@ -1068,6 +1068,8 @@ export const ko: TranslationResources = {
         openFor: "{{label}}의 메뉴 열기",
         copyResumeCommand: "재개 명령 복사",
         copyAgentId: "에이전트 ID 복사",
+        markAsRead: "읽음으로 표시",
+        markAsReadNamed: "{{name}} 읽음으로 표시",
         markAsUnread: "읽지 않음으로 표시",
         copyTerminalId: "터미널 ID 복사",
         viewArtifacts: "산출물 보기",
@@ -1788,6 +1790,8 @@ export const ko: TranslationResources = {
         pending: "대기 중: {{count}}개",
       },
       actions: {
+        markAsRead: "읽음으로 표시",
+        markAsReadNamed: "{{name}} 읽음으로 표시",
         menu: "워크스페이스 작업",
         newWorkspace: "새 워크스페이스",
         showMore: "더 보기",
@@ -2789,6 +2793,12 @@ export const ko: TranslationResources = {
         label: "터미널 스크롤백",
         description: "내장 터미널 버퍼에 보관되는 줄 수",
         accessibilityLabel: "터미널 스크롤백 줄 수",
+      },
+      markReadOnOpen: {
+        section: "읽음 상태",
+        label: "채팅을 열면 읽음으로 표시",
+        description:
+          "끄면 읽음으로 표시하거나 메시지를 보낼 때까지 채팅이 읽지 않음 상태로 유지됩니다",
       },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",

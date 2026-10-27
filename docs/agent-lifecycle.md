@@ -187,7 +187,7 @@ Running provider-native subagents contribute `running` to the workspace owned by
 
 A finished workspace can be marked unread after it has been reviewed. The daemon restores
 `finished` attention on its newest eligible workspace-root agent without sending a new completion
-notification. Opening the workspace clears that attention through the normal focus flow.
+notification. It stays unread until the user reads it again (see [Reading](#reading)).
 
 Attention is set by the agent finishing or failing and cleared by the client's
 `workspace.clear_attention`, which fires when the user reads the chat. Loading an agent's runtime is
@@ -195,6 +195,35 @@ neither, so resuming carries the stored attention and the stored last-activity t
 untouched. Forging either makes a background resume look like the user read a workspace and like the
 agent worked in it just now, which rewrites the sidebar timestamp permanently — persisted
 `updatedAt` is what workspace `statusEnteredAt` is re-derived from on the next daemon start.
+
+### Reading
+
+Reading is explicit by default. Opening, focusing or leaving a chat leaves it unread; the user
+reads it with the check on its sidebar row or tab (also "Mark as read" in their menus, inline
+Review session menus and the phone tab switcher), or by sending it a prompt. Settings → Chat → "Mark chats read when opened"
+restores the old focus-driven reads; the choice is per device (`AppSettings.markReadOnOpen`).
+
+- Reading clears `finished` and `error` attention. A chat waiting on a permission is answered,
+  not read: it offers no read check, a workspace read leaves its tab alone, and the host keeps its
+  attention.
+- Every read the app sends is `clear_agent_attention` with `read: { seenAttentionAt }`, the
+  attention time this device showed. The host then skips agents with permission attention or
+  pending permissions, and attention raised after `seenAttentionAt`, so a permission or a new
+  finish that races the click stays unread. Older hosts ignore `read` and clear unconditionally;
+  the app's own permission guard still applies there. The sidebar's workspace read
+  (`workspace.clear_attention`) filters permission on the host but has no seen-time bound.
+- A tab's dot shows host attention that is still readable, plus activity this strip saw land off
+  screen. Host attention is persisted, so the dot survives reloads, other devices and strips that
+  were not mounted. The app marks a tab read locally only after the host clear succeeds; a failed
+  read leaves both the dot and the sidebar unread. Local read marks record the activity time read
+  through (`stores/agent-read-marks-store.ts`), and newer activity raises the dot again.
+- Each check is labelled with what it reads ("Mark ‹name› as read"). The sidebar check appears on
+  hover, on keyboard focus within the row, and always on touch, where it is a 44pt target. On web
+  it has no button role because the row is already a `<button>`, the same as the row's kebab.
+- The policy lives in `shouldClearAgentAttention` (`packages/app/src/utils/agent-attention.ts`),
+  `reconcileTabActivity` (`packages/app/src/screens/workspace/workspace-tab-activity.ts`),
+  `workspace/mark-read.ts`, and the host's `isReadClearable`
+  (`packages/server/src/server/agent/agent-manager.ts`).
 
 ### Manual input and review status
 

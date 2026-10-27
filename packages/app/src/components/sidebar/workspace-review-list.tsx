@@ -24,6 +24,7 @@ import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { collectAllTabs, findPaneById } from "@/stores/workspace-layout-actions";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
+import { buildMarkReadMenuEntries, useAgentReadAction } from "@/workspace/use-agent-read-action";
 import { useSidebarModel } from "./sidebar-model";
 import { workspaceReviewAgents } from "./workspace-review-model";
 
@@ -161,6 +162,17 @@ function ReviewRow({
     workspaceId,
     menuTestIDBase: `review-${agent.id}`,
   });
+  // Opening a review row does not read it by default, so its menus offer the explicit read.
+  const readAction = useAgentReadAction({ serverId, agentId: agent.id, unread: false });
+  const readEntries = useMemo(
+    () =>
+      buildMarkReadMenuEntries({
+        action: readAction,
+        label: t("workspace.tabs.menu.markAsRead"),
+        menuTestIDBase: `review-${agent.id}`,
+      }),
+    [agent.id, readAction, t],
+  );
   const open = useCallback(() => {
     onNavigate?.();
     navigateToAgent({ serverId, workspaceId, agentId: agent.id });
@@ -168,7 +180,7 @@ function ReviewRow({
   const menuItems = (
     <>
       <AgentStatusMenuTrigger />
-      {unreadEntries.map((entry) =>
+      {[...readEntries, ...unreadEntries].map((entry) =>
         entry.kind === "item" ? (
           <ContextMenuItem key={entry.key} onSelect={entry.onSelect} testID={entry.testID}>
             {entry.label}

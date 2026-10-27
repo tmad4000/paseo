@@ -1079,6 +1079,8 @@ export const es: TranslationResources = {
         openFor: "Menú abierto para{{label}}",
         copyResumeCommand: "Copiar comando de reanudación",
         copyAgentId: "Copiar ID del agente",
+        markAsRead: "Marcar como leído",
+        markAsReadNamed: "Marcar {{name}} como leído",
         markAsUnread: "Marcar como no leído",
         copyTerminalId: "Copiar ID del terminal",
         copyFilePath: "Copy file path",
@@ -1823,6 +1825,8 @@ export const es: TranslationResources = {
         pending: "Pendientes: {{count}}",
       },
       actions: {
+        markAsRead: "Marcar como leído",
+        markAsReadNamed: "Marcar {{name}} como leído",
         menu: "AccionesWorkspace",
         newWorkspace: "Nuevo espacio de trabajo",
         showMore: "Mostrar más",
@@ -2836,6 +2840,12 @@ export const es: TranslationResources = {
         label: "Historial de terminal",
         description: "Líneas mantenidas en el búfer de terminal incorporado",
         accessibilityLabel: "Líneas del historial de terminal",
+      },
+      markReadOnOpen: {
+        section: "Estado de lectura",
+        label: "Marcar chats como leídos al abrirlos",
+        description:
+          "Si está desactivado, un chat sigue sin leer hasta que lo marques como leído o le envíes un mensaje",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

@@ -5,6 +5,7 @@ import { i18n } from "@/i18n/i18next";
 import { useHostFeature } from "@/runtime/host-features";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
+import { isAwaitingPermission, markAgentReadLocally } from "@/workspace/mark-read";
 import { markWorkspaceUnread } from "@/workspace/mark-unread";
 
 export interface WorkspaceReadStateController {
@@ -69,6 +70,14 @@ export function useWorkspaceReadState({
       throw new Error(i18n.t("workspace.terminal.hostDisconnected"));
     }
     await client.clearWorkspaceAttention(workspaceId);
+    // The workspace's tab dots are part of what the user just read, except a chat waiting on a
+    // permission: the host kept its attention, and its tab keeps showing activity until answered.
+    const agents = useSessionStore.getState().sessions[serverId]?.agents;
+    for (const agent of agents?.values() ?? []) {
+      if (!agent.archivedAt && agent.workspaceId === workspaceId && !isAwaitingPermission(agent)) {
+        markAgentReadLocally({ serverId, agentId: agent.id });
+      }
+    }
   }, [hasClearableAttention, serverId, workspaceId]);
 
   const markUnread = useCallback(async () => {
