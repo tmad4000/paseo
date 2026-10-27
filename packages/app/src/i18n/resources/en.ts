@@ -541,6 +541,8 @@ export const en = {
         jumpAnswerLabel: "Jump to the answer in Chat",
         markSeen: "Mark seen",
         markSeenFailed: "Could not mark the answer seen",
+        stopTracking: "Stop tracking",
+        stopTrackingFailed: "Could not stop tracking this question",
         collapse: "Collapse answers",
         expand: "Show answers",
         dismiss: "Hide until a new answer arrives",

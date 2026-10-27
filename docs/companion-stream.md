@@ -71,22 +71,30 @@ keeps one entry. Older hosts get the original unanchored record and no answers p
 
 The host attaches the answer (`qa-answers.ts`): the final response after the question, meaning
 assistant messages after the last tool call and before your next message. Narration before a
-tool call is progress, not an answer. It attaches only once that span is closed: the turn
-settled, or you sent another message. A question tracked after its reply arrived is answered
-immediately. An attached answer is never replaced; Chat holds the full reply, Stream keeps
-4,000 characters plus `answerAnchor`. Answers attach for chats whose timeline is loaded on the
-host. A reply that says "I'll check" is still the reply, so read it before marking it seen.
+tool call is progress, not an answer, and `[System Error]` rows from a failed turn never are.
+It attaches only once that span is closed: a completed turn, or another message from you. A
+failed or canceled turn leaves the question waiting. A question tracked after its reply arrived
+is answered immediately when the agent is idle. An attached answer is never replaced; Chat holds
+the full reply, Stream keeps 4,000 characters plus `answerAnchor`. Answers attach for chats whose
+timeline is loaded on the host. A reply that says "I'll check" is still the reply, so read it
+before marking it seen.
+
+A daemon restart or history reload starts a new timeline epoch and renumbers rows. A waiting
+question is found again by its provider message id (`questionMessageId`) and re-anchored; a
+provider without message ids leaves it waiting, and **Stop tracking** closes it. Q&A records
+saved without an anchor (before this feature, or from a message with no timeline position yet)
+stay in Stream and never ask for attention.
 
 Seen is your own review state on the entry: `status: "reviewed"` through the existing
 `update_status` action. Arrival leaves it unseen, and an unanswered question cannot be marked
-seen. The wire snapshot carries up to 20 older waiting or unseen questions beyond its newest 50
+seen. **Stop tracking** sets `done`, and an answer never reopens it. The wire snapshot carries up to 20 older waiting or unseen questions beyond its newest 50
 entries, so turn outcomes do not push them out of Chat.
 
 Chat shows a floating **Your questions** pane over its top edge, below the Chat/Stream switcher
 and clear of the composer. Rows are **New answer** (newest first), then **Waiting for answer**.
 **Question** and **Answer** scroll Chat to the anchored message, loading its history window when
 needed. A different timeline epoch reports that the message is no longer loaded. **Mark seen**
-waits for the host; the row leaves only when the updated snapshot arrives, and a failed save
+(new answers) and **Stop tracking** (waiting questions) wait for the host; the row leaves only when the updated snapshot arrives, and a failed save
 stays visible. The header collapses the list (compact starts collapsed). **×** hides the pane
 until an answer arrives that was not showing when you hid it. Seen and resolved entries stay in
 Stream's Q&A filter.

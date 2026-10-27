@@ -6,7 +6,7 @@ import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import type { TimelinePosition } from "@/types/stream";
-import { trackedQuestionEntryId } from "./answers-model";
+import { trackedQuestionEntryId, type TrackedAnswerReview } from "./answers-model";
 import { TrackedAnswersPane } from "./answers-pane";
 
 type TrackQuestionHandler = (
@@ -86,18 +86,13 @@ export function ChatTrackedAnswers({
       NO_ENTRIES
     );
   });
-  const markSeen = useCallback(
-    async (entryId: string) => {
+  const setStatus = useCallback(
+    async (entryId: string, status: TrackedAnswerReview) => {
       if (!client) throw new Error("Not connected");
-      await client.updateStreamEntry({
-        agentId,
-        action: "update_status",
-        entryId,
-        status: "reviewed",
-      });
+      await client.updateStreamEntry({ agentId, action: "update_status", entryId, status });
     },
     [agentId, client],
   );
   if (!supported || readOnly) return null;
-  return <TrackedAnswersPane entries={entries} onJump={onJump} onMarkSeen={markSeen} />;
+  return <TrackedAnswersPane entries={entries} onJump={onJump} onSetStatus={setStatus} />;
 }

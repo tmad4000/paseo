@@ -551,6 +551,8 @@ export const es: TranslationResources = {
         jumpAnswerLabel: "Ir a la respuesta en el chat",
         markSeen: "Marcar como vista",
         markSeenFailed: "No se pudo marcar la respuesta como vista",
+        stopTracking: "Dejar de seguir",
+        stopTrackingFailed: "No se pudo dejar de seguir esta pregunta",
         collapse: "Contraer respuestas",
         expand: "Mostrar respuestas",
         dismiss: "Ocultar hasta que llegue una respuesta nueva",

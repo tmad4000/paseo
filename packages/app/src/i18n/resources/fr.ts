@@ -553,6 +553,8 @@ export const fr: TranslationResources = {
         jumpAnswerLabel: "Aller à la réponse dans le chat",
         markSeen: "Marquer comme vue",
         markSeenFailed: "Impossible de marquer la réponse comme vue",
+        stopTracking: "Ne plus suivre",
+        stopTrackingFailed: "Impossible d'arrêter de suivre cette question",
         collapse: "Réduire les réponses",
         expand: "Afficher les réponses",
         dismiss: "Masquer jusqu'à une nouvelle réponse",

@@ -547,6 +547,8 @@ export const ru: TranslationResources = {
         jumpAnswerLabel: "Перейти к ответу в чате",
         markSeen: "Отметить просмотренным",
         markSeenFailed: "Не удалось отметить ответ просмотренным",
+        stopTracking: "Не отслеживать",
+        stopTrackingFailed: "Не удалось прекратить отслеживание вопроса",
         collapse: "Свернуть ответы",
         expand: "Показать ответы",
         dismiss: "Скрыть до нового ответа",

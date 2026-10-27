@@ -2545,7 +2545,7 @@ export class AgentManager {
     let next = applyStreamEntryUpdate(entries, input);
     if (input.action === "add_q_and_a" && liveAgent) {
       // A question tracked after its reply arrived is answered now, not at the next turn.
-      next = this.attachTrackedAnswers(liveAgent.id, next, liveAgent.lifecycle !== "running");
+      next = this.attachTrackedAnswers(liveAgent.id, next, liveAgent.lifecycle === "idle");
     }
 
     if (liveAgent) {
@@ -4976,7 +4976,9 @@ export class AgentManager {
   private collectCompanionEvent(agent: ManagedAgent, event: AgentStreamEvent): void {
     const previous = agent.companionEntries ?? [];
     let next = this.companionCollector.observe(agent.id, previous, event, new Date().toISOString());
-    if (isTurnTerminalEvent(event)) next = this.attachTrackedAnswers(agent.id, next, true);
+    // A failed or canceled turn does not settle a reply; the next message or completed turn does.
+    if (isTurnTerminalEvent(event))
+      next = this.attachTrackedAnswers(agent.id, next, event.type === "turn_completed");
     if (next !== previous) {
       agent.companionEntries = next;
       this.emitState(agent);

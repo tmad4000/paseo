@@ -546,6 +546,8 @@ export const ko: TranslationResources = {
         jumpAnswerLabel: "채팅에서 답변으로 이동",
         markSeen: "확인함으로 표시",
         markSeenFailed: "답변을 확인함으로 표시하지 못했습니다",
+        stopTracking: "추적 중지",
+        stopTrackingFailed: "이 질문의 추적을 중지하지 못했습니다",
         collapse: "답변 접기",
         expand: "답변 보기",
         dismiss: "새 답변이 올 때까지 숨기기",

@@ -12,14 +12,15 @@ import {
   selectTrackedAnswers,
   trackedAnswersSignature,
   type TrackedAnswer,
+  type TrackedAnswerReview,
 } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
 
 interface TrackedAnswersPaneProps {
   entries: readonly CompanionEntry[];
   onJump: (anchor: TimelineAnchor) => void;
-  /** Resolves once the host has durably recorded the answer as seen. */
-  onMarkSeen: (entryId: string) => Promise<void>;
+  /** Resolves once the host has durably recorded the review: reviewed is seen, done stops tracking. */
+  onSetStatus: (entryId: string, status: TrackedAnswerReview) => Promise<void>;
 }
 
 /**
@@ -30,7 +31,7 @@ interface TrackedAnswersPaneProps {
 export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   entries,
   onJump,
-  onMarkSeen,
+  onSetStatus,
 }: TrackedAnswersPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -103,7 +104,7 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
                 item={item}
                 first={index === 0}
                 onJump={onJump}
-                onMarkSeen={onMarkSeen}
+                onSetStatus={onSetStatus}
               />
             ))}
           </ScrollView>
@@ -117,12 +118,12 @@ const TrackedAnswerRow = memo(function TrackedAnswerRow({
   item,
   first,
   onJump,
-  onMarkSeen,
+  onSetStatus,
 }: {
   item: TrackedAnswer;
   first: boolean;
   onJump: (anchor: TimelineAnchor) => void;
-  onMarkSeen: (entryId: string) => Promise<void>;
+  onSetStatus: (entryId: string, status: TrackedAnswerReview) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const { entry, attention } = item;
@@ -137,13 +138,23 @@ const TrackedAnswerRow = memo(function TrackedAnswerRow({
   const jumpToAnswer = useCallback(() => {
     if (entry.answerAnchor) onJump(entry.answerAnchor);
   }, [entry.answerAnchor, onJump]);
-  const markSeen = useCallback(() => {
+  // An answered row is marked seen; a waiting row can stop being tracked.
+  const review: TrackedAnswerReview = attention === "new_answer" ? "reviewed" : "done";
+  const saveReview = useCallback(() => {
     setSaving(true);
     setError(null);
-    onMarkSeen(entry.id)
-      .catch(() => setError(t("agentPanel.stream.answers.markSeenFailed")))
+    onSetStatus(entry.id, review)
+      .catch(() =>
+        setError(
+          t(
+            review === "reviewed"
+              ? "agentPanel.stream.answers.markSeenFailed"
+              : "agentPanel.stream.answers.stopTrackingFailed",
+          ),
+        ),
+      )
       .finally(() => setSaving(false));
-  }, [entry.id, onMarkSeen, t]);
+  }, [entry.id, onSetStatus, review, t]);
 
   return (
     <View style={[styles.row, !first && styles.rowBorder]} testID={`tracked-answer-${entry.id}`}>
@@ -194,18 +205,20 @@ const TrackedAnswerRow = memo(function TrackedAnswerRow({
           </Button>
         ) : null}
         <View style={styles.actionsSpacer} />
-        {attention === "new_answer" ? (
-          <Button
-            variant="secondary"
-            size="xs"
-            onPress={markSeen}
-            loading={saving}
-            disabled={saving}
-            testID="tracked-answer-mark-seen"
-          >
-            {t("agentPanel.stream.answers.markSeen")}
-          </Button>
-        ) : null}
+        <Button
+          variant={review === "reviewed" ? "secondary" : "ghost"}
+          size="xs"
+          onPress={saveReview}
+          loading={saving}
+          disabled={saving}
+          testID={review === "reviewed" ? "tracked-answer-mark-seen" : "tracked-answer-stop"}
+        >
+          {t(
+            review === "reviewed"
+              ? "agentPanel.stream.answers.markSeen"
+              : "agentPanel.stream.answers.stopTracking",
+          )}
+        </Button>
       </View>
     </View>
   );

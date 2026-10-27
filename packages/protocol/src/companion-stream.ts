@@ -88,9 +88,13 @@ export type TimelineAnchor = z.infer<typeof TimelineAnchorSchema>;
 export type QAndAEntry = Extract<CompanionEntry, { kind: "q_and_a" }>;
 export type QAndAAttention = "waiting" | "new_answer";
 
-/** Where a tracked question stands for its asker: no answer yet, or an answer not yet seen. */
+/**
+ * Where a tracked question stands for its asker: no answer yet, or an answer not yet seen.
+ * Only anchored questions can be answered by the host; older unanchored Q&A records stay in
+ * Stream without asking for attention.
+ */
 export function getQAndAAttention(entry: CompanionEntry): QAndAAttention | null {
-  if (entry.kind !== "q_and_a" || entry.status === "done") return null;
+  if (entry.kind !== "q_and_a" || entry.status === "done" || !entry.questionAnchor) return null;
   if (!entry.answer?.trim()) return "waiting";
   return entry.status === "reviewed" ? null : "new_answer";
 }

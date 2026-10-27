@@ -535,6 +535,8 @@ export const zhCN: TranslationResources = {
         jumpAnswerLabel: "跳转到聊天中的回答",
         markSeen: "标记为已读",
         markSeenFailed: "无法将回答标记为已读",
+        stopTracking: "停止跟踪",
+        stopTrackingFailed: "无法停止跟踪此问题",
         collapse: "折叠回答",
         expand: "显示回答",
         dismiss: "隐藏，直到有新回答",

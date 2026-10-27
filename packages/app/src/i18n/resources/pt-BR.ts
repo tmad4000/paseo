@@ -550,6 +550,8 @@ export const ptBR: TranslationResources = {
         jumpAnswerLabel: "Ir para a resposta no chat",
         markSeen: "Marcar como vista",
         markSeenFailed: "Não foi possível marcar a resposta como vista",
+        stopTracking: "Parar de acompanhar",
+        stopTrackingFailed: "Não foi possível parar de acompanhar esta pergunta",
         collapse: "Recolher respostas",
         expand: "Mostrar respostas",
         dismiss: "Ocultar até chegar uma nova resposta",

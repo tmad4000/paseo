@@ -547,6 +547,8 @@ export const ja: TranslationResources = {
         jumpAnswerLabel: "チャット内の回答へ移動",
         markSeen: "既読にする",
         markSeenFailed: "回答を既読にできませんでした",
+        stopTracking: "記録をやめる",
+        stopTrackingFailed: "この質問の記録を停止できませんでした",
         collapse: "回答を折りたたむ",
         expand: "回答を表示",
         dismiss: "新しい回答が届くまで非表示",

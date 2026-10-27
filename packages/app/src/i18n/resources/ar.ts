@@ -542,6 +542,8 @@ export const ar: TranslationResources = {
         jumpAnswerLabel: "الانتقال إلى الإجابة في المحادثة",
         markSeen: "تمييز كمقروء",
         markSeenFailed: "تعذّر تمييز الإجابة كمقروءة",
+        stopTracking: "إيقاف التتبّع",
+        stopTrackingFailed: "تعذّر إيقاف تتبّع هذا السؤال",
         collapse: "طيّ الإجابات",
         expand: "عرض الإجابات",
         dismiss: "إخفاء حتى تصل إجابة جديدة",

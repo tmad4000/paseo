@@ -5,6 +5,8 @@ import {
   type QAndAEntry,
 } from "@getpaseo/protocol/companion-stream";
 
+export type TrackedAnswerReview = "reviewed" | "done";
+
 export interface TrackedAnswer {
   entry: QAndAEntry;
   attention: QAndAAttention;

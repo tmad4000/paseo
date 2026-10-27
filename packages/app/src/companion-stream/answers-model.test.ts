@@ -16,6 +16,7 @@ function qa(id: string, overrides: Partial<Extract<CompanionEntry, { kind: "q_an
     timestamp: "2026-10-26T10:00:00Z",
     text: id,
     truncated: false,
+    questionAnchor: { epoch: "e1", startSeq: 1, endSeq: 1 },
     ...overrides,
   };
 }
@@ -35,6 +36,16 @@ describe("tracked answers model", () => {
       ["waiting-new", "waiting"],
       ["waiting-old", "waiting"],
     ]);
+  });
+
+  it("leaves unanchored and stopped questions out of the pane", () => {
+    expect(
+      selectTrackedAnswers([
+        qa("legacy", { questionAnchor: undefined }),
+        qa("legacy-answered", { questionAnchor: undefined, answer: "a" }),
+        qa("stopped", { status: "done" }),
+      ]),
+    ).toEqual([]);
   });
 
   it("hides only the answers that were showing when the pane was hidden", () => {

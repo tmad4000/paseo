@@ -109,6 +109,51 @@ describe("tracked question answers", () => {
     ).toBe(entries);
   });
 
+  it("ignores failure rows, so a failed turn leaves the question waiting", () => {
+    const entries = track([], 4);
+    const rows = [
+      row(4, user("Which port?")),
+      row(5, assistant("Checking")),
+      row(6, tool),
+      row(7, assistant("[System Error] provider exited")),
+    ];
+    expect(attachQAndAAnswers({ entries, rows, epoch: EPOCH, turnSettled: true, now: NOW })).toBe(
+      entries,
+    );
+  });
+
+  it("does not reopen a question the asker stopped tracking", () => {
+    const stopped = applyStreamEntryUpdate(track([], 4), {
+      agentId: "a",
+      action: "update_status",
+      entryId: "qa:seq-4",
+      status: "done",
+    });
+    const rows = [row(4, user("Which port?")), row(5, assistant("7420"))];
+    expect(
+      attachQAndAAnswers({ entries: stopped, rows, epoch: EPOCH, turnSettled: true, now: NOW }),
+    ).toBe(stopped);
+  });
+
+  it("finds the question again by message id after the timeline epoch changes", () => {
+    const rows = [
+      row(20, { ...user("Which port?"), messageId: "user-msg-1" }),
+      row(21, assistant("7420")),
+    ];
+    const entries = attachQAndAAnswers({
+      entries: track([], 4),
+      rows,
+      epoch: "epoch-2",
+      turnSettled: true,
+      now: NOW,
+    });
+    expect(qa(entries)).toMatchObject({
+      questionAnchor: { epoch: "epoch-2", startSeq: 20, endSeq: 20 },
+      answerAnchor: { epoch: "epoch-2", startSeq: 21, endSeq: 21 },
+      answer: "7420",
+    });
+  });
+
   it("never replaces an attached answer", () => {
     const rows = [row(4, user("Which port?")), row(5, assistant("7420"))];
     const answered = attachQAndAAnswers({
