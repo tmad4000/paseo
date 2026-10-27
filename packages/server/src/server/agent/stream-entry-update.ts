@@ -114,10 +114,12 @@ function createQAndA(
   input: StreamEntryUpdate,
   common: Pick<QAndAEntry, "timestamp" | "text" | "truncated" | "tags">,
 ): CompanionEntry {
-  // A stable ID makes tracking the same message again a no-op instead of a second card.
+  // A stable ID makes tracking the same message again a no-op instead of a second card;
+  // tracking a message the user stopped tracking resumes it, keeping its answer and seen state.
   const id = `qa:${input.entryId ?? randomUUID()}`;
   const existing = entries.find((entry) => entry.id === id);
-  if (existing?.kind === "q_and_a") return existing;
+  if (existing?.kind === "q_and_a")
+    return existing.status === "done" ? { ...existing, status: "open" } : existing;
   const questionMessageId = input.sourceId?.startsWith("msg:")
     ? input.sourceId.slice(4)
     : undefined;
@@ -138,8 +140,7 @@ function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionE
     throw new Error("Ask text or ID is too long");
   const id = `ask:${input.entryId}`;
   const previous = entries.find((entry) => entry.id === id);
-  const ask = TrackedAskInputSchema.parse(input.ask);
-  validateAskCompletion(ask);
+  const ask = parseAskEdit(input.ask, previous);
   const revision = previous?.ask?.revision ?? 0;
   const entry: CompanionEntry = {
     id,
@@ -174,6 +175,17 @@ function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionE
     );
   entry.ask!.revision = revision + 1;
   return previous ? entries.map((item) => (item.id === id ? entry : item)) : [...entries, entry];
+}
+
+/** A valid ask from an edit. An edit that omits expectsAnswer keeps the question waiting. */
+function parseAskEdit(
+  input: TrackedAskInput,
+  previous: CompanionEntry | undefined,
+): TrackedAskInput {
+  const ask = TrackedAskInputSchema.parse(input);
+  ask.expectsAnswer ??= previous?.ask?.expectsAnswer;
+  validateAskCompletion(ask);
+  return ask;
 }
 
 /** The answer and its seen state belong to the question, not to one revision of the ask. */

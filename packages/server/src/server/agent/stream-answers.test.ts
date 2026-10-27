@@ -249,6 +249,33 @@ describe("answers to user questions", () => {
     ).toThrow("Mark the answer seen");
   });
 
+  it("resumes a stopped message when it is tracked again, keeping its answer", () => {
+    let entries = candidate(track([], 4), [row(4, user("Which port?")), row(5, assistant("7420"))]);
+    entries = apply(entries, { action: "update_status", entryId: "qa:seq-4", status: "done" });
+    expect(getAnswerAttention(find(entries, "qa:seq-4"))).toBeNull();
+    entries = track(entries, 4);
+    expect(find(entries, "qa:seq-4")).toMatchObject({ status: "open", reply: { text: "7420" } });
+    expect(getAnswerAttention(find(entries, "qa:seq-4"))).toBe("candidate");
+  });
+
+  it("keeps an ask's expectsAnswer when an edit omits it", () => {
+    let entries = trackAsk([], "deploy", "Deploy the docs site", { expectsAnswer: true });
+    const edit = {
+      action: "set_ask" as const,
+      entryId: "deploy",
+      text: "Deploy the docs site",
+      expectedRevision: 1,
+      ask: { state: "blocked" as const, remaining: "Waiting on DNS", evidence: "" },
+    };
+    entries = apply(entries, edit);
+    expect(find(entries, "ask:deploy")).toMatchObject({
+      ask: { expectsAnswer: true, revision: 2 },
+    });
+    expect(getAnswerAttention(find(entries, "ask:deploy"))).toBe("waiting");
+    // Repeating that edit is still a no-op.
+    expect(apply(entries, { ...edit, expectedRevision: 2 })).toBe(entries);
+  });
+
   it("dedupes tracking by stable ID and ignores unanchored legacy records", () => {
     const first = track([], 4);
     expect(track(first, 4)).toEqual(first);

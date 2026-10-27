@@ -2297,7 +2297,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track a durable ask",
       description:
-        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing. Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
+        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
       inputSchema: {
         agentId: z
           .string()

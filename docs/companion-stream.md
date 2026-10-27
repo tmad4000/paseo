@@ -99,7 +99,8 @@ Seen is your own review state, kept apart from ask state: `replySeenRevision`, s
 without touching other entries. A finished ask is not seen, and an ask's state and evidence are
 never an answer: a done ask without an answer leaves the pane, a done ask with an unseen answer
 stays. Rewriting an ask keeps its answer and seen state. **Stop tracking** sets a Q&A message's
-status to `done`; no answer reopens it. The wire snapshot carries up to 20 older entries needing
+status to `done`; no answer reopens it, but tracking the message again does. An ask edit that
+omits `expectsAnswer` keeps its previous value. The wire snapshot carries up to 20 older entries needing
 attention beyond its newest 50, so turn outcomes do not push them out of Chat.
 
 The pane sits over the top of Chat, below the Chat/Stream switcher and clear of the composer.
