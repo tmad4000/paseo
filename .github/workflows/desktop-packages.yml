@@ -47,6 +47,9 @@ jobs:
           npm run build:desktop -- --publish never --linux --x64 --config "$RUNNER_TEMP/desktop-smoke-builder.json"
         env:
           EP_GH_IGNORE_TIME: true
+          # Metro's generated WebSocket validator exceeds the default 4 GiB compiler heap.
+          # This budget applies only to building artifacts, not installed app processes.
+          NODE_OPTIONS: --max-old-space-size=8192
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
 
       - name: Smoke installed artifacts with restricted user namespaces
