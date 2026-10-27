@@ -6,6 +6,7 @@ import {
 } from "./message-activity.js";
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
 import { applyStreamEntryUpdate } from "./stream-entry-update.js";
+import { attachCandidateReplies, hasCandidateWork } from "./stream-answers.js";
 import type {
   StreamListOptions,
   StreamEntryUpdate,
@@ -2541,7 +2542,11 @@ export class AgentManager {
       entries = entries ?? [];
     }
 
-    const next = applyStreamEntryUpdate(entries, input);
+    let next = applyStreamEntryUpdate(entries, input);
+    if (input.action === "add_q_and_a" && liveAgent) {
+      // A question tracked after its reply arrived is answered now, not at the next turn.
+      next = this.attachTrackedAnswers(liveAgent.id, next, liveAgent.lifecycle === "idle");
+    }
 
     if (liveAgent) {
       this.requireRegistry();
@@ -4970,16 +4975,30 @@ export class AgentManager {
 
   private collectCompanionEvent(agent: ManagedAgent, event: AgentStreamEvent): void {
     const previous = agent.companionEntries ?? [];
-    const next = this.companionCollector.observe(
-      agent.id,
-      previous,
-      event,
-      new Date().toISOString(),
-    );
+    let next = this.companionCollector.observe(agent.id, previous, event, new Date().toISOString());
+    // A failed or canceled turn does not settle a reply; the next message or completed turn does.
+    if (isTurnTerminalEvent(event))
+      next = this.attachTrackedAnswers(agent.id, next, event.type === "turn_completed");
     if (next !== previous) {
       agent.companionEntries = next;
       this.emitState(agent);
     }
+  }
+
+  /** Tracked messages get a candidate reply from the loaded timeline; see attachCandidateReplies. */
+  private attachTrackedAnswers(
+    agentId: string,
+    entries: CompanionEntry[],
+    turnSettled: boolean,
+  ): CompanionEntry[] {
+    if (!hasCandidateWork(entries) || !this.timelineStore.has(agentId)) return entries;
+    return attachCandidateReplies({
+      entries,
+      rows: this.timelineStore.getRows(agentId),
+      epoch: this.timelineStore.getEpoch(agentId),
+      turnSettled,
+      now: new Date().toISOString(),
+    });
   }
 
   private async collectArtifactsForTurn(agent: ActiveManagedAgent): Promise<void> {

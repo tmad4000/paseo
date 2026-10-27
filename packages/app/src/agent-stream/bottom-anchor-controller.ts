@@ -503,6 +503,10 @@ function createBottomAnchorControllerDriver(
       createRequest(request);
     },
     requestLocalAnchor(request) {
+      // Sending is not a navigation request while the user is reading history.
+      if (request.reason === "message-sent" && mode === "detached") {
+        return;
+      }
       createRequest(request);
     },
     beginUserScroll() {

@@ -1,0 +1,32 @@
+
+ RUN  v4.1.7 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+
+ ❯ packages/server/src/server/sharing/share-listener.test.ts (33 tests | 1 failed) 431ms
+     × rejects CONNECT with the same unavailable page before reading 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/server/sharing/share-listener.test.ts > share listener > rejects CONNECT with the same unavailable page before reading
+AssertionError: expected '' to contain '404 Not Found'
+
+- Expected
++ Received
+
+- 404 Not Found
+
+ ❯ packages/server/src/server/sharing/share-listener.test.ts:308:22
+    306|     const target = method === "CONNECT" ? "example.com:443" : `/s/${"x…
+    307|     const response = await rawRequest(method, target);
+    308|     expect(response).toContain("404 Not Found");
+       |                      ^
+    309|     expect(response.split("\r\n\r\n").slice(1).join("\r\n\r\n")).toBe(…
+    310|     expect(reads).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (33)
+   Start at  23:33:04
+   Duration  777ms (transform 80ms, setup 0ms, import 265ms, tests 431ms, environment 0ms)
+

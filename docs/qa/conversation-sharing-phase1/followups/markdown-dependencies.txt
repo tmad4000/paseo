@@ -1,0 +1,10 @@
+paseo@0.10.0-beta.17 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+├─┬ @getpaseo/app@0.10.0-beta.17 -> ./packages/app
+│ ├── @types/markdown-it@14.2.0
+│ ├── markdown-it@14.3.2 overridden
+│ └─┬ react-native-markdown-display@7.0.2
+│   └── markdown-it@14.3.2 deduped
+└─┬ @getpaseo/server@0.10.0-beta.17 -> ./packages/server
+  ├── @types/markdown-it@14.2.0 deduped
+  └── markdown-it@14.3.2 deduped
+

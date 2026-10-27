@@ -50,13 +50,13 @@ describe("share CLI", () => {
       output.mockRestore();
     }
   });
-  it("honors the design's --no-scrub paths option", async () => {
+  it.each(["paths", "hosts"] as const)("honors --no-scrub %s", async (key) => {
     const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
-      await createCli().parseAsync(["share", "create", "agent", "--no-scrub", "paths"], {
+      await createCli().parseAsync(["share", "create", "agent", "--no-scrub", key], {
         from: "user",
       });
-      expect(client.createShareLink.mock.calls[0]![0].redaction.scrub.paths).toBe(false);
+      expect(client.createShareLink.mock.calls[0]![0].redaction.scrub[key]).toBe(false);
     } finally {
       output.mockRestore();
     }

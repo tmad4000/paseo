@@ -62,7 +62,12 @@ import Animated, {
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { MarkdownRenderer, type MarkdownStyles } from "@/components/markdown/renderer";
-import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
+import type {
+  TaskActivity,
+  TimelinePosition,
+  TodoEntry,
+  UserMessageImageAttachment,
+} from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
@@ -132,7 +137,9 @@ interface UserMessageProps {
   attachments?: AgentAttachment[];
   timestamp: number;
   onPin?: MessagePinHandler;
-  onQAndA?: (text: string, messageId?: string) => void;
+  onQAndA?: (text: string, messageId?: string, timelineCursor?: TimelinePosition) => void;
+  /** The message's timeline position, so a tracked question can be answered and jumped to. */
+  timelineCursor?: TimelinePosition;
   capabilities?: AgentCapabilityFlags;
   client?: DaemonClient | null;
   isFirstInGroup?: boolean;
@@ -545,6 +552,7 @@ export const UserMessage = memo(function UserMessage({
   timestamp,
   onPin,
   onQAndA,
+  timelineCursor,
   capabilities,
   client,
   isFirstInGroup = true,
@@ -586,8 +594,8 @@ export const UserMessage = memo(function UserMessage({
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const getMessageContent = useCallback(() => message, [message]);
   const handleQAndA = useCallback(
-    () => onQAndA?.(message, messageId),
-    [onQAndA, message, messageId],
+    () => onQAndA?.(message, messageId, timelineCursor),
+    [onQAndA, message, messageId, timelineCursor],
   );
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
@@ -730,6 +738,8 @@ interface AssistantTurnFooterProps {
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
   onPin?: MessagePinHandler;
+  /** Extra turn actions after Fork, such as Reply in thread. */
+  children?: ReactNode;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -778,6 +788,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   durationMs,
   onFork,
   onPin,
+  children,
 }: AssistantTurnFooterProps) {
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
@@ -835,6 +846,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         />
       ) : null}
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
+      {children}
       {primaryLabel ? (
         <Pressable
           onPress={handlePress}

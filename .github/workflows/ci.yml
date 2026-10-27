@@ -462,6 +462,9 @@ jobs:
       - name: Run relay tests
         run: npm run test --workspace=@getpaseo/relay
 
+      - name: Run share host tests
+        run: npm run test --workspace=@getpaseo/share-worker
+
   cli-tests-1:
     name: cli-tests (shard 1/3)
     needs: changes

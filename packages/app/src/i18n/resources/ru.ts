@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
   sharing: {
+    unpublishPending: "Отзыв на хосте ожидается",
+    revokeDelay: "Отзыв на хосте завершится примерно в течение минуты.",
     deleteMessage: "Удалить ссылку и снимок? Это действие нельзя отменить.",
     action: "Поделиться…",
     title: "Поделиться беседой",
@@ -26,7 +28,7 @@ export const ru: TranslationResources = {
     loading: "Загрузка предпросмотра…",
     updateHost: "Обновите хост, чтобы делиться беседами.",
     summary:
-      "Скрыто: инструменты {{tools}}, рассуждения {{reasoning}} · Секреты {{secrets}}, контакты {{contacts}} · Сокращено путей: {{paths}}",
+      "Скрыто: инструменты {{tools}}, рассуждения {{reasoning}} · Секреты {{secrets}}, контакты {{contacts}}, хосты {{hosts}} · Сокращено путей: {{paths}}",
     shareMetadata:
       "Снимок · Просмотры: {{views}} · Срок: {{expiry}} · Последний просмотр: {{lastViewed}}",
     fields: {
@@ -34,6 +36,7 @@ export const ru: TranslationResources = {
       reasoning: "Рассуждения",
       errors: "Ошибки",
       secrets: "Секреты",
+      hosts: "Имена хостов и IP-адреса",
       paths: "Пути файлов",
       contacts: "Адреса почты и телефоны",
     },
@@ -44,6 +47,8 @@ export const ru: TranslationResources = {
       "30d": "30 дней",
     },
     omitted: {
+      earlier_one: "В этот снимок не включено {{count}} предыдущее сообщение",
+      earlier_other: "В этот снимок не включены {{count}} предыдущих сообщений",
       tool_calls_one: "Скрыто вызовов: {{count}}",
       tool_calls_other: "Скрыто вызовов: {{count}}",
       reasoning_one: "Скрыто рассуждений: {{count}}",
@@ -103,6 +108,20 @@ export const ru: TranslationResources = {
       failed: "Не удалось обновить проект",
       hostDisconnected: "Хост не подключён",
     },
+  },
+  threads: {
+    menuLabel: "Ветка из {{title}}",
+    replyInThread: "Ответить в ветке",
+    oneReply: "1 ответ",
+    manyReplies: "Ответов: {{count}}",
+    openThread: "Открыть ветку {{title}}",
+    backToMain: "Вернуться в основной чат: {{title}}",
+    sendToMainLabel: "Отправить последний ответ этой ветки в {{title}}",
+    sentToMain: "Отправлено в {{title}}",
+    sendToMainFailed: "Не удалось отправить в основной чат",
+    sendToMainUpdateHost: "Обновите хост, чтобы отправлять в основной чат.",
+    noReplyYet: "Сначала дождитесь ответа в ветке.",
+    parentUnavailable: "Основной чат больше недоступен.",
   },
   sessionPins: {
     title: "Закреплённые сеансы",
@@ -198,6 +217,8 @@ export const ru: TranslationResources = {
       daemonUnavailable: "Daemon недоступен",
       daemonClientUnavailable: "Daemon клиента недоступен",
       daemonClientDisconnected: "Daemon клиента отключен",
+      connectionInterrupted:
+        "Сейчас не удаётся связаться с хостом. Paseo переподключается; повторите попытку, когда связь восстановится.",
       noFileFound: "Файл для {{token}} не найден",
       unexpectedDictationError: "При обработке диктовки произошла непредвиденная ошибка.",
     },
@@ -505,6 +526,7 @@ export const ru: TranslationResources = {
       notePlaceholder: "Введите заметку или ссылку…",
       addNote: "Добавить заметку",
       answerLabel: "Ответ:",
+      possibleAnswerLabel: "Возможный ответ:",
       unpin: "Открепить",
       pinToStream: "Закрепить в потоке",
       pinSelection: "Pin selected text to Stream",
@@ -518,6 +540,30 @@ export const ru: TranslationResources = {
         "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
       showActivity: "Show activity",
       trackQAndA: "Записать вопрос и ответ",
+      answers: {
+        title: "Ваши вопросы",
+        newCount: "новых: {{count}}",
+        waitingCount: "ожидают: {{count}}",
+        newAnswer: "Новый ответ",
+        waiting: "Ожидает ответа",
+        possibleAnswer: "Возможный ответ",
+        candidateHint: "Первый ответ после вашего вопроса. Агент не подтвердил, что это ответ.",
+        openChat: "Открыть чат с ответом",
+        jumpQuestion: "Вопрос",
+        jumpAnswer: "Ответ",
+        jumpQuestionLabel: "Перейти к вашему вопросу в чате",
+        jumpAnswerLabel: "Перейти к ответу в чате",
+        markSeen: "Отметить просмотренным",
+        markSeenFailed: "Не удалось отметить ответ просмотренным",
+        stopTracking: "Не отслеживать",
+        stopTrackingFailed: "Не удалось прекратить отслеживание вопроса",
+        collapse: "Свернуть ответы",
+        expand: "Показать ответы",
+        dismiss: "Скрыть до нового ответа",
+        tracked: "Вопрос отслеживается. Ответ появится над чатом.",
+        trackFailed: "Не удалось отслеживать этот вопрос",
+        jumpUnavailable: "Этого сообщения больше нет в загруженной истории чата",
+      },
       checklistTab: "Checklist",
       checklistDescription:
         "Explicitly tracked asks. Turn endings never mark work done. Ask your agent to record progress, blockers and evidence.",

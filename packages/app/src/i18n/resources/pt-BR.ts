@@ -3,6 +3,8 @@ import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
   sharing: {
+    unpublishPending: "Revogação pendente no servidor",
+    revokeDelay: "A revogação no servidor é concluída em cerca de um minuto.",
     deleteMessage: "Excluir este link e seu instantâneo? Esta ação não pode ser desfeita.",
     action: "Compartilhar…",
     title: "Compartilhar conversa",
@@ -26,7 +28,7 @@ export const ptBR: TranslationResources = {
     loading: "Carregando prévia…",
     updateHost: "Atualize o host para compartilhar conversas.",
     summary:
-      "Ocultos: ferramentas {{tools}}, raciocínios {{reasoning}} · Mascarados: segredos {{secrets}}, contatos {{contacts}} · Caminhos abreviados: {{paths}}",
+      "Ocultos: ferramentas {{tools}}, raciocínios {{reasoning}} · Mascarados: segredos {{secrets}}, contatos {{contacts}}, hosts {{hosts}} · Caminhos abreviados: {{paths}}",
     shareMetadata:
       "Instantâneo · {{views}} visualizações · Expira: {{expiry}} · Última visualização: {{lastViewed}}",
     fields: {
@@ -34,6 +36,7 @@ export const ptBR: TranslationResources = {
       reasoning: "Raciocínio",
       errors: "Erros",
       secrets: "Segredos",
+      hosts: "Nomes de host e endereços IP",
       paths: "Caminhos de arquivos",
       contacts: "E-mails e telefones",
     },
@@ -44,6 +47,8 @@ export const ptBR: TranslationResources = {
       "30d": "30 dias",
     },
     omitted: {
+      earlier_one: "{{count}} mensagem anterior não está incluída neste instantâneo",
+      earlier_other: "{{count}} mensagens anteriores não estão incluídas neste instantâneo",
       tool_calls_one: "{{count}} chamada oculta",
       tool_calls_other: "{{count}} chamadas ocultas",
       reasoning_one: "{{count}} raciocínio oculto",
@@ -104,6 +109,20 @@ export const ptBR: TranslationResources = {
       failed: "Não foi possível atualizar o projeto",
       hostDisconnected: "O host não está conectado",
     },
+  },
+  threads: {
+    menuLabel: "Conversa paralela de {{title}}",
+    replyInThread: "Responder em uma conversa paralela",
+    oneReply: "1 resposta",
+    manyReplies: "{{count}} respostas",
+    openThread: "Abrir a conversa paralela {{title}}",
+    backToMain: "Voltar à conversa principal: {{title}}",
+    sendToMainLabel: "Enviar a última resposta desta conversa paralela para {{title}}",
+    sentToMain: "Enviado para {{title}}",
+    sendToMainFailed: "Não foi possível enviar à conversa principal",
+    sendToMainUpdateHost: "Atualize o host para enviar à conversa principal.",
+    noReplyYet: "Aguarde primeiro a resposta da conversa paralela.",
+    parentUnavailable: "A conversa principal não está mais disponível.",
   },
   sessionPins: {
     title: "Sessões fixadas",
@@ -199,6 +218,8 @@ export const ptBR: TranslationResources = {
       daemonUnavailable: "Daemon indisponível",
       daemonClientUnavailable: "Cliente do daemon indisponível",
       daemonClientDisconnected: "O cliente do daemon está desconectado",
+      connectionInterrupted:
+        "Não foi possível alcançar seu host agora. O Paseo está reconectando; tente de novo quando a conexão voltar.",
       noFileFound: "Nenhum arquivo encontrado para {{token}}",
       unexpectedDictationError: "Ocorreu um erro inesperado ao processar o ditado.",
     },
@@ -508,6 +529,7 @@ export const ptBR: TranslationResources = {
       notePlaceholder: "Digite uma nota ou um link…",
       addNote: "Adicionar nota",
       answerLabel: "Resposta:",
+      possibleAnswerLabel: "Possível resposta:",
       unpin: "Desafixar",
       pinToStream: "Fixar no stream",
       pinSelection: "Pin selected text to Stream",
@@ -521,6 +543,31 @@ export const ptBR: TranslationResources = {
         "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
       showActivity: "Show activity",
       trackQAndA: "Registrar pergunta e resposta",
+      answers: {
+        title: "Suas perguntas",
+        newCount: "{{count}} novas",
+        waitingCount: "{{count}} aguardando",
+        newAnswer: "Nova resposta",
+        waiting: "Aguardando resposta",
+        possibleAnswer: "Possível resposta",
+        candidateHint:
+          "A primeira resposta após sua pergunta. O agente não confirmou que ela responde.",
+        openChat: "Abrir o chat que respondeu",
+        jumpQuestion: "Pergunta",
+        jumpAnswer: "Resposta",
+        jumpQuestionLabel: "Ir para sua pergunta no chat",
+        jumpAnswerLabel: "Ir para a resposta no chat",
+        markSeen: "Marcar como vista",
+        markSeenFailed: "Não foi possível marcar a resposta como vista",
+        stopTracking: "Parar de acompanhar",
+        stopTrackingFailed: "Não foi possível parar de acompanhar esta pergunta",
+        collapse: "Recolher respostas",
+        expand: "Mostrar respostas",
+        dismiss: "Ocultar até chegar uma nova resposta",
+        tracked: "Acompanhando esta pergunta. A resposta aparece acima do chat.",
+        trackFailed: "Não foi possível acompanhar esta pergunta",
+        jumpUnavailable: "Essa mensagem não está mais no histórico carregado deste chat",
+      },
       checklistTab: "Checklist",
       checklistDescription:
         "Explicitly tracked asks. Turn endings never mark work done. Ask your agent to record progress, blockers and evidence.",

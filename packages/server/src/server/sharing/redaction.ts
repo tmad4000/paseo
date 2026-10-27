@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import {
   DEFAULT_REDACTION,
   type RedactionProfile,
@@ -7,22 +8,83 @@ import {
 import type { AgentTimelineRow } from "../agent/agent-timeline-store-types.js";
 import { TimelineProjection } from "../agent/timeline-projection.js";
 
-// Keep broad patterns after specific patterns: replacements must not be re-counted.
-export const SECRET_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
+// Keep specific credentials ahead of generic tokens, and preserve labels for readable previews.
+export const SECRET_PATTERNS: readonly {
+  name: string;
+  pattern: RegExp;
+  replace?: (match: string, prefix: string, offset: number, text: string) => string;
+}[] = [
   {
     name: "private key",
     pattern:
       /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----/g,
   },
+  {
+    name: "URL userinfo",
+    pattern: /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@?#<>"']+@/gi,
+    replace: (_match, prefix) => `${prefix}[credentials]@`,
+  },
+  {
+    name: "basic auth",
+    pattern: /(\bBasic\s+)[A-Za-z0-9+/]+=*/gi,
+    replace: (match, prefix, offset, text) => {
+      const value = match.slice(prefix.length);
+      const before = text.slice(Math.max(0, offset - 34), offset);
+      const after = text.slice(offset + match.length, offset + match.length + 34);
+      const contextual =
+        /\b(?:Authorization:|auth\b)[\s\S]{0,20}$/i.test(before) ||
+        /^[\s\S]{0,20}\b(?:Authorization:|auth\b)/i.test(after);
+      const shaped =
+        value.length >= 12 &&
+        (value.includes("=") ||
+          (/[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)) ||
+          encodedBasicPair(value));
+      return contextual || shaped ? `${prefix}[secret hidden]` : match;
+    },
+  },
   { name: "bearer", pattern: /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi },
   {
     name: "query",
-    pattern:
-      /([?&](?:token|key|secret|password|sig|signature|access_token)=)(?!\[secret hidden\])[^&#\s<>"']+/gi,
+    pattern: /([?&](?:token|key|secret|password|sig|signature|access_token)=)[^&#\s<>"']+/gi,
+    replace: (_match, prefix) => `${prefix}[secret hidden]`,
   },
   {
-    name: "password",
-    pattern: /\b(?:password|passwd)\s*[:=]\s*(?:"[^"\n]+"|'[^'\n]+'|[^\s,;<>]+)/gi,
+    name: "labelled value",
+    pattern:
+      /\b([A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL)[A-Z0-9_]*\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/gi,
+    replace: (match, prefix) => {
+      const label = /^[A-Za-z0-9_]+/.exec(prefix)![0];
+      const rawValue = match.slice(prefix.length);
+      const value = /^["']/.test(rawValue) ? rawValue.slice(1, -1) : rawValue;
+      const identifier =
+        label.includes("_") || label === label.toUpperCase() || prefix.startsWith(`${label}=`);
+      return identifier || value.length >= 8 ? `${prefix}[secret hidden]` : match;
+    },
+  },
+  {
+    name: "prose password",
+    pattern: /\b((?:password|passphrase|passcode|pin)\s+(?:is|was|=|:)\s+)\S+/gi,
+    replace: (_match, prefix) => `${prefix}[secret hidden]`,
+  },
+  {
+    name: "CLI credential flag",
+    pattern:
+      /((?<![A-Za-z0-9_-])(?:--password|--token|--api-key|--secret|--key)(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/g,
+    replace: (_match, prefix) => `${prefix}[secret hidden]`,
+  },
+  {
+    name: "credential command short flag",
+    pattern: /((?<![A-Za-z0-9_-])-p(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|\S+)/g,
+    replace: (match, prefix, offset, text) => {
+      // Separators inside quoted arguments do not start a different command.
+      const commands = text
+        .slice(0, offset)
+        .match(/(?:[^"'\\;&|\r\n]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"|'[^']*')+/g);
+      const command = commands?.at(-1) ?? "";
+      return /\b(?:sshpass|mysql|mysqldump|mongosh|smbclient)\b/.test(command)
+        ? `${prefix}[secret hidden]`
+        : match;
+    },
   },
   { name: "openai", pattern: /\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}/g },
   { name: "github", pattern: /\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}/g },
@@ -31,18 +93,50 @@ export const SECRET_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: "google", pattern: /\bAIza[A-Za-z0-9_-]{20,}/g },
   { name: "jwt", pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
   {
-    name: "labelled",
+    name: "labelled run",
     pattern:
-      /(?<![A-Za-z0-9])(?:key|token|secret|auth)(?![A-Za-z0-9])[^\n]{0,20}?[A-Za-z0-9_-]{32,}/gi,
+      /((?<![A-Za-z0-9])(?:key|secret|token|password|auth|credential)(?![A-Za-z0-9])[\s\S]{0,20}?)[A-Za-z0-9_+/=-]{32,}/gi,
+    replace: (_match, prefix) => `${prefix}[secret hidden]`,
   },
   {
     name: "labelled suffix",
     pattern:
-      /\b[A-Za-z0-9_-]{32,}[^\n]{0,20}?(?<![A-Za-z0-9])(?:key|token|secret|auth)(?![A-Za-z0-9])/gi,
+      /[A-Za-z0-9_+/=-]{32,}(?=[\s\S]{0,20}?(?<![A-Za-z0-9])(?:key|secret|token|password|auth|credential)(?![A-Za-z0-9]))/gi,
   },
 ];
+const PLACEHOLDER = /\[(?:secret hidden|credentials|host|ip|email|phone)\]/g;
+// Every pass treats prior output as opaque, including owner-provided literal rules.
+function outsidePlaceholders(
+  text: string,
+  transform: (segment: string, offset: number) => string,
+): string {
+  let offset = 0;
+  return text
+    .split(/(\[(?:secret hidden|credentials|host|ip|email|phone)\])/g)
+    .map((segment) => {
+      const start = offset;
+      offset += segment.length;
+      return segment.match(PLACEHOLDER) ? segment : transform(segment, start);
+    })
+    .join("");
+}
+// Unpadded Basic user:password values can have neither digits nor '=' (for example
+// dXNlcjpwYXNz). Require an actual UTF-8 credential pair rather than ordinary prose.
+function encodedBasicPair(value: string): boolean {
+  const decoded = Buffer.from(value, "base64").toString("utf8");
+  return (
+    /^[^:\s]+:[^\r\n]+$/.test(decoded) &&
+    Buffer.from(decoded).toString("base64").replace(/=+$/, "") === value.replace(/=+$/, "")
+  );
+}
+
+const IPV4 = /(?<![A-Za-z0-9_.])\d{1,3}(?:\.\d{1,3}){3}(?![A-Za-z0-9_]|\.\d|-[a-z])/gi;
+const IPV6 =
+  /(?<![A-Za-z0-9_.:%[])(?:\[[A-Fa-f0-9:.]+(?:%[A-Za-z0-9_.-]+)?\]|[A-Fa-f0-9]*:[A-Fa-f0-9:.]+(?:%[A-Za-z0-9_.-]+)?(?![A-Za-z0-9_.:%]))/g;
+const INTERNAL_HOST =
+  /(?<![A-Za-z0-9_.-])(?:(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+(?:ts\.net|local|internal|lan|home\.arpa|localdomain)|localhost)(?![A-Za-z0-9_-]|\.[A-Za-z0-9])/gi;
 const LOCAL_PATH =
-  /(?:\/(?:Users|home|Volumes|private|tmp)\/|~\/|[A-Za-z]:\\Users\\)[^\s`"'<>\][)]+/g;
+  /(?<!…)(?:\/(?:Users|home|Volumes|private|tmp)\/|~\/|[A-Za-z]:\\Users\\)[^\s`"'<>\][)]+/g;
 export interface SnapshotMetadata {
   title: string;
   ownerName: string;
@@ -59,6 +153,7 @@ export function redactTimeline(
     hiddenToolCalls: 0,
     hiddenReasoning: 0,
     secretsMasked: 0,
+    hostsMasked: 0,
     pathsCollapsed: 0,
     contactsMasked: 0,
     messagesExcluded: 0,
@@ -68,49 +163,84 @@ export function redactTimeline(
     // Literal patterns run first so a partial built-in match cannot defeat an owner rule.
     for (const literal of profile.extraPatterns) {
       if (!literal) continue;
-      text = text
-        .split(/(\[secret hidden\]|\[email\]|\[phone\])/g)
-        .map((segment) => {
-          if (["[secret hidden]", "[email]", "[phone]"].includes(segment)) return segment;
-          const parts = segment.split(literal);
-          summary.secretsMasked += parts.length - 1;
-          return parts.join("[secret hidden]");
-        })
-        .join("");
+      text = outsidePlaceholders(text, (segment) => {
+        const parts = segment.split(literal);
+        summary.secretsMasked += parts.length - 1;
+        return parts.join("[secret hidden]");
+      });
     }
     if (profile.scrub.secrets)
-      for (const { pattern } of SECRET_PATTERNS) {
-        text = text
-          .split(/(\[secret hidden\]|\[email\]|\[phone\])/g)
-          .map((segment) => {
-            if (["[secret hidden]", "[email]", "[phone]"].includes(segment)) return segment;
-            return segment.replace(pattern, (_match: string, prefix?: string | number) => {
-              // The query prefix is preserved without retaining its value.
-              summary.secretsMasked++;
-              return typeof prefix === "string" ? `${prefix}[secret hidden]` : "[secret hidden]";
-            });
-          })
-          .join("");
+      for (const { pattern, replace } of SECRET_PATTERNS) {
+        text = outsidePlaceholders(text, (segment, start) =>
+          segment.replace(pattern, (match: string, prefix: string, offset: number) => {
+            const output = replace
+              ? replace(match, prefix, start + offset, text)
+              : "[secret hidden]";
+            if (output !== match) summary.secretsMasked++;
+            return output;
+          }),
+        );
       }
+    // An omitted hosts field is the older wire profile, whose default is on.
+    if (profile.scrub.hosts !== false) {
+      // Leave an email domain for the contact pass to consume the whole address.
+      // URL credentials are already opaque, so their host still matches.
+      const deferEmailDomain = (segment: string, offset: number) =>
+        profile.scrub.contacts &&
+        /[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@$/.test(segment.slice(0, offset));
+      const maskHost = (marker: "[ip]" | "[host]") => {
+        summary.hostsMasked++;
+        return marker;
+      };
+      text = outsidePlaceholders(text, (segment) =>
+        segment.replace(IPV6, (value) => {
+          const address = value.startsWith("[") ? value.slice(1, -1) : value;
+          if (isIP(address) === 6) return maskHost("[ip]");
+          // A terminal sentence dot is punctuation, not part of an IPv6 address.
+          if (address.endsWith(".") && isIP(address.slice(0, -1)) === 6)
+            return `${maskHost("[ip]")}.`;
+          return value;
+        }),
+      );
+      text = outsidePlaceholders(text, (segment) =>
+        segment.replace(IPV4, (value, offset: number) =>
+          !deferEmailDomain(segment, offset) &&
+          value.split(".").every((octet) => Number(octet) <= 255)
+            ? maskHost("[ip]")
+            : value,
+        ),
+      );
+      text = outsidePlaceholders(text, (segment) =>
+        segment.replace(INTERNAL_HOST, (value, offset: number) => {
+          if (deferEmailDomain(segment, offset)) return value;
+          return maskHost("[host]");
+        }),
+      );
+    }
     if (profile.scrub.paths) {
       const collapse = (value: string) => {
         summary.pathsCollapsed++;
         return `…/${value.replaceAll("\\", "/").split("/").filter(Boolean).slice(-2).join("/")}`;
       };
-      text = text.replace(
-        /([`"'])((?:\/(?:Users|home|Volumes|private|tmp)\/|~\/|[A-Za-z]:\\Users\\)[^`"'<>\r\n]+)\1/g,
-        (_match, quote: string, value: string) => `${quote}${collapse(value)}${quote}`,
+      text = outsidePlaceholders(text, (segment) =>
+        segment
+          .replace(
+            /([`"'])((?:\/(?:Users|home|Volumes|private|tmp)\/|~\/|[A-Za-z]:\\Users\\)[^`"'<>\r\n]+)\1/g,
+            (_match, quote: string, value: string) => `${quote}${collapse(value)}${quote}`,
+          )
+          .replace(LOCAL_PATH, collapse),
       );
-      text = text.replace(LOCAL_PATH, collapse);
     }
     if (profile.scrub.contacts)
-      text = text.replace(
-        /\b[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b|\+[1-9][0-9]{7,14}\b/g,
-        (value) => {
-          if (value === metadata.ownerName) return value;
-          summary.contactsMasked++;
-          return value.startsWith("+") ? "[phone]" : "[email]";
-        },
+      text = outsidePlaceholders(text, (segment) =>
+        segment.replace(
+          /\b[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b|\+[1-9][0-9]{7,14}\b|(?<![\d])(?:\(\d{3}\)|\d{3})[-. ]\d{3}[-. ]\d{4}(?!\d)/g,
+          (value) => {
+            if (value === metadata.ownerName) return value;
+            summary.contactsMasked++;
+            return value.includes("@") ? "[email]" : "[phone]";
+          },
+        ),
       );
     return text;
   };

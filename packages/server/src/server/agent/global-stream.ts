@@ -1,5 +1,9 @@
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
-import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import {
+  isCompanionEntryPending,
+  isUserQuestionEntry,
+  type CompanionEntry,
+} from "@getpaseo/protocol/companion-stream";
 import type {
   StreamListOptions,
   StreamRow,
@@ -110,6 +114,13 @@ function withTags(entry: CompanionEntry): CompanionEntry {
   return tags.length ? { ...entry, tags } : entry;
 }
 
+function matchesEntryFilters(entry: CompanionEntry, options: StreamListOptions): boolean {
+  if (options.asksOnly && !entry.ask) return false;
+  if (options.userQuestionsOnly && !isUserQuestionEntry(entry)) return false;
+  if (options.filter === "pending" && !isCompanionEntryPending(entry)) return false;
+  return options.filter !== "pinned" || entry.kind === "pin";
+}
+
 function collectStreamRows(
   sources: Iterable<StreamSource>,
   options: StreamListOptions,
@@ -127,9 +138,7 @@ function collectStreamRows(
     };
     for (const stored of source.companionEntries ?? []) {
       const entry = withTags(stored);
-      if (options.asksOnly && !entry.ask) continue;
-      if (options.filter === "pending" && !isCompanionEntryPending(entry)) continue;
-      if (options.filter === "pinned" && entry.kind !== "pin") continue;
+      if (!matchesEntryFilters(entry, options)) continue;
       rows.push({
         ...base,
         id: JSON.stringify([source.id, "entry", entry.id]),
@@ -137,7 +146,8 @@ function collectStreamRows(
         item: { kind: "entry", entry },
       });
     }
-    if (!options.asksOnly && (!options.filter || options.filter === "all")) {
+    const entriesOnly = options.asksOnly || options.userQuestionsOnly;
+    if (!entriesOnly && (!options.filter || options.filter === "all")) {
       for (const artifact of source.artifacts ?? []) {
         rows.push({
           ...base,
