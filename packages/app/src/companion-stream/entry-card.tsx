@@ -157,19 +157,25 @@ function EntryBody({
 }) {
   const { t } = useTranslation();
   if (!entry.text) return null;
-  const answer =
-    entry.kind === "q_and_a" && entry.answer ? (
-      <View style={styles.qaAnswerContainer}>
-        <Text style={styles.qaAnswerLabel}>{t("agentPanel.stream.answerLabel")}</Text>
-        {expanded ? (
-          <MarkdownRenderer text={entry.answer} compact enableHtmlish={false} />
-        ) : (
-          <Text selectable style={styles.body} numberOfLines={6}>
-            {entry.answer}
-          </Text>
+  const answerText = entry.reply?.text ?? (entry.kind === "q_and_a" ? entry.answer : undefined);
+  const answer = answerText ? (
+    <View style={styles.qaAnswerContainer}>
+      <Text style={styles.qaAnswerLabel}>
+        {t(
+          entry.reply?.provenance === "candidate"
+            ? "agentPanel.stream.possibleAnswerLabel"
+            : "agentPanel.stream.answerLabel",
         )}
-      </View>
-    ) : null;
+      </Text>
+      {expanded ? (
+        <MarkdownRenderer text={answerText} compact enableHtmlish={false} />
+      ) : (
+        <Text selectable style={styles.body} numberOfLines={6}>
+          {answerText}
+        </Text>
+      )}
+    </View>
+  ) : null;
   if (expanded) {
     return (
       <View>

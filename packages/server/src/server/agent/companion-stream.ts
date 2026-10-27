@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { getAnswerAttention, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { AgentPermissionRequest, AgentStreamEvent } from "./agent-sdk-types.js";
 
 export const COMPANION_ENTRY_LIMIT = 50;
@@ -226,6 +226,23 @@ function upsert(entries: CompanionEntry[], entry: CompanionEntry): CompanionEntr
     ? entries.map((item) => (item.id === entry.id ? { ...entry, timestamp: item.timestamp } : item))
     : [...entries, entry];
   return retainCompanionEntries(next);
+}
+
+const SNAPSHOT_ATTENTION_LIMIT = 20;
+
+/**
+ * The wire snapshot carries the newest entries plus older tracked questions still waiting
+ * for an answer or with an unseen one, so Chat's answers pane does not lose them to turn
+ * outcomes. Storage is unaffected; order is preserved.
+ */
+export function selectSnapshotCompanionEntries(entries: CompanionEntry[]): CompanionEntry[] {
+  if (entries.length <= COMPANION_ENTRY_LIMIT) return entries;
+  const recentStart = entries.length - COMPANION_ENTRY_LIMIT;
+  const older = entries
+    .slice(0, recentStart)
+    .filter((entry) => getAnswerAttention(entry) !== null)
+    .slice(-SNAPSHOT_ATTENTION_LIMIT);
+  return [...older, ...entries.slice(recentStart)];
 }
 
 export function retainCompanionEntries(entries: CompanionEntry[]): CompanionEntry[] {
