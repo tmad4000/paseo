@@ -26,6 +26,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (!server) return;
   await new Promise<void>((resolve, reject) =>
     server.close((error) => {
       if (error) {
