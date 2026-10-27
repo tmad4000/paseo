@@ -1841,6 +1841,26 @@ export const en = {
     },
   },
   desktop: {
+    fork: {
+      app: "Paseo Fork app",
+      installed: "Installed app",
+      hosts: "Connected hosts (daemon versions)",
+      channel: "Release channel",
+      published: "Latest published",
+      ready: "Ready to install",
+      compact: {
+        current: "Current",
+        update: "Update",
+        ready: "Ready",
+        ahead: "Newer",
+        unknown: "Unknown",
+        checking: "Checking…",
+        offline: "Offline",
+      },
+      idlePolicy:
+        "Automatic installation waits until sessions are idle. A staged build may not be published yet.",
+      check: "Check for updates",
+    },
     windowControls: {
       minimize: "Minimize window",
       maximize: "Maximize window",

@@ -1847,6 +1847,7 @@ export const ja: TranslationResources = {
     },
   },
   desktop: {
+    fork: en.desktop.fork,
     windowControls: {
       minimize: "ウィンドウを最小化",
       maximize: "ウィンドウを最大化",

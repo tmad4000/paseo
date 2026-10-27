@@ -50,3 +50,6 @@ export function useIsCompactFormFactor(): boolean {
 export function supportsDesktopPaneSplits(): boolean {
   return isWeb;
 }
+
+// Reserved by ScreenHeader for the root desktop Fork/version control.
+export const FORK_BADGE_WIDTH = 252;

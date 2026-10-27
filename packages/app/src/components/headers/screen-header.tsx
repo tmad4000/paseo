@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   HEADER_INNER_HEIGHT,
+  FORK_BADGE_WIDTH,
+  getIsElectronRuntime,
   HEADER_INNER_HEIGHT_MOBILE,
   HEADER_TOP_PADDING_MOBILE,
   useIsCompactFormFactor,
@@ -60,7 +62,9 @@ export function ScreenHeader({
         >
           <TitlebarDragRegion />
           <View style={leftCombinedStyle}>{left}</View>
-          <View style={rightCombinedStyle}>{right}</View>
+          <View style={[rightCombinedStyle, getIsElectronRuntime() && styles.forkClearance]}>
+            {right}
+          </View>
         </WindowChromeSafeArea>
       </View>
     </ComposerDockBackground>
@@ -68,6 +72,7 @@ export function ScreenHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  forkClearance: { marginRight: FORK_BADGE_WIDTH },
   header: {
     backgroundColor: theme.colors.surface0,
   },
