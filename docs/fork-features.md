@@ -13,12 +13,12 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 ## Decision routing experiment — pspin-ng3
 
 `decision-routing`: General → Sending selects Current LLM, Jev with OpenAI Decisions fallback,
-or OpenAI Decisions. Optional live suggestions find chats after typing pauses and never send.
+or OpenAI Decisions (default for the October 27 trial; saved choices preserved). Optional live suggestions find chats after typing pauses and never send.
 Verify provider/time/fallback labels, stale-result cancellation, scope preservation, and explicit
 choice for uncalibrated decision probabilities. Old hosts keep Current LLM and manual choice.
 Source prepared on `feat/live-routing-pspin-ng3`; not installed. See
 [session routing](session-routing.md#decision-routing-experiment-pspin-ng3) and
-[QA evidence](qa/decision-routing.md). Preserve this opt-in behavior during reconciliation.
+[QA evidence](qa/decision-routing.md). Preserve this provider default and opt-in live suggestions during reconciliation.
 
 ## Feature register
 

@@ -42,9 +42,11 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
-  it("persists the experimental routing selection and defaults old installs to the current matcher", async () => {
+  it("persists the experimental routing selection and defaults to OpenAI Decisions", async () => {
     const fresh = makeDeps();
-    expect((await loadAppSettingsFromStorage(fresh)).sessionRoutingProvider).toBe("codex");
+    expect((await loadAppSettingsFromStorage(fresh)).sessionRoutingProvider).toBe(
+      "openai-decisions",
+    );
     expect((await loadAppSettingsFromStorage(fresh)).liveRoutingSuggestions).toBe(false);
     const saved = makeDeps({
       storage: createInMemoryKeyValueStorage({

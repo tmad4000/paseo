@@ -8,12 +8,12 @@ Source and isolated tests only; the installed desktop/phone/daemon have not chan
 Uses the existing settings card/select/switch primitives, theme, typography and spacing.
 The task is choosing a destination chat from Filter projects, with a small optional provider
 setting and immediate lexical results followed by debounced semantic suggestions. The source
-keeps both new settings opt-in. No new layout system or dependency was introduced.
+defaults to OpenAI Decisions for the October 27 trial and keeps live suggestions opt-in. No new layout system or dependency was introduced.
 
 Browser tests cover live-search debounce without delivery, provider request forwarding, fallback
 labels, explicit destination selection despite a high decision probability, old-host capability
 handling, and the existing queue/draft/stale-response behavior. Settings storage tests verify
-old installs keep Current LLM and live suggestions off.
+missing provider selections use OpenAI Decisions, saved choices survive, and live suggestions stay off.
 
 Desktop/phone-width screenshots were inspected for readable copy, unclipped selectors and normal
 existing control geometry. The screenshot harness renders real controls with static animation
@@ -57,9 +57,16 @@ Web Chromium: browser assertions and desktop/phone-width visual inspection passe
 Native iOS/Android and packaged Electron: typechecked, not installed or device-tested.
 Old-host fixture keeps Current LLM/manual selection while explaining the unavailable decision
 option. New wire fields are optional, so old clients still parse new responses and current
-clients omit the provider on the default path. The installed fork requires a normal coordinated
+clients omit the provider on the Current LLM path. The installed fork requires a normal coordinated
 client/host release to expose this experiment; no shared daemon restart was performed.
 
 Before enabling decision auto-send, evaluate destination accuracy and thresholds on labeled
 realistic cases. During this experiment, a decision probability never bypasses the destination
 choice. Current LLM's existing explicit route action retains its established thresholds.
+
+## October 27 provider selection
+
+Jacob selected OpenAI Decisions while setting up TypeSafe. The trial now defaults to OpenAI
+Decisions when no provider is saved; an explicit saved choice is retained. The existing LLM
+remains the final fallback. PR #125 initially passed all 13 applicable CI checks (6 skipped).
+This source selection does not configure credentials or activate the installed client/daemon.

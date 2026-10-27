@@ -127,7 +127,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   language: "system",
   // The fork's Steer uses strict steering on the wire. It never falls back to interruption.
   sendBehavior: "steer",
-  sessionRoutingProvider: "codex",
+  sessionRoutingProvider: "openai-decisions",
   liveRoutingSuggestions: false,
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -204,7 +204,7 @@ const StoredAppSettingsSchema = z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
-    sessionRoutingProvider: z.enum(["codex", "jev", "openai-decisions"]).catch("codex"),
+    sessionRoutingProvider: z.enum(["codex", "jev", "openai-decisions"]).catch("openai-decisions"),
     liveRoutingSuggestions: z.boolean().catch(false),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(

@@ -39,8 +39,9 @@ delivery also requires `agentMessageQueue`. Update an older host when prompted.
 ## Decision routing experiment (pspin-ng3)
 
 Settings → General → Sending has **Chat routing** and **Live routing suggestions**.
-Current LLM is the unchanged default. Jev uses TypeSafe's typed decision endpoint, with OpenAI
-Decisions as fallback; OpenAI Decisions can also be selected directly. If the configured decision
+OpenAI Decisions is the default for this trial, per Jacob's October 27 selection. Saved provider
+choices are preserved. Jev remains available for later TypeSafe setup and uses OpenAI Decisions
+as fallback. Current LLM can also be selected directly. If the configured decision
 services fail, time out, return invalid options, or lack credentials, the existing Codex matcher
 is the final fallback. A valid no-match answer is respected, not retried against another model.
 Cancellation/disconnection never triggers fallback. Every decision attempt has a 1.8-second budget;
