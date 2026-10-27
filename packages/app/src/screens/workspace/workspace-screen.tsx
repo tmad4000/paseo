@@ -1,3 +1,5 @@
+import { useFirstMessage } from "@/first-message/reader";
+import { useWorkspaceLinks } from "./use-workspace-links";
 import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
@@ -1036,6 +1038,9 @@ interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
 }
 
 function WorkspaceHeaderTitleBar({
+  canCopyTabLink,
+  onCopyTabLink,
+  onCopyWorkspaceLink,
   sharingAgentId,
   renameTabKind,
   onRenameCurrentTab,
@@ -1067,9 +1072,11 @@ function WorkspaceHeaderTitleBar({
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
   const sharing = useConversationSharing(normalizedServerId, sharingAgentId);
+  const firstMessage = useFirstMessage(normalizedServerId, sharingAgentId);
   return (
     <View style={styles.headerTitleContainer}>
       {sharing.sheet}
+      {firstMessage.sheet}
       {isLoading ? (
         <View style={styles.headerTitleTextGroup}>
           <View style={styles.headerTitleSkeleton} />
@@ -1088,9 +1095,13 @@ function WorkspaceHeaderTitleBar({
       <View style={styles.compactHeaderMenuCluster}>
         {isMobile ? (
           <WorkspaceHeaderMenuMobile
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
@@ -1110,9 +1121,13 @@ function WorkspaceHeaderTitleBar({
           />
         ) : (
           <WorkspaceHeaderMenuDesktop
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -3720,6 +3735,11 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const { canCopyTabLink, onCopyTabLink, onCopyWorkspaceLink } = useWorkspaceLinks(
+    normalizedServerId,
+    normalizedWorkspaceId,
+    activeTabDescriptor,
+  );
   const renameTabKind = getHeaderRenameTabKind(activeTabDescriptor);
   const handleRenameCurrentTab = useCallback(() => {
     if (activeTabDescriptor) handleRenameTab(activeTabDescriptor);
@@ -4166,6 +4186,9 @@ function WorkspaceScreenContent({
               <NavigationForwardButton />
               <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
+                canCopyTabLink={canCopyTabLink}
+                onCopyTabLink={onCopyTabLink}
+                onCopyWorkspaceLink={onCopyWorkspaceLink}
                 renameTabKind={renameTabKind}
                 sharingAgentId={
                   activeTabDescriptor?.target.kind === "agent"
@@ -4206,6 +4229,9 @@ function WorkspaceScreenContent({
         />
       ) : null,
     [
+      canCopyTabLink,
+      onCopyTabLink,
+      onCopyWorkspaceLink,
       activeTabDescriptor,
       renameTabKind,
       handleRenameCurrentTab,

@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  firstMessage: {
+    title: "الرسالة الأولى",
+    loading: "جارٍ تحميل الرسالة الأولى…",
+    error: "تعذّر تحميل الرسالة الأولى. تحقق من الاتصال بالمضيف وحاول مجددًا.",
+    empty: "لم تُرسَل أي رسائل في هذه الدردشة بعد.",
+    noText: "لا تحتوي هذه الرسالة على نص.",
+    updateHost: "حدّث المضيف لعرض الرسالة الأولى.",
+  },
   sharing: {
     unpublishPending: "إلغاء الرابط قيد الانتظار على المضيف",
     revokeDelay: "يكتمل إلغاء الرابط على المضيف خلال دقيقة تقريبًا.",
@@ -84,6 +92,10 @@ export const ar: TranslationResources = {
     badges: {
       default: "المشروع الافتراضي",
       pinned: "مشروع مثبّت",
+    },
+    picker: {
+      pinnedSection: "المثبتة",
+      otherSection: "المشاريع",
     },
     commandCenter: {
       goToDefault: "الانتقال إلى المشروع الافتراضي",
@@ -1115,6 +1127,8 @@ export const ar: TranslationResources = {
         newTerminal: "محطة جديدة",
         newBrowser: "علامة تبويب متصفح جديدة",
         importSession: "جلسة الاستيراد",
+        copyWorkspaceLink: "نسخ رابط مساحة العمل",
+        copyTabLink: "نسخ رابط علامة التبويب",
         copyPath: "نسخ مسار مساحة العمل",
         copyBranchName: "انسخ اسم الفرع",
         showSetup: "إظهار الإعداد",
@@ -1123,6 +1137,8 @@ export const ar: TranslationResources = {
         workspacePathUnavailable: "مسار Workspace غير متاح بعد",
         branchNameUnavailable: "اسم الفرع غير متوفر",
         terminalQueued: "تحضير مساحة العمل، وفتح الوحدة الطرفية عندما تكون جاهزة...",
+        workspaceLinkCopiedLabel: "رابط مساحة العمل",
+        tabLinkCopiedLabel: "رابط علامة التبويب",
         workspacePathCopiedLabel: "مسار Workspace",
         branchNameCopiedLabel: "اسم الفرع",
       },
@@ -1479,6 +1495,7 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} علامات تبويب مفتوحة",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1763,6 +1780,7 @@ export const ar: TranslationResources = {
   },
   newWorkspace: {
     title: "مساحة عمل جديدة",
+    close: "إغلاق مساحة العمل الجديدة",
     create: "يخلق",
     isolation: {
       local: "محلي",

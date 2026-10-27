@@ -9,7 +9,7 @@ import { HostPicker } from "@/components/hosts/host-picker";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { Button } from "@/components/ui/button";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -17,6 +17,14 @@ import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { DraftAgentControls } from "@/composer/agent-controls";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import {
+  ProjectPickerPinToggle,
+  ProjectPickerSectionHeader,
+  orderProjectsWithPins,
+  resolveProjectPickerSectionStarts,
+  useProjectPickerPinOrdering,
+  type HostProjectRef,
+} from "@/default-project";
 import { isWeb } from "@/constants/platform";
 import { getHostProjectSourceDirectory, type HostProjectListItem } from "@/projects/host-projects";
 import { useProjectIcons } from "@/projects/icons";
@@ -351,14 +359,58 @@ function QuickLaunchProjectPicker({
   const { t } = useTranslation();
   const anchorRef = useRef<View>(null);
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  // Pinned and Default projects first, as in the sidebar and the New workspace picker.
+  const pinOrdering = useProjectPickerPinOrdering(projects);
+  const ordered = useMemo(
+    () => orderProjectsWithPins({ projects, ...pinOrdering }),
+    [pinOrdering, projects],
+  );
+  const projectByViewKey = useMemo(
+    () => new Map(projects.map((candidate) => [candidate.viewKey, candidate] as const)),
+    [projects],
+  );
   const options = useMemo<ComboboxOption[]>(
     () =>
-      projects.map((candidate) => ({
+      ordered.projects.map((candidate) => ({
         id: candidate.viewKey,
         label: candidate.projectName,
         description: getHostProjectSourceDirectory(candidate, serverId) ?? candidate.iconWorkingDir,
       })),
-    [projects, serverId],
+    [ordered.projects, serverId],
+  );
+  const sectionStarts = useMemo(
+    () =>
+      resolveProjectPickerSectionStarts({
+        optionIds: options.map((option) => option.id),
+        pinnedOptionIds: ordered.pinnedViewKeys,
+        searchQuery,
+      }),
+    [options, ordered.pinnedViewKeys, searchQuery],
+  );
+  const renderOption = useCallback(
+    (input: {
+      option: ComboboxOption;
+      selected: boolean;
+      active: boolean;
+      onPress: () => void;
+    }) => {
+      const item = (
+        <QuickLaunchProjectOption
+          {...input}
+          pinHosts={projectByViewKey.get(input.option.id)?.hosts ?? NO_PIN_HOSTS}
+        />
+      );
+      const section = sectionStarts.get(input.option.id);
+      if (!section) return item;
+      return (
+        <View>
+          <ProjectPickerSectionHeader section={section} />
+          {item}
+        </View>
+      );
+    },
+    [projectByViewKey, sectionStarts],
   );
   const openPicker = useCallback(() => setOpen(true), []);
   const select = useCallback(
@@ -412,8 +464,44 @@ function QuickLaunchProjectPicker({
         desktopMinWidth={360}
         anchorRef={anchorRef}
         emptyText={t("quickLaunch.project.empty")}
+        onSearchQueryChange={setSearchQuery}
+        renderOption={renderOption}
       />
     </View>
+  );
+}
+
+const NO_PIN_HOSTS: readonly HostProjectRef[] = [];
+
+function QuickLaunchProjectOption({
+  option,
+  selected,
+  active,
+  onPress,
+  pinHosts,
+}: {
+  option: ComboboxOption;
+  selected: boolean;
+  active: boolean;
+  onPress: () => void;
+  pinHosts: readonly HostProjectRef[];
+}) {
+  const trailingSlot = useMemo(
+    () => (
+      <ProjectPickerPinToggle hosts={pinHosts} testID={`quick-launch-project-pin-${option.id}`} />
+    ),
+    [option.id, pinHosts],
+  );
+  return (
+    <ComboboxItem
+      label={option.label}
+      description={option.description}
+      selected={selected}
+      active={active}
+      onPress={onPress}
+      trailingSlot={trailingSlot}
+      testID={`quick-launch-project-option-${option.id}`}
+    />
   );
 }
 

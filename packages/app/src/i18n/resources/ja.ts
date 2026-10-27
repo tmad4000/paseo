@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  firstMessage: {
+    title: "最初のメッセージ",
+    loading: "最初のメッセージを読み込み中…",
+    error:
+      "最初のメッセージを読み込めませんでした。ホストへの接続を確認して、もう一度お試しください。",
+    empty: "このチャットにはまだメッセージが送信されていません。",
+    noText: "このメッセージにはテキストがありません。",
+    updateHost: "最初のメッセージを表示するにはホストを更新してください。",
+  },
   sharing: {
     unpublishPending: "ホストでの取り消しを待機中",
     revokeDelay: "ホストでの取り消しは約1分以内に完了します。",
@@ -85,6 +94,10 @@ export const ja: TranslationResources = {
     badges: {
       default: "既定のプロジェクト",
       pinned: "固定したプロジェクト",
+    },
+    picker: {
+      pinnedSection: "ピン留め",
+      otherSection: "プロジェクト",
     },
     commandCenter: {
       goToDefault: "既定のプロジェクトへ移動",
@@ -1122,6 +1135,8 @@ export const ja: TranslationResources = {
         newTerminal: "新しいターミナル",
         newBrowser: "新しいブラウザタブ",
         importSession: "セッションをインポート",
+        copyWorkspaceLink: "ワークスペースのリンクをコピー",
+        copyTabLink: "タブのリンクをコピー",
         copyPath: "ワークスペースパスをコピー",
         copyBranchName: "ブランチ名をコピー",
         showSetup: "セットアップを表示",
@@ -1130,6 +1145,8 @@ export const ja: TranslationResources = {
         workspacePathUnavailable: "ワークスペースパスはまだ利用できません",
         branchNameUnavailable: "ブランチ名が利用できません",
         terminalQueued: "ワークスペースを準備中、準備ができたらターミナルを開きます...",
+        workspaceLinkCopiedLabel: "ワークスペースのリンク",
+        tabLinkCopiedLabel: "タブのリンク",
         workspacePathCopiedLabel: "ワークスペースパス",
         branchNameCopiedLabel: "ブランチ名",
       },
@@ -1495,6 +1512,7 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} 個の開いているタブ",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1780,6 +1798,7 @@ export const ja: TranslationResources = {
   },
   newWorkspace: {
     title: "新しいワークスペース",
+    close: "新しいワークスペースを閉じる",
     create: "作成",
     isolation: {
       local: "ローカル",

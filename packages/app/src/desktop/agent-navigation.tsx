@@ -1,22 +1,28 @@
+import type { AppDeepLinkTarget } from "@getpaseo/protocol/app-deep-link";
+import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { parseWorkspaceOpenIntent, decodeWorkspaceIdFromPathSegment } from "@/utils/host-routes";
 import { useEffect } from "react";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 
-interface OpenAgentEventPayload {
-  serverId?: unknown;
-  agentId?: unknown;
-}
-
 export function AgentNavigationListener() {
-  const openAgent = useStableEvent((payload: OpenAgentEventPayload | null) => {
-    const serverId = typeof payload?.serverId === "string" ? payload.serverId.trim() : "";
-    const agentId = typeof payload?.agentId === "string" ? payload.agentId.trim() : "";
-    if (!serverId || !agentId) {
+  const openAgent = useStableEvent((payload: AppDeepLinkTarget | null) => {
+    if (!payload) return;
+    // The main process validates OS links before delivering or queuing this target.
+    const target = payload;
+    if ("agentId" in target) {
+      navigateToAgent(target);
       return;
     }
-    navigateToAgent({ serverId, agentId });
+    const workspaceId = decodeWorkspaceIdFromPathSegment(target.workspaceId);
+    if (!workspaceId) return;
+    navigateToWorkspace({
+      serverId: target.serverId,
+      workspaceId,
+      target: parseWorkspaceOpenIntent(target.open) ?? undefined,
+    });
   });
 
   useEffect(() => {
@@ -33,7 +39,7 @@ export function AgentNavigationListener() {
     const connect = async () => {
       let dispose: (() => void) | null = null;
       try {
-        dispose = await listenToDesktopEvent<OpenAgentEventPayload>("open-agent", openAgent);
+        dispose = await listenToDesktopEvent<AppDeepLinkTarget>("open-agent", openAgent);
         if (disposed) {
           dispose();
           return;

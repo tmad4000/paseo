@@ -37,6 +37,12 @@ host's project record (`~/.paseo/projects/projects.json`), so the phone and desk
 actions hide on hosts that do not advertise `projectPinning`. Making a grouped project the
 default applies it on each of its hosts; the host Workspaces settings page sets one host only.
 
+The New workspace and Quick launch project pickers use the same order and pins: **Pinned** rows
+first, then **Projects** (headers only while the search field is empty and both groups have
+rows). The pin button on a picker row pins or unpins without selecting it; the Default shows its
+house marker instead. Pins only reorder the picker; its initial project still comes from the
+route or the last active project.
+
 ## Host compatibility
 
 The message sorts work against every host. A host that predates `conversationMessageActivity` sends

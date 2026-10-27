@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  firstMessage: {
+    title: "Primer mensaje",
+    loading: "Cargando el primer mensaje…",
+    error:
+      "No se pudo cargar el primer mensaje. Comprueba la conexión con el host e inténtalo de nuevo.",
+    empty: "Aún no se han enviado mensajes en este chat.",
+    noText: "Este mensaje no tiene texto.",
+    updateHost: "Actualiza el host para ver el primer mensaje.",
+  },
   sharing: {
     unpublishPending: "Revocación pendiente en el servidor",
     revokeDelay: "La revocación en el servidor se completa en aproximadamente un minuto.",
@@ -86,6 +95,10 @@ export const es: TranslationResources = {
     badges: {
       default: "Proyecto predeterminado",
       pinned: "Proyecto fijado",
+    },
+    picker: {
+      pinnedSection: "Fijados",
+      otherSection: "Proyectos",
     },
     commandCenter: {
       goToDefault: "Ir al proyecto predeterminado",
@@ -1130,6 +1143,8 @@ export const es: TranslationResources = {
         newTerminal: "Nueva terminal",
         newBrowser: "Nueva pestaña del navegador",
         importSession: "Importar sesión",
+        copyWorkspaceLink: "Copiar enlace del espacio de trabajo",
+        copyTabLink: "Copiar enlace de la pestaña",
         copyPath: "Copiar ruta del espacio de trabajo",
         copyBranchName: "Copiar nombre de sucursal",
         showSetup: "Mostrar configuración",
@@ -1139,6 +1154,8 @@ export const es: TranslationResources = {
         branchNameUnavailable: "Nombre de la sucursal no disponible",
         terminalQueued:
           "Preparando el espacio de trabajo, abriendo la terminal cuando esté listo...",
+        workspaceLinkCopiedLabel: "Enlace del espacio de trabajo",
+        tabLinkCopiedLabel: "Enlace de la pestaña",
         workspacePathCopiedLabel: "RutaWorkspace",
         branchNameCopiedLabel: "Nombre de la sucursal",
       },
@@ -1523,6 +1540,7 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} pestañas abiertas",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1807,6 +1825,7 @@ export const es: TranslationResources = {
   },
   newWorkspace: {
     title: "Nuevo espacio de trabajo",
+    close: "Cerrar Nuevo espacio de trabajo",
     create: "Crear",
     isolation: {
       local: "Local",

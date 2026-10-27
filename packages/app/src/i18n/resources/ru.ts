@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  firstMessage: {
+    title: "Первое сообщение",
+    loading: "Загрузка первого сообщения…",
+    error:
+      "Не удалось загрузить первое сообщение. Проверьте подключение к хосту и попробуйте ещё раз.",
+    empty: "В этом чате ещё нет отправленных сообщений.",
+    noText: "В этом сообщении нет текста.",
+    updateHost: "Обновите хост, чтобы просмотреть первое сообщение.",
+  },
   sharing: {
     unpublishPending: "Отзыв на хосте ожидается",
     revokeDelay: "Отзыв на хосте завершится примерно в течение минуты.",
@@ -85,6 +94,10 @@ export const ru: TranslationResources = {
     badges: {
       default: "Проект по умолчанию",
       pinned: "Закреплённый проект",
+    },
+    picker: {
+      pinnedSection: "Закреплённые",
+      otherSection: "Проекты",
     },
     commandCenter: {
       goToDefault: "Перейти к проекту по умолчанию",
@@ -1125,6 +1138,8 @@ export const ru: TranslationResources = {
         newTerminal: "Новый терминал",
         newBrowser: "Новая вкладка браузера",
         importSession: "Импортировать сессию",
+        copyWorkspaceLink: "Копировать ссылку на рабочую область",
+        copyTabLink: "Копировать ссылку на вкладку",
         copyPath: "Скопировать путь к рабочему пространству",
         copyBranchName: "Скопировать название ветки",
         showSetup: "Показать настройку рабочего пространства",
@@ -1134,6 +1149,8 @@ export const ru: TranslationResources = {
         branchNameUnavailable: "Имя ветки недоступно",
         terminalQueued:
           "Рабочее пространство подготавливается. Терминал откроется, когда оно будет готово...",
+        workspaceLinkCopiedLabel: "Ссылка на рабочую область",
+        tabLinkCopiedLabel: "Ссылка на вкладку",
         workspacePathCopiedLabel: "Путь к рабочему пространству",
         branchNameCopiedLabel: "Имя ветки",
       },
@@ -1499,6 +1516,7 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "Открытых вкладок: {{count}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1784,6 +1802,7 @@ export const ru: TranslationResources = {
   },
   newWorkspace: {
     title: "Новое рабочее пространство",
+    close: "Закрыть новое рабочее пространство",
     create: "Создать",
     isolation: {
       local: "Локально",

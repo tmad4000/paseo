@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  firstMessage: {
+    title: "Premier message",
+    loading: "Chargement du premier message…",
+    error: "Impossible de charger le premier message. Vérifiez la connexion à l’hôte et réessayez.",
+    empty: "Aucun message n’a encore été envoyé dans cette discussion.",
+    noText: "Ce message ne contient pas de texte.",
+    updateHost: "Mettez l’hôte à jour pour voir le premier message.",
+  },
   sharing: {
     unpublishPending: "Révocation en attente sur le serveur",
     revokeDelay: "La révocation sur le serveur prend environ une minute.",
@@ -85,6 +93,10 @@ export const fr: TranslationResources = {
     badges: {
       default: "Projet par défaut",
       pinned: "Projet épinglé",
+    },
+    picker: {
+      pinnedSection: "Épinglés",
+      otherSection: "Projets",
     },
     commandCenter: {
       goToDefault: "Aller au projet par défaut",
@@ -1130,6 +1142,8 @@ export const fr: TranslationResources = {
         newTerminal: "Nouvelle borne",
         newBrowser: "Nouvel onglet du navigateur",
         importSession: "Session d'importation",
+        copyWorkspaceLink: "Copier le lien de l’espace de travail",
+        copyTabLink: "Copier le lien de l’onglet",
         copyPath: "Copier le chemin de l'espace de travail",
         copyBranchName: "Copier le nom de la branche",
         showSetup: "Afficher la configuration",
@@ -1139,6 +1153,8 @@ export const fr: TranslationResources = {
         branchNameUnavailable: "Nom de la succursale non disponible",
         terminalQueued:
           "Préparation de l'espace de travail, ouverture du terminal lorsque vous êtes prêt...",
+        workspaceLinkCopiedLabel: "Lien de l’espace de travail",
+        tabLinkCopiedLabel: "Lien de l’onglet",
         workspacePathCopiedLabel: "CheminWorkspace",
         branchNameCopiedLabel: "Nom de la succursale",
       },
@@ -1522,6 +1538,7 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} onglets ouverts",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1807,6 +1824,7 @@ export const fr: TranslationResources = {
   },
   newWorkspace: {
     title: "Nouvel espace de travail",
+    close: "Fermer Nouvel espace de travail",
     create: "Créer",
     isolation: {
       local: "Local",

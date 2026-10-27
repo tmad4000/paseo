@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  firstMessage: {
+    title: "第一条消息",
+    loading: "正在加载第一条消息…",
+    error: "无法加载第一条消息。请检查主机连接并重试。",
+    empty: "此聊天尚未发送任何消息。",
+    noText: "此消息没有文本。",
+    updateHost: "请更新主机以查看第一条消息。",
+  },
   sharing: {
     unpublishPending: "等待主机撤销",
     revokeDelay: "主机上的撤销将在大约一分钟内完成。",
@@ -84,6 +92,10 @@ export const zhCN: TranslationResources = {
     badges: {
       default: "默认项目",
       pinned: "已固定的项目",
+    },
+    picker: {
+      pinnedSection: "已固定",
+      otherSection: "项目",
     },
     commandCenter: {
       goToDefault: "前往默认项目",
@@ -1104,6 +1116,8 @@ export const zhCN: TranslationResources = {
         newTerminal: "新建 Terminal",
         newBrowser: "新建浏览器标签",
         importSession: "导入会话",
+        copyWorkspaceLink: "复制工作区链接",
+        copyTabLink: "复制标签页链接",
         copyPath: "复制 workspace 路径",
         copyBranchName: "复制分支名称",
         showSetup: "显示 setup",
@@ -1112,6 +1126,8 @@ export const zhCN: TranslationResources = {
         workspacePathUnavailable: "Workspace 路径尚不可用",
         branchNameUnavailable: "分支名称不可用",
         terminalQueued: "正在准备 workspace，Terminal 准备好后会打开...",
+        workspaceLinkCopiedLabel: "工作区链接",
+        tabLinkCopiedLabel: "标签页链接",
         workspacePathCopiedLabel: "Workspace 路径",
         branchNameCopiedLabel: "分支名称",
       },
@@ -1464,6 +1480,7 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} 个打开的标签页",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1745,6 +1762,7 @@ export const zhCN: TranslationResources = {
   },
   newWorkspace: {
     title: "新建 workspace",
+    close: "关闭新建 workspace",
     create: "创建",
     isolation: {
       local: "本地",

@@ -1,4 +1,12 @@
 export const en = {
+  firstMessage: {
+    title: "First message",
+    loading: "Loading first message…",
+    error: "Could not load the first message. Check the host connection and try again.",
+    empty: "No messages have been sent in this chat yet.",
+    noText: "This message has no text.",
+    updateHost: "Update the host to view the first message.",
+  },
   sharing: {
     unpublishPending: "Revoke pending at the host",
     revokeDelay: "Revocation at the host completes within about a minute.",
@@ -82,6 +90,10 @@ export const en = {
     badges: {
       default: "Default project",
       pinned: "Pinned project",
+    },
+    picker: {
+      pinnedSection: "Pinned",
+      otherSection: "Projects",
     },
     commandCenter: {
       goToDefault: "Go to default project",
@@ -1114,6 +1126,8 @@ export const en = {
         newTerminal: "New terminal",
         newBrowser: "New browser tab",
         importSession: "Import session",
+        copyWorkspaceLink: "Copy workspace link",
+        copyTabLink: "Copy tab link",
         copyPath: "Copy workspace path",
         copyBranchName: "Copy branch name",
         showSetup: "Show setup",
@@ -1122,6 +1136,8 @@ export const en = {
         workspacePathUnavailable: "Workspace path is not available yet",
         branchNameUnavailable: "Branch name not available",
         terminalQueued: "Preparing workspace, opening terminal when ready...",
+        workspaceLinkCopiedLabel: "Workspace link",
+        tabLinkCopiedLabel: "Tab link",
         workspacePathCopiedLabel: "Workspace path",
         branchNameCopiedLabel: "Branch name",
       },
@@ -1491,6 +1507,7 @@ export const en = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} open tabs",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1775,6 +1792,7 @@ export const en = {
   },
   newWorkspace: {
     title: "New workspace",
+    close: "Close New workspace",
     create: "Create",
     isolation: {
       local: "Local",

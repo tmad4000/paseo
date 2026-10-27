@@ -2,6 +2,14 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  firstMessage: {
+    title: "첫 메시지",
+    loading: "첫 메시지 불러오는 중…",
+    error: "첫 메시지를 불러올 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+    empty: "이 채팅에는 아직 보낸 메시지가 없습니다.",
+    noText: "이 메시지에는 텍스트가 없습니다.",
+    updateHost: "첫 메시지를 보려면 호스트를 업데이트하세요.",
+  },
   sharing: {
     unpublishPending: "호스트에서 취소 대기 중",
     revokeDelay: "호스트에서의 취소는 약 1분 이내에 완료됩니다.",
@@ -84,6 +92,10 @@ export const ko: TranslationResources = {
     badges: {
       default: "기본 프로젝트",
       pinned: "고정된 프로젝트",
+    },
+    picker: {
+      pinnedSection: "고정됨",
+      otherSection: "프로젝트",
     },
     commandCenter: {
       goToDefault: "기본 프로젝트로 이동",
@@ -1119,6 +1131,8 @@ export const ko: TranslationResources = {
         newTerminal: "새 터미널",
         newBrowser: "새 브라우저 탭",
         importSession: "세션 가져오기",
+        copyWorkspaceLink: "워크스페이스 링크 복사",
+        copyTabLink: "탭 링크 복사",
         copyPath: "워크스페이스 경로 복사",
         copyBranchName: "브랜치 이름 복사",
         showSetup: "설정 표시",
@@ -1127,6 +1141,8 @@ export const ko: TranslationResources = {
         workspacePathUnavailable: "워크스페이스 경로를 아직 사용할 수 없습니다",
         branchNameUnavailable: "브랜치 이름을 사용할 수 없습니다",
         terminalQueued: "워크스페이스 준비 중, 준비되면 터미널을 엽니다...",
+        workspaceLinkCopiedLabel: "워크스페이스 링크",
+        tabLinkCopiedLabel: "탭 링크",
         workspacePathCopiedLabel: "워크스페이스 경로",
         branchNameCopiedLabel: "브랜치 이름",
       },
@@ -1490,6 +1506,7 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "열린 탭 {{count}}개",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1774,6 +1791,7 @@ export const ko: TranslationResources = {
   },
   newWorkspace: {
     title: "새 워크스페이스",
+    close: "새 워크스페이스 닫기",
     create: "생성",
     isolation: {
       local: "로컬",

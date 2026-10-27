@@ -2,6 +2,15 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  firstMessage: {
+    title: "Primeira mensagem",
+    loading: "Carregando a primeira mensagem…",
+    error:
+      "Não foi possível carregar a primeira mensagem. Verifique a conexão com o host e tente novamente.",
+    empty: "Nenhuma mensagem foi enviada neste chat ainda.",
+    noText: "Esta mensagem não tem texto.",
+    updateHost: "Atualize o host para ver a primeira mensagem.",
+  },
   sharing: {
     unpublishPending: "Revogação pendente no servidor",
     revokeDelay: "A revogação no servidor é concluída em cerca de um minuto.",
@@ -86,6 +95,10 @@ export const ptBR: TranslationResources = {
     badges: {
       default: "Projeto padrão",
       pinned: "Projeto fixado",
+    },
+    picker: {
+      pinnedSection: "Fixados",
+      otherSection: "Projetos",
     },
     commandCenter: {
       goToDefault: "Ir para o projeto padrão",
@@ -1127,6 +1140,8 @@ export const ptBR: TranslationResources = {
         newTerminal: "Novo terminal",
         newBrowser: "Nova aba de navegador",
         importSession: "Importar sessão",
+        copyWorkspaceLink: "Copiar link do espaço de trabalho",
+        copyTabLink: "Copiar link da aba",
         copyPath: "Copiar caminho do workspace",
         copyBranchName: "Copiar nome da branch",
         showSetup: "Mostrar configuração",
@@ -1135,6 +1150,8 @@ export const ptBR: TranslationResources = {
         workspacePathUnavailable: "O caminho do workspace ainda não está disponível",
         branchNameUnavailable: "Nome da branch indisponível",
         terminalQueued: "Preparando workspace, abrindo terminal quando estiver pronto...",
+        workspaceLinkCopiedLabel: "Link do espaço de trabalho",
+        tabLinkCopiedLabel: "Link da aba",
         workspacePathCopiedLabel: "Caminho do workspace",
         branchNameCopiedLabel: "Nome da branch",
       },
@@ -1513,6 +1530,7 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    openTabs: "{{count}} abas abertas",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1797,6 +1815,7 @@ export const ptBR: TranslationResources = {
   },
   newWorkspace: {
     title: "Novo workspace",
+    close: "Fechar Novo workspace",
     create: "Criar",
     isolation: {
       local: "Local",
