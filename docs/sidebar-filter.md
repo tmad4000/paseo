@@ -98,6 +98,11 @@ matches render under the workspace row (provider icon, title, matched text empha
 time with "+N more". A tab named exactly like its workspace is not repeated under it. Clicking a
 nested row opens that tab.
 
+When exactly one chat tab matches within a workspace, clicking the workspace row also reveals
+that chat's existing tab and pane. It does not choose a different chat based on attention or
+recency. This applies to project and status grouping. With multiple matching chats, the indented
+rows let the person choose; a workspace-only match keeps normal workspace navigation.
+
 Tab titles come from the agent directory the client already holds (`session.agents` per host),
 so this tier never touches the network. Only tabs a workspace can show count: unarchived, titled,
 and a workspace root or explicitly auto-opened. Child agents live inside their parent's tab.

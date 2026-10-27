@@ -123,6 +123,7 @@ import {
   SidebarFilterResultsTail,
   SidebarWorkspaceTabMatches,
 } from "@/components/sidebar/sidebar-filter-results";
+import { useSidebarWorkspaceMatchTarget } from "@/components/sidebar/sidebar-filter-context";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
@@ -1441,13 +1442,18 @@ function WorkspaceRowItem({
   isDragging = false,
   dragHandleProps,
 }: WorkspaceRowItemProps) {
+  const target = useSidebarWorkspaceMatchTarget(workspace.workspaceKey);
   const handlePress = useCallback(() => {
     if (!workspace.serverId) {
       return;
     }
     onWorkspacePress?.();
-    navigateToWorkspace({ serverId: workspace.serverId, workspaceId: workspace.workspaceId });
-  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
+    navigateToWorkspace({
+      serverId: workspace.serverId,
+      workspaceId: workspace.workspaceId,
+      target,
+    });
+  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId, target]);
 
   return (
     <>

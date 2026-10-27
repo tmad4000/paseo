@@ -50,6 +50,13 @@ export type SidebarTabMatches = ReadonlyMap<string, readonly SidebarTabMatch[]>;
 
 export const EMPTY_SIDEBAR_TAB_MATCHES: SidebarTabMatches = new Map();
 
+/** A workspace row that names one matching chat should reveal that chat, not its attention pick. */
+export function selectSidebarWorkspaceMatchTarget(matches: readonly SidebarTabMatch[]) {
+  return matches.length === 1
+    ? { kind: "agent" as const, agentId: matches[0]!.agentId }
+    : undefined;
+}
+
 export function normalizeSidebarText(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase();
 }
