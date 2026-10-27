@@ -30,7 +30,18 @@ async function expectChatAtBottom(page: Page): Promise<void> {
     .toBeLessThanOrEqual(72);
 }
 
-for (const width of [1280, 390]) {
+const sendReadingPositionCases = [
+  { width: 1280, send: submitMessage },
+  {
+    width: 390,
+    send: async (page: Page, text: string) => {
+      await composerLocator(page).fill(text);
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+    },
+  },
+];
+
+for (const { width, send } of sendReadingPositionCases) {
   test(`sending preserves the reading position and explicit bottom navigation at width ${width}`, async ({
     page,
   }) => {
@@ -45,7 +56,7 @@ for (const width of [1280, 390]) {
         minDistanceFromBottom: 300,
       });
       const prompt = "Continue while I read the earlier messages";
-      await submitMessage(page, prompt);
+      await send(page, prompt);
       await expect(composerLocator(page)).toHaveValue("");
       await expectScrollStaysFixed(page, readingPosition);
       await chat.client.waitForFinish(chat.agentId, 20_000);
@@ -60,7 +71,7 @@ for (const width of [1280, 390]) {
       await expectChatAtBottom(page);
 
       const nextPrompt = "Continue following this conversation";
-      await submitMessage(page, nextPrompt);
+      await send(page, nextPrompt);
       await expectTimelinePromptVisible(page, nextPrompt);
       await chat.client.waitForFinish(chat.agentId, 20_000);
       await expectChatAtBottom(page);
