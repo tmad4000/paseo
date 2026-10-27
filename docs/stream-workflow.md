@@ -24,7 +24,8 @@ ff9fffdd-6c4f-4d44-b974-36f904a963ae. The priority is **Needs you**, not Tasks.
 
 A newly written ask gets an immutable UUID `taskId`. Subsequent revisions keep it,
 including old clients whose writes omit it. Existing untouched asks project a
-stable host/agent/entry identity without a bulk rewrite. Physical storage stays in
+stable host/agent/entry identity; the first edit persists that exact identity rather
+than replacing it with a UUID. There is no bulk rewrite. Physical storage stays in
 its atomic source agent JSON; that storage address is provenance, not an exclusive
 execution container. Archived and dormant origins remain readable without loading
 providers. Deleting source data is still deleting its records; this is not an archive backup.
@@ -38,7 +39,12 @@ host, agent and entry. The copy becomes read-only history in Activity and leaves
 current Tasks/Q&A counts. Its original text/state are retained. No fuzzy text match
 merges obligations, and no scheduler or agent is launched. An unavailable host is
 reported, never taken as proof that its work is complete. Cross-host links are
-references, not automatic host-to-host synchronization.
+references, not automatic host-to-host synchronization. Preserve the `server-id` file
+when migrating a daemon home. If the host identity changes or a record is copied,
+current views retain a read-only reference with an origin notice and source link;
+they never silently drop the obligation or adopt its authority. When the origin is
+also available, the client shows that canonical row once. There is no automatic
+origin-adoption operation.
 
 ## Intervention is independent
 
@@ -72,3 +78,14 @@ scale, subtle borders, spacing tokens, buttons and registered navigation. Needs 
 is an always-discoverable shortcut above other views, not a second dashboard. The
 composer stays owned by the existing chat/panel layout. New navigation does not
 clear drafts or treat focus as completion.
+
+## Follow-up boundaries
+
+Global MCP listing is explicitly opt-in (`global: true`) and spans the selected
+host's saved sessions, including archived projects; the default remains the caller's
+conversation. It does not load another host's data through a local daemon. An input
+stored on a different host from its parent task appears in global Needs you and
+links to the exact task source, but that remote task's session links cannot be joined
+by the local daemon; use the global view for that case. A legacy alias is deliberately
+read-only; revision-checked unlink/recovery and a global attention badge remain
+follow-up design work. None of these are permission or completion signals.

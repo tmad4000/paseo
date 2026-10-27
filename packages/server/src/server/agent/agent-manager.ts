@@ -2497,7 +2497,8 @@ export class AgentManager {
       });
     }
     let tagScopeAgentId = options.agentId;
-    if (options.relatedServerId === this.serverId) tagScopeAgentId = options.relatedAgentId;
+    if (options.relatedAgentId && options.relatedServerId === this.serverId)
+      tagScopeAgentId = options.relatedAgentId;
     let pinnedTags: string[] = [];
     if (tagScopeAgentId)
       pinnedTags = records.find((record) => record.id === tagScopeAgentId)?.pinnedStreamTags ?? [];

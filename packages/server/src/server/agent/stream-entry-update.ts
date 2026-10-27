@@ -283,7 +283,9 @@ function createTrackedAskEntry({
     status: ask.state === "done" ? "done" : "open",
     ...answerStateOf(previous),
     ask: {
-      taskId: previous?.ask?.taskId ?? `task:${randomUUID()}`,
+      taskId:
+        previous?.ask?.taskId ??
+        (previous?.ask ? JSON.stringify([serverId, agentId, id]) : `task:${randomUUID()}`),
       origin:
         previous?.ask?.origin ??
         (serverId ? { serverId, agentId: agentId, entryId: id } : undefined),

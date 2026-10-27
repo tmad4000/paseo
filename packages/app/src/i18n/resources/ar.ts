@@ -137,6 +137,12 @@ export const ar: TranslationResources = {
     open: "فتح {{title}} على {{host}}",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: غير متصل — قد تكون العناصر المخزنة مؤقتًا قديمة",
+    hostUpgradeNotice: "{{host}}: حدّث هذا المضيف لاستخدام Stream العام",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: حدّث هذا المضيف لاستخدام المهام والأسئلة والأجوبة والطلبات التي تحتاج إليك",
+    markSeenStillNeeded: "تم الاطلاع (لا يزال مطلوبًا)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

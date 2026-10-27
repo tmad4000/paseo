@@ -140,6 +140,13 @@ export const es: TranslationResources = {
     open: "Abrir {{title}} en {{host}}",
   },
   globalStream: {
+    hostOfflineNotice:
+      "{{host}}: sin conexión; los elementos en caché pueden estar desactualizados",
+    hostUpgradeNotice: "{{host}}: actualiza este host para usar el Stream global",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: actualiza este host para usar Tareas, Preguntas y respuestas y Requiere tu atención",
+    markSeenStillNeeded: "Visto (aún necesario)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

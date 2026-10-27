@@ -139,6 +139,12 @@ export const ja: TranslationResources = {
     open: "{{host}} で {{title}} を開く",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: オフライン — キャッシュされた項目は古い可能性があります",
+    hostUpgradeNotice: "{{host}}: グローバルStreamを使用するには、このホストを更新してください",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: タスク、Q&A、あなたへの依頼を使用するには、このホストを更新してください",
+    markSeenStillNeeded: "確認済み（対応は必要）",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

@@ -140,6 +140,12 @@ export const ptBR: TranslationResources = {
     open: "Abrir {{title}} em {{host}}",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: offline — os itens em cache podem estar desatualizados",
+    hostUpgradeNotice: "{{host}}: atualize este host para usar o Stream global",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: atualize este host para usar Tarefas, Perguntas e respostas e Precisa de você",
+    markSeenStillNeeded: "Visto (ainda necessário)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

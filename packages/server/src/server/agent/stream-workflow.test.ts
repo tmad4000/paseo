@@ -187,13 +187,15 @@ describe("shared task workflow", () => {
   });
 });
 
-it("makes origin immutable and prevents a copied host from mutating shared task state", () => {
+it("keeps a migrated or copied task visible with its original authority, and refuses local writes", () => {
   const entries = applyStreamEntryUpdate([], create, "host-a");
   expect(entries[0].ask?.origin).toEqual(origin);
   expect(() =>
     assertStreamWriteAuthority(entries, { ...create, expectedRevision: 1 }, "host-b"),
   ).toThrow("canonical origin");
-  expect(listStreamRows(source(entries), { view: "tasks" }, "host-b").rows).toEqual([]);
+  const migrated = listStreamRows(source(entries), { view: "tasks" }, "host-b").rows;
+  expect(migrated).toHaveLength(1);
+  expect(migrated[0].item.kind === "entry" && migrated[0].item.entry.ask?.origin).toEqual(origin);
   expect(listStreamRows(source(entries), { view: "activity" }, "host-b").rows).toHaveLength(1);
 });
 
@@ -244,4 +246,26 @@ it("pages current tasks before completed history without losing either", () => {
   expect(first.rows.map((r) => r.item.kind === "entry" && r.item.entry.id)).toEqual(["ask:ship"]);
   expect(second.rows.map((r) => r.item.kind === "entry" && r.item.entry.id)).toEqual(["ask:done"]);
   expect(second.nextCursor).toBeNull();
+});
+
+it("keeps a legacy task's projected global identity through its first and later edits", () => {
+  const entries = applyStreamEntryUpdate([], create, "host-a");
+  delete entries[0].ask!.taskId;
+  delete entries[0].ask!.origin;
+  const projected = listStreamRows(source(entries), { view: "tasks" }, "host-a").rows[0];
+  const edited = applyStreamEntryUpdate(
+    entries,
+    { ...create, expectedRevision: 1, text: "Updated legacy task" },
+    "host-a",
+  );
+  expect(edited[0].ask?.taskId).toBe(projected.taskId);
+  expect(edited[0].ask?.origin).toEqual(origin);
+  const revised = applyStreamEntryUpdate(
+    edited,
+    { ...create, expectedRevision: 2, text: "Revised legacy task" },
+    "host-a",
+  );
+  expect(listStreamRows(source(revised), { view: "tasks" }, "host-a").rows[0].taskId).toBe(
+    projected.taskId,
+  );
 });

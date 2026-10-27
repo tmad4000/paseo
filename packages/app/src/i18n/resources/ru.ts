@@ -139,6 +139,12 @@ export const ru: TranslationResources = {
     open: "Открыть {{title}} на {{host}}",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: нет подключения — сохранённые данные могут быть устаревшими",
+    hostUpgradeNotice: "{{host}}: обновите этот хост для доступа к общему Stream",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: обновите этот хост для доступа к задачам, вопросам и ответам и запросам вашего участия",
+    markSeenStillNeeded: "Просмотрено (ещё требуется)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

@@ -2,7 +2,7 @@
 import React from "react";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { needsUserInput, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { i18n } from "@/i18n/i18next";
 
 vi.mock("react-native", () => ({
@@ -84,6 +84,16 @@ const quote: CompanionEntry = {
   truncated: false,
 };
 
+const humanRequest: CompanionEntry = {
+  id: "question:needed",
+  kind: "question",
+  status: "open",
+  timestamp: ask.timestamp,
+  text: "Choose a date",
+  truncated: false,
+  inputRequest: { kind: "decision", recipient: "user" },
+};
+
 function renderCard(entry: CompanionEntry) {
   return render(
     <EntryCard
@@ -129,6 +139,46 @@ describe("EntryCard", () => {
     fireEvent.click(view.getByText("Open task source"));
     expect(navigateToAgent).toHaveBeenLastCalledWith({ serverId: "m5", agentId: "owner" });
   });
+
+  it("marks a human request seen without resolving it; Read only expands and Done resolves explicitly", () => {
+    const entry = humanRequest;
+    const onUpdateStatus = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={entry}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(view.queryByRole("button", { name: "Reviewed" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Read" }));
+    expect(onUpdateStatus).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Seen (still needed)" }));
+    expect(onUpdateStatus).toHaveBeenLastCalledWith(entry.id, "reviewed");
+    expect(needsUserInput({ ...entry, status: "reviewed" })).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "Done" }));
+    expect(onUpdateStatus).toHaveBeenLastCalledWith(entry.id, "done");
+    expect(needsUserInput({ ...entry, status: "done" })).toBe(false);
+  });
+
+  it.each(["agent", "external"] as const)(
+    "keeps Reviewed for requests addressed to %s",
+    (recipient) => {
+      const view = renderCard({
+        id: "question:other",
+        kind: "question",
+        status: "open",
+        timestamp: ask.timestamp,
+        text: "Choose a date",
+        truncated: false,
+        inputRequest: { kind: "decision", recipient, recipientId: "recipient-1" },
+      });
+      expect(view.getByRole("button", { name: "Reviewed" })).toBeTruthy();
+      expect(view.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    },
+  );
 
   it("puts kind, state and time in one eyebrow and the text first line as headline", () => {
     const view = renderCard(ask);

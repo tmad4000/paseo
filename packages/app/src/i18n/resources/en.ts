@@ -135,6 +135,11 @@ export const en = {
     open: "Open {{title}} on {{host}}",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: offline — cached items may be out of date",
+    hostUpgradeNotice: "{{host}}: update this host to use global Stream",
+    hostWorkflowUpgradeNotice: "{{host}}: update this host to use Tasks, Q&A and Needs you",
+    markSeenStillNeeded: "Seen (still needed)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

@@ -137,6 +137,11 @@ export const zhCN: TranslationResources = {
     open: "在 {{host}} 上打开 {{title}}",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}：离线，缓存的条目可能已过时",
+    hostUpgradeNotice: "{{host}}：请更新此主机以使用全局 Stream",
+    hostWorkflowUpgradeNotice: "{{host}}：请更新此主机以使用任务、问答和需要你处理的事项",
+    markSeenStillNeeded: "已看过（仍需处理）",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",

@@ -169,7 +169,6 @@ function collectStreamRows(
     for (const stored of source.companionEntries ?? []) {
       const entry = withTags(stored);
       if (!matchesEntryFilters(entry, options)) continue;
-      if (!isCanonicalWorkflowRow(entry, source, options, serverId)) continue;
       if (!matchesRelatedSession(source, entry, options, serverId, taskSessions)) continue;
       rows.push(projectEntryRow(base, entry, serverId));
     }
@@ -197,19 +196,6 @@ function projectEntryRow(base: RowSource, entry: CompanionEntry, serverId?: stri
     taskId,
     item: { kind: "entry", entry },
   };
-}
-
-function isCanonicalWorkflowRow(
-  entry: CompanionEntry,
-  source: StreamSource,
-  options: StreamListOptions,
-  serverId?: string,
-): boolean {
-  const origin = entry.ask?.origin;
-  if (!options.view || options.view === "activity" || !origin) return true;
-  return (
-    origin.serverId === serverId && origin.agentId === source.id && origin.entryId === entry.id
-  );
 }
 
 function includeSourceArtifacts(

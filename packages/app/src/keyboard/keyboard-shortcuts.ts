@@ -277,14 +277,14 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     id: "needs-you-cmd-alt-y-mac",
     action: "stream.needs-you.open",
     combo: "Cmd+Alt+Y",
-    when: { mac: true, terminal: false, commandCenter: false },
+    when: { mac: true, terminal: false, commandCenter: false, editable: false },
     help: { id: "needs-you", section: "general", label: "Needs you" },
   },
   {
     id: "needs-you-ctrl-alt-y-non-mac",
     action: "stream.needs-you.open",
     combo: "Ctrl+Alt+Y",
-    when: { mac: false, terminal: false, commandCenter: false },
+    when: { mac: false, terminal: false, commandCenter: false, editable: false },
     help: { id: "needs-you", section: "general", label: "Needs you" },
   },
   // --- Open project ---

@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { deduplicateTasks } from "./task-identity";
+import { streamCardSource } from "./card-source";
 import type { GlobalStreamRow } from "./use-global-stream";
 const origin = { serverId: "a", agentId: "source", entryId: "ask:x" };
 const row = (serverId: string, revision: number): GlobalStreamRow => ({
@@ -44,4 +45,14 @@ it("does not merge similar legacy tasks across hosts", () => {
   if (a.item.kind === "entry") delete a.item.entry.ask!.origin;
   if (b.item.kind === "entry") delete b.item.entry.ask!.origin;
   expect(deduplicateTasks([a, b])).toEqual([a, b]);
+});
+
+it("retains a migrated task as a read-only reference when its original host is unavailable", () => {
+  const migrated = row("restored-host", 2);
+  expect(deduplicateTasks([migrated])).toEqual([migrated]);
+  expect(streamCardSource(migrated)).toMatchObject({
+    copiedTask: true,
+    serverId: "a",
+    agentId: "source",
+  });
 });

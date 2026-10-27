@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import type {
@@ -49,6 +50,7 @@ function rowHasTags(row: StreamRow, tags: readonly string[]): boolean {
 export function useGlobalStream(
   options: StreamListOptions & { serverId: string | null; enabled: boolean },
 ) {
+  const { t } = useTranslation();
   const hosts = useHosts();
   const queryClient = useQueryClient();
   const runtime = getHostRuntimeStore();
@@ -206,13 +208,15 @@ export function useGlobalStream(
   );
   const notices = selected.flatMap((host, index) => {
     if (availability[index] === "offline")
-      return [`${host.label}: offline — cached items may be out of date`];
+      return [t("globalStream.hostOfflineNotice", { host: host.label })];
     if (availability[index] === "workflow-upgrade")
-      return [`${host.label}: update this host to use Tasks, Q&A and Needs you`];
+      return [t("globalStream.hostWorkflowUpgradeNotice", { host: host.label })];
     if (availability[index] === "upgrade")
-      return [`${host.label}: update this host to use global Stream`];
+      return [t("globalStream.hostUpgradeNotice", { host: host.label })];
     const error = results[index].error;
-    return error ? [`${host.label}: ${error.message}`] : [];
+    return error
+      ? [t("globalStream.hostErrorNotice", { host: host.label, error: error.message })]
+      : [];
   });
   const refetch = useCallback(
     () =>

@@ -1374,6 +1374,24 @@ describe("Needs you shortcut", () => {
       action: "stream.needs-you.open",
     });
   });
+  it.each([
+    { isMac: false, focusScope: "message-input" as const },
+    { isMac: false, focusScope: "editable" as const },
+    { isMac: true, focusScope: "message-input" as const },
+    { isMac: true, focusScope: "editable" as const },
+  ])("preserves typed input on Mac=$isMac in $focusScope", ({ isMac, focusScope }) => {
+    // AltGr can arrive as Ctrl+Alt+KeyY, including a layout-specific character.
+    expectNoShortcutResolution({
+      event: {
+        key: isMac ? "y" : "←",
+        code: "KeyY",
+        altKey: true,
+        metaKey: isMac,
+        ctrlKey: !isMac,
+      },
+      context: { isMac, focusScope },
+    });
+  });
   it("does not consume terminal input", () => {
     expectNoShortcutResolution({
       event: { key: "y", code: "KeyY", altKey: true, metaKey: true },

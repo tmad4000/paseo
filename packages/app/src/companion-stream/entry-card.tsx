@@ -1,4 +1,8 @@
-import { isCompanionEntryPending, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import {
+  isCompanionEntryPending,
+  needsUserInput,
+  type CompanionEntry,
+} from "@getpaseo/protocol/companion-stream";
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -100,6 +104,7 @@ export function EntryCard({
           <StatusActions
             entryId={entry.id}
             tracked={Boolean(entry.ask)}
+            needsInput={needsUserInput(entry)}
             disabled={disabled}
             onUpdateStatus={onUpdateStatus}
           />
@@ -156,15 +161,20 @@ function LinkedSession({ serverId, agentId }: { serverId: string; agentId: strin
 function StatusActions({
   entryId,
   tracked,
+  needsInput,
   disabled,
   onUpdateStatus,
 }: {
   entryId: string;
   tracked: boolean;
+  needsInput: boolean;
   disabled: boolean;
   onUpdateStatus: EntryCardProps["onUpdateStatus"];
 }) {
   const { t } = useTranslation();
+  const reviewLabel = tracked
+    ? "agentPanel.stream.card.markInProgress"
+    : "agentPanel.stream.card.markReviewed";
   const setOpen = useCallback(() => onUpdateStatus(entryId, "open"), [onUpdateStatus, entryId]);
   const setReviewed = useCallback(
     () => onUpdateStatus(entryId, "reviewed"),
@@ -177,9 +187,7 @@ function StatusActions({
         {t("agentPanel.stream.card.markOpen")}
       </Button>
       <Button variant="outline" onPress={setReviewed} disabled={disabled}>
-        {t(
-          tracked ? "agentPanel.stream.card.markInProgress" : "agentPanel.stream.card.markReviewed",
-        )}
+        {t(needsInput ? "globalStream.markSeenStillNeeded" : reviewLabel)}
       </Button>
       {/* A tracked ask is completed by its owner with evidence, never by a tap. */}
       <Button variant="outline" onPress={setDone} disabled={disabled || tracked}>

@@ -137,6 +137,12 @@ export const ko: TranslationResources = {
     open: "{{host}}에서 {{title}} 열기",
   },
   globalStream: {
+    hostOfflineNotice: "{{host}}: 오프라인 — 캐시된 항목이 최신 상태가 아닐 수 있습니다",
+    hostUpgradeNotice: "{{host}}: 전체 Stream을 사용하려면 이 호스트를 업데이트하세요",
+    hostWorkflowUpgradeNotice:
+      "{{host}}: 작업, Q&A 및 사용자 요청을 사용하려면 이 호스트를 업데이트하세요",
+    markSeenStillNeeded: "확인함 (아직 필요)",
+    hostErrorNotice: "{{host}}: {{error}}",
     copiedTask:
       "Copied task context. Open the original task to see its current state and make changes.",
     userQuestionPlaceholder: "A question you want the agent to answer…",
