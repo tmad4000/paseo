@@ -1139,7 +1139,11 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
 
   useEffect(() => {
     const handle: StreamViewportHandle = {
-      scrollToBottom: () => {
+      scrollToBottom: (reason = "jump-to-bottom") => {
+        // Sending is not a navigation request while the user is reading history.
+        if (reason === "message-sent" && !followOutputRef.current) {
+          return;
+        }
         setFollowOutput(true);
         cancelPendingStickToBottom();
         forceStickToBottom();
