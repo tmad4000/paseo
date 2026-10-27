@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Back/Forward history restores the exact empty New tab without opening another session or adding duplicate visits
 - Back/Forward shortcuts walk focus history; Ctrl+Tab / Ctrl+Shift+Tab and macOS Cmd+Shift+[ / ] cycle tabs ([#102](https://github.com/tmad4000/paseo/pull/102))
 - New workspace can be closed
 - Pinned projects lead project pickers
