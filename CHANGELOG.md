@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0-beta.20 - 2026-10-27
+
+### Added
+
+- Visible Back/Forward history dropdowns let you jump directly to any retained visit, with keyboard and touch access ([#132](https://github.com/tmad4000/paseo/pull/132))
+- The top-right Fork control shows the installed app version and update status, with hover details and a menu that lists host daemon versions separately ([#131](https://github.com/tmad4000/paseo/pull/131))
+- Floating answers for tracked asks and Q&A, First message recall, workspace/tab links, and sidebar counts for workspaces with multiple tabs (#99, #92, #120, #121, #122)
+
+### Fixed
+
+- Back/Forward shortcuts walk focus history; Ctrl+Tab / Ctrl+Shift+Tab and macOS Cmd+Shift+[ / ] cycle tabs ([#102](https://github.com/tmad4000/paseo/pull/102))
+- New workspace can be closed
+- Pinned projects lead project pickers
+- Sending while reading older messages keeps your reading position (#123)
+- A sidebar result matching exactly one chat reveals that existing tab, and inline workspace review lists reveal their selected session (#127, #129)
+- Find uses OpenAI Decisions routing with optional Jev; live suggestions remain off by default (#125)
+- Offline queue alias reconciliation is available as an opt-in maintenance script that refuses to run while the daemon is up (#55)
+
+Desktop rollout remains idle-only on M4, M3 and M5, with no forced deadline. A staged build is not installed until a device receipt confirms it; iOS delivery and device installation are tracked separately.
+
 ## 0.10.0-beta.8 - 2026-10-05
 
 ### Added
