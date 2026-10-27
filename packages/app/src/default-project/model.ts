@@ -123,6 +123,28 @@ export function splitPinnedProjects<T extends { viewKey: string }>(
   return { pinned, rest };
 }
 
+export type ProjectPickerSection = "pinned" | "other";
+
+/**
+ * Which picker rows open a section, for project pickers that list pinned projects first. Headers
+ * appear only while the list is in that order (no search query) and when both groups have rows,
+ * so a host with no pins shows a plain list.
+ */
+export function resolveProjectPickerSectionStarts(input: {
+  optionIds: readonly string[];
+  pinnedOptionIds: ReadonlySet<string>;
+  searchQuery: string;
+}): ReadonlyMap<string, ProjectPickerSection> {
+  const starts = new Map<string, ProjectPickerSection>();
+  if (input.searchQuery.trim() || input.pinnedOptionIds.size === 0) return starts;
+  const firstPinned = input.optionIds.find((id) => input.pinnedOptionIds.has(id));
+  const firstOther = input.optionIds.find((id) => !input.pinnedOptionIds.has(id));
+  if (firstPinned === undefined || firstOther === undefined) return starts;
+  starts.set(firstPinned, "pinned");
+  starts.set(firstOther, "other");
+  return starts;
+}
+
 /** Where a Default project sits in the sidebar's grouped projection, per host. */
 export interface DefaultProjectPlacement {
   serverId: string;

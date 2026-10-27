@@ -96,6 +96,10 @@ export const es: TranslationResources = {
       default: "Proyecto predeterminado",
       pinned: "Proyecto fijado",
     },
+    picker: {
+      pinnedSection: "Fijados",
+      otherSection: "Proyectos",
+    },
     commandCenter: {
       goToDefault: "Ir al proyecto predeterminado",
       pinCurrent: "Fijar el proyecto actual",
@@ -1816,6 +1820,7 @@ export const es: TranslationResources = {
   },
   newWorkspace: {
     title: "Nuevo espacio de trabajo",
+    close: "Cerrar Nuevo espacio de trabajo",
     create: "Crear",
     isolation: {
       local: "Local",

@@ -94,6 +94,10 @@ export const fr: TranslationResources = {
       default: "Projet par défaut",
       pinned: "Projet épinglé",
     },
+    picker: {
+      pinnedSection: "Épinglés",
+      otherSection: "Projets",
+    },
     commandCenter: {
       goToDefault: "Aller au projet par défaut",
       pinCurrent: "Épingler le projet actuel",
@@ -1815,6 +1819,7 @@ export const fr: TranslationResources = {
   },
   newWorkspace: {
     title: "Nouvel espace de travail",
+    close: "Fermer Nouvel espace de travail",
     create: "Créer",
     isolation: {
       local: "Local",

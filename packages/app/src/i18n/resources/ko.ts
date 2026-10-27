@@ -93,6 +93,10 @@ export const ko: TranslationResources = {
       default: "기본 프로젝트",
       pinned: "고정된 프로젝트",
     },
+    picker: {
+      pinnedSection: "고정됨",
+      otherSection: "프로젝트",
+    },
     commandCenter: {
       goToDefault: "기본 프로젝트로 이동",
       pinCurrent: "현재 프로젝트 고정",
@@ -1782,6 +1786,7 @@ export const ko: TranslationResources = {
   },
   newWorkspace: {
     title: "새 워크스페이스",
+    close: "새 워크스페이스 닫기",
     create: "생성",
     isolation: {
       local: "로컬",

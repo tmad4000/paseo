@@ -95,6 +95,10 @@ export const ja: TranslationResources = {
       default: "既定のプロジェクト",
       pinned: "固定したプロジェクト",
     },
+    picker: {
+      pinnedSection: "ピン留め",
+      otherSection: "プロジェクト",
+    },
     commandCenter: {
       goToDefault: "既定のプロジェクトへ移動",
       pinCurrent: "現在のプロジェクトを固定",
@@ -1789,6 +1793,7 @@ export const ja: TranslationResources = {
   },
   newWorkspace: {
     title: "新しいワークスペース",
+    close: "新しいワークスペースを閉じる",
     create: "作成",
     isolation: {
       local: "ローカル",

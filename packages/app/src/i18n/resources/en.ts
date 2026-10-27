@@ -91,6 +91,10 @@ export const en = {
       default: "Default project",
       pinned: "Pinned project",
     },
+    picker: {
+      pinnedSection: "Pinned",
+      otherSection: "Projects",
+    },
     commandCenter: {
       goToDefault: "Go to default project",
       pinCurrent: "Pin current project",
@@ -1783,6 +1787,7 @@ export const en = {
   },
   newWorkspace: {
     title: "New workspace",
+    close: "Close New workspace",
     create: "Create",
     isolation: {
       local: "Local",

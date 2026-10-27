@@ -96,6 +96,10 @@ export const ptBR: TranslationResources = {
       default: "Projeto padrão",
       pinned: "Projeto fixado",
     },
+    picker: {
+      pinnedSection: "Fixados",
+      otherSection: "Projetos",
+    },
     commandCenter: {
       goToDefault: "Ir para o projeto padrão",
       pinCurrent: "Fixar o projeto atual",
@@ -1806,6 +1810,7 @@ export const ptBR: TranslationResources = {
   },
   newWorkspace: {
     title: "Novo workspace",
+    close: "Fechar Novo workspace",
     create: "Criar",
     isolation: {
       local: "Local",

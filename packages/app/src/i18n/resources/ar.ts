@@ -93,6 +93,10 @@ export const ar: TranslationResources = {
       default: "المشروع الافتراضي",
       pinned: "مشروع مثبّت",
     },
+    picker: {
+      pinnedSection: "المثبتة",
+      otherSection: "المشاريع",
+    },
     commandCenter: {
       goToDefault: "الانتقال إلى المشروع الافتراضي",
       pinCurrent: "تثبيت المشروع الحالي",
@@ -1771,6 +1775,7 @@ export const ar: TranslationResources = {
   },
   newWorkspace: {
     title: "مساحة عمل جديدة",
+    close: "إغلاق مساحة العمل الجديدة",
     create: "يخلق",
     isolation: {
       local: "محلي",
