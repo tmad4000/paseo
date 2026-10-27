@@ -111,4 +111,3 @@ export function createGestureDeduper(now: () => number = Date.now) {
     return true;
   };
 }
-

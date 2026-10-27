@@ -63,9 +63,10 @@ into a host workspace, use `navigateToWorkspace()`. Do not make the caller
 branch on its current route.
 
 Pass only `serverId` and `workspaceId` for normal attention-aware navigation.
-When the action names a specific tab, pass it as `target`; that explicit choice
-is authoritative. Callers should not choose between separate route and tab
-navigation APIs.
+When the action names a reopenable tab, pass it as `target`; that explicit choice
+is authoritative. For an existing empty New tab, follow the
+[focus-history restore rule](#focus-history). Callers should not choose between
+separate route and tab navigation APIs.
 
 The root stack owns `h/[serverId]`; the host stack owns
 `workspace/[workspaceId]/index`. Repeated global-route hops must `POP_TO` the
@@ -123,6 +124,15 @@ must return Back to the prior workspace rather than reopen the drawer. Recent
 workspace deck entries and tab panels remain mounted, so restoring their focus
 also preserves live scroll and selection state without duplicating that state
 in the history stack.
+
+Back/Forward restores the exact existing empty New tab. Repeated observations of
+that same tab do not add visits or clear Forward; distinct empty tabs remain
+separate locations. Empty tabs have no reopenable resource identity, so restore
+through `navigateToWorkspace()` with `preserveTabFocus: true` and no `target`,
+then focus the recorded `tabId`. Omitting only the target would allow normal
+attention routing to open an unrelated session. This exception does not change
+resource equality or the allocation of fresh empty tabs. Regression coverage
+lives in `focus-history.test.ts` and `focus-history-runtime.test.ts`.
 
 The chevron beside each header Back/Forward arrow opens every retained entry in
 that direction (up to the focus-history model's 50-entry bound), nearest first.
@@ -233,7 +243,7 @@ Before landing route changes:
 - [ ] Did you change `packages/app/src/app`? Re-read this file.
 - [ ] Did you touch remembered workspace restore? Keep root on `/h/[serverId]`.
 - [ ] Did a route return to a workspace? Use `navigateToWorkspace()` and pass a
-      `target` when the action names a specific tab.
+      `target` for reopenable tabs; see [Focus History](#focus-history) for empty-tab restore.
 - [ ] Did you add a route? Register it in the layout that directly owns it.
 - [ ] Did `useLocalSearchParams()` lose a required param? Fix the route tree.
 - [ ] Did native show a blank screen without a crash? Suspect route ownership
