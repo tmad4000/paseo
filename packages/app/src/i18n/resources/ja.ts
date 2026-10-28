@@ -390,6 +390,10 @@ export const ja: TranslationResources = {
       dropFilesHere: "ここにファイルをドロップ",
       queueRemovalPending: "削除保留中 — ホストを待機しています",
       queueRemovalFailed: "削除未確認 — 削除をタップして再試行",
+      queueEditLeftQueue:
+        "編集を保存する前に、このメッセージはキューから外れました（送信または削除）。編集内容はここに残っています。",
+      queueEditAsNewMessage: "新しいメッセージとしてキューに追加",
+      queueEditDiscard: "編集を破棄",
       removeQueuedMessage: "待機中のメッセージを削除",
       readQueuedMessage: "待機中のメッセージを展開または折りたたむ",
       doneQueuedMessage: "待機中のメッセージの編集を終了",

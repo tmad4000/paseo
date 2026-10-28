@@ -391,6 +391,10 @@ export const ptBR: TranslationResources = {
       dropFilesHere: "Solte arquivos aqui",
       queueRemovalPending: "Remoção pendente — aguardando o servidor",
       queueRemovalFailed: "Remoção não confirmada — toque em Remover para tentar novamente",
+      queueEditLeftQueue:
+        "Esta mensagem saiu da fila (enviada ou removida) antes de sua edição ser salva. Sua edição continua aqui.",
+      queueEditAsNewMessage: "Colocar na fila como nova mensagem",
+      queueEditDiscard: "Descartar edição",
       removeQueuedMessage: "Remover mensagem da fila",
       readQueuedMessage: "Expandir ou recolher mensagem da fila",
       doneQueuedMessage: "Concluir edição da mensagem",

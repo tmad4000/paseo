@@ -390,6 +390,10 @@ export const ru: TranslationResources = {
       dropFilesHere: "Переместите файлы сюда",
       queueRemovalPending: "Удаление ожидает подтверждения сервера",
       queueRemovalFailed: "Удаление не подтверждено — нажмите «Удалить» для повтора",
+      queueEditLeftQueue:
+        "Сообщение покинуло очередь (отправлено или удалено) до сохранения вашей правки. Правка сохранена здесь.",
+      queueEditAsNewMessage: "Добавить в очередь как новое сообщение",
+      queueEditDiscard: "Отменить правку",
       removeQueuedMessage: "Удалить сообщение из очереди",
       readQueuedMessage: "Развернуть или свернуть сообщение в очереди",
       doneQueuedMessage: "Завершить редактирование сообщения",

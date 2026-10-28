@@ -49,6 +49,8 @@ export interface SeedDaemonClient {
     expectedText: string;
     text: string;
   }): Promise<AgentQueueSnapshot>;
+  removeQueuedAgentMessage(agentId: string, itemId: string): Promise<AgentQueueSnapshot>;
+  cancelAgent(agentId: string): Promise<void>;
   connect(): Promise<void>;
   close(): Promise<void>;
   addProject(cwd: string): Promise<{

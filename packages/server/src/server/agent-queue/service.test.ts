@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
@@ -11,6 +11,7 @@ import type { AgentManagerEvent, ManagedAgent } from "../agent/agent-manager.js"
 import type { AgentStorage } from "../agent/agent-storage.js";
 import {
   AgentQueueService,
+  QUEUE_EDIT_HOLD_TTL_MS,
   type AgentQueueAgentController,
   type SendQueuedPromptInput,
 } from "./service.js";
@@ -433,6 +434,78 @@ describe("AgentQueueService", () => {
     expect(stored.items[1]?.images).toEqual(before.items[1]?.images);
     expect(harness.broadcasts).toEqual([after]);
     expect(after.revision).toBe(before.revision + 1);
+  });
+
+  test("an edit hold keeps the head queued, and the queue behind it, until released", async () => {
+    harness.agents.emitLifecycle("running");
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "first" });
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-2", text: "second" });
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", true);
+
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+
+    await harness.service.edit(AGENT_ID, "item-1", "first", "first, revised");
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", false);
+    await harness.service.flushDrains();
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+    expect(harness.sent[0]?.prompt).toBe("first, revised");
+  });
+
+  test("an edit hold also pauses the receipt-backed drain", async () => {
+    harness.service.setMessageReceipts(new MessageReceipts(join(dir, "hold-receipts")));
+    harness.agents.emitLifecycle("running");
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "item-1",
+      text: "first",
+    });
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", true);
+
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual(["item-1"]);
+
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", false);
+    await harness.service.flushDrains();
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+  });
+
+  test("an abandoned edit hold expires so the queue cannot stall forever", async () => {
+    harness.agents.emitLifecycle("running");
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "item-1",
+      text: "first",
+    });
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", true);
+    const realNow = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(realNow + QUEUE_EDIT_HOLD_TTL_MS + 1);
+    try {
+      harness.agents.emitLifecycle("idle");
+      await harness.service.flushDrains();
+    } finally {
+      clock.mockRestore();
+    }
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
+  });
+
+  test("holding a message that already left the queue fails, and send-now overrides a hold", async () => {
+    harness.agents.emitLifecycle("running");
+    await expect(harness.service.setEditHold(AGENT_ID, "missing", "phone", true)).rejects.toThrow(
+      /no longer queued/,
+    );
+
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "item-1",
+      text: "first",
+    });
+    await harness.service.setEditHold(AGENT_ID, "item-1", "phone", true);
+    await harness.service.sendNow(AGENT_ID, "item-1");
+    expect(harness.sent.map((input) => input.messageId)).toEqual(["item-1"]);
   });
 
   test("a stale or already-drained edit cannot overwrite a queued message", async () => {
