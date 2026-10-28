@@ -424,7 +424,7 @@ describe("describe_workspace MCP tool", () => {
       agents: [{ id: "sibling" }],
     });
 
-    const listed = await catalog.executeTool("list_agents", { cwd: "/tmp" });
+    const listed = await catalog.executeTool("list_agents", {});
     expect(
       (listed.structuredContent as { agents: Array<{ id: string; workspaceId?: string }> }).agents
         .map((agent) => [agent.id, agent.workspaceId])
