@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import pLimit from "p-limit";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "../atomic-file.js";
 
@@ -13,6 +14,16 @@ const ReceiptSchema = z.object({
   voiceOwner: z.string().optional(),
   createdAt: z.string().optional(),
 });
+type Receipt = z.infer<typeof ReceiptSchema>;
+
+/**
+ * Receipts accumulate one file per delivered message (thousands on a busy host).
+ * Unbounded parallel reads held one descriptor per file; a few overlapping
+ * listings pushed the daemon past macOS OPEN_MAX (10240), after which every
+ * child spawn failed with EBADF. Keep the per-scan read window small.
+ */
+const RECEIPT_SCAN_CONCURRENCY = 16;
+
 interface SendMessageInput {
   agentId: string;
   messageId: string;
@@ -27,7 +38,38 @@ interface SendMessageInput {
 /** Owns message delivery receipts; creation is owned by CreationService. */
 export class MessageReceipts {
   private readonly pending = new Map<string, Promise<void>>();
+  /** Bumped on every write so a caller never joins a scan that predates it. */
+  private writeGeneration = 0;
+  private inflightScan: { generation: number; records: Promise<Receipt[]> } | null = null;
   constructor(private readonly directory: string) {}
+
+  /** One shared, bounded directory scan for concurrent listings. */
+  private scanAll(): Promise<Receipt[]> {
+    const generation = this.writeGeneration;
+    if (this.inflightScan?.generation === generation) return this.inflightScan.records;
+    const records = readAllReceipts(this.directory);
+    const scan = { generation, records };
+    this.inflightScan = scan;
+    const clear = () => {
+      if (this.inflightScan === scan) this.inflightScan = null;
+    };
+    records.then(clear, clear);
+    return records;
+  }
+
+  private async write(file: string, value: Receipt): Promise<void> {
+    await this.mutate(() => writeJsonFileAtomic(file, value));
+  }
+
+  /** Scans started before or during a mutation are not reused after it. */
+  private async mutate(change: () => Promise<void>): Promise<void> {
+    this.writeGeneration++;
+    try {
+      await change();
+    } finally {
+      this.writeGeneration++;
+    }
+  }
 
   async listForAttachment(input: {
     agentId: string;
@@ -40,17 +82,8 @@ export class MessageReceipts {
       createdAt: string;
     }>
   > {
-    const files = await readdir(this.directory).catch((error: unknown) => {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
-      throw error;
-    });
-    const records = await Promise.all(
-      files
-        .filter((name) => name.endsWith(".json"))
-        .map((name) => readReceipt(path.join(this.directory, name))),
-    );
+    const records = await this.scanAll();
     return records
-      .filter((record): record is NonNullable<typeof record> => record !== null)
       .filter(
         (record) =>
           record.agentId === input.agentId &&
@@ -73,17 +106,8 @@ export class MessageReceipts {
   async listForAgent(
     agentId: string,
   ): Promise<Array<{ messageId: string; state: string; createdAt: string | null }>> {
-    const files = await readdir(this.directory).catch((error: unknown) => {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
-      throw error;
-    });
-    const records = await Promise.all(
-      files
-        .filter((name) => name.endsWith(".json"))
-        .map((name) => readReceipt(path.join(this.directory, name))),
-    );
+    const records = await this.scanAll();
     return records
-      .filter((record): record is NonNullable<typeof record> => record !== null)
       .filter((record) => record.agentId === agentId && !!record.messageId)
       .map((record) => ({
         messageId: record.messageId!,
@@ -129,7 +153,7 @@ export class MessageReceipts {
           if (existing.fingerprint !== fingerprint) throw new Error("agent_request_key_conflict");
           return existing.state === "removed";
         }
-        await writeJsonFileAtomic(file, {
+        await this.write(file, {
           fingerprint,
           state: "removed",
           agentId: input.agentId,
@@ -188,7 +212,7 @@ export class MessageReceipts {
         : {}),
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
-    await writeJsonFileAtomic(file, { ...receipt, state: "pending" });
+    await this.write(file, { ...receipt, state: "pending" });
     try {
       await input.send();
     } catch (error) {
@@ -199,15 +223,29 @@ export class MessageReceipts {
         "code" in error &&
         (error.code === "AGENT_RUN_BUSY" || error.code === "AGENT_PROMPT_NOT_SUBMITTED")
       ) {
-        await rm(file, { force: true });
+        await this.mutate(() => rm(file, { force: true }));
       }
       throw error;
     }
-    await writeJsonFileAtomic(file, { ...receipt, state: "completed" });
+    await this.write(file, { ...receipt, state: "completed" });
   }
 }
 
-async function readReceipt(file: string): Promise<z.infer<typeof ReceiptSchema> | null> {
+async function readAllReceipts(directory: string): Promise<Receipt[]> {
+  const files = await readdir(directory).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  });
+  const limit = pLimit(RECEIPT_SCAN_CONCURRENCY);
+  const records = await Promise.all(
+    files
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => limit(() => readReceipt(path.join(directory, name)))),
+  );
+  return records.filter((record): record is Receipt => record !== null);
+}
+
+async function readReceipt(file: string): Promise<Receipt | null> {
   try {
     return ReceiptSchema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch (error) {
