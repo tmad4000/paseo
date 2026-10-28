@@ -387,6 +387,10 @@ export const ar: TranslationResources = {
       dropFilesHere: "Drop files here",
       queueRemovalPending: "الإزالة معلّقة — بانتظار المضيف",
       queueRemovalFailed: "لم تتأكد الإزالة — اضغط إزالة للمحاولة مجددًا",
+      queueEditLeftQueue:
+        "غادرت هذه الرسالة قائمة الانتظار (أُرسلت أو أُزيلت) قبل حفظ تعديلك. تعديلك ما زال هنا.",
+      queueEditAsNewMessage: "إضافتها كرسالة جديدة في قائمة الانتظار",
+      queueEditDiscard: "تجاهل التعديل",
       removeQueuedMessage: "إزالة الرسالة من قائمة الانتظار",
       readQueuedMessage: "توسيع الرسالة أو طيّها",
       doneQueuedMessage: "إنهاء تعديل الرسالة",

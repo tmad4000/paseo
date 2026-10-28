@@ -2002,6 +2002,8 @@ export class VoiceAssistantWebSocketServer {
         streamWorkflow: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
+        // COMPAT(queueEditHold): added 2026-10-27; remove gate after 2027-04-27.
+        queueEditHold: this.agentQueueService !== null,
         steerOnly: true,
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: true,

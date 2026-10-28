@@ -385,6 +385,10 @@ export const zhCN: TranslationResources = {
       dropFilesHere: "Drop files here",
       queueRemovalPending: "删除待确认 — 等待主机",
       queueRemovalFailed: "删除尚未确认 — 点击删除重试",
+      queueEditLeftQueue:
+        "在保存你的编辑之前，此消息已离开队列（已发送或已删除）。你的编辑仍保留在这里。",
+      queueEditAsNewMessage: "作为新消息加入队列",
+      queueEditDiscard: "放弃编辑",
       removeQueuedMessage: "删除队列消息",
       readQueuedMessage: "展开或收起队列消息",
       doneQueuedMessage: "完成队列消息编辑",

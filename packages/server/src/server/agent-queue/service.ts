@@ -57,6 +57,18 @@ export interface AgentDeliveryInspection {
 
 const MAX_DEVICE_OUTBOX_REPORTS = 64;
 const MAX_INSPECTED_RECEIPTS = 50;
+/**
+ * How long an edit hold lasts without a refresh. Editing clients refresh well
+ * inside this window; a device that vanishes mid-edit only stalls the queue
+ * this long.
+ */
+export const QUEUE_EDIT_HOLD_TTL_MS = 60_000;
+
+interface EditHold {
+  itemId: string;
+  expiresAt: number;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export interface EnqueueAgentMessageInput {
   agentId: string;
@@ -112,6 +124,8 @@ export class AgentQueueService {
   private readonly sendNowClaims = new Set<string>();
   private unsubscribeAgentEvents: (() => void) | null = null;
   private readonly outboxReports = new Map<string, DeviceOutboxReport>();
+  /** agentId -> `${itemId}\0${owner}` -> hold. Memory only, like the drain itself. */
+  private readonly editHolds = new Map<string, Map<string, EditHold>>();
 
   constructor(options: AgentQueueServiceOptions) {
     this.store = options.store;
@@ -170,6 +184,10 @@ export class AgentQueueService {
     this.listeners.clear();
     this.lastLifecycle.clear();
     this.lastPermissionCount.clear();
+    for (const holds of this.editHolds.values()) {
+      for (const hold of holds.values()) clearTimeout(hold.timer);
+    }
+    this.editHolds.clear();
   }
 
   subscribeToMutations(listener: AgentQueueMutationListener): () => void {
@@ -372,6 +390,74 @@ export class AgentQueueService {
     return toAgentQueueSnapshot(result.queue);
   }
 
+  /**
+   * Keeps a queued message from draining while someone is editing it. The hold
+   * pauses the queue at that message, so later messages stay in order behind
+   * it. Holding an item that is already being sent fails: the edit came too late.
+   * An explicit send-now still wins over a hold.
+   */
+  async setEditHold(
+    agentId: string,
+    itemId: string,
+    owner: string,
+    held: boolean,
+  ): Promise<AgentQueueSnapshot> {
+    const holdKey = `${itemId}\0${owner}`;
+    if (!held) {
+      this.releaseEditHold(agentId, holdKey);
+      this.scheduleDrain(agentId);
+      return this.list(agentId);
+    }
+    // Under the store lock, so a drain either claimed the item first or sees the hold.
+    await this.store.mutate(agentId, (current) => {
+      if (!current.items.some((item) => item.id === itemId)) {
+        throw new Error("This message is no longer queued.");
+      }
+      if (this.sendNowClaims.has(`${agentId}\0${itemId}`)) {
+        throw new Error("This queued message is already being sent.");
+      }
+      let holds = this.editHolds.get(agentId);
+      if (!holds) {
+        holds = new Map();
+        this.editHolds.set(agentId, holds);
+      }
+      const previous = holds.get(holdKey);
+      if (previous) clearTimeout(previous.timer);
+      const timer = setTimeout(() => {
+        if (this.editHolds.get(agentId)?.get(holdKey)?.timer !== timer) return;
+        this.releaseEditHold(agentId, holdKey);
+        this.scheduleDrain(agentId);
+      }, QUEUE_EDIT_HOLD_TTL_MS);
+      timer.unref?.();
+      holds.set(holdKey, {
+        itemId,
+        expiresAt: Date.now() + QUEUE_EDIT_HOLD_TTL_MS,
+        timer,
+      });
+      return current;
+    });
+    return this.list(agentId);
+  }
+
+  private releaseEditHold(agentId: string, holdKey: string): void {
+    const holds = this.editHolds.get(agentId);
+    const hold = holds?.get(holdKey);
+    if (!holds || !hold) return;
+    clearTimeout(hold.timer);
+    holds.delete(holdKey);
+    if (holds.size === 0) this.editHolds.delete(agentId);
+  }
+
+  private isEditHeld(agentId: string, itemId: string): boolean {
+    const holds = this.editHolds.get(agentId);
+    if (!holds) return false;
+    const now = Date.now();
+    for (const hold of holds.values()) {
+      if (hold.itemId === itemId && hold.expiresAt > now) return true;
+    }
+    return false;
+  }
+
   /** Sends authoritative stored content without racing an edit, drain, or second device. */
   async sendNow(agentId: string, itemId: string): Promise<AgentQueueSnapshot> {
     const key = `${agentId}\0${itemId}`;
@@ -521,6 +607,8 @@ export class AgentQueueService {
 
   async deleteForAgent(agentId: string): Promise<void> {
     await this.store.delete(agentId);
+    for (const hold of this.editHolds.get(agentId)?.values() ?? []) clearTimeout(hold.timer);
+    this.editHolds.delete(agentId);
     this.lastLifecycle.delete(agentId);
     this.lastPermissionCount.delete(agentId);
   }
@@ -594,6 +682,9 @@ export class AgentQueueService {
         !this.agentManager.hasInFlightRun?.(agentId) &&
         !this.agentManager.getPendingPermissions?.(agentId).length
       ) {
+        if (this.isEditHeld(agentId, queue.items[0]!.id)) {
+          throw new Error("Queued input is waiting while someone edits it");
+        }
         // An uncertain or failed dispatch is still queued; it is not completion.
         throw new Error(
           "Queued input has not been confirmed submitted; inspect its delivery outcome",
@@ -620,6 +711,8 @@ export class AgentQueueService {
       return;
     }
     if (this.sendNowClaims.has(`${agentId}\0${next.id}`)) return;
+    // Someone is editing the head; its hold release or expiry drains again.
+    if (this.isEditHeld(agentId, next.id)) return;
 
     if (this.receipts) {
       await this.drainWithReceipt(agentId, next, this.receipts);
@@ -630,7 +723,7 @@ export class AgentQueueService {
     // Remembering the drained id makes a late enqueue retry of this item a no-op.
     let claimedItem: StoredQueuedMessage | undefined;
     const claimed = await this.store.mutate(agentId, (current) => {
-      if (current.items[0]?.id !== next.id) return current;
+      if (current.items[0]?.id !== next.id || this.isEditHeld(agentId, next.id)) return current;
       claimedItem = current.items[0];
       return {
         ...current,
@@ -677,7 +770,12 @@ export class AgentQueueService {
     const key = `${agentId}\0${next.id}`;
     let claimedItem: StoredQueuedMessage | undefined;
     await this.store.mutate(agentId, (current) => {
-      if (current.items[0]?.id !== next.id || this.sendNowClaims.has(key)) return current;
+      if (
+        current.items[0]?.id !== next.id ||
+        this.sendNowClaims.has(key) ||
+        this.isEditHeld(agentId, next.id)
+      )
+        return current;
       claimedItem = current.items[0];
       this.sendNowClaims.add(key);
       return current;

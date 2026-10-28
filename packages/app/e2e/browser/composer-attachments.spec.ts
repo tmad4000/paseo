@@ -300,6 +300,86 @@ test.describe("Composer attachments", () => {
     }
   });
 
+  test("the queue waits while a queued message is being edited", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-hold-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running until the test stops this turn.",
+    });
+    try {
+      await fillComposerDraft(page, "Held while editing");
+      await sendDraftToQueue(page);
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Held while editing"]);
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("Held while editing, then revised");
+
+      // The turn ends mid-edit. Without the hold this is where the queue drains.
+      await agent.client.cancelAgent(agent.agentId);
+      await expectAgentIdle(page);
+      await page.waitForTimeout(1_500);
+      expect(await queuedTexts(agent)).toEqual(["Held while editing"]);
+      await expect(queuedEditor).toHaveValue("Held while editing, then revised");
+
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expect.poll(() => queuedTexts(agent)).toEqual([]);
+      await expect(page.getByText("This message is no longer queued.")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("a queued message that leaves mid-edit keeps the edit and can be queued anew", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-detached-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while another device takes the queued message.",
+    });
+    try {
+      await fillComposerDraft(page, "Taken elsewhere");
+      await sendDraftToQueue(page);
+      await fillComposerDraft(page, "Composer text stays put");
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Taken elsewhere"]);
+      const [queued] = (await agent.client.listQueuedAgentMessages(agent.agentId)).items;
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("My careful rewrite");
+
+      await agent.client.removeQueuedAgentMessage(agent.agentId, queued!.id);
+      await expect(page.getByTestId("queued-message-detached-notice")).toBeVisible();
+      await expect(queuedEditor).toHaveValue("My careful rewrite");
+      await expect(page.getByText("This message is no longer queued.")).toHaveCount(0);
+
+      // Blur, the old save-on-leave trigger, must not drop or error the detached edit.
+      await page.getByTestId("composer-queue-toggle").click({ position: { x: 4, y: 4 } });
+      await page.getByTestId("composer-queue-toggle").click({ position: { x: 4, y: 4 } });
+      await expect(queuedEditor).toHaveValue("My careful rewrite");
+
+      // A reload (or switching chats) remounts the track; the edit must come back.
+      await page.waitForTimeout(500);
+      await page.reload();
+      await expectComposerVisible(page);
+      await expect(page.getByTestId("queued-message-detached-notice")).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Edit queued message" })).toHaveValue(
+        "My careful rewrite",
+      );
+
+      await page.getByRole("button", { name: "Queue as new message" }).click();
+      await expect(page.getByTestId("queued-message-detached-notice")).toHaveCount(0);
+      await expect.poll(() => queuedTexts(agent)).toEqual(["My careful rewrite"]);
+      await expectComposerDraft(page, "Composer text stays put");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("saving an emptied queued message removes it", async ({ page }) => {
     test.setTimeout(120_000);
     const agent = await startRunningMockAgent(page, {

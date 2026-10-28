@@ -383,6 +383,10 @@ export const en = {
       dropFilesHere: "Drop files here",
       queueRemovalPending: "Removal pending — waiting for host",
       queueRemovalFailed: "Removal not confirmed — tap Remove to retry",
+      queueEditLeftQueue:
+        "This message left the queue (sent or removed) before your edit was saved. Your edit is still here.",
+      queueEditAsNewMessage: "Queue as new message",
+      queueEditDiscard: "Discard edit",
       removeQueuedMessage: "Remove queued message",
       readQueuedMessage: "Expand or collapse queued message",
       doneQueuedMessage: "Done editing queued message",

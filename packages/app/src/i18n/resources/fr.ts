@@ -392,6 +392,10 @@ export const fr: TranslationResources = {
       dropFilesHere: "Drop files here",
       queueRemovalPending: "Suppression en attente — attente de l’hôte",
       queueRemovalFailed: "Suppression non confirmée — appuyez sur Supprimer pour réessayer",
+      queueEditLeftQueue:
+        "Ce message a quitté la file (envoyé ou supprimé) avant l'enregistrement de votre modification. Votre modification est toujours là.",
+      queueEditAsNewMessage: "Mettre en file comme nouveau message",
+      queueEditDiscard: "Abandonner la modification",
       removeQueuedMessage: "Supprimer le message en attente",
       readQueuedMessage: "Développer ou réduire le message en attente",
       doneQueuedMessage: "Terminer la modification du message",

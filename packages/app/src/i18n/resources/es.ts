@@ -392,6 +392,10 @@ export const es: TranslationResources = {
       dropFilesHere: "Drop files here",
       queueRemovalPending: "Eliminación pendiente — esperando al servidor",
       queueRemovalFailed: "Eliminación sin confirmar — toca Eliminar para reintentar",
+      queueEditLeftQueue:
+        "Este mensaje salió de la cola (enviado o eliminado) antes de guardar tu edición. Tu edición sigue aquí.",
+      queueEditAsNewMessage: "Poner en cola como mensaje nuevo",
+      queueEditDiscard: "Descartar edición",
       removeQueuedMessage: "Eliminar mensaje en cola",
       readQueuedMessage: "Expandir o contraer mensaje en cola",
       doneQueuedMessage: "Terminar de editar mensaje en cola",

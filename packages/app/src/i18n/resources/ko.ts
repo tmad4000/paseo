@@ -387,6 +387,10 @@ export const ko: TranslationResources = {
       dropFilesHere: "여기에 파일을 끌어다 놓으세요",
       queueRemovalPending: "삭제 대기 중 — 호스트를 기다리는 중",
       queueRemovalFailed: "삭제 미확인 — 삭제를 눌러 다시 시도",
+      queueEditLeftQueue:
+        "편집 내용을 저장하기 전에 이 메시지가 대기열에서 빠졌습니다(전송 또는 삭제). 편집 내용은 그대로 남아 있습니다.",
+      queueEditAsNewMessage: "새 메시지로 대기열에 추가",
+      queueEditDiscard: "편집 취소",
       removeQueuedMessage: "대기 중인 메시지 삭제",
       readQueuedMessage: "대기 중인 메시지 펼치기 또는 접기",
       doneQueuedMessage: "대기 중인 메시지 편집 완료",

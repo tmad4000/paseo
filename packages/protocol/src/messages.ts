@@ -2824,6 +2824,18 @@ export const AgentQueueEditRequestSchema = z.object({
   text: z.string(),
 });
 
+/**
+ * Pauses the queue at an item while a client edits it. Clients refresh `held:
+ * true` periodically; the daemon expires a hold that stops being refreshed.
+ */
+export const AgentQueueEditHoldRequestSchema = z.object({
+  type: z.literal("agent.queue.edit_hold.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+  held: z.boolean(),
+});
+
 /** Atomically claims a queued item and sends its daemon-owned content using strict steering. */
 export const AgentQueueSendNowRequestSchema = z.object({
   type: z.literal("agent.queue.send_now.request"),
@@ -2923,6 +2935,11 @@ export const AgentQueueRemoveResponseSchema = z.object({
 
 export const AgentQueueEditResponseSchema = z.object({
   type: z.literal("agent.queue.edit.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueEditHoldResponseSchema = z.object({
+  type: z.literal("agent.queue.edit_hold.response"),
   payload: AgentQueueResponsePayloadSchema,
 });
 
@@ -4014,6 +4031,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueEnqueueRequestSchema,
   AgentQueueRemoveRequestSchema,
   AgentQueueEditRequestSchema,
+  AgentQueueEditHoldRequestSchema,
   AgentQueueSendNowRequestSchema,
   AgentQueueListRequestSchema,
   AgentQueueReorderRequestSchema,
@@ -4434,6 +4452,8 @@ export const ServerInfoStatusPayloadSchema = z
         streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
+        // COMPAT(queueEditHold): fork feature; the queue waits while a message is being edited.
+        queueEditHold: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
         steerOnly: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
@@ -7734,6 +7754,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueEnqueueResponseSchema,
   AgentQueueRemoveResponseSchema,
   AgentQueueEditResponseSchema,
+  AgentQueueEditHoldResponseSchema,
   AgentQueueSendNowResponseSchema,
   AgentQueueListResponseSchema,
   AgentQueueReorderResponseSchema,

@@ -3128,6 +3128,19 @@ export class DaemonClient {
     );
   }
 
+  /** Pauses (or resumes) the queue at an item while it is being edited. Requires `queueEditHold`. */
+  async holdQueuedAgentMessageForEdit(input: {
+    agentId: string;
+    itemId: string;
+    held: boolean;
+  }): Promise<AgentQueueSnapshot> {
+    return this.requireAgentQueuePayload(
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.edit_hold.response">({
+        message: { type: "agent.queue.edit_hold.request", ...input },
+      }),
+    );
+  }
+
   async reorderQueuedAgentMessages(
     agentId: string,
     itemIds: string[],
