@@ -2062,6 +2062,8 @@ export class VoiceAssistantWebSocketServer {
         canonicalSubmittedPrompts: true,
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: true,
+        // COMPAT(workspaceDescribe): fork feature, added in fork v0.10.0-beta.21, remove gate after 2027-04-28.
+        workspaceDescribe: true,
         // Advertised only with a resolvable OpenAI credential; clients fall back to Paseo voice otherwise.
         openaiRealtimeVoice: realtimeAvailable(),
         // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.

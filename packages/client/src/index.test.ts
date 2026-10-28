@@ -1689,3 +1689,69 @@ test("public SDK exposes typed snapshot sharing actions", async () => {
   await api.dispose();
   await driver.close();
 });
+
+test("describeWorkspace sends workspace.describe and returns the description", async () => {
+  const daemonClient = new DaemonClient({
+    url: "ws://daemon.test",
+    clientId: "describe-test",
+    webSocketFactory: (url) => new FakeWebSocket(url),
+    reconnect: { enabled: false },
+  });
+  const connectPromise = daemonClient.connect();
+  const ws = FakeWebSocket.instances[0];
+  ws.open();
+  ws.message(
+    sessionMessage({
+      type: "status",
+      payload: {
+        status: "server_info",
+        serverId: "srv_describe",
+        hostname: null,
+        version: null,
+        features: { workspaceDescribe: true },
+      },
+    }),
+  );
+  await connectPromise;
+
+  const description = {
+    workspaceId: "wks_1",
+    title: "Tabs",
+    cwd: "/repo",
+    generatedAt: "2026-10-27T12:00:00.000Z",
+    agents: [],
+  };
+  const pending = daemonClient.describeWorkspace("wks_1", {
+    excludeAgentId: "agent-self",
+    requestId: "describe-1",
+  });
+  expect(parseSentFrame(ws.sent.at(-1)).message).toEqual({
+    type: "workspace.describe.request",
+    workspaceId: "wks_1",
+    excludeAgentId: "agent-self",
+    requestId: "describe-1",
+  });
+  ws.message(
+    sessionMessage({
+      type: "workspace.describe.response",
+      payload: { requestId: "describe-1", workspaceId: "wks_1", description, error: null },
+    }),
+  );
+  await expect(pending).resolves.toEqual(description);
+
+  const failing = daemonClient.describeWorkspace("wks_missing", { requestId: "describe-2" });
+  ws.message(
+    sessionMessage({
+      type: "workspace.describe.response",
+      payload: {
+        requestId: "describe-2",
+        workspaceId: "wks_missing",
+        description: null,
+        error: "Workspace not found: wks_missing",
+      },
+    }),
+  );
+  await expect(failing).rejects.toThrow("Workspace not found: wks_missing");
+
+  await daemonClient.close();
+});

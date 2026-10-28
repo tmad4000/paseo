@@ -21,6 +21,7 @@ import {
   AgentSnapshotPayloadSchema,
   UiTabPlacementSchema,
   UiWorkspaceTabTargetSchema,
+  WorkspaceDescriptionSchema,
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
 import type { AgentListItemPayload, UiCommandMessage } from "../../messages.js";
@@ -33,16 +34,11 @@ import {
   REVIEW_STATUSES,
 } from "@getpaseo/protocol/agent-labels";
 import { resolveUiTabCloseCommand, resolveUiTabOpenCommand } from "../../ui-commands.js";
-import {
-  buildStoredAgentPayload,
-  toAgentListItemPayload,
-  toAgentPayload,
-} from "../agent-projections.js";
+import { buildStoredAgentPayload, toAgentPayload } from "../agent-projections.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
 import { ensureAgentLoaded } from "../agent-loading.js";
-import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
 import {
   archiveByScope,
   killTerminalsForWorkspace,
@@ -104,6 +100,12 @@ import {
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
+import { getSharedPersistedConversationReader } from "../../session-text-history.js";
+import {
+  collectAgentListItems,
+  describeWorkspace,
+  readAgentWorkspaceId,
+} from "../workspace-describe.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import type {
   PaseoToolCatalog,
@@ -601,6 +603,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     logger,
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
+  const agentListDeps = {
+    agentManager,
+    agentStorage,
+    listRegisteredProviderIds: () => providerSnapshotManager.listRegisteredProviderIds(),
+    logger: childLogger,
+  };
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
@@ -2130,25 +2138,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const requestedCwd = cwd?.trim() ? expandUserPath(cwd) : callerCwd;
       const statusFilter = statuses && statuses.length > 0 ? new Set(statuses) : null;
       const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
-      const liveSnapshots = agentManager.listAgents();
-      const liveAgents = await Promise.all(
-        liveSnapshots.map((snapshot) =>
-          serializeSnapshotWithMetadata(agentStorage, snapshot, childLogger),
-        ),
-      );
-      const liveIds = new Set(liveSnapshots.map((snapshot) => snapshot.id));
-      const storedRecords = await agentStorage.list();
-      const registeredProviderIds = new Set(providerSnapshotManager.listRegisteredProviderIds());
-      const storedAgents = storedRecords
-        .filter((record) => !record.internal && !liveIds.has(record.id))
-        .filter((record) => includeArchived || !record.archivedAt)
-        .filter(
-          (record) =>
-            includeArchived || isStoredAgentProviderAvailable(record, registeredProviderIds),
-        )
-        .map((record) => buildStoredAgentPayload(record, registeredProviderIds));
-      const agents = [...liveAgents, ...storedAgents]
-        .map(toAgentListItemPayload)
+      const { items } = await collectAgentListItems(agentListDeps, { includeArchived });
+      const agents = items
         .filter((agent) => !requestedCwd || isSameOrDescendantPath(requestedCwd, agent.cwd))
         .filter((agent) => !statusFilter || statusFilter.has(agent.status))
         .filter((agent) => !agent.archivedAt || resolveAgentListActivityTime(agent) >= sinceMs)
@@ -2158,6 +2149,56 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       return {
         content: [],
         structuredContent: ensureValidJson({ agents }),
+      };
+    },
+  );
+
+  registerTool(
+    "describe_workspace",
+    {
+      title: "Describe workspace",
+      description:
+        "What each chat (tab) in a workspace is on, without starting any provider. Defaults to your own workspace. For every non-archived agent: id, title, provider/model, status, timestamps, labels, parentAgentId, a derived one-paragraph focus summary (first and latest user message, head of the last reply, open asks, pins) and the open Stream asks. Pass excludeSelf: true to leave yourself out.",
+      inputSchema: {
+        workspaceId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Workspace to describe. Defaults to the caller's workspace."),
+        excludeSelf: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Leave the calling agent out of the result."),
+      },
+      outputSchema: WorkspaceDescriptionSchema.shape,
+    },
+    async ({ workspaceId, excludeSelf = false }) => {
+      let targetWorkspaceId = workspaceId?.trim() || null;
+      if (!targetWorkspaceId && callerAgentId) {
+        targetWorkspaceId = await readAgentWorkspaceId(
+          { agentManager, agentStorage },
+          callerAgentId,
+        );
+      }
+      if (!targetWorkspaceId) {
+        throw new Error("workspaceId is required outside an agent-scoped session");
+      }
+      const description = await describeWorkspace(
+        {
+          ...agentListDeps,
+          agentManager,
+          workspaceRegistry: options.workspaceRegistry,
+          conversationReader: getSharedPersistedConversationReader(),
+        },
+        {
+          workspaceId: targetWorkspaceId,
+          ...(excludeSelf && callerAgentId ? { excludeAgentId: callerAgentId } : {}),
+        },
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson(description),
       };
     },
   );

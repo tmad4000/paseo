@@ -45,6 +45,7 @@ import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outb
 import type {
   AgentStreamEventPayload,
   AgentSnapshotPayload,
+  WorkspaceDescription,
   ProjectPlacementPayload,
   AgentPermissionResolvedMessage,
   CreateAgentRequestMessage,
@@ -3520,6 +3521,26 @@ export class DaemonClient {
       throw new Error(payload.error ?? "setWorkspaceTitle rejected");
     }
     return { title: payload.title };
+  }
+
+  /** Derived summary of every chat in a workspace. Hosts advertise features.workspaceDescribe. */
+  async describeWorkspace(
+    workspaceId: string,
+    options?: { excludeAgentId?: string; requestId?: string },
+  ): Promise<WorkspaceDescription> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "workspace.describe.request",
+        workspaceId,
+        ...(options?.excludeAgentId ? { excludeAgentId: options.excludeAgentId } : {}),
+      },
+      responseType: "workspace.describe.response",
+    });
+    if (!payload.description) {
+      throw new Error(payload.error ?? "describeWorkspace rejected");
+    }
+    return payload.description;
   }
 
   async setWorkspacePinned(

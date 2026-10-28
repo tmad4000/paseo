@@ -41,6 +41,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/session-routing.md](docs/session-routing.md) | Existing-chat Find/Send, scope isolation, tool-free matching, and delivery recovery |
 | [docs/quick-launch.md](docs/quick-launch.md) | Quick launch: starting an agent from a dialog without leaving the current one, default destination, one-request creation |
 | [docs/agent-tab-control.md](docs/agent-tab-control.md)               | MCP open_tab/close_tab over the ui.command push, and the queue-instead-of-interrupt busy-send policy                           |
+| [docs/workspace-describe.md](docs/workspace-describe.md) | MCP describe_workspace / `paseo workspace describe`: what the other chats in a workspace are on, derived without starting providers |
 | [docs/companion-stream.md](docs/companion-stream.md)                 | Per-chat and global Stream — private review across paired hosts, questions, retention, capture limits and compatibility       |
 | [docs/providers.md](docs/providers.md)                               | Adding a new agent provider end-to-end                                                                                         |
 | [docs/forge-providers.md](docs/forge-providers.md)                   | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |

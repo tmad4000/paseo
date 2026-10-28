@@ -32,6 +32,18 @@ Source prepared on `feat/global-stream-tk3`; not installed. See
 views, separate input resolution and failed/retried answer-seen writes. Native devices
 remain a release acceptance step.
 
+## Workspace describe for agents
+
+`workspace-describe`: an agent can ask what the other chats in its workspace are on. MCP
+`list_agents` rows carry `workspaceId` and `parentAgentId`; MCP `describe_workspace` (default: the
+caller's workspace, `excludeSelf` optional) returns each non-archived agent's metadata, a derived
+focus summary and open Stream asks without starting providers. CLI parity:
+`paseo workspace describe [id] --json` and `workspaceId` in `paseo ls --json`. Acceptance: from an
+agent with a sibling tab, `describe_workspace { excludeSelf: true }` names the sibling and quotes its
+latest user message; a dormant Claude/Codex sibling reports its true first prompt. See
+[workspace describe](workspace-describe.md). Source prepared on `feat/workspace-describe`; reaches
+installs through the next staged build.
+
 ## Feature register
 
 | ID                           | Behavior to preserve / quick acceptance check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
