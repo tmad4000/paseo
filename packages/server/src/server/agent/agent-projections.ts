@@ -1,3 +1,4 @@
+import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { restoreCompanionEntries, selectSnapshotCompanionEntries } from "./companion-stream.js";
 import type {
   AgentListItemPayload,
@@ -283,6 +284,10 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
     attentionTimestamp: agent.attentionTimestamp ?? null,
     labels: agent.labels,
     ...(agent.providerUnavailable ? { providerUnavailable: true } : {}),
+    ...(agent.workspaceId ? { workspaceId: agent.workspaceId } : {}),
+    ...(agent.labels[PARENT_AGENT_ID_LABEL]
+      ? { parentAgentId: agent.labels[PARENT_AGENT_ID_LABEL] }
+      : {}),
   };
 }
 

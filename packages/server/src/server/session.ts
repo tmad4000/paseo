@@ -16,6 +16,7 @@ import {
 } from "./session-search.js";
 import { searchSessionText, type SessionTextSearchCandidate } from "./session-text-search.js";
 import { getSharedPersistedConversationReader } from "./session-text-history.js";
+import { describeWorkspace } from "./agent/workspace-describe.js";
 import type { StructuredTextGeneration } from "./session/checkout/git-metadata-generator.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -3132,6 +3133,8 @@ export class Session {
         return this.handleProjectRemoveRequest(msg);
       case "workspace.title.set.request":
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
+      case "workspace.describe.request":
+        return this.handleWorkspaceDescribeRequest(msg);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
       case "project.pin.set.request":
@@ -4117,6 +4120,46 @@ export class Session {
           accepted: false,
           removedWorkspaceIds: [],
           error: getErrorMessageOr(error, "Failed to remove project"),
+        },
+      });
+    }
+  }
+
+  private async handleWorkspaceDescribeRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.describe.request" }>,
+  ): Promise<void> {
+    const { workspaceId, requestId } = msg;
+    try {
+      const description = await describeWorkspace(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          listRegisteredProviderIds: () => this.providerSnapshotManager.listRegisteredProviderIds(),
+          workspaceRegistry: this.workspaceRegistry,
+          conversationReader: getSharedPersistedConversationReader(),
+          logger: this.sessionLogger,
+        },
+        {
+          workspaceId,
+          ...(msg.excludeAgentId ? { excludeAgentId: msg.excludeAgentId } : {}),
+        },
+      );
+      this.emit({
+        type: "workspace.describe.response",
+        payload: { requestId, workspaceId, description, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.warn(
+        { err: error, workspaceId, requestId },
+        "session: workspace.describe.request failed",
+      );
+      this.emit({
+        type: "workspace.describe.response",
+        payload: {
+          requestId,
+          workspaceId,
+          description: null,
+          error: getErrorMessageOr(error, "Failed to describe workspace"),
         },
       });
     }

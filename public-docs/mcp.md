@@ -92,7 +92,8 @@ MCP does not expose an agent-detach tool. Detaching is a manual user action in t
 | `create_agent`       | Create an agent, optionally placing it in an existing workspace with `workspaceId`.     |
 | `send_agent_prompt`  | Send a prompt to an existing agent using its `agentId` and a `prompt`.                  |
 | `get_agent_status`   | Return the latest snapshot for an agent.                                                |
-| `list_agents`        | List recent agents as compact metadata.                                                 |
+| `list_agents`        | List recent agents as compact metadata, including `workspaceId` and `parentAgentId`.    |
+| `describe_workspace` | What each chat in a workspace is on: derived focus summary and open Stream asks (fork). |
 | `cancel_agent`       | Abort an agent's current run but keep the agent alive.                                  |
 | `archive_agent`      | Soft-delete an agent and remove it from the active list.                                |
 | `kill_agent`         | Terminate an agent session permanently.                                                 |

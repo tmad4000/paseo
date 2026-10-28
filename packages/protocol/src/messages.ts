@@ -889,6 +889,11 @@ export const AgentListItemPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   providerUnavailable: z.boolean().optional(),
+  // Fork: added for agent-side workspace awareness (list_agents, describe_workspace).
+  // Older daemons omit both; a row without workspaceId belongs to no known workspace.
+  workspaceId: z.string().optional(),
+  /** From the paseo.parent-agent-id label; absent for workspace roots. */
+  parentAgentId: z.string().optional(),
 });
 
 export type AgentListItemPayload = z.infer<typeof AgentListItemPayloadSchema>;
@@ -1035,6 +1040,14 @@ export const WorkspaceTitleSetRequestSchema = z.object({
   workspaceId: z.string(),
   // Null or empty string clears the title and reverts to the derived name.
   title: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const WorkspaceDescribeRequestSchema = z.object({
+  type: z.literal("workspace.describe.request"),
+  workspaceId: z.string(),
+  /** Leave this agent out of the result (for example the caller describing its own workspace). */
+  excludeAgentId: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -2279,6 +2292,62 @@ export const WorkspacePinSetResponsePayloadSchema = z.object({
   accepted: z.boolean(),
   pinnedAt: z.string().nullable(),
   error: z.string().nullable(),
+});
+
+export const WorkspaceDescribedAskSchema = z.object({
+  askId: z.string(),
+  text: z.string(),
+  state: z.string(),
+});
+
+export const WorkspaceDescribedPinSchema = z.object({
+  entryId: z.string(),
+  text: z.string(),
+});
+
+/** Derived, not model-generated: message heads plus open asks and pins. */
+export const WorkspaceAgentFocusSchema = z.object({
+  /** Earliest user message the daemon could read, truncated. */
+  firstUserMessage: z.string().nullable(),
+  lastUserMessage: z.string().nullable(),
+  lastAssistantMessage: z.string().nullable(),
+  /** One paragraph built from the fields above, the open asks and the pins. */
+  summary: z.string(),
+});
+
+export const WorkspaceDescribedAgentSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable(),
+  provider: z.string(),
+  model: z.string().nullable(),
+  status: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastUserMessageAt: z.string().nullable(),
+  labels: z.record(z.string(), z.string()),
+  parentAgentId: z.string().nullable(),
+  focus: WorkspaceAgentFocusSchema,
+  /** Null when Stream is unavailable on this host; otherwise unfinished tracked asks. */
+  openAsks: z.array(WorkspaceDescribedAskSchema).nullable(),
+  pins: z.array(WorkspaceDescribedPinSchema).nullable(),
+});
+
+export const WorkspaceDescriptionSchema = z.object({
+  workspaceId: z.string(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  generatedAt: z.string(),
+  agents: z.array(WorkspaceDescribedAgentSchema),
+});
+
+export const WorkspaceDescribeResponseSchema = z.object({
+  type: z.literal("workspace.describe.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    description: WorkspaceDescriptionSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const WorkspacePinSetResponseSchema = z.object({
@@ -3944,6 +4013,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectPinSetRequestSchema,
   ProjectDefaultSetRequestSchema,
   WorkspaceTitleSetRequestSchema,
+  WorkspaceDescribeRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
@@ -4439,6 +4509,8 @@ export const ServerInfoStatusPayloadSchema = z
         deliveryInspect: z.boolean().optional(),
         // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
         clientDiagnostics: z.boolean().optional(),
+        // COMPAT(workspaceDescribe): fork feature, added in fork v0.10.0-beta.21, remove gate after 2027-04-28.
+        workspaceDescribe: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
         conversationSharing: z.boolean().optional(),
@@ -7774,6 +7846,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectPinSetResponseSchema,
   ProjectDefaultSetResponseSchema,
   WorkspaceTitleSetResponseSchema,
+  WorkspaceDescribeResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,
@@ -7985,6 +8058,11 @@ export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
 >;
 export type WorkspacePinSetResponse = z.infer<typeof WorkspacePinSetResponseSchema>;
+export type WorkspaceDescribeResponse = z.infer<typeof WorkspaceDescribeResponseSchema>;
+export type WorkspaceDescription = z.infer<typeof WorkspaceDescriptionSchema>;
+export type WorkspaceDescribedAgent = z.infer<typeof WorkspaceDescribedAgentSchema>;
+export type WorkspaceDescribedAsk = z.infer<typeof WorkspaceDescribedAskSchema>;
+export type WorkspaceDescribedPin = z.infer<typeof WorkspaceDescribedPinSchema>;
 export type WorkspacePinSetResponsePayload = z.infer<typeof WorkspacePinSetResponsePayloadSchema>;
 export type WorkspaceRecoveryState = z.infer<typeof WorkspaceRecoveryStateSchema>;
 export type WorkspaceRecoveryInspectResponse = z.infer<
@@ -8138,6 +8216,7 @@ export type ProjectPinSetRequest = z.infer<typeof ProjectPinSetRequestSchema>;
 export type ProjectDefaultSetRequest = z.infer<typeof ProjectDefaultSetRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
+export type WorkspaceDescribeRequest = z.infer<typeof WorkspaceDescribeRequestSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;
 export type SetAgentModeRequestMessage = z.infer<typeof SetAgentModeRequestMessageSchema>;

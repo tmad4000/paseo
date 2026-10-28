@@ -3,6 +3,7 @@ import { withOutput } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions } from "../../utils/command-options.js";
 import { runArchiveCommand } from "./archive.js";
 import { runCreateCommand } from "./create.js";
+import { runDescribeCommand } from "./describe.js";
 import { runLsCommand } from "./ls.js";
 import { runRenameCommand } from "./rename.js";
 import { runSetupCommand } from "./setup.js";
@@ -40,6 +41,16 @@ export function createWorkspaceCommand(): Command {
   addJsonAndDaemonHostOptions(workspace.command("ls").description("List active workspaces")).action(
     withOutput(runLsCommand),
   );
+
+  addJsonAndDaemonHostOptions(
+    workspace
+      .command("describe")
+      .description(
+        "Show what each chat in a workspace is on (default: the calling agent's workspace)",
+      )
+      .argument("[workspace-id]", "Workspace id")
+      .option("--exclude-self", "Leave the calling agent (PASEO_AGENT_ID) out"),
+  ).action(withOutput(runDescribeCommand));
 
   addJsonAndDaemonHostOptions(
     workspace
