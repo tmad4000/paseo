@@ -242,6 +242,8 @@ export interface ComboboxItemProps {
   testID?: string;
 }
 
+const COMBOBOX_ACTION_DATASET = { comboboxAction: "true" };
+
 export function ComboboxItem({
   label,
   description,
@@ -312,7 +314,7 @@ export function ComboboxItem({
         ) : null}
       </View>
       {selected || trailingSlot ? (
-        <View style={styles.comboboxItemTrailingContainer}>
+        <View style={styles.comboboxItemTrailingContainer} dataSet={COMBOBOX_ACTION_DATASET}>
           <View style={styles.comboboxItemTrailingSlot}>
             {selected ? <Check size={16} color={theme.colors.foregroundMuted} /> : null}
           </View>
@@ -1176,6 +1178,15 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
   const handleDesktopKey = props.handleDesktopKey;
   const handleWebOverlayKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      // Row actions own activation keys. Reserve them from app-wide shortcuts,
+      // but let the focused button receive the native Enter/Space event.
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        isWeb &&
+        event.target instanceof Element &&
+        event.target.closest('[data-combobox-action="true"]')
+      )
+        return "target" as const;
       if (!isDesktopKey(event.key)) return false;
       return handleDesktopKey(event.key, event);
     },
