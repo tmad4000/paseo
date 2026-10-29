@@ -12,7 +12,9 @@ import type { TimelineJump } from "@/agent-stream/use-timeline-anchor-jump";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { trackedQuestionEntryId } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
-import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
+import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
+import { delegationTarget, delegationTargetKey, type DelegationTarget } from "./delegation-pulse";
+import { useDelegatedHere, useDelegationPulses } from "./use-delegation-pulse";
 
 type TrackQuestionHandler = (
   text: string,
@@ -21,6 +23,22 @@ type TrackQuestionHandler = (
 ) => void;
 
 const NO_ENTRIES: CompanionEntry[] = [];
+
+/** The sessions working this chat's unresolved asks, one per child, in entry order. */
+function useDelegationTargets(
+  serverId: string,
+  agentId: string,
+  entries: readonly CompanionEntry[],
+): DelegationTarget[] {
+  return useMemo(() => {
+    const byKey = new Map<string, DelegationTarget>();
+    for (const entry of entries) {
+      const target = delegationTarget(entry.ask, serverId, agentId);
+      if (target) byKey.set(delegationTargetKey(target), target);
+    }
+    return [...byKey.values()];
+  }, [agentId, entries, serverId]);
+}
 
 // COMPAT(streamAnswers): fork feature; remove gate after 2027-04-26.
 function useSupportsTrackedAnswers(serverId: string): boolean {
@@ -127,7 +145,18 @@ export function ChatTrackedAnswers({
       NO_ENTRIES
     );
   });
-  const agentTitle = useOwnerTitles(serverId, showOpenAsks ? entries : NO_ENTRIES);
+  const paneEntries = showOpenAsks ? entries : NO_ENTRIES;
+  const agentTitle = useOwnerTitles(serverId, paneEntries);
+  const targets = useDelegationTargets(serverId, agentId, paneEntries);
+  const pulses = useDelegationPulses(targets);
+  const delegation = useCallback(
+    (entry: CompanionEntry): AskDelegation | null => {
+      const target = delegationTarget(entry.ask, serverId, agentId);
+      return target ? { target, pulse: pulses(target) } : null;
+    },
+    [agentId, pulses, serverId],
+  );
+  const delegatedHere = useDelegatedHere(serverId, agentId, showOpenAsks);
   // The jump callbacks change with every streamed row; reading them through a ref keeps the
   // pane's actions stable, so its memoized rows do not re-render while the agent streams.
   const jumpRef = useRef(jump);
@@ -142,6 +171,15 @@ export function ChatTrackedAnswers({
       jumpToMessage: (messageId) => jumpRef.current.jumpToMessage(messageId),
       hasMessage: (messageId) => jumpRef.current.hasMessage(messageId),
       openChat: (target) => navigateToAgent({ serverId, agentId: target }),
+      openSession: (target) =>
+        navigateToAgent({ serverId: target.serverId, agentId: target.agentId }),
+      openOwnerAsk: (item) => {
+        openStreamEntry(serverId, item.ownerAgentId, {
+          entryId: item.entryId,
+          query: item.headline,
+        });
+        navigateToAgent({ serverId, agentId: item.ownerAgentId });
+      },
       markSeen: (entryId, replyRevision) =>
         update({ action: "mark_reply_seen", entryId, replyRevision }),
       stopTracking: (entryId) => update({ action: "update_status", entryId, status: "done" }),
@@ -160,6 +198,8 @@ export function ChatTrackedAnswers({
       actions={actions}
       showOpenAsks={showOpenAsks}
       agentTitle={agentTitle}
+      delegation={delegation}
+      delegatedHere={delegatedHere}
     />
   );
 }

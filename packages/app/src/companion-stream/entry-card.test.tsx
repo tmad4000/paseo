@@ -22,6 +22,50 @@ vi.mock("react-native", () => ({
       {children}
     </span>
   ),
+  Pressable: ({
+    children,
+    onPress,
+    testID,
+    accessibilityLabel,
+  }: {
+    children?: React.ReactNode;
+    onPress?: () => void;
+    testID?: string;
+    accessibilityLabel?: string;
+  }) => (
+    <button type="button" data-testid={testID} aria-label={accessibilityLabel} onClick={onPress}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: () => null },
+  cancelAnimation: () => {},
+  useAnimatedStyle: () => ({}),
+  useReducedMotion: () => false,
+  useSharedValue: (value: number) => ({ value }),
+  withRepeat: (value: number) => value,
+  withTiming: (value: number) => value,
+}));
+vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
+vi.mock("@/hooks/use-compact-time-ago", () => ({
+  useCompactTimeAgo: (date: Date | null) => (date ? "12m" : ""),
+}));
+const pulseFixture = vi.hoisted(() => ({
+  pulse: null as null | {
+    kind: string;
+    needsAttention: boolean;
+    since: number | null;
+    title: string | null;
+    error: string | null;
+  },
+  targets: [] as unknown[],
+}));
+vi.mock("./use-delegation-pulse", () => ({
+  useDelegationPulse: (target: unknown) => {
+    pulseFixture.targets.push(target);
+    return target ? pulseFixture.pulse : null;
+  },
 }));
 vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: () => ({}) } }));
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -235,5 +279,59 @@ describe("EntryCard", () => {
     expect(view.getByText("Remaining: Waiting for review")).toBeTruthy();
     expect(view.getByText("Evidence so far: Unit tests pass")).toBeTruthy();
     expect(view.getByText("Done").closest("button")?.disabled).toBe(true);
+  });
+});
+
+const delegated: CompanionEntry = {
+  ...ask,
+  ask: { ...ask.ask!, state: "in_progress", delegatedAgentId: "child-77" },
+};
+const delegatedDone: CompanionEntry = {
+  ...delegated,
+  ask: { ...delegated.ask!, state: "done" },
+};
+
+describe("EntryCard delegated ask", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) await i18n.init();
+    await i18n.changeLanguage("en");
+  });
+  beforeEach(() => vi.stubGlobal("React", React));
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    pulseFixture.pulse = null;
+    pulseFixture.targets = [];
+    vi.mocked(navigateToAgent).mockClear();
+  });
+  const handlers = {
+    onReturnToChat: () => {},
+    onReplyInChat: () => {},
+    onUpdateStatus: () => {},
+    onRemovePin: () => {},
+  };
+
+  it("shows the working child's live state on the card without expanding it", () => {
+    pulseFixture.pulse = {
+      kind: "idle",
+      needsAttention: true,
+      since: 1,
+      title: "Deploy worker",
+      error: null,
+    };
+    const view = render(<EntryCard entry={delegated} serverId="srv" {...handlers} />);
+    const chip = view.getByTestId("companion-entry-delegation");
+    expect(chip.textContent).toBe("Deploy workerIdle 12m · ask still open");
+    expect(pulseFixture.targets.at(-1)).toEqual({ serverId: "srv", agentId: "child-77" });
+    fireEvent.click(chip);
+    expect(navigateToAgent).toHaveBeenCalledWith({ serverId: "srv", agentId: "child-77" });
+  });
+
+  it("shows nothing for a done ask or an ask without a child", () => {
+    const view = render(<EntryCard entry={delegatedDone} serverId="srv" {...handlers} />);
+    expect(view.queryByTestId("companion-entry-delegation")).toBeNull();
+    cleanup();
+    const solo = render(<EntryCard entry={ask} serverId="srv" {...handlers} />);
+    expect(solo.queryByTestId("companion-entry-delegation")).toBeNull();
   });
 });

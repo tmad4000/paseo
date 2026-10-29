@@ -12,6 +12,9 @@ import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { formatMessageTimestamp } from "@/utils/time";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { describeEntry, splitEntryText } from "./entry-labels";
+import { delegationTarget } from "./delegation-pulse";
+import { DelegationPulseChip } from "./delegation-pulse-chip";
+import { useDelegationPulse } from "./use-delegation-pulse";
 import { HashtagText } from "./hashtag-text";
 
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
@@ -75,6 +78,7 @@ export function EntryCard({
       </View>
 
       <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
+      <AskDelegationPulse ask={entry.ask} serverId={serverId} />
       {entry.inputRequest ? <InputRequestDetails entry={entry} /> : null}
       {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
 
@@ -110,6 +114,32 @@ export function EntryCard({
           />
         ) : null}
       </View>
+    </View>
+  );
+}
+
+/**
+ * The live state of the session working an open delegated ask, shown without expanding the
+ * card: the delegator owns the loop until the ask is done, whatever the child is doing.
+ */
+function AskDelegationPulse({ ask, serverId }: { ask?: TrackedAsk; serverId?: string }) {
+  const target = useMemo(
+    () => (serverId ? delegationTarget(ask, serverId) : null),
+    [ask, serverId],
+  );
+  const pulse = useDelegationPulse(target);
+  const open = useCallback(() => {
+    if (target) navigateToAgent({ serverId: target.serverId, agentId: target.agentId });
+  }, [target]);
+  if (!target || !pulse) return null;
+  return (
+    <View style={styles.delegation}>
+      <DelegationPulseChip
+        pulse={pulse}
+        name={pulse.title || target.agentId.slice(0, 8)}
+        onOpen={open}
+        testID="companion-entry-delegation"
+      />
     </View>
   );
 }
@@ -343,6 +373,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   pendingCard: { borderLeftWidth: 3, borderLeftColor: theme.colors.accent },
+  delegation: { flexDirection: "row" },
   pendingText: { color: theme.colors.accent },
   headerRow: {
     flexDirection: "row",
