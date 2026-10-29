@@ -109,6 +109,36 @@ test("leaving hover closes preview and keyboard opening still supports Escape", 
   await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
 });
 
+test("preview leaves composing Escape to the editor and closes on ordinary Escape", async () => {
+  await page.getByRole("textbox", { name: "Draft" }).click();
+  await page.getByTestId("navigation-back-button").hover();
+  await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+  const editor = document.querySelector<HTMLInputElement>('input[aria-label="Draft"]')!;
+  const received = vi.fn();
+  editor.addEventListener("keydown", received);
+  const composing = new KeyboardEvent("keydown", {
+    key: "Escape",
+    isComposing: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => { editor.dispatchEvent(composing); });
+  expect(composing.defaultPrevented).toBe(false);
+  expect(received).toHaveBeenCalledTimes(1);
+  await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+
+  const escape = new KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => { editor.dispatchEvent(escape); });
+  expect(escape.defaultPrevented).toBe(true);
+  expect(received).toHaveBeenCalledTimes(1);
+  await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
+  editor.removeEventListener("keydown", received);
+});
+
 test("compact touch-sized layouts keep history explicit and do not open from mouse movement", async () => {
   fixture.compact = true;
   await act(async () =>

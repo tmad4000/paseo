@@ -506,6 +506,7 @@ export function MenuOverlay({
   useEffect(() => {
     if (!isWeb || !visible || !pointerPassthrough) return;
     const escapePreview = (event: KeyboardEvent) => {
+      if (event.isComposing || event.key === "Process") return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
