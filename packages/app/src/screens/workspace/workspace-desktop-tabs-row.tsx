@@ -80,6 +80,10 @@ import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
+import {
+  NewTabSplitPreview,
+  type NewTabSplitTriggerBindings,
+} from "@/screens/workspace/new-tab-split-preview";
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
 import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
@@ -243,6 +247,10 @@ interface WorkspaceNewTabButtonProps {
   paneId?: string;
   shortcutKeys: ShortcutKey[][] | null;
   placement: "inline" | "toolbar";
+  /** Offer Split right / Split down from the button (hidden in focus mode). */
+  splitEnabled: boolean;
+  onSplitRight?: () => void;
+  onSplitDown?: () => void;
 }
 
 function WorkspaceNewTabButton({
@@ -250,6 +258,9 @@ function WorkspaceNewTabButton({
   paneId,
   shortcutKeys,
   placement,
+  splitEnabled,
+  onSplitRight,
+  onSplitDown,
 }: WorkspaceNewTabButtonProps) {
   const { t } = useTranslation();
   const viewPaneActions = useViewPaneActions();
@@ -257,45 +268,54 @@ function WorkspaceNewTabButton({
   const handleAddViewTab = useCallback(() => {
     if (viewPaneActions && paneId) viewPaneActions.onAddTab(paneId);
   }, [paneId, viewPaneActions]);
-  if (viewPaneActions && paneId) {
-    const addButton = (
-      <ToolbarButton
-        label={viewPaneActions.addTabLabel}
-        shortcut={shortcutKeys}
-        testID="view-add-tab-button"
-        style={placement === "inline" ? styles.inlineNewTabButton : undefined}
-        onPress={handleAddViewTab}
-      >
-        <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
-      </ToolbarButton>
+  const renderButton = (split: NewTabSplitTriggerBindings) => {
+    if (viewPaneActions && paneId) {
+      return (
+        <ToolbarButton
+          label={viewPaneActions.addTabLabel}
+          shortcut={shortcutKeys}
+          testID="view-add-tab-button"
+          style={placement === "inline" ? styles.inlineNewTabButton : undefined}
+          tooltipEnabled={split.tooltipEnabled}
+          onLongPress={split.onLongPress}
+          onPress={handleAddViewTab}
+        >
+          <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
+        </ToolbarButton>
+      );
+    }
+    return (
+      <DropdownMenu onOpenChange={split.onNewTabMenuOpenChange}>
+        <ToolbarButton
+          kind="menu"
+          label={tooltipText}
+          shortcut={shortcutKeys}
+          testID="workspace-new-tab-button"
+          style={placement === "inline" ? styles.inlineNewTabButton : undefined}
+          tooltipEnabled={split.tooltipEnabled}
+          onLongPress={split.onLongPress}
+        >
+          <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
+        </ToolbarButton>
+        <WorkspaceNewTabMenuContent
+          serverId={serverId}
+          purpose="primary"
+          host="main"
+          paneId={paneId}
+        />
+      </DropdownMenu>
     );
-    return placement === "inline" ? (
-      <View style={styles.inlineAddButton}>{addButton}</View>
-    ) : (
-      addButton
-    );
-  }
-  const menu = (
-    <DropdownMenu>
-      <ToolbarButton
-        kind="menu"
-        label={tooltipText}
-        shortcut={shortcutKeys}
-        testID="workspace-new-tab-button"
-        style={placement === "inline" ? styles.inlineNewTabButton : undefined}
-      >
-        <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
-      </ToolbarButton>
-      <WorkspaceNewTabMenuContent
-        serverId={serverId}
-        purpose="primary"
-        host="main"
-        paneId={paneId}
-      />
-    </DropdownMenu>
+  };
+  const button = (
+    <NewTabSplitPreview
+      onSplitRight={splitEnabled ? onSplitRight : undefined}
+      onSplitDown={splitEnabled ? onSplitDown : undefined}
+    >
+      {renderButton}
+    </NewTabSplitPreview>
   );
 
-  return placement === "inline" ? <View style={styles.inlineAddButton}>{menu}</View> : menu;
+  return placement === "inline" ? <View style={styles.inlineAddButton}>{button}</View> : button;
 }
 
 function WorkspacePaneToolbarActions({
@@ -361,6 +381,9 @@ function WorkspacePaneToolbarActions({
           serverId={serverId}
           paneId={paneId}
           shortcutKeys={newTabShortcutKeys}
+          splitEnabled={splitActionsVisible}
+          onSplitRight={onSplitRight}
+          onSplitDown={onSplitDown}
         />
       ) : null}
       {maximizeActionVisible && onTogglePaneMaximized ? (
@@ -1587,6 +1610,9 @@ function ResolvedWorkspaceDesktopTabsRow({
               serverId={normalizedServerId}
               paneId={paneId}
               shortcutKeys={newTabKeys}
+              splitEnabled={showPaneSplitActions}
+              onSplitRight={onSplitRight}
+              onSplitDown={onSplitDown}
             />
           ) : null}
         </Animated.ScrollView>

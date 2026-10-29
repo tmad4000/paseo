@@ -60,6 +60,8 @@ interface ToolbarButtonCommonProps extends Omit<
   compact?: boolean;
   shortcut?: ShortcutKey[][] | null;
   tooltipSide?: "left" | "right" | "top" | "bottom";
+  /** Lets a surface that replaces the tooltip (a hover preview) suppress it. */
+  tooltipEnabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -80,6 +82,7 @@ export function ToolbarButton({
   compact = false,
   shortcut,
   tooltipSide = "bottom",
+  tooltipEnabled = true,
   style,
   kind = "action",
   onPress,
@@ -113,7 +116,7 @@ export function ToolbarButton({
 
   if (kind === "menu") {
     return (
-      <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+      <Tooltip delayDuration={300} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
         <TooltipTrigger asChild triggerRefProp="triggerRef">
           <DropdownMenuTrigger
             {...props}
@@ -133,7 +136,7 @@ export function ToolbarButton({
   }
 
   return (
-    <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+    <Tooltip delayDuration={300} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
       <TooltipTrigger
         {...props}
         disabled={disabled}
