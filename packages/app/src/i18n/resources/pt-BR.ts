@@ -1124,6 +1124,8 @@ export const ptBR: TranslationResources = {
         newBrowser: "Novo navegador",
         maximizePane: "Maximizar painel",
         restorePane: "Restaurar painel",
+        unmaximizedToShowTab: "Painel restaurado para mostrar esta aba",
+        maximizeShownPane: "Maximizar este painel",
         closePane: "Fechar painel",
         exitFocusMode: "Sair do modo de foco",
         splitRight: "Dividir painel à direita",

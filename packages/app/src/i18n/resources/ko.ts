@@ -1116,6 +1116,8 @@ export const ko: TranslationResources = {
         newBrowser: "새 브라우저",
         maximizePane: "창 최대화",
         restorePane: "창 복원",
+        unmaximizedToShowTab: "이 탭을 표시하기 위해 창 최대화를 해제했습니다",
+        maximizeShownPane: "이 창 최대화",
         closePane: "창 닫기",
         exitFocusMode: "집중 모드 종료",
         splitRight: "창을 오른쪽으로 분할",

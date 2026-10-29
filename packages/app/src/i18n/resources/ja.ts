@@ -1121,6 +1121,8 @@ export const ja: TranslationResources = {
         newBrowser: "新しいブラウザ",
         maximizePane: "ペインを最大化",
         restorePane: "ペインを元に戻す",
+        unmaximizedToShowTab: "このタブを表示するため、ペインの最大化を解除しました",
+        maximizeShownPane: "このペインを最大化",
         closePane: "ペインを閉じる",
         exitFocusMode: "フォーカスモードを終了",
         splitRight: "右にペインを分割",

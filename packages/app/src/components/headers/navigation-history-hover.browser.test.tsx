@@ -4,12 +4,19 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { NavigationBackButton, NavigationForwardButton } from "./navigation-back-button";
 import { i18n } from "@/i18n/i18next";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 void i18n;
-const fixture = vi.hoisted(() => ({ navigate: vi.fn(), compact: false, available: true }));
+const fixture = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  compact: false,
+  available: true,
+  entries: null as unknown[] | null,
+}));
 vi.mock("@/navigation/focus-history-runtime", () => ({
   useCanNavigateBackInFocusHistory: () => fixture.available,
   useCanNavigateForwardInFocusHistory: () => true,
   useFocusHistoryEntries: () =>
+    fixture.entries ??
     Array.from({ length: 20 }, (_, i) => ({ kind: "route", pathname: `/visit-${i}` })),
   navigateInFocusHistory: fixture.navigate,
 }));
@@ -75,6 +82,7 @@ beforeEach(async () => {
   fixture.navigate.mockReset();
   fixture.compact = false;
   fixture.available = true;
+  fixture.entries = null;
   container = document.createElement("div");
   container.style.cssText = "padding:40px;display:flex;width:500px";
   // The test theme adapter does not resolve Unistyles breakpoints; supply only the header hitboxes.
@@ -100,6 +108,45 @@ afterEach(async () => {
   container.remove();
   document.getElementById("history-test-geometry")?.remove();
   vi.unstubAllGlobals();
+  useWorkspaceLayoutStore.setState({ layoutByWorkspace: {} });
+});
+
+test("history rows show the destination workspace's open tab count, like the sidebar", async () => {
+  const workspace = (workspaceId: string) => ({
+    kind: "workspace",
+    serverId: "host",
+    workspaceId,
+    paneId: null,
+    tabId: null,
+    target: null,
+    view: { panel: "agent", explorerTab: "changes" },
+  });
+  fixture.entries = [
+    workspace("busy"),
+    { kind: "route", pathname: "/settings" },
+    workspace("empty"),
+  ];
+  await useWorkspaceLayoutStore.persist.rehydrate();
+  await act(async () => {
+    for (const agentId of ["a", "b", "c"]) {
+      useWorkspaceLayoutStore.getState().openTab({
+        workspaceKey: "host:busy",
+        intent: "reveal",
+        target: { kind: "agent", agentId },
+      });
+    }
+  });
+  await page.getByTestId("navigation-back-button-history-menu-button").click();
+  await expect
+    .element(page.getByTestId("navigation-back-history-item-0-tab-count"))
+    .toHaveTextContent("3");
+  await expect.element(page.getByLabelText("3 open tabs")).toBeVisible();
+  expect(
+    document.querySelector('[data-testid="navigation-back-history-item-1-tab-count"]'),
+  ).toBeNull();
+  expect(
+    document.querySelector('[data-testid="navigation-back-history-item-2-tab-count"]'),
+  ).toBeNull();
 });
 
 test("hover reaches every history row, keeps draft focus and leaves one-step arrow clickable", async () => {

@@ -1121,6 +1121,8 @@ export const ru: TranslationResources = {
         newBrowser: "Новый браузер",
         maximizePane: "Развернуть панель",
         restorePane: "Восстановить панель",
+        unmaximizedToShowTab: "Панель восстановлена, чтобы показать эту вкладку",
+        maximizeShownPane: "Развернуть эту панель",
         closePane: "Закрыть панель",
         exitFocusMode: "Выйти из режима фокусировки",
         splitRight: "Разделить панель справа",

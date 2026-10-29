@@ -37,6 +37,24 @@ export function hasMultipleVisiblePanes(node: SplitNode): boolean {
   return visiblePaneCount > 1;
 }
 
+/**
+ * Whether focus has just moved onto a pane the maximized pane covers — by Back/Forward, a
+ * sidebar or Command Center jump, a pane shortcut, a split. Focus must never land somewhere
+ * hidden, so the caller restores the split rather than appearing to do nothing.
+ */
+export function focusMovedBehindMaximizedPane(input: {
+  root: SplitNode | null;
+  maximizedPaneId: string | null;
+  previousFocusedPaneId: string | null;
+  focusedPaneId: string | null;
+}): boolean {
+  const { root, maximizedPaneId, previousFocusedPaneId, focusedPaneId } = input;
+  if (!root || !maximizedPaneId || !focusedPaneId) return false;
+  if (focusedPaneId === previousFocusedPaneId || focusedPaneId === maximizedPaneId) return false;
+  const pane = findPane(root, focusedPaneId);
+  return Boolean(pane && pane.hidden !== true);
+}
+
 function findPane(node: SplitNode, paneId: string): SplitPane | null {
   if (node.kind === "pane") return node.pane.id === paneId ? node.pane : null;
   for (const child of node.group.children) {

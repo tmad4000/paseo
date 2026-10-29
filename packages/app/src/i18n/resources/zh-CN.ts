@@ -1102,6 +1102,8 @@ export const zhCN: TranslationResources = {
         newBrowser: "新建浏览器",
         maximizePane: "最大化窗格",
         restorePane: "还原窗格",
+        unmaximizedToShowTab: "已取消窗格最大化以显示此标签页",
+        maximizeShownPane: "最大化此窗格",
         closePane: "关闭窗格",
         exitFocusMode: "退出专注模式",
         splitRight: "向右拆分窗格",

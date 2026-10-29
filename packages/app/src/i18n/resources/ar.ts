@@ -1110,6 +1110,8 @@ export const ar: TranslationResources = {
         newBrowser: "متصفح جديد",
         maximizePane: "تكبير الجزء",
         restorePane: "استعادة الجزء",
+        unmaximizedToShowTab: "تمت استعادة الجزء لعرض علامة التبويب هذه",
+        maximizeShownPane: "تكبير هذا الجزء",
         closePane: "إغلاق الجزء",
         exitFocusMode: "إنهاء وضع التركيز",
         splitRight: "تقسيم الجزء الأيمن",
