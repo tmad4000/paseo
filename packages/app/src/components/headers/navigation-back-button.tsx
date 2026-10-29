@@ -133,10 +133,16 @@ function NavigationHistoryButton({
   const [open, setOpen] = useState(false);
   const [hoverPreview, setHoverPreview] = useState(false);
   const surfaceRef = useRef<View>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHover = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
   const handleOpenChange = useCallback((next: boolean) => {
+    cancelHover();
     setHoverPreview(false);
     setOpen(next);
-  }, []);
+  }, [cancelHover]);
   const handleHoverOpen = useCallback(() => {
     setHoverPreview(true);
     setOpen(true);
@@ -149,13 +155,15 @@ function NavigationHistoryButton({
       <NavigationHistoryHoverRegion
         available={available}
         surfaceRef={surfaceRef}
+        timer={timer}
+        cancel={cancelHover}
         hoverPreview={hoverPreview}
         onHoverOpen={handleHoverOpen}
       >
         <ContextMenuTrigger contextOnly enabled={available} testID={`${testID}-history-trigger`}>
           <NavigationHistoryPressable direction={direction} available={available} />
         </ContextMenuTrigger>
-        <NavigationHistoryDropdownTrigger direction={direction} available={available} />
+        <NavigationHistoryDropdownTrigger direction={direction} available={available} hoverPreview={hoverPreview} />
       </NavigationHistoryHoverRegion>
       <ContextMenuContent
         hoverPreview={hoverPreview}
@@ -180,23 +188,22 @@ function NavigationHistoryHoverRegion({
   available,
   hoverPreview,
   surfaceRef,
+  timer,
+  cancel,
   onHoverOpen,
   children,
 }: {
   available: boolean;
   hoverPreview: boolean;
   surfaceRef: React.RefObject<View | null>;
+  timer: React.RefObject<ReturnType<typeof setTimeout> | null>;
+  cancel: () => void;
   onHoverOpen: () => void;
   children: React.ReactNode;
 }) {
   const menu = useContextMenu();
   const isCompact = useIsCompactFormFactor();
   const triggerRef = useRef<View>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancel = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-  }, []);
   useEffect(() => cancel, [cancel, available, isCompact]);
   const leave = useCallback(() => {
     cancel();
@@ -239,11 +246,17 @@ function NavigationHistoryHoverRegion({
 function NavigationHistoryDropdownTrigger({
   direction,
   available,
+  hoverPreview,
 }: {
   direction: NavigationFocusHistoryDirection;
   available: boolean;
+  hoverPreview: boolean;
 }) {
   const { t } = useTranslation();
+  const menu = useContextMenu();
+  const activate = useCallback(() => {
+    menu.setOpen(hoverPreview || !menu.open);
+  }, [hoverPreview, menu]);
   const { testID, historyLabelKey } = DIRECTIONS[direction];
   const label = t(historyLabelKey);
   const triggerStyle = useCallback(
@@ -260,6 +273,7 @@ function NavigationHistoryDropdownTrigger({
           accessibilityRole="button"
           accessibilityLabel={label}
           disabled={!available}
+          onActivate={activate}
           style={triggerStyle}
         >
           {({ hovered, open }) => {

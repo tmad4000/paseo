@@ -124,4 +124,45 @@ test("compact touch-sized layouts keep history explicit and do not open from mou
   expect(document.querySelector('[data-testid="navigation-back-button-history"]')).toBeNull();
   await page.getByTestId("navigation-back-button").click();
   expect(fixture.navigate).toHaveBeenLastCalledWith("back", { isCompact: true });
+  await page.getByTestId("navigation-back-button-history-menu-button").click();
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toBeVisible();
+});
+
+test("an arrow click cancels a pending preview", async () => {
+  await page.getByTestId("navigation-back-button").hover();
+  await page.getByTestId("navigation-back-button").click();
+  expect(fixture.navigate).toHaveBeenLastCalledWith("back", { isCompact: false });
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  expect(document.querySelector('[data-testid="navigation-back-button-history"]')).toBeNull();
+});
+
+test("a chevron click cancels a pending preview and keeps the menu focused", async () => {
+  await page.getByTestId("navigation-back-button-history-menu-button").hover();
+  await page.getByTestId("navigation-back-button-history-menu-button").click();
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
+  await page.getByTestId("navigation-back-button-history-backdrop").click({ position: { x: 5, y: 5 } });
+  await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
+});
+
+test("activating the chevron promotes a hover preview to a keyboard menu", async () => {
+  await page.getByRole("textbox", { name: "Draft" }).click();
+  await page.getByTestId("navigation-back-button-history-menu-button").hover();
+  await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+  await expect.element(page.getByRole("textbox", { name: "Draft" })).toHaveFocus();
+  await page.getByTestId("navigation-back-button-history-menu-button").click();
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
+  await userEvent.keyboard("{ArrowDown}");
+  await expect.element(page.getByTestId("navigation-back-history-item-1")).toHaveFocus();
+  await userEvent.keyboard("{Enter}");
+  expect(fixture.navigate).toHaveBeenLastCalledWith("back", { isCompact: false, steps: 2 });
+});
+
+test("keyboard activation promotes a preview", async () => {
+  await page.getByTestId("navigation-back-button-history-menu-button").hover();
+  await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+  (document.querySelector('[data-testid="navigation-back-button-history-menu-button"]') as HTMLElement).focus();
+  await userEvent.keyboard("{Enter}");
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
 });
