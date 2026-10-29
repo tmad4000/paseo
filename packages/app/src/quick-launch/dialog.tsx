@@ -402,10 +402,9 @@ function QuickLaunchProjectPicker({
         />
       );
       const section = sectionStarts.get(input.option.id);
-      if (!section) return item;
       return (
         <View>
-          <ProjectPickerSectionHeader section={section} />
+          {section ? <ProjectPickerSectionHeader section={section} /> : null}
           {item}
         </View>
       );
@@ -488,9 +487,13 @@ function QuickLaunchProjectOption({
 }) {
   const trailingSlot = useMemo(
     () => (
-      <ProjectPickerPinToggle hosts={pinHosts} testID={`quick-launch-project-pin-${option.id}`} />
+      <ProjectPickerPinToggle
+        hosts={pinHosts}
+        projectName={option.label}
+        testID={`quick-launch-project-pin-${option.id}`}
+      />
     ),
-    [option.id, pinHosts],
+    [option.id, option.label, pinHosts],
   );
   return (
     <ComboboxItem

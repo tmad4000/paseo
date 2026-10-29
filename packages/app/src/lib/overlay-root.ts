@@ -79,7 +79,8 @@ export function OverlayLayerProvider({ layer, children }: { layer: number; child
   return createElement(OverlayLayerContext.Provider, { value: layer }, children);
 }
 
-type WebOverlayKeyHandler = (event: KeyboardEvent) => boolean;
+// "target" reserves the key from app shortcuts without cancelling the focused control.
+type WebOverlayKeyHandler = (event: KeyboardEvent) => boolean | "target";
 
 interface WebOverlayEntry {
   id: symbol;
@@ -185,7 +186,9 @@ export function dispatchTopWebOverlayKeyDown(event: KeyboardEvent): boolean {
     }
   }
 
-  if (!top.getKeyHandler()(event)) return false;
+  const result = top.getKeyHandler()(event);
+  if (result === "target") return true;
+  if (!result) return false;
   event.stopImmediatePropagation();
   return true;
 }
