@@ -24,6 +24,7 @@ export function DraggableList<T>({
   ListHeaderComponent,
   ListEmptyComponent,
   showsVerticalScrollIndicator = true,
+  keyboardShouldPersistTaps,
   scrollEnabled = true,
   useDragHandle: _useDragHandle = false,
   refreshing,
@@ -116,6 +117,7 @@ export function DraggableList<T>({
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       scrollEnabled={scrollEnabled}
       extraData={extraData}
       simultaneousHandlers={simultaneousHandlers}

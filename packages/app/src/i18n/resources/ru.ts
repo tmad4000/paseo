@@ -398,6 +398,7 @@ export const ru: TranslationResources = {
       readQueuedMessage: "Развернуть или свернуть сообщение в очереди",
       doneQueuedMessage: "Завершить редактирование сообщения",
       editQueuedMessage: "Изменить сообщение из очереди",
+      reorderQueuedMessage: "Перетащите, чтобы изменить порядок сообщений в очереди",
       saveQueuedMessage: "Сохранить сообщение в очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
       queuedMessages: "Сообщения в очереди ({{count}})",
@@ -450,6 +451,7 @@ export const ru: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "Обновите этот хост Paseo, чтобы редактировать сообщения без изменения порядка очереди.",
       queueRemoveFailed: "Не удалось удалить сообщение. Попробуйте ещё раз.",
+      queueReorderFailed: "Не удалось изменить порядок сообщений. Попробуйте ещё раз.",
       queueEditFailed: "Не удалось изменить сообщение в очереди",
       steerRequiresUpdatedHost:
         "Обновите этот хост Paseo, чтобы направить сообщение, не прерывая текущий ход.",

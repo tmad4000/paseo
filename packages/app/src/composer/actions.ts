@@ -687,6 +687,47 @@ export function removeQueuedComposerMessageLocally(input: {
   return item;
 }
 
+/**
+ * Orders queued messages by an explicit id list, the same rule the daemon's
+ * `agent.queue.reorder.request` applies: unknown ids are ignored and items the
+ * list omits keep their relative order at the end.
+ */
+export function orderQueuedComposerMessages<T extends { id: string }>(
+  items: readonly T[],
+  orderedIds: readonly string[],
+): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ordered: T[] = [];
+  for (const id of orderedIds) {
+    const item = byId.get(id);
+    if (!item) continue;
+    ordered.push(item);
+    byId.delete(id);
+  }
+  ordered.push(...items.filter((item) => byId.has(item.id)));
+  return ordered;
+}
+
+/** Reorders the local copy of one agent's queue. Returns false when nothing moved. */
+export function reorderQueuedComposerMessagesLocally(input: {
+  agentId: string;
+  orderedIds: readonly string[];
+  queue: QueueWriter;
+}): boolean {
+  const current = input.queue.read(input.agentId);
+  const ordered = orderQueuedComposerMessages(current, input.orderedIds);
+  if (ordered.every((item, index) => current[index]?.id === item.id)) return false;
+  input.queue.write((prev) => {
+    const next = new Map(prev);
+    next.set(
+      input.agentId,
+      orderQueuedComposerMessages(prev.get(input.agentId) ?? [], input.orderedIds),
+    );
+    return next;
+  });
+  return true;
+}
+
 export interface TakeQueuedComposerMessageInput {
   client: ComposerQueueClient;
   agentId: string;

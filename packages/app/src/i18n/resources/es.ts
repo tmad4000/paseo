@@ -400,6 +400,7 @@ export const es: TranslationResources = {
       readQueuedMessage: "Expandir o contraer mensaje en cola",
       doneQueuedMessage: "Terminar de editar mensaje en cola",
       editQueuedMessage: "Editar mensaje en cola",
+      reorderQueuedMessage: "Arrastra para reordenar el mensaje en cola",
       saveQueuedMessage: "Guardar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
       queuedMessages: "Mensajes en cola ({{count}})",
@@ -452,6 +453,7 @@ export const es: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "Actualiza este host de Paseo para editar mensajes en cola sin cambiar su orden.",
       queueRemoveFailed: "No se pudo eliminar el mensaje. Inténtalo de nuevo.",
+      queueReorderFailed: "No se pudieron reordenar los mensajes. Inténtalo de nuevo.",
       queueEditFailed: "No se pudo editar el mensaje en cola",
       steerRequiresUpdatedHost:
         "Actualiza este host de Paseo para dirigir el mensaje sin interrumpir el turno activo.",

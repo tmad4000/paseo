@@ -189,6 +189,20 @@ Save, Done, leaving the input, collapsing the queue, or leaving the workspace at
 changed text. The existing draft store retains the local text and host baseline until the host
 confirms the edit. A stale or failed edit stays recoverable; Done does not discard it.
 
+### Reordering
+
+Each acknowledged row in the expanded queue has a grip. Dragging it sends
+`agent.queue.reorder.request` with the full id list in the new order. The composer moves the row
+locally first, then applies the host's snapshot; if the host refuses, the composer reads the queue
+back so the list returns to the host's order. Rows still waiting in the outbox and detached edits
+have no grip, since the host does not know them; the host ignores unknown ids and keeps unmentioned
+items at the end. A drain only ever removes the item it claimed, by id, so moving rows while the head
+is being sent cannot send anything twice.
+
+On web the grip is the dnd-kit keyboard handle and carries `data-keyboard-owner`, which makes the
+global shortcut resolver treat it as an editable scope. Without that, Space would toggle voice mute
+and Escape would interrupt the agent instead of lifting or cancelling the drag.
+
 ### Editing while the queue drains
 
 An open editor holds its message: the composer sends `agent.queue.edit_hold.request` with

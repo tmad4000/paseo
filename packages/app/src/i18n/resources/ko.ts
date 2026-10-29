@@ -395,6 +395,7 @@ export const ko: TranslationResources = {
       readQueuedMessage: "대기 중인 메시지 펼치기 또는 접기",
       doneQueuedMessage: "대기 중인 메시지 편집 완료",
       editQueuedMessage: "대기 중인 메시지 편집",
+      reorderQueuedMessage: "드래그하여 대기 중인 메시지 순서 변경",
       saveQueuedMessage: "대기 메시지 저장",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
       queuedMessages: "대기 중인 메시지 ({{count}}개)",
@@ -447,6 +448,7 @@ export const ko: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "대기 메시지의 순서를 유지한 채 편집하려면 이 Paseo 호스트를 업데이트하세요.",
       queueRemoveFailed: "메시지를 삭제하지 못했습니다. 다시 시도하세요.",
+      queueReorderFailed: "메시지 순서를 바꾸지 못했습니다. 다시 시도하세요.",
       queueEditFailed: "대기 메시지를 편집하지 못했습니다",
       steerRequiresUpdatedHost:
         "진행 중인 작업을 중단하지 않고 지시하려면 이 Paseo 호스트를 업데이트하세요.",

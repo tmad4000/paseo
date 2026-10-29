@@ -400,6 +400,7 @@ export const fr: TranslationResources = {
       readQueuedMessage: "Développer ou réduire le message en attente",
       doneQueuedMessage: "Terminer la modification du message",
       editQueuedMessage: "Modifier le message en file d'attente",
+      reorderQueuedMessage: "Faites glisser pour réordonner le message en file d'attente",
       saveQueuedMessage: "Enregistrer le message en file d’attente",
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
       queuedMessages: "Messages en attente ({{count}})",
@@ -452,6 +453,7 @@ export const fr: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour modifier les messages en file d’attente sans changer leur ordre.",
       queueRemoveFailed: "Impossible de supprimer le message. Réessayez.",
+      queueReorderFailed: "Impossible de réordonner les messages. Réessayez.",
       queueEditFailed: "Impossible de modifier le message en file d’attente",
       steerRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour orienter le message sans interrompre le tour actif.",

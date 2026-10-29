@@ -34,6 +34,8 @@ export interface DraggableListProps<T> {
   ListHeaderComponent?: ReactElement | null;
   ListEmptyComponent?: ReactElement | null;
   showsVerticalScrollIndicator?: boolean;
+  /** Forwarded to the scroller, e.g. "handled" so taps on row buttons survive an open keyboard. */
+  keyboardShouldPersistTaps?: "always" | "never" | "handled";
   /** When false, disables internal scrolling (use outer list to scroll). */
   scrollEnabled?: boolean;
   /**

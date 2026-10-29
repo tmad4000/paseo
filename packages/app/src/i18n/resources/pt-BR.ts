@@ -399,6 +399,7 @@ export const ptBR: TranslationResources = {
       readQueuedMessage: "Expandir ou recolher mensagem da fila",
       doneQueuedMessage: "Concluir edição da mensagem",
       editQueuedMessage: "Editar mensagem na fila",
+      reorderQueuedMessage: "Arraste para reordenar a mensagem na fila",
       saveQueuedMessage: "Salvar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
       queuedMessages: "Mensagens na fila ({{count}})",
@@ -451,6 +452,7 @@ export const ptBR: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "Atualize este host Paseo para editar mensagens na fila sem alterar a ordem.",
       queueRemoveFailed: "Não foi possível remover a mensagem. Tente novamente.",
+      queueReorderFailed: "Não foi possível reordenar as mensagens. Tente novamente.",
       queueEditFailed: "Falha ao editar mensagem na fila",
       steerRequiresUpdatedHost:
         "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",
