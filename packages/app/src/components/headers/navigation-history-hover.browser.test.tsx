@@ -26,16 +26,17 @@ vi.mock("expo-router", () => ({
 }));
 // Gorhom's native animated presenter cannot lay out in this isolated browser fixture.
 vi.mock("@/components/ui/isolated-bottom-sheet-modal", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/components/ui/isolated-bottom-sheet-modal")>();
-  const React = await import("react");
+  const actual =
+    await importOriginal<typeof import("@/components/ui/isolated-bottom-sheet-modal")>();
+  const MockReact = await import("react");
   return {
     ...actual,
-    IsolatedBottomSheetModal: React.forwardRef<
+    IsolatedBottomSheetModal: MockReact.forwardRef<
       { present: () => void; dismiss: () => void },
       { children: React.ReactNode; contextBridge: (children: React.ReactNode) => React.ReactNode }
     >(function TestSheet({ children, contextBridge }, ref) {
-      const [open, setOpen] = React.useState(false);
-      React.useImperativeHandle(ref, () => ({
+      const [open, setOpen] = MockReact.useState(false);
+      MockReact.useImperativeHandle(ref, () => ({
         present: () => setOpen(true),
         dismiss: () => setOpen(false),
       }));
@@ -147,7 +148,9 @@ test("preview leaves composing Escape to the editor and closes on ordinary Escap
     bubbles: true,
     cancelable: true,
   });
-  await act(async () => { editor.dispatchEvent(composing); });
+  await act(async () => {
+    editor.dispatchEvent(composing);
+  });
   expect(composing.defaultPrevented).toBe(false);
   expect(received).toHaveBeenCalledTimes(1);
   await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
@@ -159,7 +162,9 @@ test("preview leaves composing Escape to the editor and closes on ordinary Escap
     bubbles: true,
     cancelable: true,
   });
-  await act(async () => { editor.dispatchEvent(legacyComposing); });
+  await act(async () => {
+    editor.dispatchEvent(legacyComposing);
+  });
   expect(legacyComposing.keyCode).toBe(229);
   expect(legacyComposing.defaultPrevented).toBe(false);
   expect(received).toHaveBeenCalledTimes(2);
@@ -170,7 +175,9 @@ test("preview leaves composing Escape to the editor and closes on ordinary Escap
     bubbles: true,
     cancelable: true,
   });
-  await act(async () => { editor.dispatchEvent(escape); });
+  await act(async () => {
+    editor.dispatchEvent(escape);
+  });
   expect(escape.defaultPrevented).toBe(false);
   expect(received).toHaveBeenCalledTimes(3);
   await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
@@ -213,7 +220,9 @@ test("a chevron click cancels a pending preview and keeps the menu focused", asy
   await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
   await new Promise((resolve) => setTimeout(resolve, 450));
   await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
-  await page.getByTestId("navigation-back-button-history-backdrop").click({ position: { x: 5, y: 5 } });
+  await page
+    .getByTestId("navigation-back-button-history-backdrop")
+    .click({ position: { x: 5, y: 5 } });
   await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
 });
 
@@ -233,7 +242,11 @@ test("activating the chevron promotes a hover preview to a keyboard menu", async
 test("keyboard activation promotes a preview", async () => {
   await page.getByTestId("navigation-back-button-history-menu-button").hover();
   await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
-  (document.querySelector('[data-testid="navigation-back-button-history-menu-button"]') as HTMLElement).focus();
+  (
+    document.querySelector(
+      '[data-testid="navigation-back-button-history-menu-button"]',
+    ) as HTMLElement
+  ).focus();
   await userEvent.keyboard("{Enter}");
   await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
 });
@@ -260,7 +273,9 @@ test.each(["availability", "compact"] as const)(
     await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
     invalidate();
     await render();
-    await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByTestId("navigation-back-button-history"))
+      .not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(document.querySelector('[data-testid="navigation-back-button-history"]')).toBeNull();
 
