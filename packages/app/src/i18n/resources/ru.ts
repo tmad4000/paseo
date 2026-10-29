@@ -1574,6 +1574,7 @@ export const ru: TranslationResources = {
   sidebar: {
     reviewActions: "Действия проверки для {{title}}",
     reviewSessions: "Проверка ({{count}})",
+    openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",
     routing: {
       findMode: "Find chats mode",

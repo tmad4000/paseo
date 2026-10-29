@@ -1,6 +1,6 @@
 # Sidebar tab count
 
-Workspace rows show a muted stacked-tabs icon and count when two or more real tabs are open
+Workspace rows show a muted stacked-tabs icon and count when one or more real tabs are open
 on this device. The count covers visible split panes, excludes hidden panes and New tab
 placeholders, and updates as tabs open or close. The existing title, metadata and trailing
 status/diff/time controls stay in place. The indicator has a translated accessible label and

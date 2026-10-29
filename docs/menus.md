@@ -199,3 +199,11 @@ its own.
   positioning bugs there, not at a call site.
 - Everything else about floating surfaces on Android — Portal/Modal escape, lifecycle gates,
   status-bar offset, the open flash — is in [floating-panels.md](floating-panels.md).
+
+## Hover previews
+
+Navigation history reuses the shared menu surface with `hoverPreview` for its pointer preview.
+A preview has no backdrop or focus trap, does not dismiss the keyboard, and exposes its measured
+surface ref to `useHoverSafeZone`. The surface keeps pointer events while the overlay passes
+through to the trigger. Escape closes it. Press/keyboard menus retain the normal modal defaults;
+compact sheets are unchanged. Use a plain View to track mouse movement and never open for touch.

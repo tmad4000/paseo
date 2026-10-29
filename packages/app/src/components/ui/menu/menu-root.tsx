@@ -35,14 +35,22 @@ export function MenuRoot({
   defaultOpen,
   onOpenChange,
   compactMode,
+  dismissKeyboardOnOpen,
   children,
 }: PropsWithChildren<{
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   compactMode?: MenuCompactMode;
+  dismissKeyboardOnOpen?: boolean;
 }>): ReactElement {
-  const value = useMenuState({ open, defaultOpen, onOpenChange, compactMode });
+  const value = useMenuState({
+    open,
+    defaultOpen,
+    onOpenChange,
+    compactMode,
+    dismissKeyboardOnOpen,
+  });
   return <MenuContextProvider value={value}>{children}</MenuContextProvider>;
 }
 
@@ -57,6 +65,7 @@ type TriggerStyleProp = StyleProp<ViewStyle> | ((state: MenuTriggerState) => Sty
 export interface MenuTriggerProps extends Omit<PressableProps, "style" | "children"> {
   style?: TriggerStyleProp;
   children: ReactNode | ((state: MenuTriggerState) => ReactNode);
+  onActivate?: () => void;
 }
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
@@ -69,7 +78,7 @@ function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
 }
 
 export const MenuTrigger = forwardRef<View, MenuTriggerProps>(function MenuTrigger(
-  { children, disabled, style, accessibilityState, ...props },
+  { children, disabled, style, accessibilityState, onActivate, ...props },
   forwardedRef,
 ): ReactElement {
   const ctx = useMenuContext("MenuTrigger");
@@ -84,8 +93,9 @@ export const MenuTrigger = forwardRef<View, MenuTriggerProps>(function MenuTrigg
 
   const handlePress = useCallback(() => {
     if (disabled) return;
-    ctx.setOpen(!ctx.open);
-  }, [disabled, ctx]);
+    if (onActivate) onActivate();
+    else ctx.setOpen(!ctx.open);
+  }, [disabled, ctx, onActivate]);
 
   const pressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => {

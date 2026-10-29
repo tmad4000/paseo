@@ -47,14 +47,22 @@ test("visible history dropdown reaches older sessions and preserves Back/Forward
     await expect(menu).toBeHidden();
     await expect(trigger).toBeFocused();
 
-    await trigger.click();
+    await visibleControl(page, "navigation-back-button").hover();
+    await expect(menu).toBeVisible();
     const olderEntry = menu.getByTestId("navigation-back-history-item-16");
     await expect(olderEntry).toContainText(first.title);
     await olderEntry.click();
     await expect(menu).toBeHidden();
     await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");
 
+    const forwardMenu = visibleControl(page, "navigation-forward-button-history");
+    await visibleControl(page, "navigation-forward-button").hover();
+    await expect(forwardMenu).toBeVisible();
+    await forwardMenu.getByTestId("navigation-forward-history-item-0").hover();
+    await expect(forwardMenu).toBeVisible();
+    // The preview never covers the one-step arrow or steals its click.
     await visibleControl(page, "navigation-forward-button").click();
+    await expect(forwardMenu).toBeHidden();
     await expect(agentTab(page, second.id)).toHaveAttribute("aria-selected", "true");
     await visibleControl(page, "navigation-back-button").click();
     await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");

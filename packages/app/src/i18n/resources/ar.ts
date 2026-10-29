@@ -1553,6 +1553,7 @@ export const ar: TranslationResources = {
   sidebar: {
     reviewActions: "إجراءات مراجعة {{title}}",
     reviewSessions: "مراجعة ({{count}})",
+    openTabs_one: "علامة تبويب مفتوحة: {{count}}",
     openTabs: "{{count}} علامات تبويب مفتوحة",
     routing: {
       findMode: "Find chats mode",
