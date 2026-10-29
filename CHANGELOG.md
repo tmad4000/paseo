@@ -1,17 +1,23 @@
 # Changelog
 
-## 0.10.0-beta.20 - 2026-10-27
+## 0.10.0-beta.21 - 2026-10-29
 
 ### Added
 
+- Workspace rows show open-tab counts for one tab as well as larger workspaces, including inactive tabs ([#143](https://github.com/tmad4000/paseo/pull/143))
+- Hover Back or Forward to preview and choose any retained visit; explicit keyboard and touch history menus remain available ([#143](https://github.com/tmad4000/paseo/pull/143))
+- The floating chat pane lists unresolved asks with state, owner links and next actions alongside questions ([#142](https://github.com/tmad4000/paseo/pull/142))
+- Agents can describe other chats in their workspace, including focus summaries and open asks ([#140](https://github.com/tmad4000/paseo/pull/140))
 - Global Tasks keep their identity across linked chats, and Needs you surfaces waiting human input in Stream and each chat (Cmd/Ctrl+Alt+Y) ([#133](https://github.com/tmad4000/paseo/pull/133))
 - Stream separates chronological Activity, current Tasks, Q&A and Saved material while preserving existing asks and completed history ([#133](https://github.com/tmad4000/paseo/pull/133))
 - Visible Back/Forward history dropdowns let you jump directly to any retained visit, with keyboard and touch access ([#132](https://github.com/tmad4000/paseo/pull/132))
 - The top-right Fork control shows the installed app version and update status, with hover details and a menu that lists host daemon versions separately ([#131](https://github.com/tmad4000/paseo/pull/131))
-- Floating answers for tracked asks and Q&A, First message recall, workspace/tab links, and sidebar counts for workspaces with multiple tabs (#99, #92, #120, #121, #122)
+- Floating answers for tracked asks and Q&A, First message recall, workspace/tab links, and sidebar tab counts (#99, #92, #120, #121, #122)
 
 ### Fixed
 
+- Editing a queued message holds delivery while the edit is open and preserves detached drafts if the original message is sent or removed ([#138](https://github.com/tmad4000/paseo/pull/138))
+- Large receipt scans no longer exhaust file descriptors and prevent agent or git-command launches ([#139](https://github.com/tmad4000/paseo/pull/139))
 - Back/Forward history restores the exact empty New tab without opening another session or adding duplicate visits
 - Back/Forward shortcuts walk focus history; Ctrl+Tab / Ctrl+Shift+Tab and macOS Cmd+Shift+[ / ] cycle tabs ([#102](https://github.com/tmad4000/paseo/pull/102))
 - New workspace can be closed
@@ -20,8 +26,6 @@
 - A sidebar result matching exactly one chat reveals that existing tab, and inline workspace review lists reveal their selected session (#127, #129)
 - Find uses OpenAI Decisions routing with optional Jev; live suggestions remain off by default (#125)
 - Offline queue alias reconciliation is available as an opt-in maintenance script that refuses to run while the daemon is up (#55)
-
-Desktop rollout remains idle-only on M4, M3 and M5, with no forced deadline. A staged build is not installed until a device receipt confirms it; iOS delivery and device installation are tracked separately.
 
 ## 0.10.0-beta.8 - 2026-10-05
 
