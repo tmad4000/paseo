@@ -34,6 +34,8 @@ async function openNew(page: Page, projects: Projects) {
   const query = new URLSearchParams({
     serverId: getServerId(),
     projectId: projects.reference.projectId,
+    dir: projects.reference.repoPath,
+    name: REFERENCE,
   });
   await page.goto(`/new?${query}`);
   const trigger = page.getByTestId("new-workspace-project-picker-trigger");
