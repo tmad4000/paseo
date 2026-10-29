@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0-beta.22 - 2026-10-29
+
+### Added
+
+- Drag queued messages into a new order; the grip also works from the keyboard on web, and the host drains in the new order ([#146](https://github.com/tmad4000/paseo/pull/146))
+- Back and Forward history rows show each workspace's open tab count ([#145](https://github.com/tmad4000/paseo/pull/145))
+
+### Fixed
+
+- Navigating to a tab in a pane hidden behind a maximized pane now reveals it instead of appearing to do nothing ([#145](https://github.com/tmad4000/paseo/pull/145))
+- Pinning or unpinning a project in the project picker keeps the picker open, your selection intact and keyboard focus on the pin; pins are shared with sidebar favorites ([#150](https://github.com/tmad4000/paseo/pull/150))
+
 ## 0.10.0-beta.21 - 2026-10-29
 
 ### Added
