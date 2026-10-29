@@ -121,6 +121,10 @@ function LegacyCompanionFeed({
   useApplyStreamFocus(focusScope, (focus) => {
     setViewTab("checklist");
     setOnlyOpen(false);
+    setFilter("all");
+    setTags([]);
+    // Older hosts without durableStream list snapshot entries unsearched; the Checklist still
+    // shows the ask among the chat's others.
     setSearch(focus.query);
     setSearchKey((value) => value + 1);
   });

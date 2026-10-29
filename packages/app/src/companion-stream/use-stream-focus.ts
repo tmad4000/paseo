@@ -3,7 +3,8 @@ import { useAgentViewStore, type StreamFocusRequest } from "@/stores/agent-view-
 
 /**
  * Applies a request to show one entry's card in a chat's Stream (for example from Chat's
- * floating pane), then clears it so returning to the Stream later starts unfiltered.
+ * floating pane), then clears it so the request is applied once. The search it set stays until
+ * the user clears it.
  */
 export function useApplyStreamFocus(
   scope: { serverId: string; agentId: string } | undefined,

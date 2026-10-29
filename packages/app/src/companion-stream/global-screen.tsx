@@ -87,6 +87,7 @@ export function StreamWorkflowFeed({
     setView("tasks");
     setLocal(true);
     setUnresolvedOnly(false);
+    setTags([]);
     setSearch(focus.query);
     setSearchKey((value) => value + 1);
   });

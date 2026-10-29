@@ -1,7 +1,7 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
@@ -128,13 +128,19 @@ export function ChatTrackedAnswers({
     );
   });
   const agentTitle = useOwnerTitles(serverId, showOpenAsks ? entries : NO_ENTRIES);
+  // The jump callbacks change with every streamed row; reading them through a ref keeps the
+  // pane's actions stable, so its memoized rows do not re-render while the agent streams.
+  const jumpRef = useRef(jump);
+  jumpRef.current = jump;
   const actions = useMemo<TrackedAnswerActions>(() => {
     const update = async (input: Omit<StreamEntryUpdate, "agentId">) => {
       if (!client) throw new Error("Not connected");
       await client.updateStreamEntry({ agentId, ...input });
     };
     return {
-      ...jump,
+      jumpToAnchor: (anchor) => jumpRef.current.jumpToAnchor(anchor),
+      jumpToMessage: (messageId) => jumpRef.current.jumpToMessage(messageId),
+      hasMessage: (messageId) => jumpRef.current.hasMessage(messageId),
       openChat: (target) => navigateToAgent({ serverId, agentId: target }),
       markSeen: (entryId, replyRevision) =>
         update({ action: "mark_reply_seen", entryId, replyRevision }),
@@ -145,7 +151,7 @@ export function ChatTrackedAnswers({
           query: splitEntryText(entry.text).headline || entry.text,
         }),
     };
-  }, [agentId, client, jump, openStreamEntry, serverId]);
+  }, [agentId, client, openStreamEntry, serverId]);
   if (!supported || readOnly) return null;
   return (
     <TrackedAnswersPane
