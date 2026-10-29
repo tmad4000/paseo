@@ -200,8 +200,9 @@ export function SearchInput({
 
   useEffect(() => {
     if (autoFocus && IS_WEB && inputRef.current) {
+      const previouslyFocused = document.activeElement;
       const timer = setTimeout(() => {
-        inputRef.current?.focus();
+        if (document.activeElement === previouslyFocused) inputRef.current?.focus();
       }, 50);
       return () => clearTimeout(timer);
     }

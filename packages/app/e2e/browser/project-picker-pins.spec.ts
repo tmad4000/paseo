@@ -92,6 +92,9 @@ test("New workspace and Quick launch share persistent pins without selecting on 
   const quickUnpin = page.getByRole("button", { name: `Unpin project: ${FAVORITE}`, exact: true });
   await expect(quickUnpin).toBeVisible();
   await quickUnpin.focus();
+  // The picker delays search autofocus; it must not steal an already focused action.
+  await page.waitForTimeout(100);
+  await expect(quickUnpin).toBeFocused();
   await page.keyboard.press("Enter");
   const quickPin = page.getByRole("button", { name: `Pin project: ${FAVORITE}`, exact: true });
   await expect(quickPin).toBeVisible();
@@ -100,6 +103,7 @@ test("New workspace and Quick launch share persistent pins without selecting on 
   await expectStoredPin(projects, false);
   await page.keyboard.press("Space");
   await expect(quickUnpin).toBeVisible();
+  await expect(quickUnpin).toBeFocused();
   await expectStoredPin(projects, true);
   await expect(quickTrigger).toHaveText(selected);
   await screenshot(page, "project-picker-pins-quick-launch.png");
