@@ -1,6 +1,7 @@
 import {
   getAnswerAttention,
   type AnswerAttention,
+  type TrackedAskInput,
   type CompanionEntry,
   type TimelineAnchor,
 } from "@getpaseo/protocol/companion-stream";
@@ -81,4 +82,88 @@ export function trackedAnswerLinks(entry: CompanionEntry, agentId: string): Trac
     answerAnchor: entry.reply?.anchor,
     answeringAgentId: answeredBy && answeredBy !== agentId ? answeredBy : undefined,
   };
+}
+
+export type OpenAskState = Exclude<TrackedAskInput["state"], "done">;
+
+export interface OpenAsk {
+  entry: CompanionEntry;
+  state: OpenAskState;
+  /** First line of the ask's remaining work: what happens next. */
+  nextAction: string;
+  delegatedAgentId?: string;
+}
+
+const ASK_STATE_ORDER: Record<OpenAskState, number> = {
+  blocked: 0,
+  in_progress: 1,
+  open: 2,
+};
+
+/** First non-empty line of an ask's remaining work. */
+export function askNextAction(remaining: string): string {
+  return (
+    remaining
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim() ?? ""
+  );
+}
+
+/**
+ * The chat's unresolved Stream asks, for the pane's Open asks section. Blocked asks lead (they
+ * usually wait on the user), then work in progress, then open; newest first. Done asks never
+ * show, nor do linked duplicates of a canonical task or asks already listed as questions.
+ */
+export function selectOpenAsks(
+  entries: readonly CompanionEntry[],
+  listedAsQuestions: ReadonlySet<string> = new Set(),
+): OpenAsk[] {
+  const items: OpenAsk[] = [];
+  for (const entry of entries) {
+    const ask = entry.ask;
+    if (!ask || ask.state === "done" || ask.canonicalTask) continue;
+    if (listedAsQuestions.has(entry.id)) continue;
+    items.push({
+      entry,
+      state: ask.state,
+      nextAction: askNextAction(ask.remaining),
+      delegatedAgentId: ask.delegatedAgentId || undefined,
+    });
+  }
+  const time = (item: OpenAsk) => Date.parse(item.entry.timestamp) || 0;
+  return items.sort(
+    (a, b) => ASK_STATE_ORDER[a.state] - ASK_STATE_ORDER[b.state] || time(b) - time(a),
+  );
+}
+
+/** A newly blocked ask brings a hidden pane back; progress on other asks does not. */
+function blockedAskKey(item: OpenAsk): string | null {
+  return item.state === "blocked" ? `blocked:${item.entry.id}` : null;
+}
+
+/** Identifies what the pane is showing that should reopen it once hidden: answers and blocks. */
+export function answersPaneSignature(
+  answers: readonly TrackedAnswer[],
+  asks: readonly OpenAsk[],
+): string {
+  return [trackedAnswersSignature(answers), ...asks.flatMap((item) => blockedAskKey(item) ?? [])]
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+/** True when the pane holds an answer or blocked ask that was not showing when it was hidden. */
+export function hasUnhiddenPaneItems(
+  answers: readonly TrackedAnswer[],
+  asks: readonly OpenAsk[],
+  hidden: string | null,
+): boolean {
+  if (hidden === null) return true;
+  if (hasUnhiddenAnswers(answers, hidden)) return true;
+  const hiddenKeys = new Set(hidden.split("|"));
+  return asks.some((item) => {
+    const key = blockedAskKey(item);
+    return key !== null && !hiddenKeys.has(key);
+  });
 }

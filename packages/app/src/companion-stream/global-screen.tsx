@@ -24,6 +24,7 @@ import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { useApplyStreamFocus } from "./use-stream-focus";
 import { streamCardSource, hasUnseenReply } from "./card-source";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { WorkflowArtifact } from "./workflow-artifact";
@@ -74,11 +75,21 @@ export function StreamWorkflowFeed({
   const [view, setView] = useState<WorkflowView>(initialView);
   const [local, setLocal] = useState(Boolean(scope));
   const [search, setSearch] = useState("");
+  // The search field is uncontrolled; a new key shows a search set from outside it.
+  const [searchKey, setSearchKey] = useState(0);
   const [includeArchived, setIncludeArchived] = useState(true);
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   // Navigation into Needs you updates the existing screen, without resetting search or drafts.
   useEffect(() => setView(initialView), [initialView]);
+  // Chat's floating pane opens an ask's card: this chat's Tasks, searched down to it.
+  useApplyStreamFocus(scope, (focus) => {
+    setView("tasks");
+    setLocal(true);
+    setUnresolvedOnly(false);
+    setSearch(focus.query);
+    setSearchKey((value) => value + 1);
+  });
   const localScope = local ? scope : undefined;
   const query = useGlobalStream({
     serverId: host === ALL_HOSTS_OPTION_ID ? null : host,
@@ -176,6 +187,7 @@ export function StreamWorkflowFeed({
           testID="stream-workflow-views"
         />
         <SearchField
+          key={searchKey}
           value={search}
           onChangeText={setSearch}
           placeholder={t("globalStream.search")}
@@ -257,6 +269,7 @@ export function StreamWorkflowFeed({
       tagFilter.toggle,
       tagFilter.setPinned,
       tagFilter.error,
+      searchKey,
       hosts,
       host,
       includeArchived,

@@ -57,6 +57,8 @@ export interface TimelineJump {
   jumpToAnchor: (anchor: TimelineAnchor) => void;
   /** Only messages already loaded in Chat; a message id carries no timeline position. */
   jumpToMessage: (messageId: string) => void;
+  /** True when the message is loaded in Chat, so jumpToMessage can land on it. */
+  hasMessage: (messageId: string) => boolean;
 }
 
 /**
@@ -155,5 +157,12 @@ export function useTimelineAnchorJump({
     },
     [loadedItems, onUnavailable, scrollTo],
   );
-  return useMemo(() => ({ jumpToAnchor, jumpToMessage }), [jumpToAnchor, jumpToMessage]);
+  const hasMessage = useCallback(
+    (messageId: string) => findMessageItem(loadedItems, messageId) !== undefined,
+    [loadedItems],
+  );
+  return useMemo(
+    () => ({ jumpToAnchor, jumpToMessage, hasMessage }),
+    [hasMessage, jumpToAnchor, jumpToMessage],
+  );
 }

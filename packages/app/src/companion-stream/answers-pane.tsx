@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
-  hasUnhiddenAnswers,
+  answersPaneSignature,
+  hasUnhiddenPaneItems,
+  selectOpenAsks,
   selectTrackedAnswers,
   trackedAnswerLinks,
-  trackedAnswersSignature,
+  type OpenAsk,
+  type OpenAskState,
   type TrackedAnswer,
   type TrackedAnswerLinks,
 } from "./answers-model";
@@ -24,6 +27,10 @@ export interface TrackedAnswerActions {
   /** Resolve once the host has durably recorded the change. */
   markSeen: (entryId: string, replyRevision: number) => Promise<void>;
   stopTracking: (entryId: string) => Promise<void>;
+  /** True when the message is loaded in Chat, so a jump to it can land. */
+  hasMessage: (messageId: string) => boolean;
+  /** Shows the ask's card in this chat's Stream. */
+  openAsk: (entry: CompanionEntry) => void;
 }
 
 interface TrackedAnswersPaneProps {
@@ -31,6 +38,10 @@ interface TrackedAnswersPaneProps {
   /** The chat showing the pane; answers written from another chat offer to open it. */
   agentId: string;
   actions: TrackedAnswerActions;
+  /** Also list the chat's unresolved asks; older hosts keep the questions-only pane. */
+  showOpenAsks?: boolean;
+  /** A chat's title for an ask's delegated owner, when this client knows it. */
+  agentTitle?: (agentId: string) => string | null | undefined;
 }
 
 const BADGES = {
@@ -39,33 +50,56 @@ const BADGES = {
   waiting: { label: "agentPanel.stream.answers.waiting", variant: "muted" },
 } as const satisfies Record<string, { label: string; variant: StatusBadgeVariant }>;
 
+const ASK_BADGES = {
+  blocked: { label: "agentPanel.stream.answers.askBlocked", variant: "warning" },
+  in_progress: { label: "agentPanel.stream.answers.askInProgress", variant: "muted" },
+  open: { label: "agentPanel.stream.answers.askOpen", variant: "muted" },
+} as const satisfies Record<OpenAskState, { label: string; variant: StatusBadgeVariant }>;
+
+const NO_ASKS: OpenAsk[] = [];
+
 /**
  * Floats over the top of Chat, clear of the composer, listing questions the user asked that
  * need attention: an answer or possible answer not yet seen, or a question still waiting.
  * Entries come from the chat's Stream snapshot (tracked asks and tracked Q&A messages); seen
- * state changes only through Mark seen, per answer revision.
+ * state changes only through Mark seen, per answer revision. Capable hosts also get the chat's
+ * other unresolved asks below the questions, blocked first, each with its owner and next step.
  */
 export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   entries,
   agentId,
   actions,
+  showOpenAsks = false,
+  agentTitle,
 }: TrackedAnswersPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const items = useMemo(() => selectTrackedAnswers(entries), [entries]);
+  const asks = useMemo(
+    () =>
+      showOpenAsks ? selectOpenAsks(entries, new Set(items.map((item) => item.entry.id))) : NO_ASKS,
+    [entries, items, showOpenAsks],
+  );
   const [expanded, setExpanded] = useState(!isCompact);
   const [hiddenSignature, setHiddenSignature] = useState<string | null>(null);
   const waitingCount = items.filter((item) => item.attention === "waiting").length;
   const newCount = items.length - waitingCount;
+  const blockedCount = asks.filter((item) => item.state === "blocked").length;
 
   const toggle = useCallback(() => setExpanded((value) => !value), []);
-  const hide = useCallback(() => setHiddenSignature(trackedAnswersSignature(items)), [items]);
+  const hide = useCallback(
+    () => setHiddenSignature(answersPaneSignature(items, asks)),
+    [asks, items],
+  );
 
-  if (items.length === 0 || !hasUnhiddenAnswers(items, hiddenSignature)) return null;
+  if (items.length + asks.length === 0) return null;
+  if (!hasUnhiddenPaneItems(items, asks, hiddenSignature)) return null;
 
   const summary = [
     newCount > 0 ? t("agentPanel.stream.answers.newCount", { count: newCount }) : null,
     waitingCount > 0 ? t("agentPanel.stream.answers.waitingCount", { count: waitingCount }) : null,
+    asks.length > 0 ? t("agentPanel.stream.answers.openAsksCount", { count: asks.length }) : null,
+    blockedCount > 0 ? t("agentPanel.stream.answers.blockedCount", { count: blockedCount }) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -90,7 +124,11 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
           >
             <HelpCircle size={14} color={newCount > 0 ? styles.iconNew.color : styles.icon.color} />
             <Text style={styles.title} numberOfLines={1}>
-              {t("agentPanel.stream.answers.title")}
+              {t(
+                asks.length > 0
+                  ? "agentPanel.stream.answers.titleWithAsks"
+                  : "agentPanel.stream.answers.title",
+              )}
             </Text>
             <Text style={styles.summary} numberOfLines={1} accessibilityLiveRegion="polite">
               {summary}
@@ -105,7 +143,11 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
             onPress={hide}
             style={styles.iconButton}
             accessibilityRole="button"
-            accessibilityLabel={t("agentPanel.stream.answers.dismiss")}
+            accessibilityLabel={t(
+              asks.length > 0
+                ? "agentPanel.stream.answers.dismissWithAsks"
+                : "agentPanel.stream.answers.dismiss",
+            )}
             hitSlop={8}
             testID="tracked-answers-dismiss"
           >
@@ -114,6 +156,12 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
         </View>
         {expanded ? (
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+            {items.length > 0 && asks.length > 0 ? (
+              <SectionLabel
+                label={t("agentPanel.stream.answers.questionsSection", { count: items.length })}
+                first
+              />
+            ) : null}
             {items.map((item, index) => (
               <TrackedAnswerRow
                 key={item.entry.id}
@@ -123,9 +171,115 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
                 actions={actions}
               />
             ))}
+            {asks.length > 0 ? (
+              <View testID="open-asks-section">
+                <SectionLabel
+                  label={t("agentPanel.stream.answers.openAsksSection", { count: asks.length })}
+                  first={items.length === 0}
+                />
+                {asks.map((item, index) => (
+                  <OpenAskRow
+                    key={item.entry.id}
+                    item={item}
+                    first={index === 0}
+                    ownerTitle={
+                      item.delegatedAgentId ? agentTitle?.(item.delegatedAgentId) : undefined
+                    }
+                    actions={actions}
+                  />
+                ))}
+              </View>
+            ) : null}
           </ScrollView>
         ) : null}
       </View>
+    </View>
+  );
+});
+
+function SectionLabel({ label, first }: { label: string; first?: boolean }) {
+  return (
+    <Text
+      style={[styles.sectionLabel, !first && styles.sectionLabelBorder]}
+      accessibilityRole="header"
+    >
+      {label}
+    </Text>
+  );
+}
+
+/** A short, stable stand-in for a chat this client has no title for. */
+function shortAgentId(agentId: string): string {
+  return agentId.slice(0, 8);
+}
+
+/**
+ * One unresolved ask: state and owner as a muted eyebrow, the ask itself as the headline, and
+ * its next step. Tapping jumps to the source message when Chat has it, else opens the ask card.
+ */
+const OpenAskRow = memo(function OpenAskRow({
+  item,
+  first,
+  ownerTitle,
+  actions,
+}: {
+  item: OpenAsk;
+  first: boolean;
+  ownerTitle: string | null | undefined;
+  actions: TrackedAnswerActions;
+}) {
+  const { t } = useTranslation();
+  const { entry, state, nextAction, delegatedAgentId } = item;
+  const headline = splitEntryText(entry.text).headline || entry.text;
+  const badge = ASK_BADGES[state];
+  const sourceMessageId = entry.ask?.sourceMessageId;
+  const open = useCallback(() => {
+    if (sourceMessageId && actions.hasMessage(sourceMessageId)) {
+      actions.jumpToMessage(sourceMessageId);
+    } else {
+      actions.openAsk(entry);
+    }
+  }, [actions, entry, sourceMessageId]);
+  const openOwner = useCallback(() => {
+    if (delegatedAgentId) actions.openChat(delegatedAgentId);
+  }, [actions, delegatedAgentId]);
+  const owner = delegatedAgentId ? ownerTitle?.trim() || shortAgentId(delegatedAgentId) : null;
+
+  return (
+    <View style={[styles.row, !first && styles.rowBorder]} testID={`open-ask-${entry.id}`}>
+      <View style={styles.askEyebrow}>
+        <StatusBadge label={t(badge.label)} variant={badge.variant} />
+        {owner ? (
+          <Pressable
+            onPress={openOwner}
+            style={styles.ownerLink}
+            accessibilityRole="link"
+            accessibilityLabel={t("agentPanel.stream.answers.openOwnerLabel", { name: owner })}
+            hitSlop={6}
+            testID="open-ask-owner"
+          >
+            <Text style={styles.owner} numberOfLines={1}>
+              {owner}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Pressable
+        onPress={open}
+        accessibilityRole="button"
+        accessibilityLabel={headline}
+        accessibilityHint={t("agentPanel.stream.answers.openAskHint")}
+        testID="open-ask-open"
+      >
+        <Text style={styles.question} numberOfLines={2}>
+          {headline}
+        </Text>
+        {nextAction ? (
+          <Text style={styles.nextAction} numberOfLines={2}>
+            {t("agentPanel.stream.answers.nextAction", { action: nextAction })}
+          </Text>
+        ) : null}
+      </Pressable>
     </View>
   );
 });
@@ -395,5 +549,37 @@ const styles = StyleSheet.create((theme) => ({
   },
   actionsSpacer: {
     flex: 1,
+  },
+  sectionLabel: {
+    paddingTop: theme.spacing[3],
+    paddingBottom: theme.spacing[1],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sectionLabelBorder: {
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+  },
+  askEyebrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
+  ownerLink: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  owner: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    textDecorationLine: "underline",
+  },
+  nextAction: {
+    marginTop: theme.spacing[1],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
   },
 }));

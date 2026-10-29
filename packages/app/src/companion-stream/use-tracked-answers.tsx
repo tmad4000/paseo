@@ -5,11 +5,13 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useSessionStore } from "@/stores/session-store";
 import type { TimelinePosition } from "@/types/stream";
 import type { TimelineJump } from "@/agent-stream/use-timeline-anchor-jump";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { trackedQuestionEntryId } from "./answers-model";
+import { splitEntryText } from "./entry-labels";
 import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
 
 type TrackQuestionHandler = (
@@ -23,6 +25,12 @@ const NO_ENTRIES: CompanionEntry[] = [];
 // COMPAT(streamAnswers): fork feature; remove gate after 2027-04-26.
 function useSupportsTrackedAnswers(serverId: string): boolean {
   return useHostFeature(serverId, "streamAnswers");
+}
+
+// COMPAT(streamOpenAsks): fork feature; remove gate after 2027-04-29. Older hosts keep the
+// questions-only pane.
+function useSupportsOpenAsks(serverId: string): boolean {
+  return useHostFeature(serverId, "streamOpenAsks");
 }
 
 /**
@@ -67,6 +75,34 @@ export function useTrackQuestion(
   );
 }
 
+/**
+ * Titles of the chats unresolved asks are delegated to. Selects one string, so the pane does not
+ * re-render on unrelated session updates.
+ */
+function useOwnerTitles(serverId: string, entries: readonly CompanionEntry[]) {
+  const ownerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const entry of entries) {
+      const owner = entry.ask?.state !== "done" ? entry.ask?.delegatedAgentId : undefined;
+      if (owner) ids.add(owner);
+    }
+    return [...ids];
+  }, [entries]);
+  const titlesKey = useSessionStore((state) => {
+    const session = state.sessions[serverId];
+    return JSON.stringify(
+      ownerIds.map(
+        (id) => (session?.agents.get(id) ?? session?.agentDetails.get(id))?.title ?? null,
+      ),
+    );
+  });
+  return useMemo(() => {
+    const titles = JSON.parse(titlesKey) as (string | null)[];
+    const byId = new Map(ownerIds.map((id, index) => [id, titles[index] ?? null]));
+    return (agentId: string) => byId.get(agentId) ?? null;
+  }, [ownerIds, titlesKey]);
+}
+
 /** The answers pane for one chat, fed by the agent's live Stream snapshot. */
 export function ChatTrackedAnswers({
   serverId,
@@ -82,6 +118,8 @@ export function ChatTrackedAnswers({
   jump: TimelineJump;
 }) {
   const supported = useSupportsTrackedAnswers(serverId);
+  const showOpenAsks = useSupportsOpenAsks(serverId);
+  const openStreamEntry = useAgentViewStore((state) => state.openStreamEntry);
   const entries = useSessionStore((state) => {
     const session = state.sessions[serverId];
     return (
@@ -89,6 +127,7 @@ export function ChatTrackedAnswers({
       NO_ENTRIES
     );
   });
+  const agentTitle = useOwnerTitles(serverId, showOpenAsks ? entries : NO_ENTRIES);
   const actions = useMemo<TrackedAnswerActions>(() => {
     const update = async (input: Omit<StreamEntryUpdate, "agentId">) => {
       if (!client) throw new Error("Not connected");
@@ -100,8 +139,21 @@ export function ChatTrackedAnswers({
       markSeen: (entryId, replyRevision) =>
         update({ action: "mark_reply_seen", entryId, replyRevision }),
       stopTracking: (entryId) => update({ action: "update_status", entryId, status: "done" }),
+      openAsk: (entry) =>
+        openStreamEntry(serverId, agentId, {
+          entryId: entry.id,
+          query: splitEntryText(entry.text).headline || entry.text,
+        }),
     };
-  }, [agentId, client, jump, serverId]);
+  }, [agentId, client, jump, openStreamEntry, serverId]);
   if (!supported || readOnly) return null;
-  return <TrackedAnswersPane entries={entries} agentId={agentId} actions={actions} />;
+  return (
+    <TrackedAnswersPane
+      entries={entries}
+      agentId={agentId}
+      actions={actions}
+      showOpenAsks={showOpenAsks}
+      agentTitle={agentTitle}
+    />
+  );
 }
