@@ -83,7 +83,7 @@ test("shows and updates the multi-tab indicator without counting another workspa
   await page.getByLabelText("3 open tabs").hover();
   await expect.element(page.getByText("3 open tabs", { exact: true })).toBeVisible();
   expect(container.querySelector("svg rect")).not.toBeNull();
-  await page.screenshot({ path: "sidebar-tab-count.png" });
+  await page.screenshot({ path: "../../../../../.dev/evidence/sidebar-tab-count.png" });
   await act(async () => useWorkspaceLayoutStore.getState().closeTab(workspaceKey, second));
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
 });
@@ -127,4 +127,12 @@ test("counts split tabs and excludes the hidden Explorer pane", async () => {
   await expect.element(page.getByLabelText("5 open tabs")).toBeVisible();
   await act(async () => useWorkspaceLayoutStore.getState().hideExplorerSidebar(workspaceKey));
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
+});
+
+test("shows the full count when ten sessions share one workspace", async () => {
+  for (let index = 0; index < 10; index += 1) await openAgent(`session-${index}`);
+  await expect.element(page.getByLabelText("10 open tabs")).toBeVisible();
+  expect(container.querySelector('[data-testid="sidebar-workspace-tab-count"]')?.textContent).toBe(
+    "10",
+  );
 });
