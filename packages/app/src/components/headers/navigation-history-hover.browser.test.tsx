@@ -24,6 +24,30 @@ vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({}),
   usePathname: () => "/fixture",
 }));
+// Gorhom's native animated presenter cannot lay out in this isolated browser fixture.
+vi.mock("@/components/ui/isolated-bottom-sheet-modal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui/isolated-bottom-sheet-modal")>();
+  const React = await import("react");
+  return {
+    ...actual,
+    IsolatedBottomSheetModal: React.forwardRef<
+      { present: () => void; dismiss: () => void },
+      { children: React.ReactNode; contextBridge: (children: React.ReactNode) => React.ReactNode }
+    >(function TestSheet({ children, contextBridge }, ref) {
+      const [open, setOpen] = React.useState(false);
+      React.useImperativeHandle(ref, () => ({
+        present: () => setOpen(true),
+        dismiss: () => setOpen(false),
+      }));
+      return open ? contextBridge(children) : null;
+    }),
+  };
+});
+vi.mock("@gorhom/bottom-sheet", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@gorhom/bottom-sheet")>();
+  const { ScrollView } = await import("react-native");
+  return { ...actual, BottomSheetScrollView: ScrollView };
+});
 // Keep the real menu, browser layout, pointer events and keyboard handling; the harness has no native animation runtime.
 vi.mock("react-native-reanimated", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-native-reanimated")>();
@@ -54,7 +78,8 @@ beforeEach(async () => {
   container.style.cssText = "padding:40px;display:flex;width:500px";
   // The test theme adapter does not resolve Unistyles breakpoints; supply only the header hitboxes.
   const geometry = document.createElement("style");
-  geometry.textContent = `[data-testid="navigation-back-button"], [data-testid="navigation-forward-button"], [data-testid="navigation-back-button-history-menu-button"], [data-testid="navigation-forward-button-history-menu-button"] { width:32px !important; height:32px !important; }`;
+  geometry.textContent = `[data-testid="navigation-back-button"], [data-testid="navigation-forward-button"], [data-testid="navigation-back-button-history-menu-button"], [data-testid="navigation-forward-button-history-menu-button"] { width:32px !important; height:32px !important; }
+    [data-testid="navigation-back-button-history-backdrop"] { position:fixed !important; inset:0 !important; }`;
   document.head.append(geometry);
   geometry.id = "history-test-geometry";
   document.body.append(container);
@@ -170,6 +195,8 @@ test("compact touch-sized layouts keep history explicit and do not open from mou
   expect(fixture.navigate).toHaveBeenLastCalledWith("back", { isCompact: true });
   await page.getByTestId("navigation-back-button-history-menu-button").click();
   await expect.element(page.getByTestId("navigation-back-history-item-0")).toBeVisible();
+  await page.getByTestId("navigation-back-history-item-0").click();
+  expect(fixture.navigate).toHaveBeenLastCalledWith("back", { isCompact: true, steps: 1 });
 });
 
 test("an arrow click cancels a pending preview", async () => {
