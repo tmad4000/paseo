@@ -608,7 +608,7 @@ export const ar: TranslationResources = {
         jumpUnavailable: "لم تعد هذه الرسالة ضمن السجل المحمّل لهذه المحادثة",
         titleWithAsks: "الأسئلة والطلبات",
         dismissWithAsks: "إخفاء حتى تصل إجابة جديدة أو يُحظر طلب",
-        openAsksCount_one: "طلب مفتوح واحد",
+        openAsksCount_one: "{{count}} طلب مفتوح",
         openAsksCount_other: "طلبات مفتوحة: {{count}}",
         blockedCount_one: "محظور: {{count}}",
         blockedCount_other: "محظورة: {{count}}",

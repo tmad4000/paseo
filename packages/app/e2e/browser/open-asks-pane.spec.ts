@@ -85,8 +85,11 @@ for (const width of [390, 1440]) {
       await expect(page.getByTestId("global-stream-search")).toHaveValue(
         "Propose mobile-first interface directions for Enforce.",
       );
+      // Chat stays mounted (hidden) behind the Stream, so look inside the Stream only.
       await expect(
-        page.getByText("Propose mobile-first interface directions for Enforce.").first(),
+        page
+          .getByTestId("local-stream-workflow")
+          .getByText("Propose mobile-first interface directions for Enforce.", { exact: true }),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`open-asks-card-${width}.png`) });
 
@@ -94,7 +97,16 @@ for (const width of [390, 1440]) {
       await page.getByTestId("agent-view-chat").click();
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
       await notify.getByTestId("open-ask-owner").click();
-      await expect(page).toHaveURL(new RegExp(owners.builder!));
+      // A chat in the same workspace opens as its tab (the tab switcher on compact layouts).
+      if (width < 768) {
+        await expect(page.getByTestId("workspace-tab-switcher-trigger")).toContainText(
+          OWNER_TITLES.builder,
+        );
+      } else {
+        await expect(
+          page.getByTestId(`workspace-tab-agent_${owners.builder}`).first(),
+        ).toHaveAttribute("aria-selected", "true");
+      }
     } finally {
       await agent.cleanup();
     }

@@ -481,7 +481,9 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     minHeight: 36,
   },
+  // The title stays whole; the muted summary truncates first.
   title: {
+    flexShrink: 0,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
