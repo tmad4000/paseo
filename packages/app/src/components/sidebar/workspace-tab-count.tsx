@@ -32,7 +32,7 @@ export function WorkspaceTabCount({ workspaceKey }: { workspaceKey: string }) {
     ),
   );
   const { t } = useTranslation();
-  if (count < 2) return null;
+  if (count === 0) return null;
   const label = t("sidebar.openTabs", { count });
   return (
     <Tooltip>

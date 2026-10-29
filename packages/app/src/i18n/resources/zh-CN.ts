@@ -1523,6 +1523,7 @@ export const zhCN: TranslationResources = {
   sidebar: {
     reviewActions: "{{title}} 的审阅操作",
     reviewSessions: "审阅 ({{count}})",
+    openTabs_one: "{{count}} 个打开的标签页",
     openTabs: "{{count}} 个打开的标签页",
     routing: {
       findMode: "Find chats mode",

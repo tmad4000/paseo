@@ -212,6 +212,25 @@ export function useAnchoredPosition({
   return { position, actualPlacement, contentSize, visibleContentSize, onContentLayout };
 }
 
+function useMenuAutoFocus(
+  autoFocus: boolean | undefined,
+  open: boolean,
+  placed: boolean,
+  surfaceNativeID: string,
+) {
+  useEffect(() => {
+    if (autoFocus === false || !isWeb || !open || !placed || typeof document === "undefined")
+      return undefined;
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(surfaceNativeID)
+        ?.querySelector<HTMLElement>('[data-menu-item="true"]:not([data-menu-disabled="true"])')
+        ?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, open, placed, surfaceNativeID]);
+}
+
 export interface AnchoredSurfaceProps {
   open: boolean;
   onClose: () => void;
@@ -232,6 +251,9 @@ export interface AnchoredSurfaceProps {
   revision?: string | number;
   /** A submenu sits inside its parent's overlay and must not paint a second backdrop. */
   backdrop?: boolean;
+  /** Hover previews keep the editor focused and the trigger clickable. */
+  autoFocus?: boolean;
+  surfaceRef?: RefObject<View | null>;
   /**
    * Hover tracking for the surface box, per docs/hover.md: plain View, pointer events, never
    * a Pressable. Web-only by nature, which is all a flyout needs.
@@ -265,6 +287,8 @@ export function AnchoredSurface({
   scrollable = false,
   revision,
   backdrop = true,
+  autoFocus,
+  surfaceRef,
   onPointerEnter,
   onPointerLeave,
   testID,
@@ -300,16 +324,7 @@ export function AnchoredSurface({
   // animation from the final position.
   const placed = position !== null;
 
-  useEffect(() => {
-    if (!isWeb || !open || !placed || typeof document === "undefined") return undefined;
-    const frame = requestAnimationFrame(() => {
-      document
-        .getElementById(surfaceNativeID)
-        ?.querySelector<HTMLElement>('[data-menu-item="true"]:not([data-menu-disabled="true"])')
-        ?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [open, placed, surfaceNativeID]);
+  useMenuAutoFocus(autoFocus, open, placed, surfaceNativeID);
 
   const frameStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const { width: screenWidth } = Dimensions.get("window");
@@ -379,6 +394,8 @@ export function AnchoredSurface({
         />
       ) : null}
       <FloatingSurface
+        pointerEvents="auto"
+        ref={surfaceRef}
         key={placed ? "placed" : "measuring"}
         collapsable={false}
         tabIndex={-1}
@@ -425,11 +442,13 @@ export function MenuOverlay({
   visible,
   onClose,
   restoreFocusRef,
+  pointerPassthrough = false,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   restoreFocusRef?: RefObject<View | null>;
+  pointerPassthrough?: boolean;
   children: ReactElement | null;
 }): ReactElement | null {
   const floatingLayer = useOverlayLayer("floating");
@@ -478,11 +497,24 @@ export function MenuOverlay({
     [onClose],
   );
   const setWebOverlayScope = useWebOverlayRegistration({
-    active: isWeb && visible,
+    active: isWeb && visible && !pointerPassthrough,
     layer: floatingLayer,
     onKeyDown: handleWebOverlayKeyDown,
     restoreFocusRef,
   });
+
+  useEffect(() => {
+    if (!isWeb || !visible || !pointerPassthrough) return;
+    const escapePreview = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", escapePreview, true);
+    return () => document.removeEventListener("keydown", escapePreview, true);
+  }, [visible, pointerPassthrough, onClose]);
 
   if (!visible) return null;
 
@@ -497,7 +529,9 @@ export function MenuOverlay({
         style={[
           styles.overlay,
           isWeb ? styles.overlayWeb : null,
-          isWeb ? { zIndex: floatingLayer } : null,
+          isWeb
+            ? { zIndex: floatingLayer, pointerEvents: pointerPassthrough ? "box-none" : "auto" }
+            : null,
         ]}
       >
         {children}

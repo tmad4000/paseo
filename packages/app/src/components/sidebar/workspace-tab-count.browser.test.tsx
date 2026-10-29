@@ -70,9 +70,9 @@ async function openAgent(agentId: string, key = workspaceKey) {
 test("shows and updates the multi-tab indicator without counting another workspace", async () => {
   expect(container.textContent).toBe("");
   await openAgent("first");
-  expect(container.textContent).toBe("");
+  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
   await openAgent("other", "tab-count-host:other");
-  expect(container.textContent).toBe("");
+  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
   const second = await openAgent("second");
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
   expect(container.querySelector('[data-testid="sidebar-workspace-tab-count"]')?.textContent).toBe(
@@ -83,12 +83,12 @@ test("shows and updates the multi-tab indicator without counting another workspa
   await page.getByLabelText("3 open tabs").hover();
   await expect.element(page.getByText("3 open tabs", { exact: true })).toBeVisible();
   expect(container.querySelector("svg rect")).not.toBeNull();
-  await page.screenshot({ path: "../../../../../docs/sidebar-tabs/desktop.png" });
+  await page.screenshot({ path: "sidebar-tab-count.png" });
   await act(async () => useWorkspaceLayoutStore.getState().closeTab(workspaceKey, second));
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
 });
 
-test("hides again when only one tab remains and excludes new-tab placeholders", async () => {
+test("shows one tab when only one remains and excludes new-tab placeholders", async () => {
   await openAgent("first");
   let placeholder: string | null = null;
   await act(async () => {
@@ -97,11 +97,11 @@ test("hides again when only one tab remains and excludes new-tab placeholders", 
       .openTab({ workspaceKey, intent: "new", target: { kind: "new_tab" } });
   });
   expect(placeholder).not.toBeNull();
-  expect(container.textContent).toBe("");
+  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
   const second = await openAgent("second");
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
   await act(async () => useWorkspaceLayoutStore.getState().closeTab(workspaceKey, second));
-  expect(container.textContent).toBe("");
+  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
 });
 
 test("counts split tabs and excludes the hidden Explorer pane", async () => {

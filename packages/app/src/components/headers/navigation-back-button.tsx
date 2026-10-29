@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import { Text, View, type GestureResponderEvent } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text, View, type GestureResponderEvent, type PointerEvent } from "react-native";
 import { ArrowLeft, ArrowRight, ChevronDown } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -14,6 +14,8 @@ import {
   ContextMenuTrigger,
   useContextMenu,
 } from "@/components/ui/context-menu";
+import { isWeb } from "@/constants/platform";
+import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import {
@@ -128,18 +130,37 @@ function NavigationHistoryButton({
 }) {
   const { t } = useTranslation();
   const { testID, historyLabelKey } = DIRECTIONS[direction];
+  const [open, setOpen] = useState(false);
+  const [hoverPreview, setHoverPreview] = useState(false);
+  const surfaceRef = useRef<View>(null);
+  const handleOpenChange = useCallback((next: boolean) => {
+    setHoverPreview(false);
+    setOpen(next);
+  }, []);
+  const handleHoverOpen = useCallback(() => {
+    setHoverPreview(true);
+    setOpen(true);
+  }, []);
 
   // Both the visible chevron and the existing right-click/long-press gesture open
   // the same menu. The arrow remains a one-step Back/Forward action.
   return (
-    <ContextMenu>
-      <View style={styles.buttonGroup}>
+    <ContextMenu open={open} onOpenChange={handleOpenChange} dismissKeyboardOnOpen={!hoverPreview}>
+      <NavigationHistoryHoverRegion
+        available={available}
+        surfaceRef={surfaceRef}
+        hoverPreview={hoverPreview}
+        onHoverOpen={handleHoverOpen}
+      >
         <ContextMenuTrigger contextOnly enabled={available} testID={`${testID}-history-trigger`}>
           <NavigationHistoryPressable direction={direction} available={available} />
         </ContextMenuTrigger>
         <NavigationHistoryDropdownTrigger direction={direction} available={available} />
-      </View>
+      </NavigationHistoryHoverRegion>
       <ContextMenuContent
+        hoverPreview={hoverPreview}
+        surfaceRef={surfaceRef}
+        offset={0}
         align="start"
         minWidth={240}
         maxWidth={360}
@@ -151,6 +172,67 @@ function NavigationHistoryButton({
         <NavigationHistoryMenuItems direction={direction} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** A pointer preview shares the real menu and leaves click/keyboard/touch opening unchanged. */
+function NavigationHistoryHoverRegion({
+  available,
+  hoverPreview,
+  surfaceRef,
+  onHoverOpen,
+  children,
+}: {
+  available: boolean;
+  hoverPreview: boolean;
+  surfaceRef: React.RefObject<View | null>;
+  onHoverOpen: () => void;
+  children: React.ReactNode;
+}) {
+  const menu = useContextMenu();
+  const isCompact = useIsCompactFormFactor();
+  const triggerRef = useRef<View>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  useEffect(() => cancel, [cancel, available, isCompact]);
+  const leave = useCallback(() => {
+    cancel();
+    if (hoverPreview) menu.setOpen(false);
+  }, [cancel, hoverPreview, menu]);
+  const stay = useCallback(() => {}, []);
+  useHoverSafeZone({
+    enabled: isWeb && !isCompact && available,
+    triggerRef,
+    contentRef: surfaceRef,
+    onEnterSafeZone: stay,
+    onLeaveSafeZone: leave,
+  });
+  const move = useCallback(
+    (event: PointerEvent) => {
+      if (
+        !isWeb ||
+        isCompact ||
+        !available ||
+        menu.open ||
+        timer.current ||
+        event.nativeEvent.pointerType !== "mouse"
+      )
+        return;
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        menu.setAnchorRect(null);
+        onHoverOpen();
+      }, 350);
+    },
+    [isCompact, available, menu, onHoverOpen],
+  );
+  return (
+    <View ref={triggerRef} style={styles.buttonGroup} onPointerMove={move}>
+      {children}
+    </View>
   );
 }
 
@@ -217,8 +299,9 @@ function NavigationHistoryPressable({
   );
   const accessibilityState = useMemo(() => ({ disabled: !available }), [available]);
   const handlePress = useCallback(() => {
+    menu.setOpen(false);
     navigateInFocusHistory(direction, { isCompact });
-  }, [direction, isCompact]);
+  }, [direction, isCompact, menu]);
   const handleLongPress = useCallback(
     (event: GestureResponderEvent) => {
       if (!available) return;

@@ -1550,6 +1550,7 @@ export const ko: TranslationResources = {
   sidebar: {
     reviewActions: "{{title}} 검토 작업",
     reviewSessions: "검토 ({{count}})",
+    openTabs_one: "열린 탭 {{count}}개",
     openTabs: "열린 탭 {{count}}개",
     routing: {
       findMode: "Find chats mode",

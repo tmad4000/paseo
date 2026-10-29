@@ -8,6 +8,7 @@ import {
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
@@ -118,6 +119,9 @@ export interface MenuSurfaceProps {
   testID?: string;
   /** Limits ordinary app shortcuts to the time this menu owns keyboard focus. */
   keyboardFocusScope?: KeyboardFocusScope;
+  /** Non-modal pointer preview; press/keyboard menus retain normal focus and backdrop. */
+  hoverPreview?: boolean;
+  surfaceRef?: RefObject<View | null>;
 }
 
 /**
@@ -206,6 +210,8 @@ function MenuPopoverSurface({
   scrollable = false,
   testID,
   keyboardFocusScope,
+  hoverPreview = false,
+  surfaceRef,
 }: MenuSurfaceProps): ReactElement | null {
   const menu = useMenuContext("MenuSurface");
   const { value: surfaceValue, getAnchor } = useSubAnchors();
@@ -243,11 +249,19 @@ function MenuPopoverSurface({
 
   return (
     <MenuSurfaceContext.Provider value={hoverValue}>
-      <MenuOverlay visible={menu.open} onClose={handleClose} restoreFocusRef={menu.triggerRef}>
+      <MenuOverlay
+        visible={menu.open}
+        onClose={handleClose}
+        restoreFocusRef={hoverPreview ? undefined : menu.triggerRef}
+        pointerPassthrough={hoverPreview}
+      >
         <>
           <AnchoredSurface
             open={menu.open}
             onClose={handleClose}
+            backdrop={!hoverPreview}
+            autoFocus={!hoverPreview}
+            surfaceRef={surfaceRef}
             anchorRect={menu.anchorRect}
             anchorRef={menu.triggerRef}
             side={side}
