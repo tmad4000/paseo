@@ -1,3 +1,5 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
+import { resolveAppVersion } from "@/utils/app-version";
 import { useRef, ReactNode, useCallback, useEffect } from "react";
 import { Buffer } from "buffer";
 import { AppState } from "react-native";
@@ -510,7 +512,19 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       },
       fetchLatestTail: (agentId) =>
         getHostRuntimeStore().fetchAgentTimeline(serverId, agentId, planTimelineTailFetch()),
-      reportError: (error) => {
+      reportError: (error, agentIds) => {
+        for (const agentId of agentIds?.length ? agentIds : [undefined]) {
+          recordClientDiagnostic({
+            source: "rpc",
+            severity: "error",
+            operation: "agent.timeline.sync",
+            phase: "history-refresh",
+            message: error instanceof Error ? error.message : String(error),
+            serverId,
+            agentId,
+            appVersion: resolveAppVersion(),
+          });
+        }
         console.warn("[Session] viewed timeline synchronization failed", { serverId, error });
       },
       schedule: (task, delayMs) => {

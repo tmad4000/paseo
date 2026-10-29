@@ -32,6 +32,8 @@ The daemon log also has one line per new diagnostic:
 
 You can grep `~/.paseo/daemon.log` for these lines.
 
+History-refresh failures are recorded as `agent.timeline.sync` with phase `history-refresh`, the underlying error, host and affected agent. This includes server-returned timeline errors and subscription failures that show the refresh banner. Transport failures may also have a separate RPC diagnostic. An absent host record does not prove success: a disconnected device retains reports until it reconnects.
+
 ## What is captured
 
 | Source       | Where                                                                                                                                                                                                  | Fields                                                                                                                                                   |

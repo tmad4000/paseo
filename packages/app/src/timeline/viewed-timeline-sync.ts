@@ -319,7 +319,7 @@ export interface ViewedTimelineSyncPorts {
    * demanded set. Disconnect and backgrounding keep the obligation and do not report here.
    */
   onCatchUpEnded(agentId: string): void;
-  reportError(error: unknown): void;
+  reportError(error: unknown, agentIds?: string[]): void;
   schedule(task: () => void, delayMs: number): () => void;
 }
 
@@ -612,7 +612,7 @@ export function createViewedTimelineSync(ports: ViewedTimelineSyncPorts): Viewed
           retryDelayMs: nextRetryDelayMs,
         });
         setVisibilityCatchUpError([agentId], error);
-        ports.reportError(error);
+        ports.reportError(error, [agentId]);
       }
     } finally {
       startAcknowledgedCatchUps();
@@ -741,7 +741,7 @@ export function createViewedTimelineSync(ports: ViewedTimelineSyncPorts): Viewed
         void reconcileMembership();
       }, nextRetryDelayMs);
       membershipRetryDelayMs = nextRetryDelayMs;
-      ports.reportError(error);
+      ports.reportError(error, requested);
       return;
     }
     if (disposed || !connected || generation !== membershipGeneration) return;
