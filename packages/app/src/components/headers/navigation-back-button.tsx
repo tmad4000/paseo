@@ -138,11 +138,14 @@ function NavigationHistoryButton({
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   }, []);
-  const handleOpenChange = useCallback((next: boolean) => {
-    cancelHover();
-    setHoverPreview(false);
-    setOpen(next);
-  }, [cancelHover]);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      cancelHover();
+      setHoverPreview(false);
+      setOpen(next);
+    },
+    [cancelHover],
+  );
   const handleHoverOpen = useCallback(() => {
     setHoverPreview(true);
     setOpen(true);
@@ -163,7 +166,11 @@ function NavigationHistoryButton({
         <ContextMenuTrigger contextOnly enabled={available} testID={`${testID}-history-trigger`}>
           <NavigationHistoryPressable direction={direction} available={available} />
         </ContextMenuTrigger>
-        <NavigationHistoryDropdownTrigger direction={direction} available={available} hoverPreview={hoverPreview} />
+        <NavigationHistoryDropdownTrigger
+          direction={direction}
+          available={available}
+          hoverPreview={hoverPreview}
+        />
       </NavigationHistoryHoverRegion>
       <ContextMenuContent
         hoverPreview={hoverPreview}
@@ -241,7 +248,7 @@ function NavigationHistoryHoverRegion({
         onHoverOpen();
       }, 350);
     },
-    [isCompact, available, menu, onHoverOpen],
+    [isCompact, available, menu, onHoverOpen, timer],
   );
   return (
     <View ref={triggerRef} style={styles.buttonGroup} onPointerMove={move}>

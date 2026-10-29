@@ -24,14 +24,3 @@ renderers; the existing test theme adapter and an animation adapter replace nati
 [Indicator and tooltip screenshot](desktop.png) shows the component fixture, not an installed
 app. App typecheck and repository lint pass. Native devices and packaged desktop builds were
 not exercised. This source change does not install or restart any app or daemon.
-
-## Navigation refinements (pspin-1ip)
-
-Single-tab workspaces now show `1` as well as larger counts. The total includes inactive tabs
-in visible panes; it is not limited to the currently selected tab. Hidden Explorer panes and
-New tab placeholders remain excluded.
-
-On wide web/desktop layouts, resting a mouse over either Back/Forward control opens the full
-retained history after350ms. The pointer can enter and scroll the menu; leaving closes the
-preview. Hover does not move editor focus, dismiss the keyboard or cover the one-step arrows.
-Click/keyboard chevrons and touch/long-press keep their existing menu/sheet behavior.
