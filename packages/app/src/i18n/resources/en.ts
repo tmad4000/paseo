@@ -1110,6 +1110,8 @@ export const en = {
         newBrowser: "New browser",
         maximizePane: "Maximize pane",
         restorePane: "Restore pane",
+        unmaximizedToShowTab: "Unmaximized the pane to show this tab",
+        maximizeShownPane: "Maximize this pane",
         closePane: "Close pane",
         exitFocusMode: "Exit focus mode",
         splitRight: "Split pane right",

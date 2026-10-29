@@ -14,6 +14,10 @@ import {
   ContextMenuTrigger,
   useContextMenu,
 } from "@/components/ui/context-menu";
+import {
+  useWorkspaceTabCount,
+  WorkspaceTabCountBadge,
+} from "@/components/sidebar/workspace-tab-count";
 import { isWeb } from "@/constants/platform";
 import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -29,6 +33,7 @@ import { describeFocusLocation, type FocusLocationLabel } from "@/navigation/foc
 import { useSessionStore } from "@/stores/session-store";
 import { selectWorkspace } from "@/stores/session-store-hooks/selectors";
 import type { ShortcutKey } from "@/utils/format-shortcut";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import type { Theme } from "@/styles/theme";
 
 const ThemedChevronDown = withUnistyles(ChevronDown);
@@ -80,7 +85,11 @@ function NavigationHistoryMenuItems({ direction }: { direction: NavigationFocusH
       agentTitle: (serverId: string, agentId: string) =>
         sessions.sessions[serverId]?.agents.get(agentId)?.title ?? null,
     };
-    return entries.map((location) => describeFocusLocation(location, deps));
+    return entries.map((location) => ({
+      label: describeFocusLocation(location, deps),
+      workspaceKey:
+        location.kind === "workspace" ? buildWorkspaceTabPersistenceKey(location) : null,
+    }));
   }, [entries, t]);
 
   return rows.map((row, index) => (
@@ -91,7 +100,8 @@ function NavigationHistoryMenuItems({ direction }: { direction: NavigationFocusH
       direction={direction}
       steps={index + 1}
       isCompact={isCompact}
-      label={row}
+      label={row.label}
+      workspaceKey={row.workspaceKey}
     />
   ));
 }
@@ -101,20 +111,37 @@ function NavigationHistoryMenuItem({
   steps,
   isCompact,
   label,
+  workspaceKey,
 }: {
   direction: NavigationFocusHistoryDirection;
   steps: number;
   isCompact: boolean;
   label: FocusLocationLabel;
+  /** The destination's workspace, so the row shows its open tabs like the sidebar does. */
+  workspaceKey: string | null;
 }) {
+  const tabCount = useWorkspaceTabCount(workspaceKey);
+  const testID = `navigation-${direction}-history-item-${steps - 1}`;
   const handleSelect = useCallback(() => {
     navigateInFocusHistory(direction, { isCompact, steps });
   }, [direction, isCompact, steps]);
+  const trailing = useMemo(
+    () =>
+      tabCount > 0 ? (
+        <WorkspaceTabCountBadge
+          count={tabCount}
+          withTooltip={false}
+          testID={`${testID}-tab-count`}
+        />
+      ) : undefined,
+    [tabCount, testID],
+  );
   return (
     <ContextMenuItem
-      testID={`navigation-${direction}-history-item-${steps - 1}`}
+      testID={testID}
       description={label.subtitle ?? undefined}
       onSelect={handleSelect}
+      trailing={trailing}
     >
       {label.title}
     </ContextMenuItem>

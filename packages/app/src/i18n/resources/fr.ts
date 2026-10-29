@@ -1125,6 +1125,8 @@ export const fr: TranslationResources = {
         newBrowser: "Nouveau navigateur",
         maximizePane: "Agrandir le volet",
         restorePane: "Restaurer le volet",
+        unmaximizedToShowTab: "Volet restauré pour afficher cet onglet",
+        maximizeShownPane: "Agrandir ce volet",
         closePane: "Fermer le volet",
         exitFocusMode: "Quitter le mode concentration",
         splitRight: "Volet divisé à droite",

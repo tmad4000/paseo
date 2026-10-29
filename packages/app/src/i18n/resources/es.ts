@@ -1127,6 +1127,8 @@ export const es: TranslationResources = {
         newBrowser: "Nuevo navegador",
         maximizePane: "Maximizar panel",
         restorePane: "Restaurar panel",
+        unmaximizedToShowTab: "Se restauró el panel para mostrar esta pestaña",
+        maximizeShownPane: "Maximizar este panel",
         closePane: "Cerrar panel",
         exitFocusMode: "Salir del modo de concentración",
         splitRight: "Panel dividido a la derecha",
