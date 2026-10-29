@@ -123,6 +123,31 @@ Evidence (`tracked-answers.spec.ts`): waiting asks, a possible answer and a wait
 [390](stream-answers/tracked-answers-new-390.png) /
 [1440](stream-answers/tracked-answers-new-1440.png).
 
+### Open asks
+
+On hosts with `server_info.features.streamOpenAsks` the same pane also lists the chat's other
+unresolved asks (state `open`, `in_progress` or `blocked`) in an **Open asks · N** section below
+**Questions · N**, and the header reads **Questions and asks**. Older hosts keep the
+questions-only pane. Done asks never show; nor do asks already listed as questions, or linked
+duplicates of a canonical task (`ask.canonicalTask`), which show in the canonical chat.
+
+Each row leads with content: a muted eyebrow with the state chip (**Blocked**, **In progress**,
+**Open**) and, for a delegated ask, the owning chat's title (a short id when this client does not
+know the chat) as a link that opens it; then the ask headline; then the first line of
+`remaining` as **Next:**. Blocked asks sort first, since they usually wait on you, then in
+progress, then open; newest first within each. Tapping a row jumps to `ask.sourceMessageId`
+when that message is loaded in Chat; otherwise (no id, a prose source, or history not loaded)
+it opens the ask's card: this chat's Stream, on Tasks, searched to the ask's headline.
+
+Collapse and **×** work as above; once hidden, the pane returns for a new or revised answer or
+for an ask that becomes blocked, not for progress on other asks. Nothing animates.
+
+Evidence (`open-asks-pane.spec.ts`, fixture `open-asks-fixture.ts`: 20 unresolved asks shaped
+like a real orchestration chat, 3 of them questions, 6 blocked): the pane at
+[390](stream-answers/open-asks-390.png) / [1440](stream-answers/open-asks-1440.png), and an ask
+card opened from it at [390](stream-answers/open-asks-card-390.png) /
+[1440](stream-answers/open-asks-card-1440.png).
+
 ## Cards
 
 Each card leads with its content. One muted eyebrow line combines kind, state and time

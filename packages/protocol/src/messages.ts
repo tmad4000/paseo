@@ -4521,6 +4521,8 @@ export const ServerInfoStatusPayloadSchema = z
         streamTags: z.boolean().optional(),
         // COMPAT(streamAnswers): fork feature; tracked-question answers, anchors and seen state.
         streamAnswers: z.boolean().optional(),
+        // COMPAT(streamOpenAsks): fork feature; Chat's floating pane also lists unresolved asks.
+        streamOpenAsks: z.boolean().optional(),
         streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),

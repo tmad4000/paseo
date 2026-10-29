@@ -20,6 +20,7 @@ import { TagCloud } from "./tag-cloud";
 import { StreamWorkflowFeed } from "./global-screen";
 import { StreamNoteComposer } from "./note-composer";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { useApplyStreamFocus } from "./use-stream-focus";
 
 export { EntryCard } from "./entry-card";
 
@@ -112,7 +113,21 @@ function LegacyCompanionFeed({
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The search field is uncontrolled; a new key shows a search set from outside it.
+  const [searchKey, setSearchKey] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
+  const focusScope = useMemo(() => ({ serverId, agentId }), [serverId, agentId]);
+  // Chat's floating pane opens an ask's card: the Checklist, searched down to it.
+  useApplyStreamFocus(focusScope, (focus) => {
+    setViewTab("checklist");
+    setOnlyOpen(false);
+    setFilter("all");
+    setTags([]);
+    // Older hosts without durableStream list snapshot entries unsearched; the Checklist still
+    // shows the ask among the chat's others.
+    setSearch(focus.query);
+    setSearchKey((value) => value + 1);
+  });
 
   const pendingFilter = onlyOpen ? "pending" : "all";
   const query = useGlobalStream({
@@ -318,6 +333,7 @@ function LegacyCompanionFeed({
 
         {supportsDurableStream ? (
           <SearchField
+            key={searchKey}
             value={search}
             onChangeText={setSearch}
             placeholder={t("agentPanel.stream.search")}
@@ -428,6 +444,7 @@ function LegacyCompanionFeed({
       tagFilter.toggle,
       tagFilter.setPinned,
       tagFilter.error,
+      searchKey,
     ],
   );
 

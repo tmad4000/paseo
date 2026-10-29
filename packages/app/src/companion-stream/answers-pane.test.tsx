@@ -64,6 +64,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
+import { followUpChatFixtureEntries, openAskFixtureEntries } from "./open-asks-fixture";
 
 const anchor = (startSeq: number, endSeq = startSeq) => ({ epoch: "e1", startSeq, endSeq });
 
@@ -121,9 +122,18 @@ function actions(overrides: Partial<TrackedAnswerActions> = {}): TrackedAnswerAc
     openChat: vi.fn(),
     markSeen: vi.fn().mockResolvedValue(undefined),
     stopTracking: vi.fn().mockResolvedValue(undefined),
+    hasMessage: vi.fn().mockReturnValue(false),
+    openAsk: vi.fn(),
     ...overrides,
   };
 }
+
+const TITLES: Record<string, string> = {
+  "child-1": "Release agent",
+  "agent-release": "Release agent",
+  "agent-owner": "Mock builder",
+};
+const agentTitle = (id: string) => TITLES[id];
 
 function renderPane(entries: CompanionEntry[], handlers = actions()) {
   return render(<TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} />);
@@ -216,5 +226,148 @@ describe("TrackedAnswersPane", () => {
     const revised = { ...askAnswered, reply: { ...askAnswered.reply!, revision: 3 } };
     rerender(view([revised, waiting]));
     expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+  });
+});
+
+describe("TrackedAnswersPane open asks", () => {
+  const task = (
+    id: string,
+    state: "open" | "in_progress" | "blocked" | "done",
+    extra: Partial<NonNullable<CompanionEntry["ask"]>> = {},
+    text = `Task ${id}`,
+  ): CompanionEntry => ({
+    id: `ask:${id}`,
+    kind: "question",
+    status: "open",
+    timestamp: "2026-10-29T09:00:00Z",
+    text,
+    truncated: false,
+    ask: { state, remaining: "", evidence: "", revision: 1, provenance: "explicit", ...extra },
+  });
+
+  function renderAsks(entries: CompanionEntry[], handlers = actions()) {
+    return render(
+      <TrackedAnswersPane
+        entries={entries}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        agentTitle={agentTitle}
+      />,
+    );
+  }
+
+  it("stays questions-only on hosts without the feature", () => {
+    const { container } = renderPane([task("a", "blocked")]);
+    expect(container.innerHTML).toBe("");
+    cleanup();
+    renderPane([askAnswered, task("a", "blocked")]);
+    expect(screen.queryByTestId("open-asks-section")).toBeNull();
+    expect(screen.getByText("Your questions")).toBeTruthy();
+  });
+
+  it("lists unresolved asks with state, owner and next action; done asks never show", () => {
+    renderAsks(
+      [
+        task("progress", "in_progress", {
+          remaining: "Ship build 2.\nThen verify.",
+          delegatedAgentId: "child-1",
+        }),
+        task("blocked", "blocked", { remaining: "Jacob picks a direction." }),
+        task("open", "open", { delegatedAgentId: "child-unknown-123456" }),
+        task("done", "done"),
+      ],
+      actions(),
+    );
+    expect(screen.getByText("Questions and asks")).toBeTruthy();
+    expect(screen.getByText("3 open asks · 1 blocked")).toBeTruthy();
+    expect(screen.getByText("Open asks · 3")).toBeTruthy();
+    expect(screen.queryByText("Task done")).toBeNull();
+    const rows = screen.getAllByTestId(/^open-ask-ask:/).map((row) => row.dataset.testid);
+    expect(rows).toEqual(["open-ask-ask:blocked", "open-ask-ask:progress", "open-ask-ask:open"]);
+    expect(screen.getByText("Blocked")).toBeTruthy();
+    expect(screen.getByText("In progress")).toBeTruthy();
+    expect(screen.getByText("Open")).toBeTruthy();
+    expect(screen.getByText("Next: Ship build 2.")).toBeTruthy();
+    expect(screen.queryByText(/Then verify/)).toBeNull();
+    expect(screen.getByText("Release agent")).toBeTruthy();
+    // An owner this client has no title for still links, by a short id.
+    expect(screen.getByText("child-un")).toBeTruthy();
+  });
+
+  it("jumps to a loaded source message, else opens the ask card; owners open their chat", () => {
+    const handlers = actions({ hasMessage: vi.fn((id: string) => id === "m-loaded") });
+    const loaded = task("loaded", "in_progress", {
+      sourceMessageId: "m-loaded",
+      delegatedAgentId: "child-1",
+    });
+    const prose = task("prose", "in_progress", {
+      sourceMessageId: "user message 2026-10-29 (no message id exposed)",
+    });
+    const none = task("none", "open");
+    renderAsks([loaded, prose, none], handlers);
+    const open = (id: string) =>
+      fireEvent.click(
+        screen.getByTestId(`open-ask-ask:${id}`).querySelector('[data-testid="open-ask-open"]')!,
+      );
+    open("loaded");
+    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m-loaded");
+    expect(handlers.openAsk).not.toHaveBeenCalled();
+    open("prose");
+    open("none");
+    expect(handlers.openAsk).toHaveBeenNthCalledWith(1, prose);
+    expect(handlers.openAsk).toHaveBeenNthCalledWith(2, none);
+    fireEvent.click(screen.getByTestId("open-ask-owner"));
+    expect(handlers.openChat).toHaveBeenCalledWith("child-1");
+  });
+
+  it("keeps questions above the asks without listing a question twice", () => {
+    renderAsks([askAnswered, task("a", "in_progress")]);
+    expect(screen.getByText("Questions · 1")).toBeTruthy();
+    expect(screen.getByText("Open asks · 1")).toBeTruthy();
+    expect(screen.getByTestId("tracked-answer-ask:db")).toBeTruthy();
+    expect(screen.queryByTestId("open-ask-ask:db")).toBeNull();
+  });
+
+  it("collapses, and hiding lasts until an answer arrives or an ask becomes blocked", () => {
+    const handlers = actions();
+    const view = (entries: CompanionEntry[]) => (
+      <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} showOpenAsks />
+    );
+    const progress = task("a", "in_progress");
+    const { rerender, container } = render(view([progress]));
+    fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
+    expect(screen.queryByTestId("open-asks-section")).toBeNull();
+    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
+    expect(container.innerHTML).toBe("");
+    rerender(view([progress, task("b", "open")]));
+    expect(container.innerHTML).toBe("");
+    rerender(view([task("a", "blocked"), task("b", "open")]));
+    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+  });
+
+  it("shows the orchestration-chat fixture: 3 questions, 17 open asks, blocked first", () => {
+    renderAsks(openAskFixtureEntries({ release: "agent-release" }));
+    expect(screen.getByText("3 waiting · 17 open asks · 5 blocked")).toBeTruthy();
+    expect(screen.getAllByTestId(/^tracked-answer-ask:/)).toHaveLength(3);
+    const rows = screen.getAllByTestId(/^open-ask-ask:/);
+    expect(rows).toHaveLength(17);
+    const states = rows.map((row) => row.textContent?.match(/^(Blocked|In progress|Open)/)?.[1]);
+    expect(states.slice(0, 5)).toEqual(Array(5).fill("Blocked"));
+    expect(states.slice(5).includes("Blocked")).toBe(false);
+    expect(screen.getAllByText("Release agent").length).toBeGreaterThan(0);
+  });
+
+  it("shows the follow-up-chat fixture: done asks gone, blocked asks first", () => {
+    renderAsks(followUpChatFixtureEntries("agent-owner"));
+    expect(screen.getByText("2 waiting · 8 open asks · 5 blocked")).toBeTruthy();
+    expect(screen.getAllByTestId(/^tracked-answer-ask:/)).toHaveLength(2);
+    const rows = screen.getAllByTestId(/^open-ask-ask:/);
+    expect(rows).toHaveLength(8);
+    expect(rows.some((row) => row.dataset.testid?.includes("done-"))).toBe(false);
+    const states = rows.map((row) => row.textContent?.match(/^(Blocked|In progress|Open)/)?.[1]);
+    expect(states).toEqual([...Array(5).fill("Blocked"), ...Array(3).fill("In progress")]);
+    expect(screen.getByText("Mock builder")).toBeTruthy();
+    expect(screen.getByText("Next: Graph save blocked on the same credential.")).toBeTruthy();
   });
 });
