@@ -395,6 +395,7 @@ export const ar: TranslationResources = {
       readQueuedMessage: "توسيع الرسالة أو طيّها",
       doneQueuedMessage: "إنهاء تعديل الرسالة",
       editQueuedMessage: "تحرير الرسالة في قائمة الانتظار",
+      reorderQueuedMessage: "اسحب لإعادة ترتيب الرسالة في قائمة الانتظار",
       saveQueuedMessage: "حفظ الرسالة في قائمة الانتظار",
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
       queuedMessages: "الرسائل في قائمة الانتظار ({{count}})",
@@ -446,6 +447,7 @@ export const ar: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "حدّث مضيف Paseo لتعديل الرسائل في قائمة الانتظار دون تغيير ترتيبها.",
       queueRemoveFailed: "تعذرت إزالة الرسالة. حاول مجددًا.",
+      queueReorderFailed: "تعذرت إعادة ترتيب الرسائل. حاول مجددًا.",
       queueEditFailed: "تعذّر تعديل الرسالة في قائمة الانتظار",
       steerRequiresUpdatedHost: "حدّث مضيف Paseo للتوجيه دون مقاطعة المهمة الجارية.",
       failedToCreateAgent: "فشل في إنشاء الوكيل",

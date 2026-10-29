@@ -391,6 +391,7 @@ export const en = {
       readQueuedMessage: "Expand or collapse queued message",
       doneQueuedMessage: "Done editing queued message",
       editQueuedMessage: "Edit queued message",
+      reorderQueuedMessage: "Drag to reorder queued message",
       saveQueuedMessage: "Save queued message",
       sendQueuedMessageNow: "Send queued message now",
       queuedMessages: "Queued messages ({{count}})",
@@ -441,6 +442,7 @@ export const en = {
       failedToSend: "Failed to send message",
       queueEditRequiresUpdatedHost: "Update this Paseo host to edit queued messages in place.",
       queueRemoveFailed: "Could not remove queued message. Try again.",
+      queueReorderFailed: "Could not reorder queued messages. Try again.",
       queueEditFailed: "Failed to edit queued message",
       steerRequiresUpdatedHost:
         "Update this Paseo host to steer without interrupting its active turn.",

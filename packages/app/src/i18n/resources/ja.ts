@@ -398,6 +398,7 @@ export const ja: TranslationResources = {
       readQueuedMessage: "待機中のメッセージを展開または折りたたむ",
       doneQueuedMessage: "待機中のメッセージの編集を終了",
       editQueuedMessage: "キューに入れたメッセージを編集",
+      reorderQueuedMessage: "ドラッグしてキューのメッセージを並べ替え",
       saveQueuedMessage: "キューのメッセージを保存",
       sendQueuedMessageNow: "キューに入れたメッセージを今すぐ送信",
       queuedMessages: "キュー内のメッセージ（{{count}}件）",
@@ -450,6 +451,7 @@ export const ja: TranslationResources = {
       queueEditRequiresUpdatedHost:
         "キュー内の順序を変えずに編集するには、この Paseo ホストを更新してください。",
       queueRemoveFailed: "メッセージを削除できませんでした。再試行してください。",
+      queueReorderFailed: "メッセージを並べ替えできませんでした。再試行してください。",
       queueEditFailed: "キューのメッセージを編集できませんでした",
       steerRequiresUpdatedHost:
         "実行中のターンを中断せずに誘導するには、この Paseo ホストを更新してください。",
