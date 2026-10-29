@@ -7,7 +7,7 @@ import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-cli
 import { getServerId } from "../support/helpers/server-id";
 
 const REFERENCE = "Reference project";
-const FAVORITE = "Frequent project";
+const FAVORITE = "Z Frequent project";
 type Observer = Pick<DaemonClient, "connect" | "close" | "listProjects">;
 interface Projects {
   reference: SeededWorkspace;
@@ -16,8 +16,8 @@ interface Projects {
 }
 const test = base.extend<{ projects: Projects }>({
   projects: async ({ page: _page }, provide) => {
-    const reference = await seedWorkspace({ repoPrefix: "picker-reference-", git: false });
     const favorite = await seedWorkspace({ repoPrefix: "picker-favorite-", git: false });
+    const reference = await seedWorkspace({ repoPrefix: "picker-reference-", git: false });
     const observer = await connectDaemonClient<Observer>({ clientIdPrefix: "picker-pin-observer" });
     try {
       await reference.client.renameProject(reference.projectId, REFERENCE);
@@ -67,6 +67,10 @@ test("New workspace and Quick launch share persistent pins without selecting on 
   const trigger = await openNew(page, projects);
   const pin = page.getByRole("button", { name: `Pin project: ${FAVORITE}`, exact: true });
   await expect(pin).toBeVisible();
+  const rows = page.locator('[data-testid^="new-workspace-project-picker-option-"]');
+  const initialFavoriteBox = await rows.filter({ hasText: FAVORITE }).boundingBox();
+  const initialReferenceBox = await rows.filter({ hasText: REFERENCE }).boundingBox();
+  expect(initialFavoriteBox!.y).toBeGreaterThan(initialReferenceBox!.y);
   await pin.focus();
   await expect(pin).toBeFocused();
   await page.keyboard.press("Enter");
@@ -76,7 +80,6 @@ test("New workspace and Quick launch share persistent pins without selecting on 
   await expect(trigger).toContainText(REFERENCE);
   await expectStoredPin(projects, true);
   await expect(page.getByTestId("project-picker-section-pinned")).toBeVisible();
-  const rows = page.locator('[data-testid^="new-workspace-project-picker-option-"]');
   const favoriteBox = await rows.filter({ hasText: FAVORITE }).boundingBox();
   const referenceBox = await rows.filter({ hasText: REFERENCE }).boundingBox();
   expect(favoriteBox!.y).toBeLessThan(referenceBox!.y);
@@ -101,10 +104,20 @@ test("New workspace and Quick launch share persistent pins without selecting on 
   await expect(quickPin).toBeFocused();
   await expect(quickTrigger).toHaveText(selected);
   await expectStoredPin(projects, false);
+  const quickRows = page.locator('[data-testid^="quick-launch-project-option-"]');
+  await expect
+    .poll(async () => {
+      const favorite = await quickRows.filter({ hasText: FAVORITE }).boundingBox();
+      const reference = await quickRows.filter({ hasText: REFERENCE }).boundingBox();
+      return favorite!.y > reference!.y;
+    })
+    .toBe(true);
+  await expect(quickPin).toBeFocused();
   await page.keyboard.press("Space");
   await expect(quickUnpin).toBeVisible();
   await expect(quickUnpin).toBeFocused();
   await expectStoredPin(projects, true);
+  await expect(quickUnpin).toBeFocused();
   await expect(quickTrigger).toHaveText(selected);
   await screenshot(page, "project-picker-pins-quick-launch.png");
   await page.keyboard.press("Escape");

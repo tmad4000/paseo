@@ -61,8 +61,8 @@ rows). The pin button on a picker row pins or unpins without selecting it; the D
 house marker instead. Pin controls name the project for keyboard/voice access, show their action
 on hover or keyboard focus, and retain a thumb-sized target on compact/native layouts. Enter,
 Space and pointer activation toggle only the pin, without choosing the project or closing the
-picker; Escape still dismisses it. Pins only reorder the picker; its initial project still comes
-from the route or the last active project.
+picker; Escape still dismisses it. Pins only reorder the picker; they do not change its initial
+project selection. See [Quick launch](quick-launch.md#destination) for its default destination.
 
 ## Host compatibility
 
