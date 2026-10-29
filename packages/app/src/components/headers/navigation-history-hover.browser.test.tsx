@@ -5,9 +5,9 @@ import { page, userEvent } from "vitest/browser";
 import { NavigationBackButton, NavigationForwardButton } from "./navigation-back-button";
 import { i18n } from "@/i18n/i18next";
 void i18n;
-const fixture = vi.hoisted(() => ({ navigate: vi.fn(), compact: false }));
+const fixture = vi.hoisted(() => ({ navigate: vi.fn(), compact: false, available: true }));
 vi.mock("@/navigation/focus-history-runtime", () => ({
-  useCanNavigateBackInFocusHistory: () => true,
+  useCanNavigateBackInFocusHistory: () => fixture.available,
   useCanNavigateForwardInFocusHistory: () => true,
   useFocusHistoryEntries: () =>
     Array.from({ length: 20 }, (_, i) => ({ kind: "route", pathname: `/visit-${i}` })),
@@ -49,6 +49,7 @@ beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fixture.navigate.mockReset();
   fixture.compact = false;
+  fixture.available = true;
   container = document.createElement("div");
   container.style.cssText = "padding:40px;display:flex;width:500px";
   // The test theme adapter does not resolve Unistyles breakpoints; supply only the header hitboxes.
@@ -165,4 +166,58 @@ test("keyboard activation promotes a preview", async () => {
   (document.querySelector('[data-testid="navigation-back-button-history-menu-button"]') as HTMLElement).focus();
   await userEvent.keyboard("{Enter}");
   await expect.element(page.getByTestId("navigation-back-history-item-0")).toHaveFocus();
+});
+
+test.each(["availability", "compact"] as const)(
+  "invalidating %s closes an open preview and cancels pending previews",
+  async (condition) => {
+    const render = async () => {
+      await act(async () =>
+        root.render(
+          <>
+            <input aria-label="Draft" />
+            <NavigationBackButton />
+            <NavigationForwardButton />
+          </>,
+        ),
+      );
+    };
+    const invalidate = () => {
+      if (condition === "availability") fixture.available = false;
+      else fixture.compact = true;
+    };
+    await page.getByTestId("navigation-back-button").hover();
+    await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+    invalidate();
+    await render();
+    await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(document.querySelector('[data-testid="navigation-back-button-history"]')).toBeNull();
+
+    fixture.available = true;
+    fixture.compact = false;
+    await render();
+    await page.getByRole("textbox", { name: "Draft" }).hover();
+    await page.getByTestId("navigation-back-button").hover();
+    invalidate();
+    await render();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(document.querySelector('[data-testid="navigation-back-button-history"]')).toBeNull();
+  },
+);
+
+test("an explicit menu stays open when history becomes unavailable", async () => {
+  await page.getByTestId("navigation-back-button-history-menu-button").click();
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toBeVisible();
+  fixture.available = false;
+  await act(async () =>
+    root.render(
+      <>
+        <input aria-label="Draft" />
+        <NavigationBackButton />
+        <NavigationForwardButton />
+      </>,
+    ),
+  );
+  await expect.element(page.getByTestId("navigation-back-history-item-0")).toBeVisible();
 });

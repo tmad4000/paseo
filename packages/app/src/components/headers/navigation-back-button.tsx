@@ -205,6 +205,13 @@ function NavigationHistoryHoverRegion({
   const isCompact = useIsCompactFormFactor();
   const triggerRef = useRef<View>(null);
   useEffect(() => cancel, [cancel, available, isCompact]);
+  const setMenuOpen = menu.setOpen;
+  useEffect(() => {
+    if (!available || isCompact) {
+      cancel();
+      if (hoverPreview) setMenuOpen(false);
+    }
+  }, [available, isCompact, hoverPreview, cancel, setMenuOpen]);
   const leave = useCallback(() => {
     cancel();
     if (hoverPreview) menu.setOpen(false);
