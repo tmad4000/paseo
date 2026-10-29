@@ -140,7 +140,39 @@ when that message is loaded in Chat; otherwise (no id, a prose source, or histor
 it opens the ask's card: this chat's Stream, on Tasks, searched to the ask's headline.
 
 Collapse and **×** work as above; once hidden, the pane returns for a new or revised answer or
-for an ask that becomes blocked, not for progress on other asks. Nothing animates.
+for an ask that becomes blocked, or a delegated child that newly needs you, not for progress on
+other asks.
+
+#### Delegated asks
+
+The delegating chat owns an open loop as much as the child working it. An ask's working session
+is its `delegatedAgentId` on this host, else its newest linked `sessions` entry that is not the
+owning chat (`delegationTarget`, `companion-stream/delegation-pulse.ts`). Instead of the owner
+link, its row shows that child live: a status dot, the child's title as a link to it, and its
+state with elapsed time. **Running · 4m** counts from the open turn, **Waiting on permission**,
+**Idle 12m · ask still open**, **Errored**, **Closed · ask still open** (closed or archived),
+**Starting**, or **Status unavailable** when this client holds no snapshot (another host that
+is not connected, or an archived child it never loaded). The ask's Stream card shows the same
+line without Read.
+
+State comes from the child's agent snapshot in the session store, which the host's
+`agent_update` pushes keep current for every non-archived agent with a workspace placement; one
+serialized selector (`useDelegationPulses`) re-renders a row only when its child changes. Nothing
+polls. Permission, idle, error and closed need the delegator: the header counts them (**N need
+attention**) and they bring a hidden pane back. An idle child is never read as a finished ask;
+only the ask's own state can close it. Only the running dot moves: a slow opacity pulse that
+stops with reduced motion and in hidden retained panels.
+
+The child links back. Its pane lists **Delegated to this chat · N**: each unresolved ask on this
+host whose working session is this chat, with its state and owning chat. Tapping one opens the
+owning chat on that ask's card in Stream. The lookup scans snapshots the client already holds
+(cached per agent map), so an owner outside them is not listed.
+
+Evidence (`delegation-pulse.spec.ts`, real mock children): a running and an idle child
+([running](stream-answers/delegation-pulse-running.png)), the running child stopped and followed
+live ([idle](stream-answers/delegation-pulse-idle.png)), the Stream card
+([card](stream-answers/delegation-pulse-stream-card.png)) and the child's link back
+([child](stream-answers/delegation-pulse-child-backlink.png)).
 
 Evidence (`open-asks-pane.spec.ts`, fixture `open-asks-fixture.ts`: 20 unresolved asks shaped
 like a real orchestration chat, 3 of them questions, 6 blocked): the pane at
