@@ -24,6 +24,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { FloatingScrollView, FloatingSurface } from "@/components/ui/floating";
 import { isWeb } from "@/constants/platform";
 import type { KeyboardFocusScope } from "@/keyboard/actions";
+import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import {
   getOverlayRoot,
   OverlayLayerProvider,
@@ -506,10 +507,8 @@ export function MenuOverlay({
   useEffect(() => {
     if (!isWeb || !visible || !pointerPassthrough) return;
     const escapePreview = (event: KeyboardEvent) => {
-      if (event.isComposing || event.key === "Process") return;
+      if (isImeComposingKeyboardEvent(event) || event.key === "Process") return;
       if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
         onClose();
       }
     };

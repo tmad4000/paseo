@@ -127,14 +127,27 @@ test("preview leaves composing Escape to the editor and closes on ordinary Escap
   expect(received).toHaveBeenCalledTimes(1);
   await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
 
+  const legacyComposing = new KeyboardEvent("keydown", {
+    key: "Escape",
+    keyCode: 229,
+    isComposing: false,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => { editor.dispatchEvent(legacyComposing); });
+  expect(legacyComposing.keyCode).toBe(229);
+  expect(legacyComposing.defaultPrevented).toBe(false);
+  expect(received).toHaveBeenCalledTimes(2);
+  await expect.element(page.getByTestId("navigation-back-button-history")).toBeVisible();
+
   const escape = new KeyboardEvent("keydown", {
     key: "Escape",
     bubbles: true,
     cancelable: true,
   });
   await act(async () => { editor.dispatchEvent(escape); });
-  expect(escape.defaultPrevented).toBe(true);
-  expect(received).toHaveBeenCalledTimes(1);
+  expect(escape.defaultPrevented).toBe(false);
+  expect(received).toHaveBeenCalledTimes(3);
   await expect.element(page.getByTestId("navigation-back-button-history")).not.toBeInTheDocument();
   editor.removeEventListener("keydown", received);
 });
