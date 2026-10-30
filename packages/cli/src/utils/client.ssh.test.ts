@@ -33,6 +33,7 @@ describe("CLI SSH transport", () => {
     mocks.createSshTunnel.mockResolvedValue({
       endpoint: "127.0.0.1:4567",
       close: vi.fn(),
+      closeGracefully: vi.fn(async () => undefined),
       failureDetail: () => null,
     });
   });
@@ -61,5 +62,17 @@ describe("CLI SSH transport", () => {
       clientId: "cli-test-id",
       clientType: "cli",
     });
+  });
+
+  it("drains the tunnel instead of killing it when the client closes", async () => {
+    const client = await connectToDaemon({
+      target: { kind: "endpoint", host: "ssh://deploy@build-box" },
+    });
+    const tunnel = await mocks.createSshTunnel.mock.results[0].value;
+
+    await client.close();
+
+    expect(tunnel.closeGracefully).toHaveBeenCalledTimes(1);
+    expect(tunnel.close).not.toHaveBeenCalled();
   });
 });

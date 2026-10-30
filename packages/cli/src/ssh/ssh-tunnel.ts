@@ -3,10 +3,19 @@ import { createServer, type Server, type Socket } from "node:net";
 import { buildSshTunnelArgs, type SshTransportTarget } from "@getpaseo/protocol/ssh-transport";
 
 const SSH_STDERR_LIMIT = 8192;
+/** Upper bound on how long a graceful close waits for the forwarded connection to finish. */
+export const SSH_TUNNEL_CLOSE_GRACE_MS = 2000;
 
 export interface SshTunnel {
   endpoint: string;
+  /** Tear the tunnel down immediately, discarding anything still in flight. */
   close(): void;
+  /**
+   * Let the forwarded connection finish (the WebSocket close handshake travels through
+   * ssh), then tear the tunnel down. Killing ssh as soon as the client starts closing
+   * drops frames that were written just before the close. Bounded by `graceMs`.
+   */
+  closeGracefully(graceMs?: number): Promise<void>;
   failureDetail(): string | null;
 }
 
@@ -39,6 +48,26 @@ export function createSshTunnel(target: SshTransportTarget): Promise<SshTunnel> 
     socket = null;
     if (child && !child.killed) child.kill();
     child = null;
+  }
+
+  async function closeGracefully(graceMs = SSH_TUNNEL_CLOSE_GRACE_MS): Promise<void> {
+    const pending = socket;
+    if (pending && !pending.destroyed && child && !child.killed) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let onClose: (() => void) | undefined;
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          onClose = resolve;
+          pending.once("close", onClose);
+        }),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, graceMs);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (onClose) pending.off("close", onClose);
+    }
+    close();
   }
 
   return new Promise((resolve, reject) => {
@@ -83,6 +112,7 @@ export function createSshTunnel(target: SshTransportTarget): Promise<SshTunnel> 
       resolve({
         endpoint: `127.0.0.1:${address.port}`,
         close,
+        closeGracefully,
         failureDetail: () => resolveSshFailureDetail(failure, stderr),
       });
     });
