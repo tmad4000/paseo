@@ -330,7 +330,9 @@ async function connectSelectedDaemon(options: ConnectOptions): Promise<DaemonCli
         try {
           await close();
         } finally {
-          tunnel.close();
+          // Let the WebSocket close handshake drain through ssh before killing it, so a
+          // frame written just before close() still reaches the remote daemon.
+          await tunnel.closeGracefully();
         }
       };
       return result.client;

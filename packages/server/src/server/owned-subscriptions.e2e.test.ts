@@ -1587,6 +1587,53 @@ test("permission outcomes and domain observations keep independent source owners
   }
 });
 
+test("a client with default capabilities gets a confirmed permission outcome without observing events", async () => {
+  // `paseo permit allow|deny` connects with the default (owned-subscriptions) capabilities,
+  // observes nothing, and waits for this confirmation before reporting success.
+  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  try {
+    await client.connect();
+    const agent = await client.createAgent({
+      provider: "codex",
+      cwd: daemon.staticDir,
+      modeId: "always-ask",
+    });
+    await client.sendMessage(
+      agent.id,
+      'Request approval to run the command `printf "ok" > permission.txt`. If denied, stop.',
+    );
+    const state = await client.waitForFinish(agent.id, 5000);
+    const permission = state.final?.pendingPermissions[0];
+    if (!permission) throw new Error("Expected a pending permission");
+
+    // A response the daemon cannot apply comes back as an error, not silence.
+    await expect(
+      client.respondToPermissionAndWait(
+        "00000000-0000-4000-8000-000000000000",
+        permission.id,
+        { behavior: "allow" },
+        5000,
+      ),
+    ).rejects.toThrow(/requestType=agent_permission_response/);
+
+    const resolved = await client.respondToPermissionAndWait(
+      agent.id,
+      permission.id,
+      { behavior: "deny", message: "CLI confirmation regression" },
+      5000,
+    );
+    expect(resolved).toMatchObject({
+      agentId: agent.id,
+      requestId: permission.id,
+      resolution: { behavior: "deny" },
+    });
+  } finally {
+    await client.close();
+    await daemon.close();
+  }
+});
+
 test("mark unread replies remain source-owned while directory observers receive attention", async () => {
   const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
