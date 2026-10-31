@@ -29,8 +29,10 @@ test("Reply quotes a message into the same chat's composer and keeps the draft",
     await expect(composer).toHaveValue("> First line to quote.\n>\n> Second line.\n\nmy draft");
     await expect(composer).toBeFocused();
 
-    await replies.first().hover();
-    await replies.first().click();
+    // The prompt sits under the floating view switcher at the top of the chat, so use the
+    // keyboard: Reply is a real button and works without a pointer.
+    await replies.first().focus();
+    await page.keyboard.press("Enter");
     await expect(composer).toHaveValue(
       "> Give me two lines to reply to.\n\n> First line to quote.\n>\n> Second line.\n\nmy draft",
     );
