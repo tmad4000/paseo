@@ -1,3 +1,4 @@
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -20,6 +21,8 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
@@ -368,7 +371,31 @@ export function GlobalStreamCard({
       workspaceId: sourceWorkspaceId,
     });
   }, [localSource, sourceServerId, sourceAgentId, sourceWorkspaceId]);
-  const replyInChat = localSource?.onReplyInChat ?? openChat;
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  // The reply goes to the task's own chat, which openChat opens for a copied task too.
+  const replyInChat = useCallback(
+    (replyTo: CompanionEntry) => {
+      requestReplyQuote(sourceServerId, sourceAgentId, replyTo.text);
+      if (localSource) localSource.onReplyInChat();
+      else openChat();
+    },
+    [localSource, openChat, requestReplyQuote, sourceServerId, sourceAgentId],
+  );
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  // A copied task's place is in its origin chat, which this row cannot address.
+  const showInChat = useCallback(
+    (target: ChatJumpTarget) => {
+      openChatAt(row.serverId, row.agentId, target);
+      if (!localSource) {
+        navigateToAgent({
+          serverId: row.serverId,
+          agentId: row.agentId,
+          workspaceId: row.workspaceId,
+        });
+      }
+    },
+    [localSource, openChatAt, row.serverId, row.agentId, row.workspaceId],
+  );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
       if (!client || connection !== "online" || !supportsWrites || busy || copiedTask) return;
@@ -451,6 +478,7 @@ export function GlobalStreamCard({
           serverId={row.serverId}
           onReturnToChat={openChat}
           onReplyInChat={replyInChat}
+          onShowInChat={copiedTask ? undefined : showInChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
           onTagPress={onTagPress}

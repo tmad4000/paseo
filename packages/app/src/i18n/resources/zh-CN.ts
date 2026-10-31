@@ -560,6 +560,8 @@ export const zhCN: TranslationResources = {
       emptyTitle: "此聊天的伴随动态",
       emptyDescription: "智能体工作时，问题、审批和最终回复会出现在这里。",
       backToChat: "返回聊天",
+      showInChat: "在聊天中查看",
+      showInChatHint: "打开聊天并滚动到此内容的出处",
       retention: "最近50条记录和收集的文件。主机更新后开始记录；完整上下文保留在聊天中。",
       question: "问题",
       decision: "决策",

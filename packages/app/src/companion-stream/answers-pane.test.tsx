@@ -151,6 +151,7 @@ function actions(overrides: Partial<TrackedAnswerActions> = {}): TrackedAnswerAc
   return {
     jumpToAnchor: vi.fn(),
     jumpToMessage: vi.fn(),
+    jumpToTarget: vi.fn(),
     openChat: vi.fn(),
     markSeen: vi.fn().mockResolvedValue(undefined),
     stopTracking: vi.fn().mockResolvedValue(undefined),
@@ -224,15 +225,22 @@ describe("TrackedAnswersPane", () => {
     renderPane([candidate], handlers);
     fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
     fireEvent.click(screen.getByTestId("tracked-answer-jump-answer"));
-    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(1, anchor(1));
-    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(2, anchor(2, 3));
+    expect(handlers.jumpToTarget).toHaveBeenNthCalledWith(1, { anchor: anchor(1) });
+    expect(handlers.jumpToAnchor).toHaveBeenCalledWith(anchor(2, 3));
     cleanup();
     renderPane([askAnswered], handlers);
     expect(screen.queryByTestId("tracked-answer-jump-answer")).toBeNull();
     fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
     fireEvent.click(screen.getByTestId("tracked-answer-open-chat"));
-    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m7");
+    expect(handlers.jumpToTarget).toHaveBeenNthCalledWith(2, { messageId: "m7" });
     expect(handlers.openChat).toHaveBeenCalledWith("child-1");
+  });
+
+  it("jumps to a tracked ask's question by the host's source anchor", () => {
+    const handlers = actions();
+    renderPane([{ ...askAnswered, sourceAnchor: anchor(9) }], handlers);
+    fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
+    expect(handlers.jumpToTarget).toHaveBeenCalledWith({ anchor: anchor(9), messageId: "m7" });
   });
 
   it("keeps the answer listed until the host records it seen, and shows a failed save", async () => {
@@ -349,7 +357,7 @@ describe("TrackedAnswersPane open asks", () => {
     expect(screen.getByText("child-un")).toBeTruthy();
   });
 
-  it("jumps to a loaded source message, else opens the ask card; owners open their chat", () => {
+  it("jumps to an anchored or loaded source, else opens the ask card; owners open their chat", () => {
     const handlers = actions({ hasMessage: vi.fn((id: string) => id === "m-loaded") });
     const loaded = task("loaded", "in_progress", {
       sourceMessageId: "m-loaded",
@@ -359,13 +367,17 @@ describe("TrackedAnswersPane open asks", () => {
       sourceMessageId: "user message 2026-10-29 (no message id exposed)",
     });
     const none = task("none", "open");
-    renderAsks([loaded, prose, none], handlers);
+    // The host anchors a new ask to the message being answered, even without a message id.
+    const anchored = { ...task("anchored", "open"), sourceAnchor: anchor(5) };
+    renderAsks([loaded, prose, none, anchored], handlers);
     const open = (id: string) =>
       fireEvent.click(
         screen.getByTestId(`open-ask-ask:${id}`).querySelector('[data-testid="open-ask-open"]')!,
       );
     open("loaded");
-    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m-loaded");
+    expect(handlers.jumpToTarget).toHaveBeenCalledWith({ messageId: "m-loaded" });
+    open("anchored");
+    expect(handlers.jumpToTarget).toHaveBeenLastCalledWith({ anchor: anchor(5) });
     expect(handlers.openAsk).not.toHaveBeenCalled();
     open("prose");
     open("none");

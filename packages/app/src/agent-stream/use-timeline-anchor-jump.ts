@@ -42,16 +42,26 @@ export function findAnchoredItem(
   });
 }
 
-/** A loaded user message by provider or client message id, as recorded on a tracked ask. */
+/**
+ * A loaded message by provider or client message id, as recorded on a tracked ask or a pin.
+ * A pinned assistant message is found by its first block.
+ */
 export function findMessageItem(
   items: readonly StreamItem[],
   messageId: string,
 ): StreamItem | undefined {
   return items.find(
     (item) =>
-      item.kind === "user_message" &&
-      (item.messageId === messageId || item.clientMessageId === messageId),
+      (item.kind === "user_message" &&
+        (item.messageId === messageId || item.clientMessageId === messageId)) ||
+      (item.kind === "assistant_message" && item.messageId === messageId),
   );
+}
+
+/** Where a Stream entry sits in Chat: a timeline anchor, a message id, or both. */
+export interface ChatJumpTarget {
+  anchor?: TimelineAnchor;
+  messageId?: string;
 }
 
 export interface TimelineJump {
@@ -63,6 +73,11 @@ export interface TimelineJump {
   /** Any loaded row by its id — an assistant block, a tool call — not only user messages. */
   jumpToItem: (itemId: string) => void;
   hasItem: (itemId: string) => boolean;
+  /**
+   * A loaded message wins, since its id survives a new timeline epoch. Otherwise the anchor
+   * loads the window around it; an anchor from an older epoch is unavailable.
+   */
+  jumpToTarget: (target: ChatJumpTarget) => void;
 }
 
 /**
@@ -206,8 +221,16 @@ export function useTimelineAnchorJump({
     (itemId: string) => loadedItems.some((item) => item.id === itemId),
     [loadedItems],
   );
+  const jumpToTarget = useCallback(
+    (target: ChatJumpTarget) => {
+      if (target.messageId && hasMessage(target.messageId)) jumpToMessage(target.messageId);
+      else if (target.anchor) jumpToAnchor(target.anchor);
+      else onUnavailable();
+    },
+    [hasMessage, jumpToAnchor, jumpToMessage, onUnavailable],
+  );
   return useMemo(
-    () => ({ jumpToAnchor, jumpToMessage, hasMessage, jumpToItem, hasItem }),
-    [hasItem, hasMessage, jumpToAnchor, jumpToItem, jumpToMessage],
+    () => ({ jumpToAnchor, jumpToMessage, hasMessage, jumpToItem, hasItem, jumpToTarget }),
+    [hasItem, hasMessage, jumpToAnchor, jumpToItem, jumpToMessage, jumpToTarget],
   );
 }

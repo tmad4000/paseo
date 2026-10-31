@@ -39,7 +39,11 @@ import {
 } from "@/composer/pill-styles";
 import { getActiveMessageSubmissions } from "@/composer/submission/model";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
-import { ComposerQuoteProvider } from "@/components/reply/composer-quote";
+import {
+  buildReplyQuote,
+  ComposerQuoteProvider,
+  insertReplyQuote,
+} from "@/components/reply/composer-quote";
 import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
@@ -1296,6 +1300,37 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
+  // Reply in chat from a Stream card: quote the entry above the draft so a late reply still says
+  // what it answers, then focus the composer. Applied once the draft has loaded; a chat without a
+  // composer drops it. Pressing Reply again does not stack a second copy of the same quote.
+  const replyQuote = useAgentViewStore(
+    (state) => state.replyQuote[`${serverId}:${agentId}`] ?? null,
+  );
+  const clearReplyQuote = useAgentViewStore((state) => state.clearReplyQuote);
+  useEffect(() => {
+    if (!replyQuote || !isHydrated) return;
+    clearReplyQuote(serverId, agentId, replyQuote.requestId);
+    if (!hasActiveComposer) return;
+    const quoted = buildReplyQuote(replyQuote.text);
+    const currentText = textSource.getSnapshot();
+    if (quoted && !currentText.startsWith(quoted)) {
+      replaceText(insertReplyQuote({ currentText, quote: quoted }));
+    }
+    requestComposerFocus({ draftKey });
+    streamViewRef.current?.scrollToBottom("jump-to-bottom");
+  }, [
+    agentId,
+    clearReplyQuote,
+    draftKey,
+    hasActiveComposer,
+    isHydrated,
+    replaceText,
+    replyQuote,
+    requestComposerFocus,
+    serverId,
+    streamViewRef,
+    textSource,
+  ]);
   const composerSection = (
     <RenderProfile id={`AgentComposerSection:${agentId}`}>
       <AgentComposerSection

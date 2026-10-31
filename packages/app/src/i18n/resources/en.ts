@@ -565,6 +565,8 @@ export const en = {
       emptyDescription:
         "Questions, approvals and final responses will appear here as the agent works.",
       backToChat: "Back to chat",
+      showInChat: "Show in chat",
+      showInChatHint: "Opens Chat scrolled to where this came from",
       retention:
         "Unanswered questions, pins, recent 50 other moments and collected files. Full context stays in Chat.",
       question: "Question",

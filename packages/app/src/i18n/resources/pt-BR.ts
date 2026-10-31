@@ -576,6 +576,8 @@ export const ptBR: TranslationResources = {
       emptyDescription:
         "Perguntas, aprovações e respostas finais aparecerão aqui enquanto o agente trabalha.",
       backToChat: "Voltar à conversa",
+      showInChat: "Ver na conversa",
+      showInChatHint: "Abre a conversa no ponto de onde isto veio",
       retention:
         "Os últimos 50 momentos e arquivos coletados. O registro começa com a atualização do host; o contexto completo fica no Chat.",
       question: "Pergunta",

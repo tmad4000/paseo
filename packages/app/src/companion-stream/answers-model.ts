@@ -66,7 +66,7 @@ export function trackedQuestionEntryId(cursor: { epoch: string; seq: number }): 
 
 export interface TrackedAnswerLinks {
   questionAnchor?: TimelineAnchor;
-  /** A tracked ask's originating chat message; it has no timeline position. */
+  /** A tracked ask's originating chat message, found when Chat has it loaded. */
   questionMessageId?: string;
   answerAnchor?: TimelineAnchor;
   /** The chat that wrote the answer, when it is not the one showing the pane. */
@@ -77,7 +77,9 @@ export interface TrackedAnswerLinks {
 export function trackedAnswerLinks(entry: CompanionEntry, agentId: string): TrackedAnswerLinks {
   const answeredBy = entry.reply?.answeredByAgentId;
   return {
-    questionAnchor: entry.kind === "q_and_a" ? entry.questionAnchor : undefined,
+    // A tracked ask has no question anchor of its own; the host's source anchor places it.
+    questionAnchor:
+      (entry.kind === "q_and_a" ? entry.questionAnchor : undefined) ?? entry.sourceAnchor,
     questionMessageId: entry.kind === "question" ? entry.ask?.sourceMessageId : undefined,
     answerAnchor: entry.reply?.anchor,
     answeringAgentId: answeredBy && answeredBy !== agentId ? answeredBy : undefined,

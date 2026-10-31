@@ -3,6 +3,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { GlobalStreamRow } from "./use-global-stream";
 
 const state = vi.hoisted(() => ({
@@ -124,15 +125,17 @@ vi.mock("./workflow-composer", () => ({ WorkflowComposer: () => null }));
 vi.mock("./use-global-stream", () => ({ useGlobalStream: vi.fn() }));
 vi.mock("./entry-card", () => ({
   EntryCard: ({
+    entry,
     disabled,
     onUpdateStatus,
     onReturnToChat,
     onReplyInChat,
   }: {
+    entry: CompanionEntry;
     disabled: boolean;
     onUpdateStatus: typeof state.updateStatus;
     onReturnToChat: () => void;
-    onReplyInChat: () => void;
+    onReplyInChat: (entry: CompanionEntry) => void;
   }) => {
     state.updateStatus = onUpdateStatus;
     return (
@@ -143,7 +146,7 @@ vi.mock("./entry-card", () => ({
         <button type="button" onClick={onReturnToChat}>
           Return to Chat
         </button>
-        <button type="button" onClick={onReplyInChat}>
+        <button type="button" onClick={() => onReplyInChat(entry)}>
           Reply in Chat
         </button>
       </div>
@@ -154,6 +157,7 @@ vi.mock("./entry-card", () => ({
 import { GlobalStreamCard, StreamWorkflowFeed } from "./global-screen";
 import { useGlobalStream } from "./use-global-stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 
 beforeEach(() => {
   state.supported = true;
@@ -389,11 +393,15 @@ it("uses local Chat return and reply controls only for the same source session",
   fireEvent.click(rendered.getByText("Reply in Chat"));
   expect(context.onReturnToChat).toHaveBeenCalledOnce();
   expect(context.onReplyInChat).toHaveBeenCalledOnce();
+  // Reply quotes the entry into that chat's composer.
+  expect(useAgentViewStore.getState().replyQuote["host:agent"]?.text).toBe("Choose name");
   expect(navigateToAgent).not.toHaveBeenCalled();
   const foreign = { ...row, agentId: "another" };
   rendered.rerender(<GlobalStreamCard row={foreign} onSaved={vi.fn()} localContext={context} />);
   fireEvent.click(rendered.getByText("Reply in Chat"));
   expect(context.onReplyInChat).toHaveBeenCalledOnce();
+  expect(useAgentViewStore.getState().replyQuote["host:another"]?.text).toBe("Choose name");
+  expect(useAgentViewStore.getState().selectedViews["host:another"]).toBe("chat");
   expect(navigateToAgent).toHaveBeenCalledExactlyOnceWith({
     serverId: "host",
     agentId: "another",

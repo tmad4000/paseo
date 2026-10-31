@@ -578,6 +578,8 @@ export const fr: TranslationResources = {
       emptyDescription:
         "Questions, autorisations et réponses finales apparaîtront ici pendant le travail de l’agent.",
       backToChat: "Retour au chat",
+      showInChat: "Afficher dans le chat",
+      showInChatHint: "Ouvre le chat à l’endroit d’où cela vient",
       retention:
         "Les 50 derniers moments et les fichiers collectés. La capture commence avec la mise à jour de l’hôte ; le contexte complet reste dans Chat.",
       question: "Question",

@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SearchField } from "@/components/ui/search-field";
@@ -236,6 +238,19 @@ function LegacyCompanionFeed({
     },
     [save, agentId],
   );
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  const handleShowInChat = useCallback(
+    (target: ChatJumpTarget) => openChatAt(serverId, agentId, target),
+    [openChatAt, serverId, agentId],
+  );
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  const handleReplyInChat = useCallback(
+    (entry: CompanionEntry) => {
+      requestReplyQuote(serverId, agentId, entry.text);
+      onReplyInChat();
+    },
+    [requestReplyQuote, serverId, agentId, onReplyInChat],
+  );
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
       void artifactPins.current.save(serverId, agentId, artifact.path, save).catch(() => undefined);
@@ -259,7 +274,8 @@ function LegacyCompanionFeed({
           entry={item.entry}
           serverId={serverId}
           onReturnToChat={onReturnToChat}
-          onReplyInChat={onReplyInChat}
+          onReplyInChat={handleReplyInChat}
+          onShowInChat={handleShowInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
           onTagPress={query.supportsTags ? tagFilter.add : undefined}
@@ -272,7 +288,8 @@ function LegacyCompanionFeed({
       openArtifact,
       handlePinArtifact,
       onReturnToChat,
-      onReplyInChat,
+      handleReplyInChat,
+      handleShowInChat,
       handleUpdateStatus,
       handleRemovePin,
       saving,
