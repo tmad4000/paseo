@@ -46,7 +46,14 @@ export function LinkPeek({
   const [interactive, setInteractive] = useState(false);
   const header = useMemo<SheetHeader>(
     // The label is already short; the full address is what tells two similar links apart.
-    () => ({ title: link?.label ?? "", subtitle: link?.url }),
+    () => ({
+      title: link?.label ?? "",
+      subtitle: link ? (
+        <Text style={styles.subtitle} numberOfLines={1} selectable>
+          {link.url}
+        </Text>
+      ) : undefined,
+    }),
     [link],
   );
   const handleClose = useCallback(() => {
@@ -179,6 +186,10 @@ export function PeekFallback({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  subtitle: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   frameHost: {
     flex: 1,
     minHeight: 0,
