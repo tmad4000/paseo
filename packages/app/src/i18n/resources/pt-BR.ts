@@ -583,11 +583,11 @@ export const ptBR: TranslationResources = {
       possibleAnswerLabel: "Possível resposta:",
       unpin: "Desafixar",
       pinToStream: "Fixar no stream",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -796,6 +796,7 @@ export const ptBR: TranslationResources = {
       copyMessage: "Copiar mensagem",
       showMore: "Mostrar mais",
       showLess: "Mostrar menos",
+      reply: "Responder",
       forkMenu: "Bifurcar mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
       forkInNewWorkspace: "Bifurcar em um novo workspace",

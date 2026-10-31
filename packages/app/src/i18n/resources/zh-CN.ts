@@ -566,11 +566,11 @@ export const zhCN: TranslationResources = {
       possibleAnswerLabel: "可能的回答：",
       unpin: "取消固定",
       pinToStream: "固定到流",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -775,6 +775,7 @@ export const zhCN: TranslationResources = {
       copyMessage: "复制消息",
       showMore: "展开",
       showLess: "收起",
+      reply: "回复",
       forkMenu: "分叉消息",
       forkInNewTab: "分叉到新标签页",
       forkInNewWorkspace: "分叉到新工作区",

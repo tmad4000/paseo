@@ -578,11 +578,11 @@ export const ko: TranslationResources = {
       possibleAnswerLabel: "답변 후보:",
       unpin: "고정 해제",
       pinToStream: "스트림에 고정",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -788,6 +788,7 @@ export const ko: TranslationResources = {
       copyMessage: "메시지 복사",
       showMore: "더 보기",
       showLess: "접기",
+      reply: "답장",
       forkMenu: "여기에서 채팅 분기",
       forkInNewTab: "새 탭으로 분기",
       forkInNewWorkspace: "새 워크스페이스로 분기",
