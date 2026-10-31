@@ -45,7 +45,8 @@ export function LinkPeek({
   const { height } = useWindowDimensions();
   const [interactive, setInteractive] = useState(false);
   const header = useMemo<SheetHeader>(
-    () => ({ title: link?.label ?? "", subtitle: link ? linkHost(link.url) : undefined }),
+    // The label is already short; the full address is what tells two similar links apart.
+    () => ({ title: link?.label ?? "", subtitle: link?.url }),
     [link],
   );
   const handleClose = useCallback(() => {

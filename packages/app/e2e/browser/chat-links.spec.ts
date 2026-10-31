@@ -4,6 +4,7 @@ import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { chatLinksFixture } from "@/chat-links/fixture";
 import { normalizeLinkKey } from "@/chat-links/model";
+import type { Locator } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
@@ -37,6 +38,23 @@ async function evidence(page: Page, name: string) {
   const file = path.resolve("test-results", name);
   await mkdir(path.dirname(file), { recursive: true });
   await page.screenshot({ path: file, animations: "disabled" });
+}
+
+/** Sheets slide in on compact layouts; screenshot once the element is fully shown and still. */
+async function expectSettled(locator: Locator) {
+  await expect(locator).toBeInViewport({ ratio: 1 });
+  let previous: number | null = null;
+  await expect
+    .poll(
+      async () => {
+        const box = await locator.boundingBox();
+        const settled = box !== null && previous !== null && Math.abs(box.y - previous) < 0.5;
+        previous = box?.y ?? null;
+        return settled;
+      },
+      { intervals: [200] },
+    )
+    .toBe(true);
 }
 
 async function openLinksPanel(page: Page) {
@@ -104,6 +122,7 @@ for (const width of [390, 1440]) {
         "Review the interactive mock:",
       );
       await expect(linkRow(page, fixture.urls.pr)).toContainText("PR #154");
+      await expectSettled(produced.getByTestId(/^chat-link-row-/).first());
       await evidence(page, `chat-links-${width}.png`);
 
       // Peek a mock: the page loads in a scaled, non-interactive frame.
@@ -117,6 +136,7 @@ for (const width of [390, 1440]) {
         }),
       ).toBeVisible();
       await expect(page.getByTestId("chat-link-peek-loading")).toHaveCount(0);
+      await expectSettled(page.getByTestId("chat-link-peek-open").filter({ visible: true }));
       await evidence(page, `chat-links-peek-${width}.png`);
       await page.getByTestId("chat-link-peek-interact").filter({ visible: true }).click();
       await expect(frame).toHaveAttribute("data-interactive", "true");
@@ -131,6 +151,7 @@ for (const width of [390, 1440]) {
       await expect(fallback).toContainText("This page can't be previewed here");
       await expect(fallback).toContainText(fixture.urls.pr);
       await expect(fallback.getByTestId("chat-link-peek-fallback-open")).toBeVisible();
+      await expectSettled(page.getByTestId("chat-link-peek-open").filter({ visible: true }));
       await evidence(page, `chat-links-fallback-${width}.png`);
       await closePeek(page);
       await expect(fallback).toHaveCount(0);

@@ -40,7 +40,7 @@ function shell(id: string, command: string, output: string): StreamItem {
 describe("findUrls", () => {
   it("captures a markdown label and leaves the bare form unlabeled", () => {
     expect(findUrls("See [the mock](https://example.com/mock) for details")).toEqual([
-      { url: "https://example.com/mock", label: "the mock", context: "See for details" },
+      { url: "https://example.com/mock", label: "the mock", context: "See the mock for details" },
     ]);
     expect(findUrls("Deployed to https://example.org/x today")).toEqual([
       { url: "https://example.org/x", label: null, context: "Deployed to today" },
@@ -115,6 +115,12 @@ describe("extractChatLinks", () => {
     expect(link.anchor.itemId).toBe("a1");
     expect(link.context).toBe("Review the interactive mock:");
     expect(link.label).toBe("m4-mini…:4387/session/87a7…");
+  });
+
+  it("keeps a markdown label in the context line", () => {
+    const links = extractChatLinks(chatLinksFixtureRows());
+    const pr = links.find((link) => link.url === CHAT_LINKS_FIXTURE_URLS.pr);
+    expect(pr?.context).toBe("The settings scaffold is up as PR #154.");
   });
 
   it("reads a gh pr create output line as produced", () => {

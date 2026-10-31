@@ -93,13 +93,17 @@ function isEmbeddedInMarkup(text: string, start: number): boolean {
 }
 
 function collapseContext(line: string): string {
-  const collapsed = line.replace(/\s+/g, " ").trim();
+  const collapsed = line
+    .replace(/\s+/g, " ")
+    .replace(/ ([.,;:!?])(?=\s|$)/g, "$1")
+    .trim();
   if (collapsed.length <= CONTEXT_MAX_LENGTH) return collapsed;
   return `${collapsed.slice(0, CONTEXT_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
-function lineContext(line: string, match: string): string {
-  return collapseContext(line.replace(match, " ").replace(/[[\]()]{2,}/g, " "));
+/** The line minus the URL; a markdown link keeps its label so the sentence still reads. */
+function lineContext(line: string, match: string, replacement = " "): string {
+  return collapseContext(line.replace(match, replacement).replace(/[[\]()]{2,}/g, " "));
 }
 
 /** Every http(s) URL in `text`, in order, with its markdown label and line context. */
@@ -121,7 +125,7 @@ export function findUrls(text: string): FoundUrl[] {
         item: {
           url,
           label: label && label !== url ? label : null,
-          context: lineContext(line, match[0]),
+          context: lineContext(line, match[0], label ? ` ${label} ` : " "),
         },
       });
     }
