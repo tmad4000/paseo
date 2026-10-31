@@ -23,7 +23,8 @@ export interface EntryCardProps {
   serverId?: string;
   disabled?: boolean;
   onReturnToChat: () => void;
-  onReplyInChat: () => void;
+  /** Quotes the entry into Chat's composer and focuses it, so the reply says what it answers. */
+  onReplyInChat: (entry: CompanionEntry) => void;
   /** Opens Chat scrolled to where the entry came from; offered when the entry has a place. */
   onShowInChat?: (target: ChatJumpTarget) => void;
   onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
@@ -134,7 +135,7 @@ function ChatActions({
   pending: boolean;
   quote: boolean;
   onReturnToChat: () => void;
-  onReplyInChat: () => void;
+  onReplyInChat: (entry: CompanionEntry) => void;
   onShowInChat?: (target: ChatJumpTarget) => void;
 }) {
   const { t } = useTranslation();
@@ -145,6 +146,7 @@ function ChatActions({
   const showInChat = useCallback(() => {
     if (target) onShowInChat?.(target);
   }, [target, onShowInChat]);
+  const replyInChat = useCallback(() => onReplyInChat(entry), [entry, onReplyInChat]);
   let chatAction = quote ? "agentPanel.stream.openSource" : "agentPanel.stream.backToChat";
   if (pending) chatAction = "agentPanel.stream.replyInChat";
   return (
@@ -164,7 +166,7 @@ function ChatActions({
         <Button
           variant={pending ? "secondary" : "outline"}
           style={styles.touchTarget}
-          onPress={pending ? onReplyInChat : onReturnToChat}
+          onPress={pending ? replyInChat : onReturnToChat}
         >
           {t(chatAction)}
         </Button>

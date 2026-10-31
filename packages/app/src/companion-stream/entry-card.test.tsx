@@ -256,7 +256,7 @@ describe("EntryCard", () => {
     fireEvent.click(view.getByRole("button", { name: "Show in chat" }));
     expect(onShowInChat).toHaveBeenLastCalledWith({ anchor: sourceAnchor });
     fireEvent.click(view.getByRole("button", { name: "Reply in chat" }));
-    expect(onReplyInChat).toHaveBeenCalled();
+    expect(onReplyInChat).toHaveBeenCalledWith(anchored);
     cleanup();
 
     // A quote's Open source becomes Show in chat, addressed by its message id.

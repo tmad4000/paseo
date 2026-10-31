@@ -243,6 +243,14 @@ function LegacyCompanionFeed({
     (target: ChatJumpTarget) => openChatAt(serverId, agentId, target),
     [openChatAt, serverId, agentId],
   );
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  const handleReplyInChat = useCallback(
+    (entry: CompanionEntry) => {
+      requestReplyQuote(serverId, agentId, entry.text);
+      onReplyInChat();
+    },
+    [requestReplyQuote, serverId, agentId, onReplyInChat],
+  );
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
       void artifactPins.current.save(serverId, agentId, artifact.path, save).catch(() => undefined);
@@ -266,7 +274,7 @@ function LegacyCompanionFeed({
           entry={item.entry}
           serverId={serverId}
           onReturnToChat={onReturnToChat}
-          onReplyInChat={onReplyInChat}
+          onReplyInChat={handleReplyInChat}
           onShowInChat={handleShowInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
@@ -280,7 +288,7 @@ function LegacyCompanionFeed({
       openArtifact,
       handlePinArtifact,
       onReturnToChat,
-      onReplyInChat,
+      handleReplyInChat,
       handleShowInChat,
       handleUpdateStatus,
       handleRemovePin,

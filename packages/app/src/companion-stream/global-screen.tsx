@@ -1,3 +1,4 @@
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -370,7 +371,16 @@ export function GlobalStreamCard({
       workspaceId: sourceWorkspaceId,
     });
   }, [localSource, sourceServerId, sourceAgentId, sourceWorkspaceId]);
-  const replyInChat = localSource?.onReplyInChat ?? openChat;
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  // The reply goes to the task's own chat, which openChat opens for a copied task too.
+  const replyInChat = useCallback(
+    (replyTo: CompanionEntry) => {
+      requestReplyQuote(sourceServerId, sourceAgentId, replyTo.text);
+      if (localSource) localSource.onReplyInChat();
+      else openChat();
+    },
+    [localSource, openChat, requestReplyQuote, sourceServerId, sourceAgentId],
+  );
   const openChatAt = useAgentViewStore((state) => state.openChatAt);
   // A copied task's place is in its origin chat, which this row cannot address.
   const showInChat = useCallback(
