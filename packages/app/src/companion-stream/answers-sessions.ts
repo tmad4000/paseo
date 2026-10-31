@@ -106,7 +106,9 @@ export function computeChatSessions(
   const sessions: ChatSession[] = [];
   const times = new Map<string, number>();
   let forkAt: number | null = null;
-  let systemTurn = false;
+  // Until a user message is seen in a window that starts mid-history, the prompt that led the
+  // first replies is unloaded and may have been a heartbeat, so those replies do not count.
+  let systemTurn = !options.historyComplete;
   for (const event of events) {
     for (const key of event.keys) times.set(key, event.time);
     if (event.role === "user") systemTurn = Boolean(event.system);

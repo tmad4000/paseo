@@ -116,6 +116,13 @@ describe("computeChatSessions", () => {
   it("does not claim a chat start it has not loaded", () => {
     expect(sessionsOf([user(at(30, 9))], false).sessions[0]!.origin).toBe("partial");
   });
+
+  it("does not count replies whose prompt is unloaded, which may have been a heartbeat", () => {
+    const chat = sessionsOf([assistant(at(30, 6)), user(at(30, 9))], false);
+    expect(chat.sessions.map((s) => [s.origin, s.start])).toEqual([
+      ["partial", at(30, 9).getTime()],
+    ]);
+  });
 });
 
 describe("placeEntry", () => {

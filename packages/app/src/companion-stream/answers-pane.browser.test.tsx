@@ -124,6 +124,40 @@ async function mountPane(width: number): Promise<HTMLElement> {
   return container;
 }
 
+/**
+ * No doubled rules: walking the list top to bottom, a horizontal rule never directly follows
+ * another (one element's bottom rule and the next one's top rule, or two stacked top rules
+ * with nothing between). The first divider sits on the panel rule rather than adding one.
+ */
+function expectSingleRules(): void {
+  const width = (element: Element, side: "Top" | "Bottom") =>
+    Number.parseFloat(getComputedStyle(element)[`border${side}Width`]) || 0;
+  const rows = [
+    ...document.querySelectorAll(
+      '[data-testid^="session-divider-"], [data-testid^="open-ask-ask:"], [data-testid^="tracked-answer-ask:"], h1, [role="heading"]',
+    ),
+  ];
+  expect(rows.length).toBeGreaterThan(4);
+  const dividers = rows.filter((row) =>
+    row.getAttribute("data-testid")?.startsWith("session-divider-"),
+  );
+  expect(dividers.length).toBeGreaterThan(1);
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1]!;
+    const current = rows[index]!;
+    if (previous.contains(current) || current.contains(previous)) continue;
+    expect(width(previous, "Bottom") > 0 && width(current, "Top") > 0).toBe(false);
+    // An element right under a rule-drawing divider or section label adds no rule of its own.
+    // Dividers and section labels are headers (h1 on web).
+    const previousIsSeparator =
+      previous.tagName === "H1" || previous.getAttribute("role") === "heading";
+    if (previousIsSeparator) expect(width(current, "Top")).toBe(0);
+  }
+  for (const divider of dividers) {
+    expect(getComputedStyle(divider.firstElementChild!).fontWeight).toBe("400");
+  }
+}
+
 function rect(testId: string): DOMRect {
   const element = document.querySelector(`[data-testid="${testId}"]`);
   if (!element) throw new Error(`Missing ${testId}`);
@@ -159,6 +193,7 @@ describe("TrackedAnswersPane in a browser", () => {
     const detail = page.getByText("New session after 5 h idle").first().element();
     expect(detail.scrollWidth).toBeLessThanOrEqual(detail.clientWidth + 1);
     await expect.element(page.getByText("Session continues")).toBeVisible();
+    expectSingleRules();
   });
 
   it("on desktop: shows a tooltip on hover and keeps the expanded answer through minimize", async () => {

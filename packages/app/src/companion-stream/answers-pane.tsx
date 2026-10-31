@@ -826,15 +826,19 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[3],
     paddingBottom: theme.spacing[1],
   },
+  // One rule per boundary. Rows draw only a top rule and the row under a divider draws none,
+  // so the divider's rule is the only one there; the first divider in a section sits on the
+  // panel's or the section label's rule instead of adding its own.
   dividerBorder: {
     borderTopWidth: theme.borderWidth[1],
     borderTopColor: theme.colors.border,
   },
+  // Light, regular-weight labels: a divider marks time, it does not compete with the rows.
   dividerTitle: {
     flexShrink: 0,
-    color: theme.colors.foreground,
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.normal,
   },
   dividerDetail: {
     flexShrink: 1,
