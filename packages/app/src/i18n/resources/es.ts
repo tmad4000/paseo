@@ -612,11 +612,11 @@ export const es: TranslationResources = {
       possibleAnswerLabel: "Posible respuesta:",
       unpin: "Desfijar",
       pinToStream: "Fijar en el stream",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -825,6 +825,7 @@ export const es: TranslationResources = {
       copyMessage: "Copiar mensaje",
       showMore: "Mostrar más",
       showLess: "Mostrar menos",
+      reply: "Responder",
       forkMenu: "Bifurcar mensaje",
       forkInNewTab: "Bifurcar en una pestaña nueva",
       forkInNewWorkspace: "Bifurcar en un espacio de trabajo nuevo",

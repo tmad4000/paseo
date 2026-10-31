@@ -68,10 +68,10 @@ for (const width of [390, 1440]) {
           .first(),
       ).toBeVisible();
       await page.getByTestId("agent-view-chat").click();
-      const pin = page.getByRole("button", { name: "Pin to stream", exact: true });
+      const pin = page.getByRole("button", { name: "Save to Stream", exact: true });
       await expect(pin.last()).toBeVisible();
       await pin.last().click();
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect(page.getByText("Saved to Stream", { exact: true })).toBeVisible();
       const fullPins = await session.client.listGlobalStream({
         agentId: session.agentId,
@@ -82,11 +82,11 @@ for (const width of [390, 1440]) {
       ).toEqual([response]);
 
       await pin.last().click();
-      await page.getByText("Pin excerpt…", { exact: true }).click();
+      await page.getByText("Save excerpt…", { exact: true }).click();
       const excerpt = page.getByTestId("message-pin-excerpt-body");
       await excerpt.getByTestId("message-pin-excerpt-input").fill("Keep this exact line.");
       rejectNextPin = true;
-      await excerpt.getByRole("button", { name: "Pin to stream", exact: true }).click();
+      await excerpt.getByRole("button", { name: "Save to Stream", exact: true }).click();
       await expect(excerpt.getByRole("alert")).toHaveText("Pin save failed. Please retry.");
       await expect(excerpt.getByTestId("message-pin-excerpt-input")).toHaveValue(
         "Keep this exact line.",
@@ -95,7 +95,7 @@ for (const width of [390, 1440]) {
         path: testInfo.outputPath(`pin-retry-${width}.png`),
         fullPage: true,
       });
-      await excerpt.getByRole("button", { name: "Pin to stream", exact: true }).click();
+      await excerpt.getByRole("button", { name: "Save to Stream", exact: true }).click();
       await expect(excerpt).toHaveCount(0);
       expect(pinIds[1]).toBe(pinIds[2]);
 
@@ -104,7 +104,7 @@ for (const width of [390, 1440]) {
         .getByTestId("assistant-message")
         .filter({ hasText: "Another useful detail." })
         .click({ button: "right" });
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect
         .poll(
           async () =>
@@ -112,7 +112,7 @@ for (const width of [390, 1440]) {
               .rows.length,
         )
         .toBe(3);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       const selectedItem = page
         .getByTestId("assistant-message")
@@ -135,7 +135,7 @@ for (const width of [390, 1440]) {
         throw new Error("Expected selectable excerpt");
       });
       await page.mouse.click(selectionPoint.x, selectionPoint.y, { button: "right" });
-      await page.getByText("Pin selected text to Stream", { exact: true }).click();
+      await page.getByText("Save selected text to Stream", { exact: true }).click();
       await expect
         .poll(async () => {
           const pins = await session.client.listGlobalStream({
@@ -151,7 +151,7 @@ for (const width of [390, 1440]) {
           );
         })
         .toBe(true);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       // User-message pinning uses the same acknowledged path.
       await page
@@ -159,7 +159,7 @@ for (const width of [390, 1440]) {
         .getByText("Return a completed reply for pinning.", { exact: true })
         .hover();
       await pin.first().click();
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect
         .poll(
           async () =>
@@ -167,7 +167,7 @@ for (const width of [390, 1440]) {
               .rows.length,
         )
         .toBe(5);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       // The default Activity view includes completed outcomes and newly saved pins.
       await page.getByTestId("agent-view-artifacts").click();

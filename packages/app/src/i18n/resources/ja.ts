@@ -607,11 +607,11 @@ export const ja: TranslationResources = {
       possibleAnswerLabel: "回答の候補：",
       unpin: "ピン留めを解除",
       pinToStream: "ストリームにピン留め",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -819,6 +819,7 @@ export const ja: TranslationResources = {
       copyMessage: "メッセージをコピー",
       showMore: "もっと見る",
       showLess: "折りたたむ",
+      reply: "返信",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
       forkInNewWorkspace: "新しいワークスペースにフォーク",

@@ -607,11 +607,11 @@ export const ru: TranslationResources = {
       possibleAnswerLabel: "Возможный ответ:",
       unpin: "Открепить",
       pinToStream: "Закрепить в потоке",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -818,6 +818,7 @@ export const ru: TranslationResources = {
       copyMessage: "Копировать сообщение",
       showMore: "Показать больше",
       showLess: "Показать меньше",
+      reply: "Ответить",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
       forkInNewWorkspace: "Создать форк в новом рабочем пространстве",
