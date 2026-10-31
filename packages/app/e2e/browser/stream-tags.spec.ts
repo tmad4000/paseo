@@ -83,7 +83,7 @@ for (const width of [390, 1440]) {
       const cloud = feed.getByTestId("stream-tag-cloud");
       await expect(cloud.getByTestId(`stream-tag-${ux}`)).toBeVisible();
       await expect(feed.getByTestId("companion-entry-quote")).toHaveText(quoteText);
-      await expect(feed.getByTestId("companion-entry-pin:quote")).toContainText("Open source chat");
+      await expect(feed.getByTestId("companion-entry-pin:quote")).toContainText("Show in chat");
       await feed.getByTestId("companion-entry-pin:quote").scrollIntoViewIfNeeded();
       await feed
         .getByTestId("companion-entry-pin:quote")
