@@ -737,6 +737,7 @@ function WorkspaceRowRightGroup({
                 onTogglePin={onTogglePin}
                 openInFileManagerPath={workspacePath}
                 lastActiveAt={workspaceLastActiveAt(workspace)}
+                startedAt={workspace.startedAt}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>

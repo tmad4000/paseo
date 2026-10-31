@@ -4,7 +4,7 @@ import type {
   SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 
-export type SidebarSortMode = "manual" | "recent" | "user" | "assistant" | "title";
+export type SidebarSortMode = "manual" | "recent" | "user" | "assistant" | "started" | "title";
 
 export function normalizeSidebarQuery(query: string): string {
   return query.trim().normalize("NFKC").toLocaleLowerCase();
@@ -45,7 +45,7 @@ export function sortSidebarWorkspaces<T extends SidebarWorkspacePlacement>(
   return [...workspaces].sort((left, right) => {
     const leftEntry = entries.get(left.workspaceKey);
     const rightEntry = entries.get(right.workspaceKey);
-    if (mode === "recent" || mode === "user" || mode === "assistant") {
+    if (mode === "recent" || mode === "user" || mode === "assistant" || mode === "started") {
       // Equal or unknown clocks preserve stored order; title edits must not reshuffle ties.
       return sidebarMessageTimestamp(rightEntry, mode) - sidebarMessageTimestamp(leftEntry, mode);
     }
@@ -106,6 +106,7 @@ function sidebarMessageTimestamp(
   let at = entry?.lastMessageAt;
   if (mode === "user") at = entry?.lastUserMessageAt;
   if (mode === "assistant") at = entry?.lastAssistantMessageAt;
+  if (mode === "started") at = entry?.startedAt;
   const time = at?.getTime();
   return time !== undefined && Number.isFinite(time) ? time : 0;
 }
