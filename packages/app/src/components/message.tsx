@@ -1,4 +1,5 @@
 import { MessagePinControl } from "@/companion-stream/message-pin-control";
+import { useMessageReply } from "@/components/reply/composer-quote";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -45,6 +46,7 @@ import {
   Scissors,
   MicVocal,
   FileSymlink,
+  Reply,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -703,6 +705,10 @@ export const UserMessage = memo(function UserMessage({
                 onRewind={handleRewind}
               />
             ) : null}
+            <TurnReplyButton
+              getContent={getMessageContent}
+              containerStyle={userMessageStylesheet.copyButton}
+            />
             {onPin ? (
               <MessagePinControl
                 getContent={getMessageContent}
@@ -835,6 +841,10 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   return (
     <View style={assistantTurnFooterStylesheet.container}>
       <TurnCopyButton
+        getContent={getContent}
+        containerStyle={assistantTurnFooterStylesheet.copyButton}
+      />
+      <TurnReplyButton
         getContent={getContent}
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
@@ -1216,6 +1226,40 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
           ? turnCopyButtonStylesheet.iconHoveredColor.color
           : turnCopyButtonStylesheet.iconColor.color;
         return <HelpCircle size={16} color={iconColor} />;
+      }}
+    </Pressable>
+  );
+});
+
+/** Reply: quotes the message into this chat's composer. Hidden where the chat has no composer. */
+export const TurnReplyButton = memo(function TurnReplyButton({
+  getContent,
+  containerStyle,
+}: {
+  getContent: () => string;
+  containerStyle?: StyleProp<ViewStyle>;
+}) {
+  const { t } = useTranslation();
+  const reply = useMessageReply();
+  const pressableStyle = useMemo(
+    () => [turnCopyButtonStylesheet.container, containerStyle],
+    [containerStyle],
+  );
+  const handleReply = useCallback(() => reply?.(getContent()), [getContent, reply]);
+  if (!reply) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      style={pressableStyle}
+      onPress={handleReply}
+      accessibilityLabel={t("message.actions.reply")}
+      testID="message-reply-button"
+    >
+      {({ hovered }) => {
+        const iconColor = hovered
+          ? turnCopyButtonStylesheet.iconHoveredColor.color
+          : turnCopyButtonStylesheet.iconColor.color;
+        return <Reply size={16} color={iconColor} />;
       }}
     </Pressable>
   );

@@ -3,6 +3,7 @@ import type { MessagePinHandler } from "@/companion-stream/message-pin-operation
 import { useMessagePin } from "@/companion-stream/use-message-pin";
 import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
+import { MessageReplyScope } from "@/components/reply/composer-quote";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   forwardRef,
@@ -121,16 +122,20 @@ import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins
 function ChatSurfaceProviders({
   serverId,
   agentId,
+  readOnly,
   children,
 }: {
   serverId: string;
   agentId: string;
+  readOnly: boolean;
   children: ReactNode;
 }) {
   return (
     <ToolCallSheetProvider>
       <StreamTagScopeProvider serverId={serverId} agentId={agentId}>
-        {children}
+        <MessageReplyScope agentId={agentId} readOnly={readOnly}>
+          {children}
+        </MessageReplyScope>
       </StreamTagScopeProvider>
     </ToolCallSheetProvider>
   );
@@ -1215,7 +1220,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         revealLoadedMessage={revealLoadedHistory}
         visibleMessageIds={visibleMessageIds}
       >
-        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId}>
+        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId} readOnly={readOnly}>
           <AssistantSelectionCopySurface style={stylesheet.container}>
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({

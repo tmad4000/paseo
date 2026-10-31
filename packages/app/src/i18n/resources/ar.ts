@@ -574,11 +574,11 @@ export const ar: TranslationResources = {
       possibleAnswerLabel: "إجابة محتملة:",
       unpin: "إلغاء التثبيت",
       pinToStream: "تثبيت في التدفق",
-      pinSelection: "Pin selected text to Stream",
-      pinMessage: "Pin message to Stream",
-      pinExcerpt: "Pin excerpt…",
+      pinSelection: "Save selected text to Stream",
+      pinMessage: "Save message to Stream",
+      pinExcerpt: "Save excerpt…",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Pins can contain up to 4,000 characters.",
+        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:
@@ -783,6 +783,7 @@ export const ar: TranslationResources = {
       copyMessage: "انسخ الرسالة",
       showMore: "عرض المزيد",
       showLess: "عرض أقل",
+      reply: "رد",
       forkMenu: "تفريع الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",
       forkInNewWorkspace: "تفريع في مساحة عمل جديدة",
