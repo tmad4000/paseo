@@ -171,6 +171,8 @@ export function Button({
   loading = false,
   accessibilityRole,
   accessibilityState: accessibilityStateProp,
+  onHoverIn,
+  onHoverOut,
   ...props
 }: PropsWithChildren<
   Omit<PressableProps, "style"> & {
@@ -211,8 +213,21 @@ export function Button({
   }
   const isGhostHovered = hovered && variant === "ghost";
 
-  const handleHoverIn = useCallback(() => setHovered(true), []);
-  const handleHoverOut = useCallback(() => setHovered(false), []);
+  // Callers' hover handlers still run, so a Button can be a tooltip trigger.
+  const handleHoverIn = useCallback<NonNullable<PressableProps["onHoverIn"]>>(
+    (event) => {
+      setHovered(true);
+      onHoverIn?.(event);
+    },
+    [onHoverIn],
+  );
+  const handleHoverOut = useCallback<NonNullable<PressableProps["onHoverOut"]>>(
+    (event) => {
+      setHovered(false);
+      onHoverOut?.(event);
+    },
+    [onHoverOut],
+  );
 
   const pressableStyle = useCallback(
     ({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> => [

@@ -16,15 +16,33 @@ vi.mock("react-native", () => ({
     onPress,
     testID,
     accessibilityLabel,
+    "aria-expanded": expanded,
   }: {
     children?: React.ReactNode;
     onPress?: () => void;
     testID?: string;
     accessibilityLabel?: string;
+    "aria-expanded"?: boolean;
   }) => (
-    <button type="button" data-testid={testID} aria-label={accessibilityLabel} onClick={onPress}>
+    <button
+      type="button"
+      data-testid={testID}
+      aria-label={accessibilityLabel}
+      aria-expanded={expanded}
+      onClick={onPress}
+    >
       {children}
     </button>
+  ),
+}));
+// Tooltip text stays in the DOM, hidden, so tests can read what desktop hover would show.
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
+  TooltipTrigger: ({ children }: { children?: React.ReactNode }) => children,
+  TooltipContent: ({ children }: { children?: React.ReactNode }) => (
+    <span hidden data-testid="tooltip">
+      {children}
+    </span>
   ),
 }));
 vi.mock("react-native-unistyles", () => ({
@@ -32,7 +50,7 @@ vi.mock("react-native-unistyles", () => ({
 }));
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
-  useTranslation: () => ({ t: i18n.t.bind(i18n) }),
+  useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }),
 }));
 vi.mock("lucide-react-native", () => ({
   HelpCircle: () => null,
@@ -76,6 +94,8 @@ vi.mock("@/components/ui/button", () => ({
 
 import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
 import { useAnswersPaneStore } from "./answers-pane-store";
+import { computeChatSessions, type ChatMessageEvent } from "./answers-sessions";
+import { describeSegment } from "./answers-pane";
 import { followUpChatFixtureEntries, openAskFixtureEntries } from "./open-asks-fixture";
 
 const anchor = (startSeq: number, endSeq = startSeq) => ({ epoch: "e1", startSeq, endSeq });
@@ -395,5 +415,142 @@ describe("TrackedAnswersPane open asks", () => {
     expect(states).toEqual([...Array(5).fill("Blocked"), ...Array(3).fill("In progress")]);
     expect(screen.getByText("Mock builder")).toBeTruthy();
     expect(screen.getByText("Next: Graph save blocked on the same credential.")).toBeTruthy();
+  });
+});
+
+describe("TrackedAnswersPane session dividers", () => {
+  // Local wall-clock times in a past year, so labels never read Today or Yesterday.
+  const at = (day: number, hour: number, minute = 0) => new Date(2020, 9, day, hour, minute);
+  const said = (time: Date, role: ChatMessageEvent["role"] = "user"): ChatMessageEvent => ({
+    role,
+    time: time.getTime(),
+    keys: [],
+  });
+  const ask = (id: string, time: Date, state: "open" | "blocked" = "open"): CompanionEntry => ({
+    id: `ask:${id}`,
+    kind: "question",
+    status: "open",
+    timestamp: time.toISOString(),
+    text: `Task ${id}`,
+    truncated: false,
+    ask: { state, remaining: "", evidence: "", revision: 1, provenance: "explicit" },
+  });
+  // Morning session, five quiet hours, then an afternoon session.
+  const sessions = computeChatSessions(
+    [said(at(30, 9)), said(at(30, 9, 30), "assistant"), said(at(30, 14, 30))],
+    { historyComplete: true },
+  );
+
+  function renderSessions(entries: CompanionEntry[], handlers = actions()) {
+    return render(
+      <TrackedAnswersPane
+        entries={entries}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        sessions={sessions}
+      />,
+    );
+  }
+
+  it("groups asks under their sessions, newest first, blocked still first within one", () => {
+    renderSessions([
+      ask("morning-open", at(30, 9, 5)),
+      ask("morning-blocked", at(30, 9, 20), "blocked"),
+      ask("afternoon", at(30, 14, 35)),
+    ]);
+    const section = screen.getByTestId("open-asks-section");
+    const order = [...section.querySelectorAll("[data-testid]")]
+      .map((node) => node.getAttribute("data-testid")!)
+      .filter((id) => id.startsWith("session-divider") || id.startsWith("open-ask-ask:"));
+    expect(order).toEqual([
+      "session-divider-session",
+      "open-ask-ask:afternoon",
+      "session-divider-session",
+      "open-ask-ask:morning-blocked",
+      "open-ask-ask:morning-open",
+    ]);
+    expect(screen.getByText("New session after 5 h idle")).toBeTruthy();
+    expect(screen.getByText("Chat starts")).toBeTruthy();
+  });
+
+  it("shows no dividers when everything sits in one session and day", () => {
+    renderSessions([ask("a", at(30, 14, 35)), ask("b", at(30, 15))]);
+    expect(screen.queryByTestId(/^session-divider/)).toBeNull();
+  });
+
+  it("puts unknown times last and keeps questions in their own section", () => {
+    const unknown = { ...ask("bad", at(30, 9)), timestamp: "not a date" };
+    renderSessions([askAnswered, unknown, ask("now", at(30, 14, 35))]);
+    expect(screen.getByText("Time unknown")).toBeTruthy();
+    const section = screen.getByTestId("open-asks-section");
+    const ids = [...section.querySelectorAll("[data-testid]")].map((node) =>
+      node.getAttribute("data-testid"),
+    );
+    expect(ids.indexOf("session-divider-unknown")).toBeGreaterThan(ids.indexOf("open-ask-ask:now"));
+    expect(screen.getByTestId("tracked-answer-ask:db")).toBeTruthy();
+  });
+
+  it("keeps an expanded answer expanded through minimize and reopen", () => {
+    renderSessions([askAnswered, ask("now", at(30, 14, 35))]);
+    fireEvent.click(screen.getByTestId("tracked-answer-text"));
+    expect(screen.getByTestId("tracked-answer-text").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByTestId("tracked-answer-text").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("explains every desktop control in a tooltip", () => {
+    renderSessions([askAnswered, ask("now", at(30, 14, 35))]);
+    const tips = screen.getAllByTestId("tooltip").map((node) => node.textContent);
+    expect(tips).toContain("Minimize to a small pill. Tap the pill to bring the pane back.");
+    expect(tips).toContain("Mark this answer seen. A revised answer shows here again.");
+    expect(tips).toContain("Jump to your question in Chat");
+    expect(tips).toContain("Open the chat that wrote this answer");
+    expect(tips).toContain("Jumps to the message that asked it, or opens its card in Stream");
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    expect(screen.getByTestId("tooltip").textContent).toMatch(/^Show questions and asks: /);
+  });
+
+  it("names days relative to now, and continued sessions and idle time plainly", () => {
+    const t = i18n.t.bind(i18n);
+    const now = new Date(2020, 9, 31, 12);
+    const session = {
+      start: at(31, 8).getTime(),
+      end: 0,
+      origin: "idle" as const,
+      idleMs: 125 * 60_000,
+    };
+    const today = describeSegment(
+      { key: "s", kind: "session", time: session.start, session, sortKey: 0 },
+      t,
+      "en-US",
+      now,
+    );
+    expect(today.title).toBe("Today, 8:00 AM");
+    expect(today.detail).toBe("New session after 2 h 5 min idle");
+    const continued = describeSegment(
+      { key: "d", kind: "day", time: at(30, 0).getTime(), session, sortKey: 0 },
+      t,
+      "en-US",
+      now,
+    );
+    expect(continued).toEqual({ title: "Yesterday", detail: "Session continues" });
+    const days = describeSegment(
+      {
+        key: "s2",
+        kind: "session",
+        time: 0,
+        session: { ...session, idleMs: 3 * 24 * 60 * 60_000 },
+        sortKey: 0,
+      },
+      t,
+      "en-US",
+      now,
+    );
+    expect(days.detail).toBe("New session after 3 d idle");
+    expect(
+      describeSegment({ key: "i", kind: "inherited", time: null, sortKey: 0 }, t, "en-US", now),
+    ).toEqual({ title: "From the parent chat", detail: "Before this fork" });
   });
 });
