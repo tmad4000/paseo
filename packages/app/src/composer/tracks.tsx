@@ -45,6 +45,8 @@ export interface ComposerTrackPillSegment {
   bucket: SidebarStateBucket | null;
   /** Short enough to stay on one line alongside its siblings: "1 failed", "2/7 tasks", "3". */
   text: string;
+  /** A glyph naming what the pill counts, for a segment with no state mark. */
+  icon?: ReactNode;
 }
 
 export interface ComposerTrackPillProps {
@@ -153,6 +155,7 @@ function ComposerTrackPillTrigger({
             testID={`${testID}-segment-${index}`}
           >
             <ComposerTrackMark bucket={segment.bucket} />
+            {segment.bucket ? null : segment.icon}
             <Text style={labelStyle} numberOfLines={1}>
               {segment.text}
             </Text>

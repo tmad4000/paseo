@@ -86,6 +86,7 @@ import {
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
+import { useAgentHasChatLinks } from "@/chat-links/host";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
@@ -1232,12 +1233,14 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     rows: subagentRows,
   });
   const hasPluginComposerPills = useHasPluginComposerPills(serverId, workspaceId, agentId);
+  const hasChatLinks = useAgentHasChatLinks(serverId, agentId);
   const hasActiveComposer = !agentState.archivedAt && !isArchivingCurrentAgent;
   const hasVisibleAgentTracks = hasAgentTracks({
     subagentRows,
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
+    hasChatLinks,
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
   const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
@@ -1339,6 +1342,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           archiveFinishedStatus={archiveFinishedSubagents.status}
           onArchiveFinished={archiveFinishedSubagents.archiveFinished}
           hasPluginComposerPills={hasPluginComposerPills}
+          hasChatLinks={hasChatLinks}
+          streamViewRef={streamViewRef}
         />
       ) : null}
     </View>

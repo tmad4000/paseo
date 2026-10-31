@@ -109,6 +109,41 @@ describe("MockLoadTestAgentClient", () => {
     expect(events.at(-1)).toMatchObject({ type: "turn_completed", provider: "mock" });
   });
 
+  test("emits scripted shell calls before a settled reply", async () => {
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "ten-second-stream",
+      featureValues: {
+        mockAssistantResponse: "Review the mock: https://example.com/session/a",
+        mockShellToolCalls: [
+          { command: "lavish-axi mock.html", output: "url: https://example.com/session/a\n" },
+          { command: 42, output: "ignored" },
+        ],
+      },
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.run("Make a mock.");
+    const items = events.flatMap((event) => (event.type === "timeline" ? [event.item] : []));
+    const toolIndex = items.findIndex((item) => item.type === "tool_call");
+    const replyIndex = items.findIndex((item) => item.type === "assistant_message");
+    expect(items.filter((item) => item.type === "tool_call")).toHaveLength(1);
+    expect(items[toolIndex]).toMatchObject({
+      type: "tool_call",
+      name: "Bash",
+      status: "completed",
+      detail: {
+        type: "shell",
+        command: "lavish-axi mock.html",
+        output: "url: https://example.com/session/a\n",
+      },
+    });
+    expect(toolIndex).toBeLessThan(replyIndex);
+  });
+
   test("can withhold the provider user-message echo until an immediate interrupt", async () => {
     vi.useFakeTimers();
     const client = new MockLoadTestAgentClient();
