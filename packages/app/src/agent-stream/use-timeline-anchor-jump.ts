@@ -8,7 +8,8 @@ import type { StreamViewportHandle } from "./strategy";
 
 interface PendingAnchorJump {
   requestId: number;
-  anchor: TimelineAnchor;
+  /** An anchor, or a loaded row waiting for the history window to reveal it. */
+  target: { kind: "anchor"; anchor: TimelineAnchor } | { kind: "item"; itemId: string };
   fetchSettled: boolean;
   hasScrolled: boolean;
 }
@@ -59,6 +60,9 @@ export interface TimelineJump {
   jumpToMessage: (messageId: string) => void;
   /** True when the message is loaded in Chat, so jumpToMessage can land on it. */
   hasMessage: (messageId: string) => boolean;
+  /** Any loaded row by its id — an assistant block, a tool call — not only user messages. */
+  jumpToItem: (itemId: string) => void;
+  hasItem: (itemId: string) => boolean;
 }
 
 /**
@@ -99,7 +103,11 @@ export function useTimelineAnchorJump({
 
   useEffect(() => {
     if (pendingJump === null || pendingJump.hasScrolled) return;
-    const target = findAnchoredItem(loadedItems, pendingJump.anchor);
+    const pendingTarget = pendingJump.target;
+    const target =
+      pendingTarget.kind === "anchor"
+        ? findAnchoredItem(loadedItems, pendingTarget.anchor)
+        : loadedItems.find((item) => item.id === pendingTarget.itemId);
     if (target) {
       if (!scrollTo(target)) return;
       setPendingJump((current) =>
@@ -125,11 +133,21 @@ export function useTimelineAnchorJump({
       const loaded = findAnchoredItem(loadedItems, anchor);
       if (loaded) {
         if (!scrollTo(loaded)) {
-          setPendingJump({ requestId, anchor, fetchSettled: true, hasScrolled: false });
+          setPendingJump({
+            requestId,
+            target: { kind: "anchor", anchor },
+            fetchSettled: true,
+            hasScrolled: false,
+          });
         }
         return;
       }
-      setPendingJump({ requestId, anchor, fetchSettled: false, hasScrolled: false });
+      setPendingJump({
+        requestId,
+        target: { kind: "anchor", anchor },
+        fetchSettled: false,
+        hasScrolled: false,
+      });
       void getHostRuntimeStore()
         .fetchAgentTimeline(
           serverId,
@@ -161,8 +179,35 @@ export function useTimelineAnchorJump({
     (messageId: string) => findMessageItem(loadedItems, messageId) !== undefined,
     [loadedItems],
   );
+  const jumpToItem = useCallback(
+    (itemId: string) => {
+      nextRequestIdRef.current += 1;
+      const requestId = nextRequestIdRef.current;
+      setPendingJump(null);
+      const loaded = loadedItems.find((item) => item.id === itemId);
+      if (!loaded) {
+        onUnavailable();
+        return;
+      }
+      // Revealing an older part of the loaded history renders it first; the effect above scrolls
+      // once it is visible.
+      if (!scrollTo(loaded)) {
+        setPendingJump({
+          requestId,
+          target: { kind: "item", itemId },
+          fetchSettled: true,
+          hasScrolled: false,
+        });
+      }
+    },
+    [loadedItems, onUnavailable, scrollTo],
+  );
+  const hasItem = useCallback(
+    (itemId: string) => loadedItems.some((item) => item.id === itemId),
+    [loadedItems],
+  );
   return useMemo(
-    () => ({ jumpToAnchor, jumpToMessage, hasMessage }),
-    [hasMessage, jumpToAnchor, jumpToMessage],
+    () => ({ jumpToAnchor, jumpToMessage, hasMessage, jumpToItem, hasItem }),
+    [hasItem, hasMessage, jumpToAnchor, jumpToItem, jumpToMessage],
   );
 }

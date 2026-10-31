@@ -298,6 +298,8 @@ function renderLiveHeadStreamItem(input: {
 export interface AgentStreamViewHandle {
   scrollToBottom(reason?: BottomAnchorLocalRequest["reason"]): void;
   prepareForViewportChange(): void;
+  /** Scroll to a loaded timeline row by id, revealing older loaded history first if needed. */
+  jumpToStreamItem(itemId: string): void;
 }
 
 export interface AgentStreamViewProps {
@@ -691,6 +693,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       onUnavailable: handleAnchorUnavailable,
     });
 
+    // The handle stays stable; the jump it forwards to changes with every loaded row.
+    const timelineJumpRef = useRef(timelineJump);
+    timelineJumpRef.current = timelineJump;
+
     useImperativeHandle(
       ref,
       () => ({
@@ -699,6 +705,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         },
         prepareForViewportChange() {
           viewportRef.current?.prepareForViewportChange();
+        },
+        jumpToStreamItem(itemId: string) {
+          timelineJumpRef.current.jumpToItem(itemId);
         },
       }),
       [],

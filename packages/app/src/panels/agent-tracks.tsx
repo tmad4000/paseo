@@ -1,4 +1,6 @@
-import { memo, useCallback, type ReactElement } from "react";
+import { memo, useCallback, type ReactElement, type RefObject } from "react";
+import type { AgentStreamViewHandle } from "@/agent-stream/view";
+import { AgentChatLinksTrack } from "@/chat-links/host";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { AgentTaskList } from "@/composer/task-list";
@@ -39,6 +41,8 @@ export const AgentTracks = memo(function AgentTracks({
   archiveFinishedStatus,
   onArchiveFinished,
   hasPluginComposerPills,
+  hasChatLinks,
+  streamViewRef,
 }: {
   serverId: string;
   workspaceId: string;
@@ -49,8 +53,10 @@ export const AgentTracks = memo(function AgentTracks({
   archiveFinishedStatus: ArchiveFinishedStatus;
   onArchiveFinished: () => void;
   hasPluginComposerPills: boolean;
+  hasChatLinks: boolean;
+  streamViewRef: RefObject<AgentStreamViewHandle | null>;
 }): ReactElement | null {
-  const { tabId, openTab } = usePaneContext();
+  const { tabId, openTab, layoutWorkspaceId } = usePaneContext();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
   const isCompact = useIsCompactFormFactor();
   const canSplit = supportsDesktopPaneSplits() && !isCompact;
@@ -123,6 +129,7 @@ export const AgentTracks = memo(function AgentTracks({
       tasks,
       archiveFinishedStatus,
       hasPluginComposerPills,
+      hasChatLinks,
     })
   ) {
     return null;
@@ -142,6 +149,14 @@ export const AgentTracks = memo(function AgentTracks({
         onDetachSubagent={canDetachSubagents ? detachSubagent : undefined}
         onOpenDrawer={openSubthreadsDrawer ? handleOpenDrawer : undefined}
       />
+      {hasChatLinks ? (
+        <AgentChatLinksTrack
+          serverId={serverId}
+          workspaceId={layoutWorkspaceId ?? workspaceId}
+          agentId={agentId}
+          streamViewRef={streamViewRef}
+        />
+      ) : null}
       <PluginComposerPills
         serverId={serverId}
         workspaceId={workspaceId}
@@ -162,14 +177,17 @@ export function hasAgentTracks({
   tasks,
   archiveFinishedStatus,
   hasPluginComposerPills = false,
+  hasChatLinks = false,
 }: {
   subagentRows: readonly SubagentRow[];
   tasks: readonly TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
   hasPluginComposerPills?: boolean;
+  hasChatLinks?: boolean;
 }): boolean {
   return (
     subagentRows.length > 0 ||
+    hasChatLinks ||
     Boolean(tasks?.length) ||
     archiveFinishedStatus.kind !== "idle" ||
     hasPluginComposerPills
