@@ -210,3 +210,36 @@ it("sorts replies independently of user messages for rows and project groups wit
     sortSidebarWorkspaces(placements, entries, "assistant").map((x) => x.workspaceKey),
   ).toEqual(["a", "b"]);
 });
+
+it("sorts by kickoff date, newest first, independent of recent activity", () => {
+  const a = workspace("a", "Old start, busy now", "Project A", "2026-10-30T00:00:00Z");
+  const b = workspace("b", "New start, quiet", "Project B", "2026-10-21T00:00:00Z");
+  a.entry.startedAt = new Date("2026-09-01T00:00:00Z");
+  b.entry.startedAt = new Date("2026-10-20T00:00:00Z");
+  const entries = new Map([a, b].map(({ entry }) => [entry.workspaceKey, entry]));
+  const placements = [a.placement, b.placement];
+  expect(sortSidebarWorkspaces(placements, entries, "recent").map((x) => x.workspaceKey)).toEqual([
+    "a",
+    "b",
+  ]);
+  expect(sortSidebarWorkspaces(placements, entries, "started").map((x) => x.workspaceKey)).toEqual([
+    "b",
+    "a",
+  ]);
+  const projects = [a, b].map(({ placement }) => ({
+    viewKey: placement.workspaceKey,
+    projectName: placement.projectName,
+    workspaces: [placement],
+  })) as SidebarProjectEntry[];
+  expect(
+    filterAndSortSidebarProjects({ projects, entries, query: "", mode: "started" }).map(
+      (x) => x.viewKey,
+    ),
+  ).toEqual(["b", "a"]);
+  // Unknown start dates sink to the bottom rather than reshuffling.
+  b.entry.startedAt = null;
+  expect(sortSidebarWorkspaces(placements, entries, "started").map((x) => x.workspaceKey)).toEqual([
+    "a",
+    "b",
+  ]);
+});
