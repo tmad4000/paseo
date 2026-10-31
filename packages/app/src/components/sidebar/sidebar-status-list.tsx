@@ -1041,6 +1041,7 @@ function StatusWorkspaceActionSlot({
             isPinned={isPinned}
             onTogglePin={onTogglePin}
             lastActiveAt={workspaceLastActiveAt(workspace)}
+            startedAt={workspace.startedAt}
           />
         ) : null}
       </SidebarWorkspaceTrailingActionOverlay>

@@ -888,6 +888,7 @@ const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = [
   "recent",
   "user",
   "assistant",
+  "started",
   "manual",
   "title",
 ];
