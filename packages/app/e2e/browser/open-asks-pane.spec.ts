@@ -49,14 +49,24 @@ for (const width of [390, 1440]) {
       await openAgentRoute(page, agent);
       await expectComposerVisible(page);
       const pane = page.getByTestId("tracked-answers-pane");
-      const toggle = pane.getByTestId("tracked-answers-toggle");
+      // One control at a time: the open card's Minimize header, or the minimized pill.
+      const toggle = pane.getByTestId(/^tracked-answers-(minimize|expand)$/);
 
       // The 3 question-shaped asks wait as questions; the other 17 are open asks.
       await expect(toggle).toHaveAccessibleName(/3 waiting · 17 open asks · 5 blocked/);
-      // Compact starts collapsed so it never takes the chat over; desktop starts expanded.
+      // Compact starts minimized so it never takes the chat over; desktop starts open.
       await expect(toggle).toHaveAttribute("aria-expanded", String(width >= 768));
-      if (width < 768) await toggle.click();
+      if (width < 768) {
+        // The pill is a small count at the right edge, not a full-width bar.
+        await expect(toggle).toHaveText("20");
+        const pillBox = await toggle.boundingBox();
+        expect(pillBox && pillBox.width < 120 && pillBox.x + pillBox.width > width - 40).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`open-asks-pill-${width}.png`) });
+        await toggle.click();
+      }
       await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      // The open card's header keeps its title on every width.
+      await expect(pane.getByText("Questions and asks", { exact: true })).toBeVisible();
 
       const section = pane.getByTestId("open-asks-section");
       await expect(section.getByText("Open asks · 17")).toBeVisible();

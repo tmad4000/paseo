@@ -35,13 +35,24 @@ vi.mock("react-i18next", async (importOriginal) => ({
   useTranslation: () => ({ t: i18n.t.bind(i18n) }),
 }));
 vi.mock("lucide-react-native", () => ({
-  ChevronDown: () => null,
-  ChevronUp: () => null,
   HelpCircle: () => null,
-  X: () => null,
+  Minimize2: () => null,
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
-vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
+const layout = vi.hoisted(() => ({ compact: false }));
+vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => layout.compact }));
+vi.mock("./answers-pane-store", async () => {
+  const { create } = await import("zustand");
+  return {
+    useAnswersPaneStore: create<{
+      minimized: boolean | null;
+      setMinimized: (minimized: boolean) => void;
+    }>()((set) => ({
+      minimized: null,
+      setMinimized: (minimized) => set({ minimized }),
+    })),
+  };
+});
 vi.mock("@/components/ui/status-badge", () => ({
   StatusBadge: ({ label }: { label: string }) => <span>{label}</span>,
 }));
@@ -64,6 +75,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
+import { useAnswersPaneStore } from "./answers-pane-store";
 import { followUpChatFixtureEntries, openAskFixtureEntries } from "./open-asks-fixture";
 
 const anchor = (startSeq: number, endSeq = startSeq) => ({ epoch: "e1", startSeq, endSeq });
@@ -142,7 +154,11 @@ function renderPane(entries: CompanionEntry[], handlers = actions()) {
 beforeAll(async () => {
   await i18n.changeLanguage("en");
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  layout.compact = false;
+  useAnswersPaneStore.setState({ minimized: null });
+});
 
 describe("TrackedAnswersPane", () => {
   it("labels confirmed answers, unconfirmed possible answers and waiting questions", () => {
@@ -211,21 +227,39 @@ describe("TrackedAnswersPane", () => {
     expect(screen.getByText("Could not mark the answer seen")).toBeTruthy();
   });
 
-  it("collapses, and hiding lasts until a new or revised answer arrives", () => {
+  it("minimizes to a count pill that stays put as items arrive, and reopens", () => {
     const handlers = actions();
     const view = (entries: CompanionEntry[]) => (
       <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} />
     );
-    const { rerender, container } = render(view([askAnswered]));
-    fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
+    const { rerender } = render(view([askAnswered]));
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
     expect(screen.queryByText("Postgres 16.")).toBeNull();
-    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
-    expect(container.innerHTML).toBe("");
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("1");
     rerender(view([askAnswered, waiting]));
-    expect(container.innerHTML).toBe("");
-    const revised = { ...askAnswered, reply: { ...askAnswered.reply!, revision: 3 } };
-    rerender(view([revised, waiting]));
-    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("2");
+    expect(screen.getByTestId("tracked-answers-expand").getAttribute("aria-label")).toBe(
+      "Show questions and asks. 1 new · 1 waiting",
+    );
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByText("Postgres 16.")).toBeTruthy();
+    expect(screen.queryByTestId("tracked-answers-expand")).toBeNull();
+  });
+
+  it("starts minimized on phones, and remembers an explicit choice across chats", () => {
+    layout.compact = true;
+    renderPane([askAnswered]);
+    expect(screen.getByTestId("tracked-answers-expand")).toBeTruthy();
+    expect(screen.queryByText("Postgres 16.")).toBeNull();
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    cleanup();
+    renderPane([askAnswered]);
+    expect(screen.getByText("Postgres 16.")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    cleanup();
+    layout.compact = false;
+    renderPane([askAnswered]);
+    expect(screen.getByTestId("tracked-answers-expand")).toBeTruthy();
   });
 });
 
@@ -329,21 +363,13 @@ describe("TrackedAnswersPane open asks", () => {
     expect(screen.queryByTestId("open-ask-ask:db")).toBeNull();
   });
 
-  it("collapses, and hiding lasts until an answer arrives or an ask becomes blocked", () => {
-    const handlers = actions();
-    const view = (entries: CompanionEntry[]) => (
-      <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} showOpenAsks />
-    );
-    const progress = task("a", "in_progress");
-    const { rerender, container } = render(view([progress]));
-    fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
+  it("minimizes with asks to a pill counting questions and asks together", () => {
+    renderAsks([askAnswered, task("a", "in_progress"), task("b", "blocked")]);
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
     expect(screen.queryByTestId("open-asks-section")).toBeNull();
-    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
-    expect(container.innerHTML).toBe("");
-    rerender(view([progress, task("b", "open")]));
-    expect(container.innerHTML).toBe("");
-    rerender(view([task("a", "blocked"), task("b", "open")]));
-    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("3");
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByTestId("open-asks-section")).toBeTruthy();
   });
 
   it("shows the orchestration-chat fixture: 3 questions, 17 open asks, blocked first", () => {

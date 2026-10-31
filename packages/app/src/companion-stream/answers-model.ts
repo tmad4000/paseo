@@ -137,12 +137,12 @@ export function selectOpenAsks(
   );
 }
 
-/** A newly blocked ask brings a hidden pane back; progress on other asks does not. */
+/** A newly blocked ask lights up a minimized pane; progress on other asks does not. */
 function blockedAskKey(item: OpenAsk): string | null {
   return item.state === "blocked" ? `blocked:${item.entry.id}` : null;
 }
 
-/** Identifies what the pane is showing that should reopen it once hidden: answers and blocks. */
+/** Identifies what the pane showed when minimized, so later answers and blocks stand out. */
 export function answersPaneSignature(
   answers: readonly TrackedAnswer[],
   asks: readonly OpenAsk[],
@@ -153,7 +153,7 @@ export function answersPaneSignature(
     .join("|");
 }
 
-/** True when the pane holds an answer or blocked ask that was not showing when it was hidden. */
+/** True when the pane holds an answer or blocked ask that was not showing when it was minimized. */
 export function hasUnhiddenPaneItems(
   answers: readonly TrackedAnswer[],
   asks: readonly OpenAsk[],

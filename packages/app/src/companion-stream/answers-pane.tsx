@@ -1,5 +1,5 @@
 import type { CompanionEntry, TimelineAnchor } from "@getpaseo/protocol/companion-stream";
-import { ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react-native";
+import { HelpCircle, Minimize2 } from "lucide-react-native";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -18,6 +18,7 @@ import {
   type TrackedAnswer,
   type TrackedAnswerLinks,
 } from "./answers-model";
+import { useAnswersPaneStore } from "./answers-pane-store";
 import { splitEntryText } from "./entry-labels";
 
 export interface TrackedAnswerActions {
@@ -64,6 +65,10 @@ const NO_ASKS: OpenAsk[] = [];
  * Entries come from the chat's Stream snapshot (tracked asks and tracked Q&A messages); seen
  * state changes only through Mark seen, per answer revision. Capable hosts also get the chat's
  * other unresolved asks below the questions, blocked first, each with its owner and next step.
+ *
+ * The pane never disappears while it has items: it minimizes to a small pill at the right
+ * edge showing the count, which lights up when an answer arrives or an ask becomes blocked
+ * after it was minimized. Phones start minimized; the choice is remembered across chats.
  */
 export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   entries,
@@ -80,20 +85,22 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
       showOpenAsks ? selectOpenAsks(entries, new Set(items.map((item) => item.entry.id))) : NO_ASKS,
     [entries, items, showOpenAsks],
   );
-  const [expanded, setExpanded] = useState(!isCompact);
-  const [hiddenSignature, setHiddenSignature] = useState<string | null>(null);
+  const minimized = useAnswersPaneStore((state) => state.minimized) ?? isCompact;
+  const setMinimized = useAnswersPaneStore((state) => state.setMinimized);
+  // What was showing when the person minimized; later answers and blocks light up the pill.
+  const [minimizedSignature, setMinimizedSignature] = useState<string | null>(null);
   const waitingCount = items.filter((item) => item.attention === "waiting").length;
   const newCount = items.length - waitingCount;
   const blockedCount = asks.filter((item) => item.state === "blocked").length;
 
-  const toggle = useCallback(() => setExpanded((value) => !value), []);
-  const hide = useCallback(
-    () => setHiddenSignature(answersPaneSignature(items, asks)),
-    [asks, items],
-  );
+  const minimize = useCallback(() => {
+    setMinimizedSignature(answersPaneSignature(items, asks));
+    setMinimized(true);
+  }, [asks, items, setMinimized]);
+  const expand = useCallback(() => setMinimized(false), [setMinimized]);
 
-  if (items.length + asks.length === 0) return null;
-  if (!hasUnhiddenPaneItems(items, asks, hiddenSignature)) return null;
+  const total = items.length + asks.length;
+  if (total === 0) return null;
 
   const summary = [
     newCount > 0 ? t("agentPanel.stream.answers.newCount", { count: newCount }) : null,
@@ -103,6 +110,36 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   ]
     .filter(Boolean)
     .join(" · ");
+  const title = t(
+    asks.length > 0 ? "agentPanel.stream.answers.titleWithAsks" : "agentPanel.stream.answers.title",
+  );
+
+  if (minimized) {
+    const attention =
+      minimizedSignature === null
+        ? newCount + blockedCount > 0
+        : hasUnhiddenPaneItems(items, asks, minimizedSignature);
+    return (
+      <View
+        style={[styles.anchor, isCompact && styles.anchorCompact]}
+        pointerEvents="box-none"
+        testID="tracked-answers-pane"
+      >
+        <Pressable
+          onPress={expand}
+          style={[styles.pill, attention && styles.pillAttention]}
+          accessibilityRole="button"
+          aria-expanded={false}
+          accessibilityLabel={`${t("agentPanel.stream.answers.expand")}. ${summary}`}
+          hitSlop={6}
+          testID="tracked-answers-expand"
+        >
+          <HelpCircle size={14} color={attention ? styles.iconNew.color : styles.icon.color} />
+          <Text style={[styles.pillCount, attention && styles.pillCountAttention]}>{total}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -110,88 +147,60 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
       pointerEvents="box-none"
       testID="tracked-answers-pane"
     >
-      <View style={[styles.card, isCompact && expanded && styles.cardCompactExpanded]}>
-        <View style={styles.header}>
-          <Pressable
-            onPress={toggle}
-            style={styles.headerToggle}
-            accessibilityRole="button"
-            aria-expanded={expanded}
-            accessibilityLabel={`${t(
-              expanded ? "agentPanel.stream.answers.collapse" : "agentPanel.stream.answers.expand",
-            )}. ${summary}`}
-            testID="tracked-answers-toggle"
-          >
-            <HelpCircle size={14} color={newCount > 0 ? styles.iconNew.color : styles.icon.color} />
-            <Text style={styles.title} numberOfLines={1}>
-              {t(
-                asks.length > 0
-                  ? "agentPanel.stream.answers.titleWithAsks"
-                  : "agentPanel.stream.answers.title",
-              )}
-            </Text>
-            <Text style={styles.summary} numberOfLines={1} accessibilityLiveRegion="polite">
-              {summary}
-            </Text>
-            {expanded ? (
-              <ChevronUp size={14} color={styles.icon.color} />
-            ) : (
-              <ChevronDown size={14} color={styles.icon.color} />
-            )}
-          </Pressable>
-          <Pressable
-            onPress={hide}
-            style={styles.iconButton}
-            accessibilityRole="button"
-            accessibilityLabel={t(
-              asks.length > 0
-                ? "agentPanel.stream.answers.dismissWithAsks"
-                : "agentPanel.stream.answers.dismiss",
-            )}
-            hitSlop={8}
-            testID="tracked-answers-dismiss"
-          >
-            <X size={14} color={styles.icon.color} />
-          </Pressable>
-        </View>
-        {expanded ? (
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {items.length > 0 && asks.length > 0 ? (
+      <View style={styles.card}>
+        <Pressable
+          onPress={minimize}
+          style={styles.header}
+          accessibilityRole="button"
+          aria-expanded
+          accessibilityLabel={`${t("agentPanel.stream.answers.minimize")}. ${summary}`}
+          testID="tracked-answers-minimize"
+        >
+          <HelpCircle size={14} color={newCount > 0 ? styles.iconNew.color : styles.icon.color} />
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.summary} numberOfLines={1} accessibilityLiveRegion="polite">
+            {summary}
+          </Text>
+          <Minimize2 size={14} color={styles.icon.color} />
+        </Pressable>
+        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+          {items.length > 0 && asks.length > 0 ? (
+            <SectionLabel
+              label={t("agentPanel.stream.answers.questionsSection", { count: items.length })}
+              first
+            />
+          ) : null}
+          {items.map((item, index) => (
+            <TrackedAnswerRow
+              key={item.entry.id}
+              item={item}
+              first={index === 0}
+              agentId={agentId}
+              actions={actions}
+            />
+          ))}
+          {asks.length > 0 ? (
+            <View testID="open-asks-section">
               <SectionLabel
-                label={t("agentPanel.stream.answers.questionsSection", { count: items.length })}
-                first
+                label={t("agentPanel.stream.answers.openAsksSection", { count: asks.length })}
+                first={items.length === 0}
               />
-            ) : null}
-            {items.map((item, index) => (
-              <TrackedAnswerRow
-                key={item.entry.id}
-                item={item}
-                first={index === 0}
-                agentId={agentId}
-                actions={actions}
-              />
-            ))}
-            {asks.length > 0 ? (
-              <View testID="open-asks-section">
-                <SectionLabel
-                  label={t("agentPanel.stream.answers.openAsksSection", { count: asks.length })}
-                  first={items.length === 0}
+              {asks.map((item, index) => (
+                <OpenAskRow
+                  key={item.entry.id}
+                  item={item}
+                  first={index === 0}
+                  ownerTitle={
+                    item.delegatedAgentId ? agentTitle?.(item.delegatedAgentId) : undefined
+                  }
+                  actions={actions}
                 />
-                {asks.map((item, index) => (
-                  <OpenAskRow
-                    key={item.entry.id}
-                    item={item}
-                    first={index === 0}
-                    ownerTitle={
-                      item.delegatedAgentId ? agentTitle?.(item.delegatedAgentId) : undefined
-                    }
-                    actions={actions}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </ScrollView>
-        ) : null}
+              ))}
+            </View>
+          ) : null}
+        </ScrollView>
       </View>
     </View>
   );
@@ -437,6 +446,8 @@ const PANE_WIDTH = 340;
 
 const styles = StyleSheet.create((theme) => ({
   // Clears the floating Chat/Stream switcher row; the composer sits below this view entirely.
+  // Children align right so the minimized pill hugs the edge and the rest of the row stays
+  // tappable through the box-none anchor.
   anchor: {
     position: "absolute",
     top: theme.spacing[12],
@@ -445,16 +456,17 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: "100%",
     maxHeight: "60%",
     zIndex: 15,
+    alignItems: "flex-end",
   },
-  // The compact switcher uses the taller sm control.
+  // The compact switcher uses the taller sm control; the open card spans the chat's width.
   anchorCompact: {
     top: theme.spacing[12] + theme.spacing[2],
     left: theme.spacing[3],
     width: "auto",
     maxHeight: "45%",
-    alignItems: "flex-end",
   },
   card: {
+    alignSelf: "stretch",
     maxHeight: "100%",
     backgroundColor: theme.colors.surface0,
     borderRadius: theme.borderRadius.xl,
@@ -463,22 +475,11 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     ...theme.shadow.md,
   },
-  cardCompactExpanded: {
-    alignSelf: "stretch",
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: theme.spacing[3],
-    paddingRight: theme.spacing[2],
-    minHeight: 36,
-    gap: theme.spacing[1],
-  },
-  headerToggle: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
     minHeight: 36,
   },
   // The title stays whole; the muted summary truncates first.
@@ -489,16 +490,34 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
   },
   summary: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
-  iconButton: {
-    width: 28,
-    height: 28,
+  pill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing[1],
+    height: 32,
+    paddingHorizontal: theme.spacing[3],
+    backgroundColor: theme.colors.surface0,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    ...theme.shadow.md,
+  },
+  pillAttention: {
+    borderColor: theme.colors.statusSuccess,
+  },
+  pillCount: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    fontVariant: ["tabular-nums"],
+  },
+  pillCountAttention: {
+    color: theme.colors.foreground,
   },
   icon: {
     color: theme.colors.foregroundMuted,
