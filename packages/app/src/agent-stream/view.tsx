@@ -57,6 +57,7 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useSendOutboxStore } from "@/stores/send-outbox-store";
 import { resolveChatMessageDeliveryState } from "@/composer/delivery-state";
 import { promptDirectSendAttention } from "@/composer/delivery-actions";
@@ -701,6 +702,28 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     // The handle stays stable; the jump it forwards to changes with every loaded row.
     const timelineJumpRef = useRef(timelineJump);
     timelineJumpRef.current = timelineJump;
+
+    // Show in chat from a Stream card, the global Stream or the answers pane: applied once the
+    // chat's history is ready, after the switch to Chat has painted.
+    const chatJump = useAgentViewStore(
+      (state) => state.chatJump[`${resolvedServerId}:${agentId}`] ?? null,
+    );
+    const clearChatJump = useAgentViewStore((state) => state.clearChatJump);
+    useEffect(() => {
+      if (!chatJump || !isAuthoritativeHistoryReady || timelineEpoch === null) return;
+      clearChatJump(resolvedServerId, agentId, chatJump.requestId);
+      // Not cancelled on cleanup: clearing the request re-runs this effect before the frame.
+      requestAnimationFrame(() => {
+        timelineJumpRef.current.jumpToTarget(chatJump.target);
+      });
+    }, [
+      agentId,
+      chatJump,
+      clearChatJump,
+      isAuthoritativeHistoryReady,
+      resolvedServerId,
+      timelineEpoch,
+    ]);
 
     useImperativeHandle(
       ref,

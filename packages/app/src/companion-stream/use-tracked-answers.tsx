@@ -140,6 +140,7 @@ export function ChatTrackedAnswers({
     return {
       jumpToAnchor: (anchor) => jumpRef.current.jumpToAnchor(anchor),
       jumpToMessage: (messageId) => jumpRef.current.jumpToMessage(messageId),
+      jumpToTarget: (target) => jumpRef.current.jumpToTarget(target),
       hasMessage: (messageId) => jumpRef.current.hasMessage(messageId),
       openChat: (target) => navigateToAgent({ serverId, agentId: target }),
       markSeen: (entryId, replyRevision) =>

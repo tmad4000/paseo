@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 
 type AgentView = "chat" | "artifacts";
 
@@ -12,6 +13,15 @@ export interface StreamFocusRequest {
 }
 
 let nextStreamFocusRequestId = 0;
+
+/** A request to show Chat scrolled to where a Stream entry came from. */
+export interface ChatJumpRequest {
+  target: ChatJumpTarget;
+  /** Distinguishes repeated requests for the same place. */
+  requestId: number;
+}
+
+let nextChatJumpRequestId = 0;
 
 interface AgentViewStoreState {
   selectedViews: Record<string, AgentView>;
@@ -29,12 +39,18 @@ interface AgentViewStoreState {
   ) => void;
   /** The Stream calls this once it has applied the request. */
   clearStreamFocus: (serverId: string, agentId: string, requestId: number) => void;
+  chatJump: Record<string, ChatJumpRequest>;
+  /** Switches the chat to Chat and asks it to scroll to the target, once its history is ready. */
+  openChatAt: (serverId: string, agentId: string, target: ChatJumpTarget) => void;
+  /** Chat calls this once it has applied the request. */
+  clearChatJump: (serverId: string, agentId: string, requestId: number) => void;
 }
 
 export const useAgentViewStore = create<AgentViewStoreState>()((set, get) => ({
   selectedViews: {},
   findOpen: {},
   streamFocus: {},
+  chatJump: {},
   setSelectedView: (serverId, agentId, view) => {
     set((state) => ({
       selectedViews: {
@@ -63,6 +79,22 @@ export const useAgentViewStore = create<AgentViewStoreState>()((set, get) => ({
       if (state.streamFocus[key]?.requestId !== requestId) return state;
       const { [key]: _cleared, ...rest } = state.streamFocus;
       return { streamFocus: rest };
+    });
+  },
+  openChatAt: (serverId, agentId, target) => {
+    const key = `${serverId}:${agentId}`;
+    nextChatJumpRequestId += 1;
+    set((state) => ({
+      selectedViews: { ...state.selectedViews, [key]: "chat" },
+      chatJump: { ...state.chatJump, [key]: { target, requestId: nextChatJumpRequestId } },
+    }));
+  },
+  clearChatJump: (serverId, agentId, requestId) => {
+    const key = `${serverId}:${agentId}`;
+    set((state) => {
+      if (state.chatJump[key]?.requestId !== requestId) return state;
+      const { [key]: _cleared, ...rest } = state.chatJump;
+      return { chatJump: rest };
     });
   },
   setFindOpen: (serverId, agentId, open) => {

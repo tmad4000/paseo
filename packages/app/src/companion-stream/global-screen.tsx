@@ -20,6 +20,8 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
@@ -369,6 +371,21 @@ export function GlobalStreamCard({
     });
   }, [localSource, sourceServerId, sourceAgentId, sourceWorkspaceId]);
   const replyInChat = localSource?.onReplyInChat ?? openChat;
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  // A copied task's place is in its origin chat, which this row cannot address.
+  const showInChat = useCallback(
+    (target: ChatJumpTarget) => {
+      openChatAt(row.serverId, row.agentId, target);
+      if (!localSource) {
+        navigateToAgent({
+          serverId: row.serverId,
+          agentId: row.agentId,
+          workspaceId: row.workspaceId,
+        });
+      }
+    },
+    [localSource, openChatAt, row.serverId, row.agentId, row.workspaceId],
+  );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
       if (!client || connection !== "online" || !supportsWrites || busy || copiedTask) return;
@@ -451,6 +468,7 @@ export function GlobalStreamCard({
           serverId={row.serverId}
           onReturnToChat={openChat}
           onReplyInChat={replyInChat}
+          onShowInChat={copiedTask ? undefined : showInChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
           onTagPress={onTagPress}

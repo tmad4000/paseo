@@ -19,10 +19,14 @@ import {
   type TrackedAnswerLinks,
 } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
+import { entryChatTarget } from "./entry-source";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 
 export interface TrackedAnswerActions {
   jumpToAnchor: (anchor: TimelineAnchor) => void;
   jumpToMessage: (messageId: string) => void;
+  /** A loaded message first, else the anchor's window; see TimelineJump.jumpToTarget. */
+  jumpToTarget: (target: ChatJumpTarget) => void;
   openChat: (agentId: string) => void;
   /** Resolve once the host has durably recorded the change. */
   markSeen: (entryId: string, replyRevision: number) => Promise<void>;
@@ -215,7 +219,8 @@ function shortAgentId(agentId: string): string {
 
 /**
  * One unresolved ask: state and owner as a muted eyebrow, the ask itself as the headline, and
- * its next step. Tapping jumps to the source message when Chat has it, else opens the ask card.
+ * its next step. Tapping jumps to where the ask was made when Chat can place it (its source
+ * anchor, or a loaded source message), else opens the ask card.
  */
 const OpenAskRow = memo(function OpenAskRow({
   item,
@@ -232,14 +237,13 @@ const OpenAskRow = memo(function OpenAskRow({
   const { entry, state, nextAction, delegatedAgentId } = item;
   const headline = splitEntryText(entry.text).headline || entry.text;
   const badge = ASK_BADGES[state];
-  const sourceMessageId = entry.ask?.sourceMessageId;
   const open = useCallback(() => {
-    if (sourceMessageId && actions.hasMessage(sourceMessageId)) {
-      actions.jumpToMessage(sourceMessageId);
-    } else {
-      actions.openAsk(entry);
-    }
-  }, [actions, entry, sourceMessageId]);
+    const target = entryChatTarget(entry);
+    const placeable =
+      target && (target.anchor || (target.messageId && actions.hasMessage(target.messageId)));
+    if (target && placeable) actions.jumpToTarget(target);
+    else actions.openAsk(entry);
+  }, [actions, entry]);
   const openOwner = useCallback(() => {
     if (delegatedAgentId) actions.openChat(delegatedAgentId);
   }, [actions, delegatedAgentId]);
@@ -357,8 +361,7 @@ function TrackedAnswerRowActions({
   const { questionAnchor, questionMessageId, answerAnchor, answeringAgentId } = links;
 
   const jumpToQuestion = useCallback(() => {
-    if (questionAnchor) actions.jumpToAnchor(questionAnchor);
-    else if (questionMessageId) actions.jumpToMessage(questionMessageId);
+    actions.jumpToTarget({ anchor: questionAnchor, messageId: questionMessageId });
   }, [actions, questionAnchor, questionMessageId]);
   const jumpToAnswer = useCallback(() => {
     if (answerAnchor) actions.jumpToAnchor(answerAnchor);

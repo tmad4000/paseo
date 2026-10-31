@@ -571,6 +571,8 @@ export const ko: TranslationResources = {
       emptyTitle: "채팅의 동반 스트림",
       emptyDescription: "에이전트가 작업하는 동안 질문, 승인, 최종 응답이 여기에 표시됩니다.",
       backToChat: "채팅으로 돌아가기",
+      showInChat: "채팅에서 보기",
+      showInChatHint: "이 항목이 나온 위치로 채팅을 스크롤합니다",
       retention:
         "최근 50개의 순간과 수집된 파일. 캡처는 호스트 업데이트 이후 시작되며 전체 맥락은 채팅에 남아 있습니다.",
       question: "질문",

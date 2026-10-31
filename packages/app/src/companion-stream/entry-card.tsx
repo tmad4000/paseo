@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { formatMessageTimestamp } from "@/utils/time";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { describeEntry, splitEntryText } from "./entry-labels";
+import { entryChatTarget } from "./entry-source";
 import { HashtagText } from "./hashtag-text";
 
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
@@ -22,6 +24,8 @@ export interface EntryCardProps {
   disabled?: boolean;
   onReturnToChat: () => void;
   onReplyInChat: () => void;
+  /** Opens Chat scrolled to where the entry came from; offered when the entry has a place. */
+  onShowInChat?: (target: ChatJumpTarget) => void;
   onUpdateStatus: (id: string, status: "open" | "reviewed" | "done") => void;
   onRemovePin: (id: string) => void;
   /** Tapping a #hashtag in the text adds it to the Stream tag filter. */
@@ -34,6 +38,7 @@ export function EntryCard({
   serverId,
   onReturnToChat,
   onReplyInChat,
+  onShowInChat,
   onUpdateStatus,
   onRemovePin,
   onTagPress,
@@ -48,8 +53,6 @@ export function EntryCard({
   const eyebrow = describeEntry(entry, t);
   const time = formatMessageTimestamp(new Date(entry.timestamp));
   const quote = entry.kind === "pin" && Boolean(entry.sourceId);
-  let chatAction = quote ? "agentPanel.stream.openSource" : "agentPanel.stream.backToChat";
-  if (pending) chatAction = "agentPanel.stream.replyInChat";
 
   return (
     <View
@@ -93,13 +96,14 @@ export function EntryCard({
             {t(expanded ? "agentPanel.stream.showLess" : "agentPanel.stream.read")}
           </Button>
         ) : null}
-        <Button
-          variant={pending ? "secondary" : "outline"}
-          style={styles.touchTarget}
-          onPress={pending ? onReplyInChat : onReturnToChat}
-        >
-          {t(chatAction)}
-        </Button>
+        <ChatActions
+          entry={entry}
+          pending={pending}
+          quote={quote}
+          onReturnToChat={onReturnToChat}
+          onReplyInChat={onReplyInChat}
+          onShowInChat={onShowInChat}
+        />
         {entry.kind === "question" || entry.kind === "feature_request" ? (
           <StatusActions
             entryId={entry.id}
@@ -111,6 +115,61 @@ export function EntryCard({
         ) : null}
       </View>
     </View>
+  );
+}
+
+/**
+ * Show in chat when Chat can place the entry; it already returns to Chat, so Back to chat and
+ * Open source give way to it. A pending entry still offers Reply in chat.
+ */
+function ChatActions({
+  entry,
+  pending,
+  quote,
+  onReturnToChat,
+  onReplyInChat,
+  onShowInChat,
+}: {
+  entry: CompanionEntry;
+  pending: boolean;
+  quote: boolean;
+  onReturnToChat: () => void;
+  onReplyInChat: () => void;
+  onShowInChat?: (target: ChatJumpTarget) => void;
+}) {
+  const { t } = useTranslation();
+  const target = useMemo(
+    () => (onShowInChat ? entryChatTarget(entry) : null),
+    [entry, onShowInChat],
+  );
+  const showInChat = useCallback(() => {
+    if (target) onShowInChat?.(target);
+  }, [target, onShowInChat]);
+  let chatAction = quote ? "agentPanel.stream.openSource" : "agentPanel.stream.backToChat";
+  if (pending) chatAction = "agentPanel.stream.replyInChat";
+  return (
+    <>
+      {target ? (
+        <Button
+          variant="outline"
+          style={styles.touchTarget}
+          onPress={showInChat}
+          accessibilityHint={t("agentPanel.stream.showInChatHint")}
+          testID="companion-entry-show-in-chat"
+        >
+          {t("agentPanel.stream.showInChat")}
+        </Button>
+      ) : null}
+      {pending || !target ? (
+        <Button
+          variant={pending ? "secondary" : "outline"}
+          style={styles.touchTarget}
+          onPress={pending ? onReplyInChat : onReturnToChat}
+        >
+          {t(chatAction)}
+        </Button>
+      ) : null}
+    </>
   );
 }
 

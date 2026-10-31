@@ -92,6 +92,13 @@ const common = {
   reply: StreamReplySchema.optional(),
   /** Personal review: the reply revision the user has seen. Independent of ask state. */
   replySeenRevision: z.number().int().min(0).optional(),
+  // COMPAT(streamSourceAnchors): fork feature; older hosts omit it.
+  /**
+   * Where in this chat's timeline the entry came from, so Show in chat can scroll there: the
+   * named source message, or for a new ask without one, the user message the agent was
+   * answering when it recorded the ask.
+   */
+  sourceAnchor: TimelineAnchorSchema.optional(),
 };
 
 export const CompanionEntrySchema = z.discriminatedUnion("kind", [

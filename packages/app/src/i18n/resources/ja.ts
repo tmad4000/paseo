@@ -573,6 +573,8 @@ export const ja: TranslationResources = {
       emptyTitle: "チャットに寄り添うストリーム",
       emptyDescription: "エージェントの作業中に質問、承認、最終回答がここに表示されます。",
       backToChat: "チャットに戻る",
+      showInChat: "チャットで表示",
+      showInChatHint: "この項目の元の位置までチャットをスクロールします",
       retention:
         "直近50件と収集されたファイル。ホスト更新後から記録されます。全文はチャットで確認できます。",
       question: "質問",

@@ -94,6 +94,9 @@ const humanRequest: CompanionEntry = {
   inputRequest: { kind: "decision", recipient: "user" },
 };
 
+const sourceAnchor = { epoch: "e1", startSeq: 7, endSeq: 7 };
+const anchored: CompanionEntry = { ...ask, sourceAnchor };
+
 function renderCard(entry: CompanionEntry) {
   return render(
     <EntryCard
@@ -235,5 +238,46 @@ describe("EntryCard", () => {
     expect(view.getByText("Remaining: Waiting for review")).toBeTruthy();
     expect(view.getByText("Evidence so far: Unit tests pass")).toBeTruthy();
     expect(view.getByText("Done").closest("button")?.disabled).toBe(true);
+  });
+
+  it("offers Show in chat with the entry's place, keeping Reply for pending asks", () => {
+    const onShowInChat = vi.fn();
+    const onReplyInChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={anchored}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={onReplyInChat}
+        onShowInChat={onShowInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Show in chat" }));
+    expect(onShowInChat).toHaveBeenLastCalledWith({ anchor: sourceAnchor });
+    fireEvent.click(view.getByRole("button", { name: "Reply in chat" }));
+    expect(onReplyInChat).toHaveBeenCalled();
+    cleanup();
+
+    // A quote's Open source becomes Show in chat, addressed by its message id.
+    const quoteView = render(
+      <EntryCard
+        entry={quote}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onShowInChat={onShowInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(quoteView.queryByRole("button", { name: "Open source" })).toBeNull();
+    fireEvent.click(quoteView.getByRole("button", { name: "Show in chat" }));
+    expect(onShowInChat).toHaveBeenLastCalledWith({ messageId: "42" });
+    cleanup();
+
+    // Nothing to place: the card keeps Back to chat.
+    const plain = renderCard(tagged);
+    expect(plain.queryByRole("button", { name: "Show in chat" })).toBeNull();
+    expect(plain.getByRole("button", { name: "Back to chat" })).toBeTruthy();
   });
 });
