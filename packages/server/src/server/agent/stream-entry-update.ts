@@ -29,6 +29,7 @@ export function applyStreamEntryUpdate(
   if (input.action === "set_reply")
     return setExplicitReply(entries, input, new Date().toISOString());
   if (input.action === "mark_reply_seen") return markReplySeen(entries, input);
+  if (input.action === "set_deferred") return setDeferred(entries, input);
   if (input.action === "remove_pin") {
     if (!entries.some((entry) => entry.id === input.entryId && entry.kind === "pin"))
       throw new Error("Pinned item no longer exists");
@@ -41,6 +42,22 @@ export function applyStreamEntryUpdate(
   return retainCompanionEntries(
     exists ? entries.map((item) => (item.id === entry.id ? entry : item)) : [...entries, entry],
   );
+}
+
+/**
+ * Set a request aside for later, or bring it back. Status and the ask stay as they are; asking
+ * again replaces the entry without deferredAt, so a renewed request resurfaces.
+ */
+function setDeferred(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
+  if (input.deferred === undefined) throw new Error("Say whether to defer the item");
+  const target = entries.find((entry) => entry.id === input.entryId);
+  if (!target) throw new Error("Stream item no longer exists");
+  if (Boolean(target.deferredAt) === input.deferred) return entries;
+  const { deferredAt: _previous, ...rest } = target;
+  const next = (
+    input.deferred ? { ...rest, deferredAt: new Date().toISOString() } : rest
+  ) as CompanionEntry;
+  return entries.map((entry) => (entry === target ? next : entry));
 }
 
 function updateStatus(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {

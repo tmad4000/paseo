@@ -4523,6 +4523,8 @@ export const ServerInfoStatusPayloadSchema = z
         streamAnswers: z.boolean().optional(),
         // COMPAT(streamOpenAsks): fork feature; Chat's floating pane also lists unresolved asks.
         streamOpenAsks: z.boolean().optional(),
+        // COMPAT(streamDefer): fork feature; Needs you items can be set aside for later.
+        streamDefer: z.boolean().optional(),
         streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
