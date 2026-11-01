@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GlobalStreamRow } from "./use-global-stream";
-import { arrangeLater, LATER_HEADER } from "./needs-you-later";
+import { splitLater } from "./needs-you-later";
 
 function row(id: string, deferredAt?: string): GlobalStreamRow {
   return {
@@ -27,24 +27,33 @@ function row(id: string, deferredAt?: string): GlobalStreamRow {
   };
 }
 
-describe("arrangeLater", () => {
+describe("splitLater", () => {
   const rows = [row("a"), row("b", "2026-11-01T01:00:00Z"), row("c")];
 
-  it("moves deferred requests under a collapsed Later header in Needs you", () => {
-    const collapsed = arrangeLater(rows, "needs_you", false);
-    expect(collapsed.laterCount).toBe(1);
-    expect(collapsed.data).toEqual([rows[0], rows[2], LATER_HEADER]);
-    expect(arrangeLater(rows, "needs_you", true).data).toEqual([
-      rows[0],
-      rows[2],
-      LATER_HEADER,
-      rows[1],
-    ]);
+  it("shows Now or Later in Needs you, with both counts for the header switch", () => {
+    expect(splitLater(rows, "needs_you", false)).toEqual({
+      data: [rows[0], rows[2]],
+      nowCount: 2,
+      laterCount: 1,
+      showingLater: false,
+    });
+    expect(splitLater(rows, "needs_you", true)).toMatchObject({
+      data: [rows[1]],
+      showingLater: true,
+    });
   });
 
-  it("leaves other views and a list with nothing deferred untouched", () => {
-    expect(arrangeLater(rows, "tasks", false)).toEqual({ data: rows, laterCount: 0 });
+  it("falls back to Now when Later is empty, and leaves other views untouched", () => {
     const plain = [row("a")];
-    expect(arrangeLater(plain, "needs_you", false)).toEqual({ data: plain, laterCount: 0 });
+    expect(splitLater(plain, "needs_you", true)).toMatchObject({
+      data: plain,
+      showingLater: false,
+    });
+    expect(splitLater(rows, "tasks", true)).toEqual({
+      data: rows,
+      nowCount: 0,
+      laterCount: 0,
+      showingLater: false,
+    });
   });
 });

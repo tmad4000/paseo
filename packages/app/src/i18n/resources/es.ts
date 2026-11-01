@@ -163,6 +163,7 @@ export const es: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "Ahora · {{count}}",
     later: "Más tarde · {{count}}",
     backToNeedsYou: "Volver a Needs you",
     backToStream: "Volver a Stream",

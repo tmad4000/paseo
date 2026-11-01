@@ -158,6 +158,7 @@ export const zhCN: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "现在 · {{count}}",
     later: "稍后 · {{count}}",
     backToNeedsYou: "返回 Needs you",
     backToStream: "返回 Stream",

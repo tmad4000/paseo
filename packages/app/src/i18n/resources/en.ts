@@ -156,6 +156,7 @@ export const en = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "Now · {{count}}",
     later: "Later · {{count}}",
     backToNeedsYou: "Back to Needs you",
     backToStream: "Back to Stream",

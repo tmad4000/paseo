@@ -162,6 +162,7 @@ export const ptBR: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "Agora · {{count}}",
     later: "Depois · {{count}}",
     backToNeedsYou: "Voltar para Needs you",
     backToStream: "Voltar para Stream",

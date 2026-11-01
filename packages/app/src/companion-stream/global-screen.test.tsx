@@ -547,3 +547,36 @@ it("lets a chat opened from Needs you offer the way back", () => {
     view: "needs_you",
   });
 });
+
+it("keeps Later one tap away in the Needs you header, however long the list is", () => {
+  const deferred: GlobalStreamRow = {
+    ...row,
+    id: "later",
+    item: {
+      kind: "entry",
+      entry: { ...(row.item as { entry: CompanionEntry }).entry, deferredAt: "2026-11-01" },
+    },
+  };
+  vi.mocked(useGlobalStream).mockReturnValue({
+    rows: [row, deferred],
+    notices: [],
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    isFetching: false,
+    isLoading: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    tagCounts: [],
+    pinnedTags: [],
+    supportsTags: false,
+    setTagPinned: vi.fn(),
+  });
+  const tasks = render(<StreamWorkflowFeed initialView="tasks" />);
+  expect(tasks.queryByText("globalStream.later")).toBeNull();
+  cleanup();
+  const rendered = render(<StreamWorkflowFeed initialView="needs_you" />);
+  expect(rendered.getByText("globalStream.now")).toBeTruthy();
+  fireEvent.click(rendered.getByText("globalStream.later"));
+  fireEvent.click(rendered.getByText("globalStream.now"));
+  expect(rendered.getByText("globalStream.later")).toBeTruthy();
+});

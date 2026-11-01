@@ -35,14 +35,13 @@ import { WorkflowArtifact } from "./workflow-artifact";
 import { WorkflowComposer } from "./workflow-composer";
 import { parseWorkflowView, type WorkflowView } from "./workflow-view";
 import { useStreamReturnStore } from "./stream-return";
-import { arrangeLater, isLaterHeader, type FeedItem } from "./needs-you-later";
+import { splitLater } from "./needs-you-later";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const KEEP_VISIBLE_CONTENT = { minIndexForVisible: 0 };
-const rowKey = (item: FeedItem) =>
-  isLaterHeader(item) ? "later-header" : JSON.stringify([item.serverId, item.id]);
+const rowKey = (row: GlobalStreamRow) => JSON.stringify([row.serverId, row.id]);
 
 export function GlobalStreamScreen() {
   const { view } = useLocalSearchParams<{ view?: string }>();
@@ -136,10 +135,11 @@ export function StreamWorkflowFeed({
   const toggleUnresolved = useCallback(() => setUnresolvedOnly((value) => !value), []);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
   const toggleScope = useCallback(() => setLocal((value) => !value), []);
-  const toggleLater = useCallback(() => setShowLater((value) => !value), []);
+  const showNow = useCallback(() => setShowLater(false), []);
+  const showLaterRows = useCallback(() => setShowLater(true), []);
   const { rows: queryRows } = query;
-  const { data, laterCount } = useMemo(
-    () => arrangeLater(queryRows, view, showLater),
+  const { data, nowCount, laterCount, showingLater } = useMemo(
+    () => splitLater(queryRows, view, showLater),
     [view, queryRows, showLater],
   );
   const chooseView = useCallback(
@@ -154,19 +154,16 @@ export function StreamWorkflowFeed({
   const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
   const returnView = scope ? undefined : view;
   const renderItem = useCallback(
-    ({ item }: { item: FeedItem }) =>
-      isLaterHeader(item) ? (
-        <LaterHeader count={laterCount} expanded={showLater} onToggle={toggleLater} />
-      ) : (
-        <GlobalStreamCard
-          row={item}
-          onSaved={refresh}
-          onTagPress={tagPress}
-          localContext={localContext}
-          returnView={returnView}
-        />
-      ),
-    [refresh, tagPress, localContext, returnView, laterCount, showLater, toggleLater],
+    ({ item }: { item: GlobalStreamRow }) => (
+      <GlobalStreamCard
+        row={item}
+        onSaved={refresh}
+        onTagPress={tagPress}
+        localContext={localContext}
+        returnView={returnView}
+      />
+    ),
+    [refresh, tagPress, localContext, returnView],
   );
   const tabs = useMemo(
     () => [
@@ -245,6 +242,15 @@ export function StreamWorkflowFeed({
             {t("globalStream.refresh")}
           </Button>
         </View>
+        {laterCount > 0 ? (
+          <NowLaterSwitch
+            nowCount={nowCount}
+            laterCount={laterCount}
+            showingLater={showingLater}
+            onShowNow={showNow}
+            onShowLater={showLaterRows}
+          />
+        ) : null}
         {/* Tags organise saved knowledge; in Needs you they only show once one is in use. */}
         {query.supportsTags && (view !== "needs_you" || tags.length > 0) ? (
           <TagCloud
@@ -281,6 +287,11 @@ export function StreamWorkflowFeed({
     [
       t,
       view,
+      nowCount,
+      laterCount,
+      showingLater,
+      showNow,
+      showLaterRows,
       showNeedsYou,
       chooseView,
       needsYouSelected,
@@ -365,29 +376,44 @@ export function StreamWorkflowFeed({
   );
 }
 
-function LaterHeader({
-  count,
-  expanded,
-  onToggle,
+/** Needs you: what is waiting now, or what was set aside for later. Always in the header. */
+function NowLaterSwitch({
+  nowCount,
+  laterCount,
+  showingLater,
+  onShowNow,
+  onShowLater,
 }: {
-  count: number;
-  expanded: boolean;
-  onToggle: () => void;
+  nowCount: number;
+  laterCount: number;
+  showingLater: boolean;
+  onShowNow: () => void;
+  onShowLater: () => void;
 }) {
   const { t } = useTranslation();
-  const state = useMemo(() => ({ expanded }), [expanded]);
+  const nowState = useMemo(() => ({ selected: !showingLater }), [showingLater]);
+  const laterState = useMemo(() => ({ selected: showingLater }), [showingLater]);
   return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={state}
-      style={styles.laterHeader}
-      testID="stream-later-header"
-    >
-      <Text style={styles.laterLabel}>
-        {expanded ? "▾" : "▸"} {t("globalStream.later", { count })}
-      </Text>
-    </Pressable>
+    <View style={styles.controls} testID="stream-now-later">
+      <Button
+        size="sm"
+        variant={showingLater ? "ghost" : "secondary"}
+        onPress={onShowNow}
+        accessibilityState={nowState}
+        testID="stream-show-now"
+      >
+        {t("globalStream.now", { count: nowCount })}
+      </Button>
+      <Button
+        size="sm"
+        variant={showingLater ? "secondary" : "ghost"}
+        onPress={onShowLater}
+        accessibilityState={laterState}
+        testID="stream-show-later"
+      >
+        {t("globalStream.later", { count: laterCount })}
+      </Button>
+    </View>
   );
 }
 
@@ -702,18 +728,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   path: { flex: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   inlineAction: { alignSelf: "flex-start" },
-  laterHeader: {
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[1],
-    marginBottom: theme.spacing[2],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  laterLabel: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-  },
   emptyState: { gap: theme.spacing[2], paddingVertical: theme.spacing[8] },
   artifact: {
     gap: theme.spacing[3],

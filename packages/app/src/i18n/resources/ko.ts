@@ -159,6 +159,7 @@ export const ko: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "지금 · {{count}}",
     later: "나중에 · {{count}}",
     backToNeedsYou: "Needs you로 돌아가기",
     backToStream: "Stream으로 돌아가기",

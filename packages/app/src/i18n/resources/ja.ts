@@ -161,6 +161,7 @@ export const ja: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "今 · {{count}}",
     later: "後で · {{count}}",
     backToNeedsYou: "Needs you に戻る",
     backToStream: "Stream に戻る",

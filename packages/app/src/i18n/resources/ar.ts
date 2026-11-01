@@ -159,6 +159,7 @@ export const ar: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "الآن · {{count}}",
     later: "لاحقًا · {{count}}",
     backToNeedsYou: "العودة إلى Needs you",
     backToStream: "العودة إلى Stream",

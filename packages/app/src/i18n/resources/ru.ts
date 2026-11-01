@@ -161,6 +161,7 @@ export const ru: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    now: "Сейчас · {{count}}",
     later: "Позже · {{count}}",
     backToNeedsYou: "Назад к Needs you",
     backToStream: "Назад к Stream",
