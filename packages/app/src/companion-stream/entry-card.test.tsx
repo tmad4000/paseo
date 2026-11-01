@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { needsUserInput, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { i18n } from "@/i18n/i18next";
@@ -23,7 +23,24 @@ vi.mock("react-native", () => ({
     </span>
   ),
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: () => ({}) } }));
+vi.mock("react-native-unistyles", () => ({
+  StyleSheet: { create: () => ({}) },
+  withUnistyles: (component: unknown) => component,
+}));
+vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
+vi.mock("@/components/ui/text-input", async () => {
+  const { forwardRef, useImperativeHandle } = await import("react");
+  return {
+    EditingTextInput: forwardRef(function MockInput(
+      { onChangeText, testID }: { onChangeText: (text: string) => void; testID?: string },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ replaceText: () => undefined }));
+      // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop -- test double
+      return <input data-testid={testID} onChange={(event) => onChangeText(event.target.value)} />;
+    }),
+  };
+});
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: i18n.t.bind(i18n) }),
@@ -93,6 +110,8 @@ const humanRequest: CompanionEntry = {
   truncated: false,
   inputRequest: { kind: "decision", recipient: "user" },
 };
+
+const deferredRequest: CompanionEntry = { ...humanRequest, deferredAt: "2026-11-01T00:00:00Z" };
 
 const sourceAnchor = { epoch: "e1", startSeq: 7, endSeq: 7 };
 const anchored: CompanionEntry = { ...ask, sourceAnchor };
@@ -279,5 +298,72 @@ describe("EntryCard", () => {
     const plain = renderCard(tagged);
     expect(plain.queryByRole("button", { name: "Show in chat" })).toBeNull();
     expect(plain.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+  });
+
+  it("offers only the status moves that change something", () => {
+    const view = renderCard(humanRequest);
+    expect(view.queryByRole("button", { name: "Open" })).toBeNull();
+    expect(view.getByRole("button", { name: "Seen (still needed)" })).toBeTruthy();
+    cleanup();
+    const reviewed = renderCard({ ...humanRequest, status: "reviewed" } as CompanionEntry);
+    expect(reviewed.getByRole("button", { name: "Open" })).toBeTruthy();
+    expect(reviewed.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    expect(reviewed.getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
+  it("sets a request aside for later and brings it back, without a status change", () => {
+    const onDefer = vi.fn();
+    const onUpdateStatus = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={onDefer}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Later" }));
+    expect(onDefer).toHaveBeenLastCalledWith(humanRequest.id, true);
+    expect(onUpdateStatus).not.toHaveBeenCalled();
+    cleanup();
+    const deferred = render(
+      <EntryCard
+        entry={deferredRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={onDefer}
+      />,
+    );
+    fireEvent.click(deferred.getByRole("button", { name: "Bring back" }));
+    expect(onDefer).toHaveBeenLastCalledWith(humanRequest.id, false);
+  });
+
+  it("answers a question in place when the card can send, staying on the list", async () => {
+    const onReplyInChat = vi.fn();
+    const onSendReply = vi.fn().mockResolvedValue({ queued: true });
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={onReplyInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+        onSendReply={onSendReply}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Reply" }));
+    fireEvent.change(view.getByTestId("companion-entry-reply-input"), {
+      target: { value: "Use staging" },
+    });
+    fireEvent.click(view.getByRole("button", { name: "Send" }));
+    expect(onSendReply).toHaveBeenCalledWith(humanRequest, "Use staging");
+    await waitFor(() =>
+      expect(view.getByText("Queued. The agent gets it when its current turn ends.")).toBeTruthy(),
+    );
+    expect(onReplyInChat).not.toHaveBeenCalled();
   });
 });

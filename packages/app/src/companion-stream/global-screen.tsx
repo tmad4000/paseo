@@ -1,6 +1,6 @@
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -23,6 +23,7 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
+import { buildReplyQuote } from "@/components/reply/composer-quote";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
@@ -33,12 +34,15 @@ import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { WorkflowArtifact } from "./workflow-artifact";
 import { WorkflowComposer } from "./workflow-composer";
 import { parseWorkflowView, type WorkflowView } from "./workflow-view";
+import { useStreamReturnStore } from "./stream-return";
+import { arrangeLater, isLaterHeader, type FeedItem } from "./needs-you-later";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const KEEP_VISIBLE_CONTENT = { minIndexForVisible: 0 };
-const rowKey = (row: GlobalStreamRow) => JSON.stringify([row.serverId, row.id]);
+const rowKey = (item: FeedItem) =>
+  isLaterHeader(item) ? "later-header" : JSON.stringify([item.serverId, item.id]);
 
 export function GlobalStreamScreen() {
   const { view } = useLocalSearchParams<{ view?: string }>();
@@ -83,8 +87,14 @@ export function StreamWorkflowFeed({
   const [includeArchived, setIncludeArchived] = useState(true);
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [showLater, setShowLater] = useState(false);
   // Navigation into Needs you updates the existing screen, without resetting search or drafts.
   useEffect(() => setView(initialView), [initialView]);
+  // Back on the Stream, the chat it opened no longer offers the way back here.
+  const clearStreamReturn = useStreamReturnStore((state) => state.clear);
+  useEffect(() => {
+    if (!scope && focused) clearStreamReturn();
+  }, [scope, focused, clearStreamReturn]);
   // Chat's floating pane opens an ask's card: this chat's Tasks, searched down to it.
   useApplyStreamFocus(scope, (focus) => {
     setView("tasks");
@@ -126,6 +136,12 @@ export function StreamWorkflowFeed({
   const toggleUnresolved = useCallback(() => setUnresolvedOnly((value) => !value), []);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
   const toggleScope = useCallback(() => setLocal((value) => !value), []);
+  const toggleLater = useCallback(() => setShowLater((value) => !value), []);
+  const { rows: queryRows } = query;
+  const { data, laterCount } = useMemo(
+    () => arrangeLater(queryRows, view, showLater),
+    [view, queryRows, showLater],
+  );
   const chooseView = useCallback(
     (next: WorkflowView) => {
       setView(next);
@@ -136,16 +152,21 @@ export function StreamWorkflowFeed({
   const showNeedsYou = useCallback(() => chooseView("needs_you"), [chooseView]);
   const needsYouSelected = useMemo(() => ({ selected: view === "needs_you" }), [view]);
   const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
+  const returnView = scope ? undefined : view;
   const renderItem = useCallback(
-    ({ item }: { item: GlobalStreamRow }) => (
-      <GlobalStreamCard
-        row={item}
-        onSaved={refresh}
-        onTagPress={tagPress}
-        localContext={localContext}
-      />
-    ),
-    [refresh, tagPress, localContext],
+    ({ item }: { item: FeedItem }) =>
+      isLaterHeader(item) ? (
+        <LaterHeader count={laterCount} expanded={showLater} onToggle={toggleLater} />
+      ) : (
+        <GlobalStreamCard
+          row={item}
+          onSaved={refresh}
+          onTagPress={tagPress}
+          localContext={localContext}
+          returnView={returnView}
+        />
+      ),
+    [refresh, tagPress, localContext, returnView, laterCount, showLater, toggleLater],
   );
   const tabs = useMemo(
     () => [
@@ -161,44 +182,71 @@ export function StreamWorkflowFeed({
       <View style={styles.header}>
         <View style={styles.controls}>
           <Button
-            variant={view === "needs_you" ? "secondary" : "outline"}
+            size="sm"
+            variant={view === "needs_you" ? "secondary" : "ghost"}
             onPress={showNeedsYou}
             accessibilityState={needsYouSelected}
             testID="stream-needs-you"
           >
             {t("globalStream.needsYou")}
           </Button>
+          <SegmentedControl
+            value={view}
+            onValueChange={chooseView}
+            options={tabs}
+            size="sm"
+            textWrap
+            testID="stream-workflow-views"
+          />
           {scope ? (
-            <Button variant="ghost" onPress={toggleScope} testID="stream-scope">
+            <Button size="sm" variant="ghost" onPress={toggleScope} testID="stream-scope">
               {t(local ? "globalStream.thisChat" : "globalStream.allSessions")}
             </Button>
-          ) : (
-            <Text style={styles.description}>{t("globalStream.allSessions")}</Text>
-          )}
+          ) : null}
         </View>
-        <Text style={styles.description}>
-          {t(
-            view === "needs_you"
-              ? "globalStream.needsYouDescription"
-              : "globalStream.scopeDescription",
-          )}
-        </Text>
-        <SegmentedControl
-          value={view}
-          onValueChange={chooseView}
-          options={tabs}
-          textWrap
-          testID="stream-workflow-views"
-        />
-        <SearchField
-          key={searchKey}
-          value={search}
-          onChangeText={setSearch}
-          placeholder={t("globalStream.search")}
-          clearAccessibilityLabel={t("globalStream.clearSearch")}
-          testID="global-stream-search"
-        />
-        {query.supportsTags ? (
+        <View style={styles.controls}>
+          <View style={styles.search}>
+            <SearchField
+              key={searchKey}
+              value={search}
+              onChangeText={setSearch}
+              placeholder={t("globalStream.search")}
+              clearAccessibilityLabel={t("globalStream.clearSearch")}
+              testID="global-stream-search"
+            />
+          </View>
+          <HostFilter
+            hosts={hosts}
+            selectedHost={host}
+            onSelectHost={setHost}
+            triggerTestID="global-stream-host"
+          />
+          {view === "tasks" ? (
+            <Button
+              size="sm"
+              variant={unresolvedOnly ? "secondary" : "ghost"}
+              onPress={toggleUnresolved}
+            >
+              {t(
+                unresolvedOnly
+                  ? "agentPanel.stream.showCompleted"
+                  : "agentPanel.stream.showUnresolved",
+              )}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant={includeArchived ? "secondary" : "ghost"}
+            onPress={toggleArchived}
+          >
+            {t("globalStream.archived")}
+          </Button>
+          <Button size="sm" variant="ghost" onPress={refresh} disabled={isFetching}>
+            {t("globalStream.refresh")}
+          </Button>
+        </View>
+        {/* Tags organise saved knowledge; in Needs you they only show once one is in use. */}
+        {query.supportsTags && (view !== "needs_you" || tags.length > 0) ? (
           <TagCloud
             counts={query.tagCounts}
             pinned={query.pinnedTags}
@@ -208,29 +256,6 @@ export function StreamWorkflowFeed({
             error={tagFilter.error}
           />
         ) : null}
-        <View style={styles.controls}>
-          <HostFilter
-            hosts={hosts}
-            selectedHost={host}
-            onSelectHost={setHost}
-            triggerTestID="global-stream-host"
-          />
-          {view === "tasks" ? (
-            <Button variant={unresolvedOnly ? "secondary" : "ghost"} onPress={toggleUnresolved}>
-              {t(
-                unresolvedOnly
-                  ? "agentPanel.stream.showCompleted"
-                  : "agentPanel.stream.showUnresolved",
-              )}
-            </Button>
-          ) : null}
-          <Button variant={includeArchived ? "secondary" : "ghost"} onPress={toggleArchived}>
-            {t("globalStream.archived")}
-          </Button>
-          <Button variant="ghost" onPress={refresh} disabled={isFetching}>
-            {t("globalStream.refresh")}
-          </Button>
-        </View>
         {scope ? (
           <WorkflowComposer
             scope={scope}
@@ -241,11 +266,11 @@ export function StreamWorkflowFeed({
             knownTags={knownTags}
           />
         ) : null}
-        <Text style={styles.description} testID="stream-loaded-count">
-          {t(hasNextPage ? "globalStream.partialCount" : "globalStream.loadedCount", {
-            count: query.rows.length,
-          })}
-        </Text>
+        {hasNextPage ? (
+          <Text style={styles.description} testID="stream-loaded-count">
+            {t("globalStream.partialCount", { count: query.rows.length })}
+          </Text>
+        ) : null}
         {notices.map((notice) => (
           <Text key={notice} style={styles.notice} accessibilityRole="alert">
             {notice}
@@ -291,11 +316,21 @@ export function StreamWorkflowFeed({
       isLoading ? (
         <ThemedSpinner />
       ) : (
-        <Text style={styles.empty}>
-          {t(notices.length ? "globalStream.incomplete" : "globalStream.empty")}
-        </Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.empty}>
+            {t(notices.length ? "globalStream.incomplete" : "globalStream.empty")}
+          </Text>
+          {/* What each view holds is explained where there is room for it: the empty list. */}
+          <Text style={styles.description}>
+            {t(
+              view === "needs_you"
+                ? "globalStream.needsYouDescription"
+                : "globalStream.scopeDescription",
+            )}
+          </Text>
+        </View>
       ),
-    [isLoading, notices.length, t],
+    [isLoading, notices.length, t, view],
   );
   const footer = useMemo(
     () =>
@@ -314,7 +349,7 @@ export function StreamWorkflowFeed({
         />
       ) : null}
       <FlatList
-        data={query.rows}
+        data={data}
         maintainVisibleContentPosition={KEEP_VISIBLE_CONTENT}
         keyExtractor={rowKey}
         renderItem={renderItem}
@@ -330,16 +365,45 @@ export function StreamWorkflowFeed({
   );
 }
 
+function LaterHeader({
+  count,
+  expanded,
+  onToggle,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const state = useMemo(() => ({ expanded }), [expanded]);
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={state}
+      style={styles.laterHeader}
+      testID="stream-later-header"
+    >
+      <Text style={styles.laterLabel}>
+        {expanded ? "▾" : "▸"} {t("globalStream.later", { count })}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function GlobalStreamCard({
   row,
   onSaved,
   onTagPress,
   localContext,
+  returnView,
 }: {
   row: GlobalStreamRow;
   onSaved: () => void;
   onTagPress?: (tag: string) => void;
   localContext?: WorkflowLocalContext;
+  /** The Stream view showing this card; a chat opened from it offers the way back. */
+  returnView?: WorkflowView;
 }) {
   const { t } = useTranslation();
   const {
@@ -358,19 +422,34 @@ export function GlobalStreamCard({
   const supportsAnswers = useSessionStore(
     (state) => state.sessions[row.serverId]?.serverInfo?.features?.streamAnswers === true,
   );
+  const supportsDefer = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.streamDefer === true,
+  );
+  // Without the daemon queue a plain send would interrupt a busy agent; reply in Chat instead.
+  const supportsQueuedReply = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setStreamReturn = useStreamReturnStore((state) => state.setTarget);
+  const rememberReturn = useCallback(
+    (serverId: string, agentId: string) => {
+      if (returnView) setStreamReturn({ serverId, agentId, view: returnView });
+    },
+    [returnView, setStreamReturn],
+  );
   const openChat = useCallback(() => {
     if (localSource) {
       localSource.onReturnToChat();
       return;
     }
+    rememberReturn(sourceServerId, sourceAgentId);
     navigateToAgent({
       serverId: sourceServerId,
       agentId: sourceAgentId,
       workspaceId: sourceWorkspaceId,
     });
-  }, [localSource, sourceServerId, sourceAgentId, sourceWorkspaceId]);
+  }, [localSource, rememberReturn, sourceServerId, sourceAgentId, sourceWorkspaceId]);
   const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
   // The reply goes to the task's own chat, which openChat opens for a copied task too.
   const replyInChat = useCallback(
@@ -387,6 +466,7 @@ export function GlobalStreamCard({
     (target: ChatJumpTarget) => {
       openChatAt(row.serverId, row.agentId, target);
       if (!localSource) {
+        rememberReturn(row.serverId, row.agentId);
         navigateToAgent({
           serverId: row.serverId,
           agentId: row.agentId,
@@ -394,7 +474,21 @@ export function GlobalStreamCard({
         });
       }
     },
-    [localSource, openChatAt, row.serverId, row.agentId, row.workspaceId],
+    [localSource, openChatAt, rememberReturn, row.serverId, row.agentId, row.workspaceId],
+  );
+  // Answer from the card: the reply quotes what it answers, as Reply in chat would.
+  const sendReply = useCallback(
+    async (replyTo: CompanionEntry, text: string) => {
+      if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
+      const quoted = buildReplyQuote(replyTo.text);
+      const result = await client.sendAgentMessage(
+        row.agentId,
+        quoted ? `${quoted}\n\n${text}` : text,
+        { messageId: globalThis.crypto.randomUUID() },
+      );
+      return { queued: result.queued };
+    },
+    [client, connection, row.agentId, t],
   );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
@@ -430,6 +524,33 @@ export function GlobalStreamCard({
     },
     [update],
   );
+  const setDeferred = useCallback(
+    async (entryId: string, deferred: boolean) => {
+      if (!client || connection !== "online" || busy || copiedTask) return;
+      setBusy(true);
+      setError(null);
+      try {
+        await client.updateStreamEntry({
+          agentId: row.agentId,
+          entryId,
+          action: "set_deferred",
+          deferred,
+        });
+        onSaved();
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : t("globalStream.saveFailed"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [client, connection, busy, copiedTask, row.agentId, onSaved, t],
+  );
+  const defer = useCallback(
+    (entryId: string, deferred: boolean) => {
+      void setDeferred(entryId, deferred);
+    },
+    [setDeferred],
+  );
   const unseenAnswer = hasUnseenReply(entry);
   const markAnswerSeen = useCallback(async () => {
     if (
@@ -459,19 +580,17 @@ export function GlobalStreamCard({
   }, [entry, client, connection, supportsAnswers, busy, copiedTask, row.agentId, onSaved, t]);
   return (
     <View style={styles.row} testID={`global-stream-row-${row.agentId}`}>
-      <Button variant="ghost" onPress={openChat} style={styles.source}>
-        {copiedTask ? t("globalStream.openTaskSource") : row.agentTitle} ·{" "}
-        {copiedTask ? sourceServerId : row.serverLabel}
-        {row.archived ? ` · ${t("globalStream.archived")}` : ""}
-      </Button>
+      <CardSourceLine
+        row={row}
+        copiedTask={copiedTask}
+        sourceServerId={sourceServerId}
+        onOpen={openChat}
+      />
       {copiedTask ? (
         <Text style={styles.notice} accessibilityRole="alert">
           {t("globalStream.copiedTask")}
         </Text>
       ) : null}
-      <Text style={styles.path} numberOfLines={1}>
-        {row.cwd}
-      </Text>
       {row.item.kind === "entry" ? (
         <EntryCard
           entry={row.item.entry}
@@ -482,6 +601,8 @@ export function GlobalStreamCard({
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
           onTagPress={onTagPress}
+          onSendReply={supportsQueuedReply && !copiedTask ? sendReply : undefined}
+          onDefer={supportsDefer && !copiedTask ? defer : undefined}
           disabled={busy || copiedTask || connection !== "online" || !supportsWrites}
         />
       ) : (
@@ -495,7 +616,9 @@ export function GlobalStreamCard({
       )}
       {unseenAnswer && supportsAnswers ? (
         <Button
-          variant="outline"
+          variant="ghost"
+          size="sm"
+          style={styles.inlineAction}
           onPress={markAnswerSeen}
           disabled={busy || copiedTask || connection !== "online"}
           testID="stream-mark-answer-seen"
@@ -509,6 +632,35 @@ export function GlobalStreamCard({
           {error}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+/** One muted line says where the card is from; the chat title opens it. */
+function CardSourceLine({
+  row,
+  copiedTask,
+  sourceServerId,
+  onOpen,
+}: {
+  row: GlobalStreamRow;
+  copiedTask: boolean;
+  sourceServerId: string;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.sourceLine}>
+      <Pressable onPress={onOpen} accessibilityRole="button" style={styles.sourcePress}>
+        <Text style={styles.source} numberOfLines={1}>
+          {copiedTask ? t("globalStream.openTaskSource") : row.agentTitle}
+        </Text>
+      </Pressable>
+      <Text style={styles.path} numberOfLines={1}>
+        {copiedTask ? sourceServerId : row.serverLabel}
+        {row.archived ? ` · ${t("globalStream.archived")}` : ""}
+        {row.cwd ? ` · ${row.cwd}` : ""}
+      </Text>
     </View>
   );
 }
@@ -530,17 +682,39 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[4],
     paddingBottom: theme.spacing[8],
   },
-  header: { gap: theme.spacing[3], marginBottom: theme.spacing[6] },
+  header: { gap: theme.spacing[2], marginBottom: theme.spacing[4] },
   controls: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },
+  search: { flexGrow: 1, flexBasis: 220 },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   notice: { color: theme.colors.statusWarning, fontSize: theme.fontSize.sm },
-  row: { gap: theme.spacing[2], marginBottom: theme.spacing[6] },
-  source: { alignSelf: "flex-start", minHeight: 44, maxWidth: "100%" },
-  path: {
+  row: { gap: theme.spacing[1], marginBottom: theme.spacing[4] },
+  sourceLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[1],
+  },
+  sourcePress: { flexShrink: 1, maxWidth: "60%" },
+  source: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  path: { flex: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  inlineAction: { alignSelf: "flex-start" },
+  laterHeader: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[1],
+    marginBottom: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  laterLabel: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing[1],
+    fontWeight: theme.fontWeight.medium,
   },
+  emptyState: { gap: theme.spacing[2], paddingVertical: theme.spacing[8] },
   artifact: {
     gap: theme.spacing[3],
     padding: theme.spacing[4],
@@ -550,9 +724,5 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.lg,
   },
   artifactPath: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
-  empty: {
-    color: theme.colors.foregroundMuted,
-    paddingVertical: theme.spacing[8],
-    fontSize: theme.fontSize.base,
-  },
+  empty: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.base },
 }));

@@ -383,7 +383,8 @@ test("durable tasks page current work first, and evidence and reopen survive rec
     await expect(feed.getByRole("button", { name: "Load more" })).toBeVisible();
     await feed.getByRole("button", { name: "Load more" }).click();
     await expect(feed.getByRole("button", { name: "Load more" })).toHaveCount(0);
-    await expect(feed.getByTestId("stream-loaded-count")).toHaveText("53 items loaded");
+    // A complete list needs no count; it only shows while more is available.
+    await expect(feed.getByTestId("stream-loaded-count")).toHaveCount(0);
     const completed = feed.getByTestId("companion-entry-ask:ask-1");
     // FlatList may mount then evict a row while correcting estimated heights.
     // Move incrementally until the row mounts, then center it synchronously in

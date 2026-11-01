@@ -82,6 +82,7 @@ const entries: CompanionEntry[] = [
 const actions: TrackedAnswerActions = {
   jumpToAnchor: () => {},
   jumpToMessage: () => {},
+  jumpToTarget: () => {},
   openChat: () => {},
   markSeen: async () => {},
   stopTracking: async () => {},

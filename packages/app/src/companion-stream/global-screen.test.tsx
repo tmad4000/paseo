@@ -11,6 +11,9 @@ const state = vi.hoisted(() => ({
   answersSupported: true,
   connection: "online",
   updateStreamEntry: vi.fn().mockResolvedValue(undefined),
+  sendAgentMessage: vi.fn().mockResolvedValue({ queued: false }),
+  deferSupported: false,
+  queueSupported: false,
   updateStatus: undefined as undefined | ((id: string, status: "done") => void),
 }));
 function clickDone() {
@@ -19,6 +22,11 @@ function clickDone() {
 vi.mock("react-native", () => ({
   View: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  Pressable: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) => (
+    <button type="button" onClick={onPress}>
+      {children}
+    </button>
+  ),
   FlatList: ({
     ListHeaderComponent,
     ListEmptyComponent,
@@ -49,7 +57,12 @@ vi.mock("@/stores/session-store", () => ({
       sessions: {
         host: {
           serverInfo: {
-            features: { globalStream: state.supported, streamAnswers: state.answersSupported },
+            features: {
+              globalStream: state.supported,
+              streamAnswers: state.answersSupported,
+              streamDefer: state.deferSupported,
+              agentMessageQueue: state.queueSupported,
+            },
           },
         },
       },
@@ -57,7 +70,10 @@ vi.mock("@/stores/session-store", () => ({
 }));
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => [],
-  useHostRuntimeClient: () => ({ updateStreamEntry: state.updateStreamEntry }),
+  useHostRuntimeClient: () => ({
+    updateStreamEntry: state.updateStreamEntry,
+    sendAgentMessage: state.sendAgentMessage,
+  }),
   useHostRuntimeConnectionStatus: () => state.connection,
 }));
 vi.mock("@/components/ui/button", () => ({
@@ -130,12 +146,16 @@ vi.mock("./entry-card", () => ({
     onUpdateStatus,
     onReturnToChat,
     onReplyInChat,
+    onDefer,
+    onSendReply,
   }: {
     entry: CompanionEntry;
     disabled: boolean;
     onUpdateStatus: typeof state.updateStatus;
     onReturnToChat: () => void;
     onReplyInChat: (entry: CompanionEntry) => void;
+    onDefer?: (id: string, deferred: boolean) => void;
+    onSendReply?: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
   }) => {
     state.updateStatus = onUpdateStatus;
     return (
@@ -149,6 +169,16 @@ vi.mock("./entry-card", () => ({
         <button type="button" onClick={() => onReplyInChat(entry)}>
           Reply in Chat
         </button>
+        {onDefer ? (
+          <button type="button" onClick={() => onDefer(entry.id, true)}>
+            Later
+          </button>
+        ) : null}
+        {onSendReply ? (
+          <button type="button" onClick={() => void onSendReply(entry, "Use staging")}>
+            Send reply
+          </button>
+        ) : null}
       </div>
     );
   },
@@ -158,12 +188,17 @@ import { GlobalStreamCard, StreamWorkflowFeed } from "./global-screen";
 import { useGlobalStream } from "./use-global-stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useAgentViewStore } from "@/stores/agent-view-store";
+import { useStreamReturnStore } from "./stream-return";
 
 beforeEach(() => {
   state.supported = true;
   state.answersSupported = true;
   state.connection = "online";
   state.updateStreamEntry.mockReset().mockResolvedValue(undefined);
+  state.sendAgentMessage.mockReset().mockResolvedValue({ queued: false });
+  state.deferSupported = false;
+  state.queueSupported = false;
+  useStreamReturnStore.getState().clear();
   vi.mocked(navigateToAgent).mockClear();
   vi.stubGlobal("React", React);
 });
@@ -474,4 +509,41 @@ it("keeps local artifact preview, side opening and durable pinning", async () =>
   expect(rendered.getByText("agentPanel.artifacts.updateHostDescription").textContent).toBe(
     "agentPanel.artifacts.updateHostDescription",
   );
+});
+
+it("offers Later and in-place replies only where the host can honour them", async () => {
+  const plain = render(<GlobalStreamCard row={row} onSaved={vi.fn()} />);
+  expect(plain.queryByText("Later")).toBeNull();
+  expect(plain.queryByText("Send reply")).toBeNull();
+  cleanup();
+
+  state.deferSupported = true;
+  state.queueSupported = true;
+  const onSaved = vi.fn();
+  const rendered = render(<GlobalStreamCard row={row} onSaved={onSaved} />);
+  fireEvent.click(rendered.getByText("Later"));
+  await waitFor(() =>
+    expect(state.updateStreamEntry).toHaveBeenCalledWith({
+      agentId: "agent",
+      entryId: "question:q",
+      action: "set_deferred",
+      deferred: true,
+    }),
+  );
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  fireEvent.click(rendered.getByText("Send reply"));
+  // Queued delivery: no activeTurnBehavior, so a busy agent is never interrupted.
+  expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
+    messageId: expect.any(String),
+  });
+});
+
+it("lets a chat opened from Needs you offer the way back", () => {
+  const rendered = render(<GlobalStreamCard row={row} onSaved={vi.fn()} returnView="needs_you" />);
+  fireEvent.click(rendered.getByText("Return to Chat"));
+  expect(useStreamReturnStore.getState().target).toEqual({
+    serverId: "host",
+    agentId: "agent",
+    view: "needs_you",
+  });
 });
