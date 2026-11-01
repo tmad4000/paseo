@@ -1,6 +1,13 @@
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -34,7 +41,9 @@ import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { WorkflowArtifact } from "./workflow-artifact";
 import { WorkflowComposer } from "./workflow-composer";
 import { parseWorkflowView, type WorkflowView } from "./workflow-view";
-import { useStreamReturnStore } from "./stream-return";
+import { useStreamReturnStore, type StreamPlace } from "./stream-return";
+import { useToast } from "@/contexts/toast-context";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { splitLater } from "./needs-you-later";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
@@ -89,11 +98,22 @@ export function StreamWorkflowFeed({
   const [showLater, setShowLater] = useState(false);
   // Navigation into Needs you updates the existing screen, without resetting search or drafts.
   useEffect(() => setView(initialView), [initialView]);
-  // Back on the Stream, the chat it opened no longer offers the way back here.
-  const clearStreamReturn = useStreamReturnStore((state) => state.clear);
-  useEffect(() => {
-    if (!scope && focused) clearStreamReturn();
-  }, [scope, focused, clearStreamReturn]);
+  // Back on the Stream, the chat it opened no longer offers the way back here. Coming back
+  // through it restores the place it was opened from: side, search, host and scroll.
+  const listRef = useRef<FlatList<GlobalStreamRow>>(null);
+  const scrollOffset = useRef(0);
+  const pendingScroll = useRef<number | null>(null);
+  useRestoreStreamPlace(!scope && focused, (place) => {
+    setView(place.view);
+    setShowLater(place.showLater);
+    setHost(place.host);
+    setSearch(place.search);
+    setSearchKey((value) => value + 1);
+    pendingScroll.current = place.scrollOffset;
+  });
+  const trackScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffset.current = event.nativeEvent.contentOffset.y;
+  }, []);
   // Chat's floating pane opens an ask's card: this chat's Tasks, searched down to it.
   useApplyStreamFocus(scope, (focus) => {
     setView("tasks");
@@ -138,9 +158,42 @@ export function StreamWorkflowFeed({
   const showNow = useCallback(() => setShowLater(false), []);
   const showLaterRows = useCallback(() => setShowLater(true), []);
   const { rows: queryRows } = query;
-  const { data, nowCount, laterCount, showingLater } = useMemo(
+  const { data, nowCount, laterCount } = useMemo(
     () => splitLater(queryRows, view, showLater),
     [view, queryRows, showLater],
+  );
+  // Counts cover loaded pages only. An empty side with more pages keeps loading until it finds
+  // an item or runs out, so "Later · 0" never hides deferred items on a later page.
+  const searchingSide = view === "needs_you" && data.length === 0 && hasNextPage;
+  useEffect(() => {
+    if (searchingSide && !isFetchingNextPage && !isFetching) void fetchNextPage();
+  }, [searchingSide, isFetchingNextPage, isFetching, fetchNextPage]);
+  useEffect(() => {
+    if (pendingScroll.current === null || !data.length) return;
+    const offset = pendingScroll.current;
+    pendingScroll.current = null;
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset, animated: false }));
+  }, [data.length]);
+  const placeRef = useRef<Omit<StreamPlace, "scrollOffset">>({
+    view,
+    showLater,
+    search,
+    host,
+  });
+  placeRef.current = { view, showLater, search, host };
+  const setStreamReturn = useStreamReturnStore((state) => state.setTarget);
+  // A chat opened from a global Stream card remembers where the list was.
+  const rememberReturn = useMemo(
+    () =>
+      scope
+        ? undefined
+        : (serverId: string, agentId: string) =>
+            setStreamReturn({
+              serverId,
+              agentId,
+              place: { ...placeRef.current, scrollOffset: scrollOffset.current },
+            }),
+    [scope, setStreamReturn],
   );
   const chooseView = useCallback(
     (next: WorkflowView) => {
@@ -152,7 +205,7 @@ export function StreamWorkflowFeed({
   const showNeedsYou = useCallback(() => chooseView("needs_you"), [chooseView]);
   const needsYouSelected = useMemo(() => ({ selected: view === "needs_you" }), [view]);
   const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
-  const returnView = scope ? undefined : view;
+  const triage = view === "needs_you";
   const renderItem = useCallback(
     ({ item }: { item: GlobalStreamRow }) => (
       <GlobalStreamCard
@@ -160,10 +213,11 @@ export function StreamWorkflowFeed({
         onSaved={refresh}
         onTagPress={tagPress}
         localContext={localContext}
-        returnView={returnView}
+        onRememberReturn={rememberReturn}
+        triage={triage}
       />
     ),
-    [refresh, tagPress, localContext, returnView],
+    [refresh, tagPress, localContext, rememberReturn, triage],
   );
   const tabs = useMemo(
     () => [
@@ -242,15 +296,6 @@ export function StreamWorkflowFeed({
             {t("globalStream.refresh")}
           </Button>
         </View>
-        {laterCount > 0 ? (
-          <NowLaterSwitch
-            nowCount={nowCount}
-            laterCount={laterCount}
-            showingLater={showingLater}
-            onShowNow={showNow}
-            onShowLater={showLaterRows}
-          />
-        ) : null}
         {/* Tags organise saved knowledge; in Needs you they only show once one is in use. */}
         {query.supportsTags && (view !== "needs_you" || tags.length > 0) ? (
           <TagCloud
@@ -287,11 +332,6 @@ export function StreamWorkflowFeed({
     [
       t,
       view,
-      nowCount,
-      laterCount,
-      showingLater,
-      showNow,
-      showLaterRows,
       showNeedsYou,
       chooseView,
       needsYouSelected,
@@ -322,26 +362,17 @@ export function StreamWorkflowFeed({
       notices,
     ],
   );
+  const triageEmpty = triageEmptyKey(triage && !notices.length, searchingSide, showLater);
   const empty = useMemo(
-    () =>
-      isLoading ? (
-        <ThemedSpinner />
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.empty}>
-            {t(notices.length ? "globalStream.incomplete" : "globalStream.empty")}
-          </Text>
-          {/* What each view holds is explained where there is room for it: the empty list. */}
-          <Text style={styles.description}>
-            {t(
-              view === "needs_you"
-                ? "globalStream.needsYouDescription"
-                : "globalStream.scopeDescription",
-            )}
-          </Text>
-        </View>
-      ),
-    [isLoading, notices.length, t, view],
+    () => (
+      <FeedEmpty
+        loading={isLoading}
+        triageKey={triageEmpty}
+        incomplete={notices.length > 0}
+        view={view}
+      />
+    ),
+    [isLoading, triageEmpty, notices.length, view],
   );
   const footer = useMemo(
     () =>
@@ -359,7 +390,20 @@ export function StreamWorkflowFeed({
           title={t(view === "needs_you" ? "globalStream.needsYou" : "globalStream.title")}
         />
       ) : null}
+      {triage ? (
+        <NowLaterSwitch
+          nowCount={nowCount}
+          laterCount={laterCount}
+          partial={hasNextPage}
+          showingLater={showLater}
+          onShowNow={showNow}
+          onShowLater={showLaterRows}
+        />
+      ) : null}
       <FlatList
+        ref={listRef}
+        onScroll={trackScroll}
+        scrollEventThrottle={100}
         data={data}
         maintainVisibleContentPosition={KEEP_VISIBLE_CONTENT}
         keyExtractor={rowKey}
@@ -376,42 +420,103 @@ export function StreamWorkflowFeed({
   );
 }
 
-/** Needs you: what is waiting now, or what was set aside for later. Always in the header. */
+/** On focus, drop the way-back chip and apply a place the way back asked to restore. */
+function useRestoreStreamPlace(active: boolean, apply: (place: StreamPlace) => void) {
+  const clear = useStreamReturnStore((state) => state.clear);
+  const takeRestore = useStreamReturnStore((state) => state.takeRestore);
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    if (!active) return;
+    clear();
+    const place = takeRestore();
+    if (place) applyRef.current(place);
+  }, [active, clear, takeRestore]);
+}
+
+/** What an empty Needs you side says: still looking through pages, or nothing there. */
+function triageEmptyKey(triage: boolean, searching: boolean, showLater: boolean): string | null {
+  if (!triage) return null;
+  if (searching) return showLater ? "globalStream.lookingForLater" : "globalStream.lookingForNow";
+  return showLater ? "globalStream.nothingLater" : "globalStream.nothingNow";
+}
+
+function FeedEmpty({
+  loading,
+  triageKey,
+  incomplete,
+  view,
+}: {
+  loading: boolean;
+  triageKey: string | null;
+  incomplete: boolean;
+  view: WorkflowView;
+}) {
+  const { t } = useTranslation();
+  if (loading) return <ThemedSpinner />;
+  if (triageKey)
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.empty}>{t(triageKey)}</Text>
+      </View>
+    );
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.empty}>
+        {t(incomplete ? "globalStream.incomplete" : "globalStream.empty")}
+      </Text>
+      {/* What each view holds is explained where there is room for it: the empty list. */}
+      <Text style={styles.description}>
+        {t(
+          view === "needs_you"
+            ? "globalStream.needsYouDescription"
+            : "globalStream.scopeDescription",
+        )}
+      </Text>
+    </View>
+  );
+}
+
+/** Needs you: what is waiting now, or what was set aside for later. Pinned above the list. */
 function NowLaterSwitch({
   nowCount,
   laterCount,
+  partial,
   showingLater,
   onShowNow,
   onShowLater,
 }: {
   nowCount: number;
   laterCount: number;
+  /** More pages exist, so the counts are of loaded items: shown as "N+". */
+  partial: boolean;
   showingLater: boolean;
   onShowNow: () => void;
   onShowLater: () => void;
 }) {
   const { t } = useTranslation();
+  const size = useIsCompactFormFactor() ? "md" : "sm";
   const nowState = useMemo(() => ({ selected: !showingLater }), [showingLater]);
   const laterState = useMemo(() => ({ selected: showingLater }), [showingLater]);
   return (
-    <View style={styles.controls} testID="stream-now-later">
+    <View style={styles.nowLater} testID="stream-now-later">
       <Button
-        size="sm"
+        size={size}
         variant={showingLater ? "ghost" : "secondary"}
         onPress={onShowNow}
         accessibilityState={nowState}
         testID="stream-show-now"
       >
-        {t("globalStream.now", { count: nowCount })}
+        {t(partial ? "globalStream.nowPartial" : "globalStream.now", { count: nowCount })}
       </Button>
       <Button
-        size="sm"
+        size={size}
         variant={showingLater ? "secondary" : "ghost"}
         onPress={onShowLater}
         accessibilityState={laterState}
         testID="stream-show-later"
       >
-        {t("globalStream.later", { count: laterCount })}
+        {t(partial ? "globalStream.laterPartial" : "globalStream.later", { count: laterCount })}
       </Button>
     </View>
   );
@@ -422,14 +527,17 @@ export function GlobalStreamCard({
   onSaved,
   onTagPress,
   localContext,
-  returnView,
+  onRememberReturn,
+  triage = false,
 }: {
   row: GlobalStreamRow;
   onSaved: () => void;
   onTagPress?: (tag: string) => void;
   localContext?: WorkflowLocalContext;
-  /** The Stream view showing this card; a chat opened from it offers the way back. */
-  returnView?: WorkflowView;
+  /** Records where the list was, so the chat this card opens offers the way back to it. */
+  onRememberReturn?: (serverId: string, agentId: string) => void;
+  /** Shown in Needs you: the triage row and Undo after Later. */
+  triage?: boolean;
 }) {
   const { t } = useTranslation();
   const {
@@ -457,12 +565,10 @@ export function GlobalStreamCard({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setStreamReturn = useStreamReturnStore((state) => state.setTarget);
+  const toast = useToast();
   const rememberReturn = useCallback(
-    (serverId: string, agentId: string) => {
-      if (returnView) setStreamReturn({ serverId, agentId, view: returnView });
-    },
-    [returnView, setStreamReturn],
+    (serverId: string, agentId: string) => onRememberReturn?.(serverId, agentId),
+    [onRememberReturn],
   );
   const openChat = useCallback(() => {
     if (localSource) {
@@ -563,14 +669,26 @@ export function GlobalStreamCard({
           deferred,
         });
         onSaved();
+        if (deferred && triage) {
+          toast.show(t("agentPanel.stream.movedToLater"), {
+            action: {
+              label: t("agentPanel.stream.undo"),
+              onPress: () => void setDeferredRef.current?.(entryId, false),
+              testID: "stream-undo-later",
+            },
+          });
+        }
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : t("globalStream.saveFailed"));
       } finally {
         setBusy(false);
       }
     },
-    [client, connection, busy, copiedTask, row.agentId, onSaved, t],
+    [client, connection, busy, copiedTask, row.agentId, onSaved, t, triage, toast],
   );
+  // Undo runs after the card may have re-rendered; it calls the latest setDeferred.
+  const setDeferredRef = useRef<typeof setDeferred | null>(null);
+  setDeferredRef.current = setDeferred;
   const defer = useCallback(
     (entryId: string, deferred: boolean) => {
       void setDeferred(entryId, deferred);
@@ -629,6 +747,7 @@ export function GlobalStreamCard({
           onTagPress={onTagPress}
           onSendReply={supportsQueuedReply && !copiedTask ? sendReply : undefined}
           onDefer={supportsDefer && !copiedTask ? defer : undefined}
+          variant={triage ? "triage" : "default"}
           disabled={busy || copiedTask || connection !== "online" || !supportsWrites}
         />
       ) : (
@@ -685,10 +804,16 @@ function CardSourceLine({
       <Text style={styles.path} numberOfLines={1}>
         {copiedTask ? sourceServerId : row.serverLabel}
         {row.archived ? ` · ${t("globalStream.archived")}` : ""}
-        {row.cwd ? ` · ${row.cwd}` : ""}
+        {row.cwd ? ` · ${projectName(row.cwd)}` : ""}
       </Text>
     </View>
   );
+}
+
+/** The folder name tells projects apart; the full path is noise on a one-line source. */
+function projectName(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? cwd;
 }
 
 function localContextForSource(
@@ -711,6 +836,18 @@ const styles = StyleSheet.create((theme) => ({
   header: { gap: theme.spacing[2], marginBottom: theme.spacing[4] },
   controls: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },
   search: { flexGrow: 1, flexBasis: 220 },
+  nowLater: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    width: "100%",
+    maxWidth: 800,
+    alignSelf: "center",
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: theme.spacing[2],
+  },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   notice: { color: theme.colors.statusWarning, fontSize: theme.fontSize.sm },
   row: { gap: theme.spacing[1], marginBottom: theme.spacing[4] },

@@ -8,6 +8,12 @@ import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -19,7 +25,7 @@ import { entryChatTarget } from "./entry-source";
 import { HashtagText } from "./hashtag-text";
 
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
-type ActionSize = "xs" | "sm";
+type ActionSize = "xs" | "sm" | "md";
 
 const ReplyInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
@@ -45,6 +51,11 @@ export interface EntryCardProps {
   onSendReply?: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
   /** Sets a request aside for later (true) or brings it back (false). Status is unchanged. */
   onDefer?: (id: string, deferred: boolean) => void;
+  /**
+   * Needs you triage: one predictable row (Reply, Later, Details, More) with phone-sized
+   * targets; identifiers and source links wait behind Details.
+   */
+  variant?: "default" | "triage";
 }
 
 /** Eyebrow (kind · state · time), then the entry text as the headline. Details sit behind Read. */
@@ -59,10 +70,11 @@ export function EntryCard({
   onTagPress,
   onSendReply,
   onDefer,
+  variant = "default",
   disabled = false,
 }: EntryCardProps) {
-  const { t } = useTranslation();
-  const actionSize: ActionSize = useIsCompactFormFactor() ? "sm" : "xs";
+  const triage = variant === "triage";
+  const actionSize = useActionSize(triage);
   const [expanded, setExpanded] = useState(false);
   const [replying, setReplying] = useState(false);
   const toggleReplying = useCallback(() => setReplying((value) => !value), []);
@@ -78,43 +90,49 @@ export function EntryCard({
       testID={`companion-entry-${entry.id}`}
     >
       <EntryHeader entry={entry} pending={pending} disabled={disabled} onRemovePin={onRemovePin} />
-      <EntryBody entry={entry} expanded={expanded} quote={quote} onTagPress={onTagPress} />
-      {entry.inputRequest ? <InputRequestDetails entry={entry} /> : null}
-      {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
-
-      {entry.truncated ? (
-        <Text style={styles.description}>{t("agentPanel.stream.excerpt")}</Text>
-      ) : null}
+      <EntryBody
+        entry={entry}
+        expanded={expanded}
+        quote={quote}
+        previewLines={triage ? 2 : 5}
+        onTagPress={onTagPress}
+      />
+      <EntryExtras entry={entry} serverId={serverId} expanded={expanded} triage={triage} />
 
       {/* One wrapping row of small actions: the card's text, not its buttons, takes the space. */}
-      <View style={styles.actions}>
-        <ChatActions
+      {triage ? (
+        <TriageActions
+          entry={entry}
+          size={actionSize}
+          disabled={disabled}
+          expanded={expanded}
+          replying={replying}
+          onToggleExpanded={toggleExpanded}
+          onToggleInlineReply={inlineReply ? toggleReplying : undefined}
+          onReplyInChat={onReplyInChat}
+          onReturnToChat={onReturnToChat}
+          onShowInChat={onShowInChat}
+          onUpdateStatus={onUpdateStatus}
+          onDefer={onDefer}
+        />
+      ) : (
+        <DefaultActions
           entry={entry}
           pending={pending}
           quote={quote}
           size={actionSize}
+          disabled={disabled}
+          expanded={expanded}
           replying={replying}
+          onToggleExpanded={toggleExpanded}
           onToggleInlineReply={inlineReply ? toggleReplying : undefined}
           onReturnToChat={onReturnToChat}
           onReplyInChat={onReplyInChat}
           onShowInChat={onShowInChat}
+          onUpdateStatus={onUpdateStatus}
+          onDefer={onDefer}
         />
-        <DeferButton entry={entry} size={actionSize} disabled={disabled} onDefer={onDefer} />
-        {entry.kind === "question" || entry.kind === "feature_request" ? (
-          <StatusActions
-            entryId={entry.id}
-            status={entry.status}
-            tracked={Boolean(entry.ask)}
-            needsInput={needsUserInput(entry)}
-            disabled={disabled}
-            size={actionSize}
-            onUpdateStatus={onUpdateStatus}
-          />
-        ) : null}
-        {entry.text || entry.ask ? (
-          <ReadToggle expanded={expanded} size={actionSize} onToggle={toggleExpanded} />
-        ) : null}
-      </View>
+      )}
       {inlineReply && replying ? (
         <InlineReply
           entry={entry}
@@ -124,6 +142,208 @@ export function EntryCard({
           onClose={toggleReplying}
         />
       ) : null}
+    </View>
+  );
+}
+
+/** Triage on a phone gets 44px targets: it is tapped through quickly, often one-handed. */
+function useActionSize(triage: boolean): ActionSize {
+  const compact = useIsCompactFormFactor();
+  if (!compact) return "xs";
+  return triage ? "md" : "sm";
+}
+
+/** Request details, ask evidence and the excerpt note. Triage keeps identifiers behind Details. */
+function EntryExtras({
+  entry,
+  serverId,
+  expanded,
+  triage,
+}: {
+  entry: CompanionEntry;
+  serverId?: string;
+  expanded: boolean;
+  triage: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {entry.inputRequest && (!triage || expanded) ? <InputRequestDetails entry={entry} /> : null}
+      {expanded && entry.ask ? <AskDetails ask={entry.ask} serverId={serverId} /> : null}
+      {entry.truncated ? (
+        <Text style={styles.description}>{t("agentPanel.stream.excerpt")}</Text>
+      ) : null}
+    </>
+  );
+}
+
+/** The compact row used outside Needs you: chat moves, Later, status moves and Read. */
+function DefaultActions({
+  entry,
+  pending,
+  quote,
+  size,
+  disabled,
+  expanded,
+  replying,
+  onToggleExpanded,
+  onToggleInlineReply,
+  onReturnToChat,
+  onReplyInChat,
+  onShowInChat,
+  onUpdateStatus,
+  onDefer,
+}: {
+  entry: CompanionEntry;
+  pending: boolean;
+  quote: boolean;
+  size: ActionSize;
+  disabled: boolean;
+  expanded: boolean;
+  replying: boolean;
+  onToggleExpanded: () => void;
+  onToggleInlineReply?: () => void;
+  onReturnToChat: () => void;
+  onReplyInChat: (entry: CompanionEntry) => void;
+  onShowInChat?: (target: ChatJumpTarget) => void;
+  onUpdateStatus: EntryCardProps["onUpdateStatus"];
+  onDefer?: (id: string, deferred: boolean) => void;
+}) {
+  return (
+    <View style={styles.actions}>
+      <ChatActions
+        entry={entry}
+        pending={pending}
+        quote={quote}
+        size={size}
+        replying={replying}
+        onToggleInlineReply={onToggleInlineReply}
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={onReplyInChat}
+        onShowInChat={onShowInChat}
+      />
+      <DeferButton entry={entry} size={size} disabled={disabled} onDefer={onDefer} />
+      {entry.kind === "question" || entry.kind === "feature_request" ? (
+        <StatusActions
+          entryId={entry.id}
+          status={entry.status}
+          tracked={Boolean(entry.ask)}
+          needsInput={needsUserInput(entry)}
+          disabled={disabled}
+          size={size}
+          onUpdateStatus={onUpdateStatus}
+        />
+      ) : null}
+      {entry.text || entry.ask ? (
+        <ReadToggle expanded={expanded} size={size} onToggle={onToggleExpanded} />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Needs you's row: the answer, Later, Details, and More for the rarer moves. A permission is
+ * reviewed in Chat, where its full command and scope are shown. Seen (still needed) is left out:
+ * Later is the way to skip without deciding, and Seen could move a tracked task's progress.
+ */
+function TriageActions({
+  entry,
+  size,
+  disabled,
+  expanded,
+  replying,
+  onToggleExpanded,
+  onToggleInlineReply,
+  onReplyInChat,
+  onReturnToChat,
+  onShowInChat,
+  onUpdateStatus,
+  onDefer,
+}: {
+  entry: CompanionEntry;
+  size: ActionSize;
+  disabled: boolean;
+  expanded: boolean;
+  replying: boolean;
+  onToggleExpanded: () => void;
+  onToggleInlineReply?: () => void;
+  onReplyInChat: (entry: CompanionEntry) => void;
+  onReturnToChat: () => void;
+  onShowInChat?: (target: ChatJumpTarget) => void;
+  onUpdateStatus: EntryCardProps["onUpdateStatus"];
+  onDefer?: (id: string, deferred: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const target = useMemo(
+    () => (onShowInChat ? entryChatTarget(entry) : null),
+    [entry, onShowInChat],
+  );
+  const openInChat = useCallback(() => {
+    if (target && onShowInChat) onShowInChat(target);
+    else onReturnToChat();
+  }, [target, onShowInChat, onReturnToChat]);
+  const replyInChat = useCallback(() => onReplyInChat(entry), [entry, onReplyInChat]);
+  const markDone = useCallback(() => onUpdateStatus(entry.id, "done"), [onUpdateStatus, entry.id]);
+  const replyState = useMemo(() => ({ expanded: replying }), [replying]);
+  const detailsState = useMemo(() => ({ expanded }), [expanded]);
+  const permission = entry.kind === "permission";
+  // A tracked ask is completed by its owner with evidence, never by a tap.
+  const canMarkDone =
+    (entry.kind === "question" || entry.kind === "feature_request") &&
+    entry.status !== "done" &&
+    !entry.ask;
+  return (
+    <View style={styles.actions}>
+      {permission ? (
+        <Button variant="secondary" size={size} onPress={openInChat} disabled={disabled}>
+          {t("agentPanel.stream.reviewPermission")}
+        </Button>
+      ) : (
+        <Button
+          variant="secondary"
+          size={size}
+          onPress={onToggleInlineReply ?? replyInChat}
+          accessibilityState={onToggleInlineReply ? replyState : undefined}
+          testID="companion-entry-reply"
+        >
+          {t("agentPanel.stream.reply")}
+        </Button>
+      )}
+      <DeferButton entry={entry} size={size} disabled={disabled} onDefer={onDefer} />
+      <Button
+        variant="ghost"
+        size={size}
+        onPress={onToggleExpanded}
+        accessibilityState={detailsState}
+        testID="companion-entry-details"
+      >
+        {t(expanded ? "agentPanel.stream.less" : "agentPanel.stream.details")}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          accessibilityRole="button"
+          accessibilityLabel={t("agentPanel.stream.more")}
+          style={[styles.moreTrigger, size === "md" && styles.moreTriggerLarge]}
+          hitSlop={4}
+          testID="companion-entry-more"
+        >
+          <Text style={styles.moreLabel}>{t("agentPanel.stream.more")}</Text>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={openInChat} testID="companion-entry-open-in-chat">
+            {t("agentPanel.stream.openInChat")}
+          </DropdownMenuItem>
+          {canMarkDone ? (
+            <DropdownMenuItem
+              onSelect={markDone}
+              disabled={disabled}
+              testID="companion-entry-mark-done"
+            >
+              {t("agentPanel.stream.card.markDone")}
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </View>
   );
 }
@@ -463,11 +683,13 @@ function EntryBody({
   entry,
   expanded,
   quote,
+  previewLines,
   onTagPress,
 }: {
   entry: CompanionEntry;
   expanded: boolean;
   quote: boolean;
+  previewLines: number;
   onTagPress?: (tag: string) => void;
 }) {
   const { t } = useTranslation();
@@ -522,7 +744,12 @@ function EntryBody({
         onTagPress={onTagPress}
       />
       {rest ? (
-        <HashtagText text={rest} style={styles.body} numberOfLines={5} onTagPress={onTagPress} />
+        <HashtagText
+          text={rest}
+          style={styles.body}
+          numberOfLines={previewLines}
+          onTagPress={onTagPress}
+        />
       ) : null}
       {answer}
     </View>
@@ -597,7 +824,7 @@ function AskDetails({ ask, serverId }: { ask: TrackedAsk; serverId?: string }) {
 
 const styles = StyleSheet.create((theme) => ({
   card: {
-    paddingHorizontal: theme.spacing[4],
+    paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[3],
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -649,6 +876,14 @@ const styles = StyleSheet.create((theme) => ({
     marginLeft: -theme.spacing[2],
   },
   reply: { gap: theme.spacing[1] },
+  moreTrigger: {
+    minHeight: 28,
+    paddingHorizontal: theme.spacing[3],
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.xl,
+  },
+  moreTriggerLarge: { minHeight: 44 },
+  moreLabel: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
   replyRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   replyInput: {
     flex: 1,

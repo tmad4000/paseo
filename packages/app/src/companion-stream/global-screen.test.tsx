@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   deferSupported: false,
   queueSupported: false,
   updateStatus: undefined as undefined | ((id: string, status: "done") => void),
+  toastShow: vi.fn(),
 }));
 function clickDone() {
   state.updateStatus?.("question:q", "done");
@@ -50,6 +51,8 @@ vi.mock("react-native-unistyles", () => ({
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({}) }));
 vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ show: state.toastShow }) }));
+vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
 vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
 vi.mock("@/stores/session-store", () => ({
   useSessionStore: (selector: (store: unknown) => unknown) =>
@@ -198,7 +201,8 @@ beforeEach(() => {
   state.sendAgentMessage.mockReset().mockResolvedValue({ queued: false });
   state.deferSupported = false;
   state.queueSupported = false;
-  useStreamReturnStore.getState().clear();
+  useStreamReturnStore.setState({ target: null, restore: null });
+  state.toastShow.mockReset();
   vi.mocked(navigateToAgent).mockClear();
   vi.stubGlobal("React", React);
 });
@@ -538,14 +542,31 @@ it("offers Later and in-place replies only where the host can honour them", asyn
   });
 });
 
-it("lets a chat opened from Needs you offer the way back", () => {
-  const rendered = render(<GlobalStreamCard row={row} onSaved={vi.fn()} returnView="needs_you" />);
+it("lets a chat opened from a card offer the way back", () => {
+  const onRememberReturn = vi.fn();
+  const rendered = render(
+    <GlobalStreamCard row={row} onSaved={vi.fn()} onRememberReturn={onRememberReturn} />,
+  );
   fireEvent.click(rendered.getByText("Return to Chat"));
-  expect(useStreamReturnStore.getState().target).toEqual({
-    serverId: "host",
-    agentId: "agent",
-    view: "needs_you",
-  });
+  expect(onRememberReturn).toHaveBeenCalledWith("host", "agent");
+});
+
+it("offers Undo after moving a Needs you request to Later", async () => {
+  state.deferSupported = true;
+  const rendered = render(<GlobalStreamCard row={row} onSaved={vi.fn()} triage />);
+  fireEvent.click(rendered.getByText("Later"));
+  await waitFor(() => expect(state.toastShow).toHaveBeenCalled());
+  const [message, options] = state.toastShow.mock.calls[0];
+  expect(message).toBe("agentPanel.stream.movedToLater");
+  options.action.onPress();
+  await waitFor(() =>
+    expect(state.updateStreamEntry).toHaveBeenLastCalledWith({
+      agentId: "agent",
+      entryId: "question:q",
+      action: "set_deferred",
+      deferred: false,
+    }),
+  );
 });
 
 it("keeps Later one tap away in the Needs you header, however long the list is", () => {
@@ -579,4 +600,56 @@ it("keeps Later one tap away in the Needs you header, however long the list is",
   fireEvent.click(rendered.getByText("globalStream.later"));
   fireEvent.click(rendered.getByText("globalStream.now"));
   expect(rendered.getByText("globalStream.later")).toBeTruthy();
+});
+
+it("marks counts partial and keeps loading while an empty side may have items on later pages", () => {
+  const fetchNextPage = vi.fn();
+  vi.mocked(useGlobalStream).mockReturnValue({
+    rows: [row],
+    notices: [],
+    refetch: vi.fn(),
+    fetchNextPage,
+    isFetching: false,
+    isLoading: false,
+    hasNextPage: true,
+    isFetchingNextPage: false,
+    tagCounts: [],
+    pinnedTags: [],
+    supportsTags: false,
+    setTagPinned: vi.fn(),
+  });
+  const rendered = render(<StreamWorkflowFeed initialView="needs_you" />);
+  expect(rendered.getByText("globalStream.nowPartial")).toBeTruthy();
+  expect(fetchNextPage).not.toHaveBeenCalled();
+  fireEvent.click(rendered.getByText("globalStream.laterPartial"));
+  expect(fetchNextPage).toHaveBeenCalled();
+  expect(rendered.getByText("globalStream.lookingForLater")).toBeTruthy();
+});
+
+it("comes back from a chat to the same side, search and host", () => {
+  vi.mocked(useGlobalStream).mockReturnValue({
+    rows: [],
+    notices: [],
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    isFetching: false,
+    isLoading: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    tagCounts: [],
+    pinnedTags: [],
+    supportsTags: false,
+    setTagPinned: vi.fn(),
+  });
+  useStreamReturnStore.setState({
+    restore: { view: "needs_you", showLater: true, search: "deploy", host: "m5", scrollOffset: 0 },
+  });
+  const rendered = render(<StreamWorkflowFeed initialView="needs_you" />);
+  expect(vi.mocked(useGlobalStream).mock.lastCall?.[0]).toMatchObject({
+    view: "needs_you",
+    serverId: "m5",
+    search: "deploy",
+  });
+  expect(rendered.getByText("globalStream.nothingLater")).toBeTruthy();
+  expect(useStreamReturnStore.getState().restore).toBeNull();
 });

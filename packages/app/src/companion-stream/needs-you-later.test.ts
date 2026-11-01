@@ -30,30 +30,18 @@ function row(id: string, deferredAt?: string): GlobalStreamRow {
 describe("splitLater", () => {
   const rows = [row("a"), row("b", "2026-11-01T01:00:00Z"), row("c")];
 
-  it("shows Now or Later in Needs you, with both counts for the header switch", () => {
+  it("shows Now or Later in Needs you, with both counts for the switch", () => {
     expect(splitLater(rows, "needs_you", false)).toEqual({
       data: [rows[0], rows[2]],
       nowCount: 2,
       laterCount: 1,
-      showingLater: false,
     });
-    expect(splitLater(rows, "needs_you", true)).toMatchObject({
-      data: [rows[1]],
-      showingLater: true,
-    });
+    expect(splitLater(rows, "needs_you", true).data).toEqual([rows[1]]);
   });
 
-  it("falls back to Now when Later is empty, and leaves other views untouched", () => {
+  it("keeps the chosen side even when it is empty, and leaves other views untouched", () => {
     const plain = [row("a")];
-    expect(splitLater(plain, "needs_you", true)).toMatchObject({
-      data: plain,
-      showingLater: false,
-    });
-    expect(splitLater(rows, "tasks", true)).toEqual({
-      data: rows,
-      nowCount: 0,
-      laterCount: 0,
-      showingLater: false,
-    });
+    expect(splitLater(plain, "needs_you", true)).toEqual({ data: [], nowCount: 1, laterCount: 0 });
+    expect(splitLater(rows, "tasks", true)).toEqual({ data: rows, nowCount: 0, laterCount: 0 });
   });
 });

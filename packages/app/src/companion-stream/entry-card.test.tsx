@@ -28,6 +28,24 @@ vi.mock("react-native-unistyles", () => ({
   withUnistyles: (component: unknown) => component,
 }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" role="menuitem" onClick={onSelect} disabled={disabled}>
+      {children}
+    </button>
+  ),
+}));
 vi.mock("@/components/ui/text-input", async () => {
   const { forwardRef, useImperativeHandle } = await import("react");
   return {
@@ -109,6 +127,17 @@ const humanRequest: CompanionEntry = {
   text: "Choose a date",
   truncated: false,
   inputRequest: { kind: "decision", recipient: "user" },
+};
+
+const permissionRequest: CompanionEntry = {
+  id: "permission:p",
+  kind: "permission",
+  requestId: "p",
+  requestKind: "tool",
+  status: "pending",
+  timestamp: ask.timestamp,
+  text: "Run deploy",
+  truncated: false,
 };
 
 const deferredRequest: CompanionEntry = { ...humanRequest, deferredAt: "2026-11-01T00:00:00Z" };
@@ -365,5 +394,60 @@ describe("EntryCard", () => {
       expect(view.getByText("Queued. The agent gets it when its current turn ends.")).toBeTruthy(),
     );
     expect(onReplyInChat).not.toHaveBeenCalled();
+  });
+
+  it("gives Needs you one triage row: Reply, Later, Details and More", () => {
+    const onUpdateStatus = vi.fn();
+    const onReturnToChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        variant="triage"
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={vi.fn()}
+      />,
+    );
+    for (const name of ["Reply", "Later", "Details"])
+      expect(view.getByRole("button", { name })).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    expect(view.queryByText("Decision · Needs you")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Details" }));
+    expect(view.getByText("Decision · Needs you")).toBeTruthy();
+    fireEvent.click(view.getByRole("menuitem", { name: "Open in chat" }));
+    expect(onReturnToChat).toHaveBeenCalled();
+    fireEvent.click(view.getByRole("menuitem", { name: "Done" }));
+    expect(onUpdateStatus).toHaveBeenCalledWith(humanRequest.id, "done");
+  });
+
+  it("sends a permission to Chat for review and never offers Done for a tracked ask", () => {
+    const onReturnToChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={permissionRequest}
+        variant="triage"
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Review permission" }));
+    expect(onReturnToChat).toHaveBeenCalled();
+    expect(view.queryByRole("button", { name: "Reply" })).toBeNull();
+    cleanup();
+    const tracked = render(
+      <EntryCard
+        entry={ask}
+        variant="triage"
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(tracked.queryByRole("menuitem", { name: "Done" })).toBeNull();
   });
 });
