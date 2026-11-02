@@ -1803,7 +1803,7 @@ export class AgentManager {
         updatedAt: existing.updatedAt,
         lastUserMessageAt: existing.lastUserMessageAt,
         messageActivity: existing.messageActivity,
-        ...(existing.createdBy ? { createdBy: existing.createdBy } : {}),
+        createdBy: existing.createdBy,
         historyPrimed: rehydrateFromDisk ? false : preservedHistoryPrimed,
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
@@ -2707,7 +2707,7 @@ export class AgentManager {
     }
     if (options?.clientMessageId) {
       this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
-        ...(options.sender ? { sender: options.sender } : {}),
+        sender: options.sender,
       });
       this.emitState(agent);
     }
@@ -4047,14 +4047,7 @@ export class AgentManager {
       ),
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,
       lastUserMessageAt: options?.lastUserMessageAt ?? null,
-      messageActivity: seedLegacyHumanActivity(
-        resolveInitialMessageActivity(options),
-        resolveAgentCreatedBy({
-          createdBy: options?.createdBy,
-          parentAgentId: getParentAgentIdFromLabels(options?.labels),
-        }),
-      ),
-      ...(options?.createdBy ? { createdBy: options.createdBy } : {}),
+      ...resolveInitialOwnership(options),
       lastUsage: options?.lastUsage,
       lastError: options?.lastError,
       attention: resolveInitialAttention(options?.attention),
@@ -5947,4 +5940,23 @@ function resolveInitialMessageActivity(options?: {
   messageActivity?: MessageActivity;
 }): MessageActivity {
   return options?.messageActivity ?? emptyMessageActivity();
+}
+
+/** Message activity with legacy human time seeded, plus the recorded creator. */
+function resolveInitialOwnership(options?: {
+  messageActivity?: MessageActivity;
+  createdBy?: string;
+  labels?: Record<string, string>;
+}): { messageActivity: MessageActivity; createdBy?: string } {
+  const createdBy = resolveAgentCreatedBy({
+    createdBy: options?.createdBy,
+    parentAgentId: getParentAgentIdFromLabels(options?.labels),
+  });
+  const messageActivity = seedLegacyHumanActivity(
+    resolveInitialMessageActivity(options),
+    createdBy,
+  );
+  return options?.createdBy
+    ? { messageActivity, createdBy: options.createdBy }
+    : { messageActivity };
 }

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -21,6 +21,7 @@ export function SidebarMineChip() {
   const tooltip = mineOnly
     ? t("sidebar.filterSidebar.mine.showAll", { count: mineHiddenCount })
     : t("sidebar.filterSidebar.mine.showMine");
+  const accessibilityState = useMemo(() => ({ selected: mineOnly }), [mineOnly]);
   const chipStyle = useCallback(
     ({ hovered = false, pressed }: ChipState) => [
       styles.chip,
@@ -34,7 +35,7 @@ export function SidebarMineChip() {
         <Pressable
           onPress={toggleMineOnly}
           accessibilityRole="button"
-          accessibilityState={{ selected: mineOnly }}
+          accessibilityState={accessibilityState}
           accessibilityLabel={tooltip}
           style={chipStyle}
           testID="sidebar-mine-filter"

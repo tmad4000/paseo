@@ -15,7 +15,10 @@ export type AgentOwnershipInput = Pick<
   "createdBy" | "parentAgentId" | "messageActivity" | "lastUserMessageAt"
 >;
 
-type AgentCreatorInput = { createdBy?: string | null; parentAgentId?: string | null };
+interface AgentCreatorInput {
+  createdBy?: string | null;
+  parentAgentId?: string | null;
+}
 
 export function agentCreatedBy(agent: AgentCreatorInput): UserMessageSender {
   return resolveAgentCreatedBy({ createdBy: agent.createdBy, parentAgentId: agent.parentAgentId });

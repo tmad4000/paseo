@@ -645,7 +645,7 @@ function serializeAgent(agent: Agent): StoredAgent {
     updatedAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt?.toISOString() ?? null,
     messageActivity: agent.messageActivity,
-    ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
+    createdBy: agent.createdBy,
     status: agent.status,
     ...(agent.turn.phase === "open" && agent.turn.turnId
       ? {
