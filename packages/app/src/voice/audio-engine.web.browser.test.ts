@@ -38,6 +38,9 @@ afterEach(async () => {
 
 describe("web audio engine playback", () => {
   it("fails fast with NotAllowedError while the tab has no user gesture, instead of hanging", async () => {
+    // What Chromium does without a user gesture; stubbed so earlier tests' activation cannot leak in.
+    vi.spyOn(AudioContext.prototype, "state", "get").mockReturnValue("suspended");
+    vi.spyOn(AudioContext.prototype, "resume").mockReturnValue(new Promise<void>(() => {}));
     const player = createEngine();
     const started = performance.now();
     const error = await player
