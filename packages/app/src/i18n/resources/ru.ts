@@ -324,6 +324,7 @@ export const ru: TranslationResources = {
       groupByProject: "Группировать по проекту",
       groupByStatus: "Группировать по статусу",
       groupInOneList: "Показывать чаты одним списком",
+      showAllSessions: "Показать все сессии",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -1704,6 +1705,11 @@ export const ru: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "Мои",
+        showMine: "Показывать только мои сессии",
+        showAll: "Показать все сессии (скрыто: {{count}})",
+      },
       matches: {
         startChat: "Начать чат с «{{query}}»",
         searchMessages: "Искать «{{query}}» в сообщениях",
@@ -2504,6 +2510,7 @@ export const ru: TranslationResources = {
     backdrop: "Фон меню",
   },
   subagents: {
+    delegatedBy: "делегировано: {{name}}",
     title: "Субагенты",
     pillLabelOne: "1 субагент",
     pillLabelMany: "Субагентов: {{count}}",

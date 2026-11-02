@@ -319,6 +319,7 @@ export const zhCN: TranslationResources = {
       groupByProject: "按项目分组",
       groupByStatus: "按状态分组",
       groupInOneList: "以单一列表显示聊天",
+      showAllSessions: "显示所有会话",
       modelGroupLabel: "模型",
       modelSearchKeywords: "切换模型 更改模型 设置模型 选择模型",
       thinkingGroupLabel: "思考",
@@ -1667,6 +1668,11 @@ export const zhCN: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "我的",
+        showMine: "仅显示我的会话",
+        showAll: "显示所有会话（已隐藏 {{count}} 个）",
+      },
       matches: {
         startChat: "以“{{query}}”开始聊天",
         searchMessages: "在消息中搜索“{{query}}”",
@@ -2436,6 +2442,7 @@ export const zhCN: TranslationResources = {
     backdrop: "菜单背景",
   },
   subagents: {
+    delegatedBy: "由 {{name}} 委派",
     title: "Subagent",
     pillLabelOne: "1 个 subagent",
     pillLabelMany: "{{count}} 个 subagent",

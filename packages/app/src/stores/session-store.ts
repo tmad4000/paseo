@@ -105,6 +105,12 @@ export interface Agent {
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
   parentAgentId: string | null;
+  /**
+   * Who started the agent: "human", "schedule" or "agent:<id>". Normalized from the snapshot,
+   * so legacy agents resolve to human unless they carry a parent. See
+   * `@getpaseo/protocol/user-message-sender`.
+   */
+  createdBy?: string;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
   artifacts?: AgentArtifact[];

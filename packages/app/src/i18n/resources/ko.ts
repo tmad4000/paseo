@@ -321,6 +321,7 @@ export const ko: TranslationResources = {
       groupByProject: "프로젝트별 그룹화",
       groupByStatus: "상태별 그룹화",
       groupInOneList: "채팅을 하나의 목록으로 표시",
+      showAllSessions: "모든 세션 보기",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -1694,6 +1695,11 @@ export const ko: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "내 세션",
+        showMine: "내 세션만 보기",
+        showAll: "모든 세션 보기 ({{count}}개 숨김)",
+      },
       matches: {
         startChat: '"{{query}}"(으)로 채팅 시작',
         searchMessages: '메시지에서 "{{query}}" 검색',
@@ -2481,6 +2487,7 @@ export const ko: TranslationResources = {
     backdrop: "메뉴 배경",
   },
   subagents: {
+    delegatedBy: "{{name}}이(가) 위임함",
     title: "하위 에이전트",
     pillLabelOne: "하위 에이전트 1개",
     pillLabelMany: "하위 에이전트 {{count}}개",
