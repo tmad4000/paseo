@@ -2448,6 +2448,8 @@ export const ja: TranslationResources = {
       "recognition-unavailable": "ホストで音声認識を利用できません。",
       "host-disconnected": "ホストとの接続が切れました。再接続までマイク入力は一時停止します。",
       "microphone-lost": "マイクが使えなくなりました。音声を停止しました。",
+      "playback-failed":
+        "このデバイスでは音声の返答を再生できません。返答はチャットにテキストで表示されます。",
     },
     actions: {
       interruptAgent: "エージェントを中断",

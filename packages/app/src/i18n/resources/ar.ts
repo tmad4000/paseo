@@ -2425,6 +2425,7 @@ export const ar: TranslationResources = {
       "recognition-unavailable": "التعرف على الكلام غير متاح على المضيف.",
       "host-disconnected": "انقطع الاتصال بالمضيف. إدخال الميكروفون متوقف مؤقتًا حتى يعود الاتصال.",
       "microphone-lost": "فُقد الميكروفون. توقف الصوت.",
+      "playback-failed": "تعذّر تشغيل الردود الصوتية على هذا الجهاز. تستمر الردود نصًا في المحادثة.",
     },
     actions: {
       interruptAgent: "مقاطعة الوكيل",

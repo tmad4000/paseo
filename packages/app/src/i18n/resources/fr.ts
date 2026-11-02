@@ -2487,6 +2487,8 @@ export const fr: TranslationResources = {
       "host-disconnected":
         "Hôte déconnecté. L’entrée du micro est suspendue jusqu’à la reconnexion.",
       "microphone-lost": "Micro perdu. La session vocale s’est arrêtée.",
+      "playback-failed":
+        "Impossible de lire les réponses vocales sur cet appareil. Les réponses continuent sous forme de texte dans le chat.",
     },
     actions: {
       interruptAgent: "Interrompre l’agent",

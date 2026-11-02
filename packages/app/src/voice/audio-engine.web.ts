@@ -4,12 +4,15 @@ import type {
   AudioEngineCallbacks,
   AudioPlaybackSource,
 } from "@/voice/audio-engine-types";
+import { isPcmMimeType } from "@/voice/audio-format";
 
 interface QueuedAudio {
   audio: AudioPlaybackSource;
   resolve: (duration: number) => void;
   reject: (error: Error) => void;
 }
+
+const PLAYBACK_RESUME_TIMEOUT_MS = 1_500;
 
 function getAudioContextCtor(): typeof AudioContext | null {
   if (typeof window === "undefined") {
@@ -100,8 +103,10 @@ export function createAudioEngine(
     muted: boolean;
     queue: QueuedAudio[];
     processingQueue: boolean;
+    gestureResumeArmed: boolean;
     activePlayback: {
-      source: AudioBufferSourceNode;
+      /** The playing Web Audio source, or the media-element fallback's pause handle. */
+      source: { stop(): void };
       resolve: (duration: number) => void;
       reject: (error: Error) => void;
       settled: boolean;
@@ -117,14 +122,13 @@ export function createAudioEngine(
     muted: false,
     queue: [],
     processingQueue: false,
+    gestureResumeArmed: false,
     activePlayback: null,
   };
 
   async function ensurePlaybackContext(): Promise<AudioContext> {
     if (refs.playbackContext) {
-      if (refs.playbackContext.state === "suspended") {
-        await refs.playbackContext.resume().catch(() => undefined);
-      }
+      await ensureRunning(refs.playbackContext);
       return refs.playbackContext;
     }
 
@@ -134,11 +138,50 @@ export function createAudioEngine(
     }
 
     const context = new AudioContextCtor();
-    if (context.state === "suspended") {
-      await context.resume().catch(() => undefined);
-    }
     refs.playbackContext = context;
+    await ensureRunning(context);
     return context;
+  }
+
+  // A browser tab without a user gesture keeps the context suspended, and resume() then never
+  // settles. Waiting on it hung every reply until the runtime's 90 s timeout. Bound the wait,
+  // fail with a named error the runtime can count and show, and resume on the next gesture.
+  async function ensureRunning(context: AudioContext): Promise<void> {
+    if (context.state !== "suspended") return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      context.resume().catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, PLAYBACK_RESUME_TIMEOUT_MS);
+      }),
+    ]);
+    clearTimeout(timer);
+    // state changes asynchronously; read it through a function so TypeScript does not narrow it.
+    if (readState(context) === "suspended") {
+      resumeOnNextGesture(context);
+      const error = new Error(
+        "Audio output is blocked until you click or press a key in this window",
+      );
+      error.name = "NotAllowedError";
+      throw error;
+    }
+  }
+
+  function readState(context: AudioContext): AudioContextState {
+    return context.state;
+  }
+
+  function resumeOnNextGesture(context: AudioContext): void {
+    if (refs.gestureResumeArmed || typeof window === "undefined") return;
+    refs.gestureResumeArmed = true;
+    const resume = () => {
+      window.removeEventListener("pointerdown", resume, true);
+      window.removeEventListener("keydown", resume, true);
+      refs.gestureResumeArmed = false;
+      if (context.state === "suspended") void context.resume().catch(() => undefined);
+    };
+    window.addEventListener("pointerdown", resume, true);
+    window.addEventListener("keydown", resume, true);
   }
 
   async function ensureCaptureContext(): Promise<AudioContext> {
@@ -166,13 +209,23 @@ export function createAudioEngine(
     const context = await ensurePlaybackContext();
     const arrayBuffer = await audio.arrayBuffer();
     const type = (audio.type || "").toLowerCase();
-    const audioBuffer = type.startsWith("audio/pcm")
-      ? pcm16LeToAudioBuffer(
-          context,
-          new Uint8Array(arrayBuffer),
-          parsePcmSampleRate(type) ?? 24000,
-        )
-      : await decodeAudioData(context, arrayBuffer);
+    let audioBuffer: AudioBuffer;
+    if (isPcmMimeType(type)) {
+      // createBuffer rejects zero frames with NotSupportedError; an empty chunk is just silence.
+      if (arrayBuffer.byteLength < 2) return 0;
+      audioBuffer = pcm16LeToAudioBuffer(
+        context,
+        new Uint8Array(arrayBuffer),
+        parsePcmSampleRate(type) ?? 24000,
+      );
+    } else {
+      try {
+        audioBuffer = await decodeAudioData(context, arrayBuffer);
+      } catch (decodeError) {
+        // Web Audio cannot decode every container the media element can; try that before failing.
+        return await playWithMediaElement(arrayBuffer, type, decodeError);
+      }
+    }
 
     const durationSec = audioBuffer.duration;
     const source = context.createBufferSource();
@@ -202,6 +255,47 @@ export function createAudioEngine(
         settle(() => reject(error instanceof Error ? error : new Error(String(error))));
       }
     });
+  }
+
+  // Fallback player for compressed clips Web Audio rejected. Rethrows the decode error when the
+  // element cannot play it either, so the caller sees the original cause.
+  async function playWithMediaElement(
+    arrayBuffer: ArrayBuffer,
+    type: string,
+    decodeError: unknown,
+  ): Promise<number> {
+    if (typeof Audio === "undefined" || typeof URL === "undefined" || !URL.createObjectURL) {
+      throw decodeError;
+    }
+    const url = URL.createObjectURL(new Blob([arrayBuffer], { type: type || "audio/mpeg" }));
+    const element = new Audio(url);
+    const stopElement = () => element.pause();
+    const failure = () =>
+      decodeError instanceof Error ? decodeError : new Error(String(decodeError));
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        const source = { stop: stopElement };
+        refs.activePlayback = { source, resolve, reject, settled: false };
+        const settle = (fn: () => void) => {
+          const active = refs.activePlayback;
+          if (!active || active.source !== source || active.settled) return;
+          active.settled = true;
+          refs.activePlayback = null;
+          fn();
+        };
+        element.addEventListener("ended", () => {
+          settle(() => resolve(Number.isFinite(element.duration) ? element.duration : 0));
+        });
+        element.addEventListener("error", () => {
+          settle(() => reject(failure()));
+        });
+        element.play().catch(() => {
+          settle(() => reject(failure()));
+        });
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function processQueue(): Promise<void> {
@@ -259,7 +353,10 @@ export function createAudioEngine(
 
   return {
     async initialize() {
-      await ensurePlaybackContext();
+      // Before any gesture the context may be blocked; playback reports that when it matters.
+      await ensurePlaybackContext().catch((error: unknown) => {
+        if (!(error instanceof Error && error.name === "NotAllowedError")) throw error;
+      });
     },
 
     async destroy() {

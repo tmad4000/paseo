@@ -2439,6 +2439,8 @@ export const ko: TranslationResources = {
       "host-disconnected":
         "호스트 연결이 끊어졌습니다. 다시 연결될 때까지 마이크 입력이 일시 중지됩니다.",
       "microphone-lost": "마이크를 사용할 수 없습니다. 음성이 중지되었습니다.",
+      "playback-failed":
+        "이 기기에서 음성 답변을 재생할 수 없습니다. 답변은 채팅에 텍스트로 계속 표시됩니다.",
     },
     actions: {
       interruptAgent: "에이전트 중단",

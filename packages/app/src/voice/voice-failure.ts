@@ -15,11 +15,13 @@ export type VoiceFailureKind =
   /** The connection to the host dropped. Input is paused until it reconnects. */
   | "host-disconnected"
   /** The device stopped delivering microphone audio. Voice stops. */
-  | "microphone-lost";
+  | "microphone-lost"
+  /** Replies repeatedly failed to play on this device. Input still works; replies stay text. */
+  | "playback-failed";
 
 /** Failures after which nothing the user says reaches the agent. */
 export function isVoiceFailureBlocking(kind: VoiceFailureKind): boolean {
-  return kind !== "nothing-recognized";
+  return kind !== "nothing-recognized" && kind !== "playback-failed";
 }
 
 /** Host `voice_input_state.recognitionIssue` values. Unknown values are ignored. */
@@ -48,6 +50,7 @@ const REANNOUNCE_AFTER_MS: Record<VoiceFailureKind, number> = {
   "recognition-unavailable": 30_000,
   "host-disconnected": 30_000,
   "microphone-lost": 30_000,
+  "playback-failed": 30_000,
 };
 
 /** A different kind this soon after an announcement is usually a consequence of it. */

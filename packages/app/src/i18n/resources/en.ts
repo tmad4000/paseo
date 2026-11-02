@@ -2472,6 +2472,8 @@ export const en = {
       "recognition-unavailable": "Speech recognition is unavailable on the host.",
       "host-disconnected": "Host disconnected. Microphone input is paused until it reconnects.",
       "microphone-lost": "Microphone lost. Voice stopped.",
+      "playback-failed":
+        "Can't play voice replies on this device. Replies continue as text in the chat.",
     },
     actions: {
       interruptAgent: "Interrupt agent",
