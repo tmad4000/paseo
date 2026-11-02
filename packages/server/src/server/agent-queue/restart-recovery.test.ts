@@ -206,6 +206,8 @@ describe("Restart agent recovers a stuck queue", () => {
     const first = createService();
     await first.enqueue({ agentId: AGENT_ID, itemId: "a", text: "a" });
     await first.enqueue({ agentId: AGENT_ID, itemId: "b", text: "b" });
+    // One daemon at a time: let the old service settle before the "restarted" one starts.
+    await first.flushDrains();
     first.stop();
     // Daemon restart while the agent was "running": it comes back idle, no edge.
     agents.lifecycle = "idle";
