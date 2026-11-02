@@ -13,17 +13,7 @@ import React, {
 } from "react";
 import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
-  Circle,
   CircleCheck,
-  CopyX,
-  ArrowLeftToLine,
-  ArrowRightToLine,
-  Copy,
-  FileCode2,
-  LayoutPanelLeft,
-  Search,
-  Pencil,
-  RotateCw,
   Columns2,
   Rows2,
   Ellipsis,
@@ -70,6 +60,7 @@ import {
   type WorkspaceTabMenuEntry,
   type WorkspaceTabMenuLabels,
 } from "@/screens/workspace/workspace-tab-menu";
+import { renderWorkspaceTabMenuIcon } from "@/screens/workspace/workspace-tab-menu-icon";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import type { Theme } from "@/styles/theme";
@@ -82,6 +73,7 @@ import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispat
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
+import { useAgentTabControlMenuEntries } from "@/screens/workspace/use-agent-tab-control-menu-entries";
 import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
 import { resolveTabTrailingControls } from "@/screens/workspace/workspace-tab-trailing-controls";
 import {
@@ -133,18 +125,8 @@ const AGENT_TOOLTIP_TITLE_MAX_LENGTH = 80;
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedX = withUnistyles(X);
-const ThemedFileCode2 = withUnistyles(FileCode2);
-const ThemedSearch = withUnistyles(Search);
-const ThemedLayoutPanelLeft = withUnistyles(LayoutPanelLeft);
-const ThemedCopy = withUnistyles(Copy);
 
-const ThemedRotateCw = withUnistyles(RotateCw);
-const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
-const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
-const ThemedCopyX = withUnistyles(CopyX);
-const ThemedCircle = withUnistyles(Circle);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
-const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
@@ -473,34 +455,7 @@ function TabContextMenuItem({
   entry: Extract<WorkspaceTabMenuEntry, { kind: "item" }>;
 }) {
   const leading = useMemo(() => {
-    switch (entry.icon) {
-      case "copy":
-        return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
-      case "rotate-cw":
-        return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
-      case "arrow-left-to-line":
-        return <ThemedArrowLeftToLine size={16} uniProps={mutedColorMapping} />;
-      case "arrow-right-to-line":
-        return <ThemedArrowRightToLine size={16} uniProps={mutedColorMapping} />;
-      case "copy-x":
-        return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
-      case "pencil":
-        return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
-      case "x":
-        return <ThemedX size={16} uniProps={mutedColorMapping} />;
-      case "file-code-2":
-        return <ThemedFileCode2 size={16} uniProps={mutedColorMapping} />;
-      case "search":
-        return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
-      case "layout-panel-left":
-        return <ThemedLayoutPanelLeft size={16} uniProps={mutedColorMapping} />;
-      case "circle":
-        return <ThemedCircle size={16} uniProps={mutedColorMapping} />;
-      case "circle-check":
-        return <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
-      default:
-        return undefined;
-    }
+    return renderWorkspaceTabMenuIcon(entry.icon);
   }, [entry.icon]);
   const trailing = useMemo(
     () => (entry.hint ? <Text style={styles.menuItemHint}>{entry.hint}</Text> : undefined),
@@ -1719,6 +1674,11 @@ function ResolvedDesktopTabChip({
     workspaceId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const agentControlEntries = useAgentTabControlMenuEntries({
+    tab: item.tab,
+    serverId,
+    menuTestIDBase: baseResolvedTab.contextMenuTestId,
+  });
   const readAction = useAgentReadAction({
     serverId: item.tab.scope?.serverId ?? serverId,
     agentId: item.tab.target.kind === "agent" ? item.tab.target.agentId : null,
@@ -1737,18 +1697,20 @@ function ResolvedDesktopTabChip({
     () =>
       openInViewEntries.length === 0 &&
       markUnreadEntries.length === 0 &&
-      markReadEntries.length === 0
+      markReadEntries.length === 0 &&
+      agentControlEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
             menuEntries: [
+              ...agentControlEntries,
               ...markReadEntries,
               ...markUnreadEntries,
               ...openInViewEntries,
               ...baseResolvedTab.menuEntries,
             ],
           },
-    [baseResolvedTab, markReadEntries, markUnreadEntries, openInViewEntries],
+    [agentControlEntries, baseResolvedTab, markReadEntries, markUnreadEntries, openInViewEntries],
   );
 
   const rawTooltipLabel =

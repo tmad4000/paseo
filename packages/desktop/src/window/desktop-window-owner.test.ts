@@ -73,6 +73,14 @@ describe("desktop window owner", () => {
     expect(h.sent).toEqual([{ id: "agent-7" }]);
   });
 
+  it("opens an additional window directly on an agent route", async () => {
+    const h = harness();
+    await h.owner.openAdditional({ initialRoute: "/h/server/agent/agent-7" });
+    expect(h.launches).toEqual([
+      { initialRoute: "/h/server/agent/agent-7", restoreWindowState: false },
+    ]);
+  });
+
   it("removes pending routing state when a window closes", async () => {
     const h = harness();
     await h.owner.openAdditional({ pendingProjectPath: "/project/a" });

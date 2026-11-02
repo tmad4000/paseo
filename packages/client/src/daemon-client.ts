@@ -3153,6 +3153,45 @@ export class DaemonClient {
     );
   }
 
+  /** Sends the queue head now if the agent is free. Requires `queueDrain`. */
+  async drainAgentQueue(agentId: string): Promise<AgentQueueSnapshot> {
+    return this.requireAgentQueuePayload(
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.drain.response">({
+        message: { type: "agent.queue.drain.request", agentId },
+        timeout: 120_000,
+      }),
+    );
+  }
+
+  /** Removes every queued item not already being submitted. Requires `queueDrain`. */
+  async clearAgentQueue(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.queue.clear.response">> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.clear.response">(
+      {
+        message: { type: "agent.queue.clear.request", agentId },
+      },
+    );
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  /**
+   * Restart agent: restarts the provider process, resumes the same session and
+   * delivers the queue in order. Requires `agentRestart`.
+   */
+  async restartAgent(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.restart.response">> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"agent.restart.response">({
+      message: { type: "agent.restart.request", agentId },
+      // Resuming a provider session and submitting the queue head can take a while.
+      timeout: 180_000,
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
   /** Host-side delivery state for one agent. Requires `deliveryInspect`. */
   async inspectAgentDelivery(
     agentId: string,

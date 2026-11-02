@@ -10,6 +10,7 @@ import { addSendOptions, runSendCommand } from "./send.js";
 import { addInspectOptions, runInspectCommand } from "./inspect.js";
 import { addWaitOptions, runWaitCommand } from "./wait.js";
 import { addAttachOptions, runAttachCommand } from "./attach.js";
+import { addRestartOptions, runRestartCommand } from "./restart.js";
 import { addReloadOptions, runReloadCommand } from "./reload.js";
 import { addImportOptions, runImportCommand } from "./import.js";
 import { runUpdateCommand } from "./update.js";
@@ -86,6 +87,10 @@ export function createAgentCommand(): Command {
 
   addJsonAndDaemonHostOptions(addReloadOptions(agent.command("reload"))).action(
     withOutput(runReloadCommand),
+  );
+
+  addJsonAndDaemonHostOptions(addRestartOptions(agent.command("restart"))).action(
+    withOutput(runRestartCommand),
   );
 
   addJsonAndDaemonHostOptions(

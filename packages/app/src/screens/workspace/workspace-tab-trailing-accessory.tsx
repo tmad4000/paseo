@@ -2,19 +2,7 @@ import { useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import {
-  ArrowLeftToLine,
-  ArrowRightToLine,
-  CircleCheck,
-  Copy,
-  FileCode2,
-  Search,
-  CopyX,
-  Ellipsis,
-  Pencil,
-  RotateCw,
-  X,
-} from "lucide-react-native";
+import { CircleCheck, Ellipsis } from "lucide-react-native";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,18 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { WorkspaceTabMenuEntry } from "@/screens/workspace/workspace-tab-menu";
+import { renderWorkspaceTabMenuIcon } from "@/screens/workspace/workspace-tab-menu-icon";
 import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
-const ThemedCopy = withUnistyles(Copy);
-const ThemedRotateCw = withUnistyles(RotateCw);
-const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
-const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
-const ThemedCopyX = withUnistyles(CopyX);
-const ThemedPencil = withUnistyles(Pencil);
-const ThemedX = withUnistyles(X);
-const ThemedFileCode2 = withUnistyles(FileCode2);
-const ThemedSearch = withUnistyles(Search);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -52,30 +32,7 @@ function MobileTabDropdownMenuItem({
   entry: Extract<WorkspaceTabMenuEntry, { kind: "item" }>;
 }) {
   const leading = useMemo(() => {
-    switch (entry.icon) {
-      case "copy":
-        return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
-      case "rotate-cw":
-        return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
-      case "arrow-left-to-line":
-        return <ThemedArrowLeftToLine size={16} uniProps={mutedColorMapping} />;
-      case "arrow-right-to-line":
-        return <ThemedArrowRightToLine size={16} uniProps={mutedColorMapping} />;
-      case "copy-x":
-        return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
-      case "pencil":
-        return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
-      case "x":
-        return <ThemedX size={16} uniProps={mutedColorMapping} />;
-      case "file-code-2":
-        return <ThemedFileCode2 size={16} uniProps={mutedColorMapping} />;
-      case "search":
-        return <ThemedSearch size={16} uniProps={mutedColorMapping} />;
-      case "circle-check":
-        return <ThemedCircleCheck size={16} uniProps={mutedColorMapping} />;
-      default:
-        return undefined;
-    }
+    return renderWorkspaceTabMenuIcon(entry.icon);
   }, [entry.icon]);
   const trailing = useMemo(
     () => (entry.hint ? <Text style={styles.menuItemHint}>{entry.hint}</Text> : undefined),

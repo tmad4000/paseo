@@ -398,6 +398,12 @@ next running → idle edge or the next enqueue rather than resuming the agent at
 agents when the daemon comes up is a bigger behavior change than mirroring, and it belongs in its
 own decision.
 
+That wait can be forever: an already-idle agent never produces the edge, and a head whose receipt
+was left `pending` by a dying daemon is never retried. The explicit recovery is **Restart agent**
+(tab menu, `paseo agent restart`, MCP `restart_agent`), which settles the stalled head against the
+timeline and drains in order; `paseo queue drain` / `drain_queue` deliver an idle agent's queue
+without a restart. See [agent-tab-control.md](agent-tab-control.md#the-stuck-queue-and-what-restart-does-about-it).
+
 With delivery receipts, send-now claims the stored item in place and removes it only
 after confirmed dispatch. A failed or unsupported steer leaves it at its original
 position for recovery. Older hosts without receipts temporarily claim and restore

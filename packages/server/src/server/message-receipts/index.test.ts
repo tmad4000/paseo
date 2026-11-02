@@ -188,3 +188,57 @@ test("pre-dispatch preparation failure stays retryable, active dispatch is not u
   await pending;
   expect((await requests.listForAttachment(input))[0].state).toBe("completed");
 });
+
+async function strandPending(directory: string, requests: MessageReceipts) {
+  const input = {
+    agentId: "agent",
+    messageId: "stuck",
+    request: { text: "hello" },
+    send: async () => {
+      throw new Error("connection lost after dispatch");
+    },
+  };
+  await expect(requests.send(input)).rejects.toThrow();
+  expect(await new MessageReceipts(directory).get("agent", "stuck")).toBe("pending");
+  return input;
+}
+
+test("settling a stale pending receipt as absent lets the message send again", async () => {
+  const { requests, directory } = await fixture();
+  const input = await strandPending(directory, requests);
+  const restarted = new MessageReceipts(directory);
+  expect(await restarted.settleStalePending("agent", "stuck", "absent")).toBe(true);
+  expect(await restarted.get("agent", "stuck")).toBe("absent");
+  let deliveries = 0;
+  await restarted.send({ ...input, send: async () => void deliveries++ });
+  expect(deliveries).toBe(1);
+  expect(await restarted.get("agent", "stuck")).toBe("completed");
+});
+
+test("settling a stale pending receipt as completed never sends it again", async () => {
+  const { requests, directory } = await fixture();
+  const input = await strandPending(directory, requests);
+  const restarted = new MessageReceipts(directory);
+  expect(await restarted.settleStalePending("agent", "stuck", "completed")).toBe(true);
+  let deliveries = 0;
+  await restarted.send({ ...input, send: async () => void deliveries++ });
+  expect(deliveries).toBe(0);
+});
+
+test("settling refuses receipts that are not pending or still in flight", async () => {
+  const { requests } = await fixture();
+  expect(await requests.settleStalePending("agent", "missing", "absent")).toBe(false);
+  let release: () => void = () => undefined;
+  const sending = requests.send({
+    agentId: "agent",
+    messageId: "live",
+    request: { text: "x" },
+    send: () => new Promise<void>((resolve) => (release = resolve)),
+  });
+  await expect.poll(() => requests.get("agent", "live")).toBe("pending");
+  expect(await requests.settleStalePending("agent", "live", "absent")).toBe(false);
+  release();
+  await sending;
+  expect(await requests.settleStalePending("agent", "live", "absent")).toBe(false);
+  expect(await requests.get("agent", "live")).toBe("completed");
+});

@@ -272,3 +272,76 @@ ended" from "the work is complete and wants a look."
   `jacob/daily`).
 - queue-instead-of-interrupt fix — new branch off v0.4.0, stacked on the
   queue-mirror work.
+
+## Tab context menu, Restart agent and queue recovery (fork, 2026-11-01)
+
+Right-click an agent tab (desktop) or open its tab menu (mobile) for per-agent controls. They are
+built by `buildAgentTabControlMenuEntries` (`packages/app/src/screens/workspace/agent-tab-control-menu.ts`)
+and appended by `useAgentTabControlMenuEntries`, the same hook pattern as Mark as unread, so no
+callbacks are threaded through the split/tab tree. Every item calls an existing daemon RPC.
+
+| Menu item                 | Daemon RPC                       | CLI                                | Agent MCP (`/mcp/agents`)    |
+| ------------------------- | -------------------------------- | ---------------------------------- | ---------------------------- |
+| Restart agent             | `agent.restart.request`          | `paseo agent restart <id>`         | `restart_agent`              |
+| Interrupt (while running) | `cancel_agent_request`           | `paseo agent stop <id>`            | `cancel_agent`               |
+| Mode: … (one per mode)    | `set_agent_mode_request`         | `paseo agent mode <id> <mode>`     | `set_agent_mode`             |
+| Queued messages (N)       | snapshot (`agent.queue.update`)  | `paseo queue ls <id>`              | `list_queue`                 |
+| Send now: …               | `agent.queue.send_now.request`   | `paseo queue send-now <id> <item>` | `send_queued_now`            |
+| Deliver queue now         | `agent.queue.drain.request`      | `paseo queue drain <id>`           | `drain_queue`                |
+| Clear queue               | `agent.queue.clear.request`      | `paseo queue clear <id>`           | `clear_queue`                |
+| (remove one item)         | `agent.queue.remove.request`     | `paseo queue rm <id> <item>`       | `remove_queued_message`      |
+| Copy attach command       | none (`paseo agent attach <id>`) | `paseo agent attach <id>`          | n/a                          |
+| Open in new window        | desktop IPC `openNew({ agent })` | n/a                                | `open_tab` (existing window) |
+| Archive agent             | `archive_agent_request`          | `paseo agent archive <id>`         | `archive_agent`              |
+| Rename (existing)         | `update_agent_request`           | `paseo agent update <id> --name`   | `update_agent`               |
+| Reload agent (existing)   | `refresh_agent_request`          | `paseo agent reload <id>`          | none (see gaps)              |
+
+Capability flags: `agentRestart` and `queueDrain` (both `COMPAT`, fork). The menu hides Restart and
+Deliver/Clear on hosts without them; Send now still needs `queueSendNow`. Open in new window builds
+its route in the Electron main process from `{ serverId, agentId }`; the renderer never passes a URL.
+
+### Restart vs Reload
+
+**Reload** wipes the in-memory timeline and re-streams provider history (use it when the session
+was changed outside Paseo, or to pick up skills/MCPs). **Restart** (`restartAgentCommand`,
+`packages/server/src/server/agent/restart-agent.ts`) restarts the provider process and resumes the
+same session _keeping the timeline_, then recovers and drains the queue. Keeping the timeline is
+what lets it tell whether a stuck message already arrived.
+
+### The stuck queue, and what Restart does about it
+
+Two independent things strand a daemon queue on an idle agent:
+
+1. Drains fire only on a running → idle edge (or enqueue / hold release / permission resolution),
+   and nothing drains at daemon startup. An agent that is already idle never produces the edge.
+2. A head item whose delivery receipt is `pending` — the daemon died between writing the receipt
+   and confirming submission — is never retried automatically, by design (the provider may have
+   received it). `drainWithReceipt` returns early on it forever, and every item behind it waits.
+
+Agent 073a1f54 (2026-10-28 → 2026-11-01) hit case 2: head `164864a9…` pending since 05:44, 37 items
+behind it. Restart fixes both: `AgentQueueService.recoverStalledHead` checks the timeline for a
+user message whose `clientMessageId`/`messageId` equals the item id. Found → the receipt becomes
+`completed` and the item is recorded as drained (no duplicate). Not found → the receipt is deleted
+and the item is resent. Losing a message is worse than a possible duplicate, and Restart is the
+user's explicit statement that the old dispatch is dead. Matching is by id only, never by text:
+two identical "continue" messages must not cancel each other. A send still in flight on this
+daemon is never settled (`MessageReceipts.settleStalePending` refuses). Then `drainNow` sends the
+head; the rest follow one per turn, in order, on the normal idle edges.
+
+`paseo queue ls` flags a pending head ("The first message is stuck … Run: paseo agent restart").
+`drain_queue` / `paseo queue drain` alone fix case 1 but not case 2.
+
+### Parity gaps (app actions without a CLI or MCP twin), as of 2026-11-01
+
+- **Reload agent** has no MCP tool (`restart_agent` covers the recovery use; add `reload_agent` if
+  agents need the re-stream).
+- **Mark as read / unread** (`workspace.mark_unread.request`, agent attention): no CLI, no MCP.
+- **Queue edit and reorder** (`agent.queue.edit`, `agent.queue.reorder`): no CLI, no MCP.
+  Enqueue is covered by `send_agent_prompt` / `paseo agent send`, which queue when the agent is busy.
+- **Model change** from the composer: MCP `update_agent.settings` covers it; the CLI's
+  `agent update` has `--thinking` but no `--model`.
+- **Rewind** (`agent.rewind.request`) and **fork context** (`agent.fork_context.request`): no CLI, no MCP.
+- **Copy resume command** (provider-native resume line): app only; `paseo agent inspect` shows
+  the session id.
+- **Delete agent**: CLI `agent delete`; MCP has `kill_agent` (close) and `archive_agent`, no delete.
+- **Open in new window**: desktop-only by nature; agents use `open_tab` on an existing window.

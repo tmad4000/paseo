@@ -176,6 +176,35 @@ export class MessageReceipts {
     }
   }
 
+  /**
+   * Resolves a `pending` receipt whose dispatch owner is gone, for example after
+   * the daemon died mid-submit. A pending receipt blocks the queue forever by
+   * design (the outcome is unknown, so nothing retries it automatically), so
+   * only an explicit recovery — Restart agent — calls this, after checking the
+   * agent's timeline. `completed` records the message as delivered; `absent`
+   * deletes the receipt so the next drain sends the message again.
+   *
+   * Refuses (returns false) while this daemon still has the send in flight, or
+   * when the receipt is not pending.
+   */
+  async settleStalePending(
+    agentId: string,
+    messageId: string,
+    outcome: "completed" | "absent",
+  ): Promise<boolean> {
+    const key = digest(["send", agentId, messageId]);
+    if (this.pending.has(key)) return false;
+    const file = path.join(this.directory, `${key}.json`);
+    const existing = await readReceipt(file);
+    if (!existing || existing.state !== "pending") return false;
+    if (outcome === "completed") {
+      await this.write(file, { ...existing, state: "completed" });
+    } else {
+      await this.mutate(() => rm(file, { force: true }));
+    }
+    return true;
+  }
+
   send(input: SendMessageInput): Promise<void> {
     // Preserve the existing on-disk identity and shape across daemon upgrades.
     const key = digest(["send", input.agentId, input.messageId]);
