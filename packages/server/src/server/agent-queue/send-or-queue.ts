@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { UserMessageSender } from "@getpaseo/protocol/user-message-sender";
 
 import { sendPromptToAgent } from "../agent/agent-prompt.js";
 import type { AgentManager } from "../agent/agent-manager.js";
@@ -18,6 +19,8 @@ export interface SendOrQueuePromptParams {
   text: string;
   origin?: "voice";
   voiceOwner?: string;
+  /** Who sent it; recorded on the user_message turn whether it is queued or sent now. */
+  sender?: UserMessageSender;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: AgentAttachment[];
   messageId?: string;
@@ -51,12 +54,15 @@ export async function sendOrQueuePromptToAgent(
   params: SendOrQueuePromptParams,
 ): Promise<SendOrQueueResult> {
   const { queueService } = params;
+  const runOptions: AgentRunOptions | undefined = params.sender
+    ? { ...params.runOptions, sender: params.sender }
+    : params.runOptions;
   if (!params.interrupt && queueService) {
     const prompt = buildAgentPrompt(params.text, params.images, params.attachments);
     if (
       params.origin !== "voice" &&
       params.agentManager.getAgent(params.agentId) &&
-      params.agentManager.tryRunOutOfBand(params.agentId, prompt, params.runOptions)
+      params.agentManager.tryRunOutOfBand(params.agentId, prompt, runOptions)
     ) {
       return { queued: false, outOfBand: true };
     }
@@ -71,6 +77,7 @@ export async function sendOrQueuePromptToAgent(
       text: params.text,
       origin: params.origin,
       voiceOwner: params.voiceOwner,
+      ...(params.sender ? { sender: params.sender } : {}),
       ...(params.images?.length ? { images: params.images } : {}),
       ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     });
@@ -84,7 +91,7 @@ export async function sendOrQueuePromptToAgent(
     agentId: params.agentId,
     prompt: buildAgentPrompt(params.text, params.images, params.attachments),
     ...(params.messageId ? { messageId: params.messageId } : {}),
-    ...(params.runOptions ? { runOptions: params.runOptions } : {}),
+    ...(runOptions ? { runOptions } : {}),
     ...(params.sessionMode ? { sessionMode: params.sessionMode } : {}),
     ...(params.unarchive !== undefined ? { unarchive: params.unarchive } : {}),
     logger: params.logger,

@@ -58,6 +58,8 @@ const STORED_AGENT_SCHEMA = z.object({
   lastActivityAt: z.string().optional(),
   lastUserMessageAt: z.string().nullable().optional(),
   messageActivity: AgentMessageActivitySchema.optional(),
+  /** UserMessageSender that created the agent; absent on records written before it existed. */
+  createdBy: z.string().optional(),
   title: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   lastStatus: AgentStatusSchema.default("closed"),

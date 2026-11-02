@@ -7,6 +7,10 @@ import type {
   QueuedComposerAttachment,
 } from "@getpaseo/protocol/messages";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
+import {
+  parseUserMessageSender,
+  type UserMessageSender,
+} from "@getpaseo/protocol/user-message-sender";
 
 import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentPromptInput } from "../agent/agent-sdk-types.js";
@@ -77,6 +81,8 @@ export interface EnqueueAgentMessageInput {
   validateDestination?: () => Promise<void>;
   origin?: "voice";
   voiceOwner?: string;
+  /** Who queued it; recorded on the turn when it is delivered. */
+  sender?: UserMessageSender;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: AgentAttachment[];
   composerAttachments?: QueuedComposerAttachment[];
@@ -87,6 +93,12 @@ export interface SendQueuedPromptInput {
   prompt: AgentPromptInput;
   messageId: string;
   activeTurnBehavior?: "steer_only";
+  sender?: UserMessageSender;
+}
+
+function queuedItemSender(item: { sender?: string }): { sender?: UserMessageSender } {
+  const sender = parseUserMessageSender(item.sender);
+  return sender ? { sender } : {};
 }
 
 export interface AgentQueueServiceOptions {
@@ -145,6 +157,7 @@ export class AgentQueueService {
           blockPendingPermissions: true,
           awaitRunStart: true,
           ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
+          ...(input.sender ? { runOptions: { sender: input.sender } } : {}),
           logger: this.logger,
         });
       });
@@ -272,6 +285,7 @@ export class AgentQueueService {
       id: input.itemId,
       text,
       ...(input.origin ? { origin: input.origin, voiceOwner: input.voiceOwner } : {}),
+      ...(input.sender ? { sender: input.sender } : {}),
       createdAt: new Date().toISOString(),
       ...(attachments.length ? { attachments } : {}),
       ...(input.composerAttachments?.length
@@ -511,6 +525,7 @@ export class AgentQueueService {
             prompt,
             messageId: itemId,
             activeTurnBehavior: "steer_only",
+            ...queuedItemSender(item),
           }).then(() => undefined),
       });
     }
@@ -553,6 +568,7 @@ export class AgentQueueService {
         prompt: buildAgentPrompt(item.text, item.images, item.attachments as AgentAttachment[]),
         messageId: item.id,
         activeTurnBehavior: "steer_only",
+        ...queuedItemSender(item),
       });
     } catch (error) {
       const restored = await this.store.mutate(agentId, (current) => {
@@ -746,6 +762,7 @@ export class AgentQueueService {
           sendItem.attachments as AgentAttachment[],
         ),
         messageId: sendItem.id,
+        ...queuedItemSender(sendItem),
       });
     } catch (error) {
       this.logger.warn(
@@ -799,7 +816,12 @@ export class AgentQueueService {
               : {}),
             request,
             send: () =>
-              this.sendPrompt({ agentId, prompt, messageId: next.id }).then(() => undefined),
+              this.sendPrompt({
+                agentId,
+                prompt,
+                messageId: next.id,
+                ...queuedItemSender(claimedItem!),
+              }).then(() => undefined),
           });
         } catch (error) {
           this.logger.warn(

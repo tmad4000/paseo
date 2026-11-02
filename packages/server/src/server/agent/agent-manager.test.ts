@@ -12158,11 +12158,117 @@ test("message activity ignores submitted system notifications while accepted use
     expect(manager.getAgent(agent.id)?.messageActivity).toEqual({
       lastUserMessageAt: null,
       lastAssistantMessageAt: null,
+      lastHumanMessageAt: null,
     });
     await manager.runAgent(agent.id, "real prompt", { clientMessageId: "user" });
     expect(manager.getAgent(agent.id)?.messageActivity?.lastUserMessageAt).toEqual(
       expect.any(String),
     );
+  } finally {
+    if (agentId) await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("records who sent each user turn and moves human activity only for human turns", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-message-sender-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  let agentId: string | undefined;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+      createdBy: "agent:parent-1",
+    });
+    agentId = agent.id;
+    expect(manager.getAgent(agent.id)?.createdBy).toBe("agent:parent-1");
+    expect(toAgentPayload(manager.getAgent(agent.id)!).createdBy).toBe("agent:parent-1");
+
+    await manager.runAgent(agent.id, "from the parent", {
+      clientMessageId: "agent-turn",
+      sender: "agent:parent-1",
+    });
+    await manager.runAgent(agent.id, "from the schedule", {
+      clientMessageId: "schedule-turn",
+      sender: "schedule",
+    });
+    const afterAutomated = manager.getAgent(agent.id)?.messageActivity;
+    expect(afterAutomated?.lastUserMessageAt).toEqual(expect.any(String));
+    expect(afterAutomated?.lastHumanMessageAt).toBeNull();
+
+    await manager.runAgent(agent.id, "from a person", {
+      clientMessageId: "human-turn",
+      sender: "human",
+    });
+    const activity = manager.getAgent(agent.id)?.messageActivity;
+    expect(activity?.lastHumanMessageAt).toEqual(expect.any(String));
+    expect(activity?.lastHumanMessageAt).toBe(activity?.lastUserMessageAt);
+
+    const senders = (await manager.getTimelineRows(agent.id))
+      .map((row) => row.item)
+      .filter((item) => item.type === "user_message")
+      .map((item) => [item.text, item.sender]);
+    expect(senders).toEqual([
+      ["from the parent", "agent:parent-1"],
+      ["from the schedule", "schedule"],
+      ["from a person", "human"],
+    ]);
+
+    await manager.closeAgent(agent.id);
+    await storage.flush();
+    const record = await storage.get(agent.id);
+    expect(record?.createdBy).toBe("agent:parent-1");
+    expect(record?.messageActivity?.lastHumanMessageAt).toBe(activity?.lastHumanMessageAt);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("applies the turn sender to a prompt the provider echoes without a client message id", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-message-echo-sender-"));
+  class EchoingSession extends TestAgentSession {
+    override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+      const turnId = "echo-turn";
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: "codex", turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: "codex",
+          turnId,
+          item: { type: "user_message", text: typeof prompt === "string" ? prompt : "" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: "codex", turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+  const manager = new AgentManager({
+    clients: {
+      codex: new (class extends TestAgentClient {
+        override async createSession(config: AgentSessionConfig) {
+          return new EchoingSession(config);
+        }
+      })(),
+    },
+    logger,
+  });
+  let agentId: string | undefined;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    await manager.runAgent(agent.id, "scheduled work", { sender: "schedule" });
+    const userMessages = (await manager.getTimelineRows(agent.id))
+      .map((row) => row.item)
+      .filter((item) => item.type === "user_message");
+    expect(userMessages.map((item) => item.sender)).toEqual(["schedule"]);
+    expect(manager.getAgent(agent.id)?.messageActivity?.lastHumanMessageAt).toBeNull();
   } finally {
     if (agentId) await manager.closeAgent(agentId);
     rmSync(workdir, { recursive: true, force: true });
@@ -12218,9 +12324,11 @@ test("message activity imports only original dated messages and preserves clocks
     });
     agentId = agent.id;
     await manager.hydrateTimelineFromProvider(agent.id, { force: true });
+    // A person created this agent, so its unattributed provider history counts as theirs.
     const expected = {
       lastUserMessageAt: "2025-01-01T00:00:00.000Z",
       lastAssistantMessageAt: "2025-01-02T00:00:00.000Z",
+      lastHumanMessageAt: "2025-01-01T00:00:00.000Z",
     };
     expect(manager.getAgent(agent.id)?.messageActivity).toEqual(expected);
     history = [

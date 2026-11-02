@@ -176,6 +176,33 @@ describe("AgentQueueService", () => {
     expect(retry.items.map((item) => item.id)).toEqual(["routed"]);
   });
 
+  test("a queued message keeps its sender through a restart and delivers with it", async () => {
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "from-parent",
+      text: "do the next step",
+      sender: "agent:parent-1",
+    });
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "legacy",
+      text: "queued before senders existed",
+    });
+    harness.service.stop();
+    harness = createHarness();
+    for (let turn = 0; turn < 2; turn += 1) {
+      harness.agents.emitLifecycle("running");
+      harness.agents.emitLifecycle("idle");
+      await harness.service.flushDrains();
+    }
+
+    expect(harness.sent.map((input) => [input.messageId, input.sender])).toEqual([
+      ["from-parent", "agent:parent-1"],
+      ["legacy", undefined],
+    ]);
+  });
+
   test("broadcasts the queue to subscribers when an item is enqueued while the agent is busy", async () => {
     harness.agents.lifecycle = "running";
 

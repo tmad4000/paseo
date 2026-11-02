@@ -3,6 +3,7 @@ import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
   emptyMessageActivity,
+  seedLegacyHumanActivity,
 } from "./message-activity.js";
 
 describe("message activity clocks", () => {
@@ -12,6 +13,7 @@ describe("message activity clocks", () => {
     expect(reply).toEqual({
       lastUserMessageAt: "2026-10-01T10:00:00.000Z",
       lastAssistantMessageAt: "2026-10-01T10:01:00.000Z",
+      lastHumanMessageAt: null,
     });
     expect(advanceMessageActivity(reply, "user", "2026-09-01T00:00:00Z")).toBe(reply);
     expect(advanceMessageActivity(reply, "assistant", "2026-10-01T10:01:00Z")).toBe(reply);
@@ -53,6 +55,7 @@ describe("historical message activity", () => {
     ).toEqual({
       lastUserMessageAt: "2026-10-01T10:02:00.000Z",
       lastAssistantMessageAt: "2026-10-01T10:03:00.000Z",
+      lastHumanMessageAt: null,
     });
   });
 
@@ -93,6 +96,59 @@ describe("historical message activity", () => {
       deriveHistoricalMessageActivity([
         { item: { type: "user_message", text: "" }, timestamp: "2026-10-01T10:00:00Z" },
       ]),
-    ).toEqual({ lastUserMessageAt: "2026-10-01T10:00:00.000Z", lastAssistantMessageAt: null });
+    ).toEqual({
+      lastUserMessageAt: "2026-10-01T10:00:00.000Z",
+      lastAssistantMessageAt: null,
+      lastHumanMessageAt: null,
+    });
+  });
+
+  it("counts a turn as human from its sender, and unattributed turns only when asked", () => {
+    const events = [
+      {
+        item: { type: "user_message" as const, text: "typed", sender: "human" },
+        timestamp: "2026-10-01T10:00:00Z",
+      },
+      {
+        item: { type: "user_message" as const, text: "delegated", sender: "agent:parent" },
+        timestamp: "2026-10-01T11:00:00Z",
+      },
+      {
+        item: { type: "user_message" as const, text: "provider history" },
+        timestamp: "2026-10-01T12:00:00Z",
+      },
+    ];
+    expect(deriveHistoricalMessageActivity(events).lastHumanMessageAt).toBe(
+      "2026-10-01T10:00:00.000Z",
+    );
+    expect(
+      deriveHistoricalMessageActivity(events, { unattributedIsHuman: true }).lastHumanMessageAt,
+    ).toBe("2026-10-01T12:00:00.000Z");
+    expect(deriveHistoricalMessageActivity(events).lastUserMessageAt).toBe(
+      "2026-10-01T12:00:00.000Z",
+    );
+  });
+});
+
+describe("legacy human activity", () => {
+  const legacy = {
+    lastUserMessageAt: "2026-10-01T10:00:00.000Z",
+    lastAssistantMessageAt: "2026-10-01T10:01:00.000Z",
+  };
+
+  it("keeps a human-created agent's last user time as human time", () => {
+    expect(seedLegacyHumanActivity(legacy, "human").lastHumanMessageAt).toBe(
+      "2026-10-01T10:00:00.000Z",
+    );
+  });
+
+  it("gives a delegated or scheduled agent no human time", () => {
+    expect(seedLegacyHumanActivity(legacy, "agent:parent").lastHumanMessageAt).toBeNull();
+    expect(seedLegacyHumanActivity(legacy, "schedule").lastHumanMessageAt).toBeNull();
+  });
+
+  it("leaves a recorded human time alone", () => {
+    const recorded = { ...legacy, lastHumanMessageAt: null };
+    expect(seedLegacyHumanActivity(recorded, "human")).toBe(recorded);
   });
 });

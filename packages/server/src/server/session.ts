@@ -21,6 +21,7 @@ import type { StructuredTextGeneration } from "./session/checkout/git-metadata-g
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
+import { agentSender, HUMAN_SENDER } from "@getpaseo/protocol/user-message-sender";
 import { relative } from "node:path";
 import { isAbsolute } from "node:path";
 import { CreationService } from "./creation/index.js";
@@ -1283,6 +1284,7 @@ export class Session {
               text,
               origin: "voice",
               voiceOwner: options.voiceOwner,
+              sender: HUMAN_SENDER,
             });
           },
           reportDiagnostic: (input) =>
@@ -4787,6 +4789,7 @@ export class Session {
         },
         {
           kind: "session",
+          createdBy: msg.callerAgentId ? agentSender(msg.callerAgentId) : HUMAN_SENDER,
           onAgentReady: async (agent) => {
             createdAgentId = agent.id;
             await onAgentReady?.(await this.buildAgentPayload(agent));
@@ -5440,6 +5443,7 @@ export class Session {
             agentId,
             itemId: msg.itemId,
             text: msg.text,
+            sender: HUMAN_SENDER,
             images: msg.images,
             attachments: msg.attachments,
             composerAttachments: msg.composerAttachments,
@@ -9116,6 +9120,7 @@ export class Session {
           agentId,
           messageId: msg.messageId,
           text: msg.text,
+          sender: HUMAN_SENDER,
           ...(msg.images ? { images: msg.images } : {}),
           ...(msg.attachments ? { attachments: msg.attachments } : {}),
         });
@@ -9143,6 +9148,7 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           clearPendingPermissions: true,
+          runOptions: { sender: HUMAN_SENDER },
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {
