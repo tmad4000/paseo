@@ -2919,6 +2919,31 @@ export const AgentQueueListRequestSchema = z.object({
   agentId: z.string(),
 });
 
+/** Sends the queue head now if the agent is free, without waiting for an idle edge. Gated on `queueDrain`. */
+export const AgentQueueDrainRequestSchema = z.object({
+  type: z.literal("agent.queue.drain.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/** Removes every queued item that is not already being submitted. Gated on `queueDrain`. */
+export const AgentQueueClearRequestSchema = z.object({
+  type: z.literal("agent.queue.clear.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/**
+ * Restart agent: restart the provider process, resume the same session, then
+ * deliver the queue in order (settling a head stuck on a pending receipt).
+ * Gated on `agentRestart`.
+ */
+export const AgentRestartRequestSchema = z.object({
+  type: z.literal("agent.restart.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
 /** Host-side delivery state for one agent, for `paseo queue ls`. Gated on `deliveryInspect`. */
 export const AgentQueueInspectRequestSchema = z.object({
   type: z.literal("agent.queue.inspect.request"),
@@ -3020,6 +3045,37 @@ export const AgentQueueSendNowResponseSchema = z.object({
 export const AgentQueueListResponseSchema = z.object({
   type: z.literal("agent.queue.list.response"),
   payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueDrainResponseSchema = z.object({
+  type: z.literal("agent.queue.drain.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueClearResponseSchema = z.object({
+  type: z.literal("agent.queue.clear.response"),
+  payload: AgentQueueResponsePayloadSchema.extend({
+    removed: z.number().int().nonnegative().optional(),
+    /** Items already being submitted, which clear leaves in place. */
+    kept: z.number().int().nonnegative().optional(),
+  }),
+});
+
+export const AgentRestartResponseSchema = z.object({
+  type: z.literal("agent.restart.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    /** `reloaded` (live process restarted) or `resumed` (stored agent loaded). */
+    mode: z.string().nullable(),
+    timelineSize: z.number().int().nonnegative().nullable(),
+    queuedBefore: z.number().int().nonnegative().nullable(),
+    queuedAfter: z.number().int().nonnegative().nullable(),
+    /** Set when the head was stuck on a pending receipt; outcome `delivered` or `resend`. */
+    recoveredHead: z.object({ itemId: z.string(), outcome: z.string() }).nullable(),
+    queue: AgentQueueSnapshotSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentQueueInspectResponseSchema = z.object({
@@ -4107,6 +4163,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueReorderRequestSchema,
   AgentQueueGetItemImagesRequestSchema,
   AgentQueueInspectRequestSchema,
+  AgentQueueDrainRequestSchema,
+  AgentQueueClearRequestSchema,
+  AgentRestartRequestSchema,
   ClientOutboxReportRequestSchema,
   ClientDiagnosticsReportRequestSchema,
   ClientDiagnosticsListRequestSchema,
@@ -4526,6 +4585,10 @@ export const ServerInfoStatusPayloadSchema = z
         streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
+        // COMPAT(agentRestart): fork feature; Restart agent keeps the session and drains the queue. Remove gate after 2027-05-01.
+        agentRestart: z.boolean().optional(),
+        // COMPAT(queueDrain): fork feature; explicit queue drain and clear. Remove gate after 2027-05-01.
+        queueDrain: z.boolean().optional(),
         // COMPAT(queueEditHold): fork feature; the queue waits while a message is being edited.
         queueEditHold: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
@@ -7834,6 +7897,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueReorderResponseSchema,
   AgentQueueGetItemImagesResponseSchema,
   AgentQueueInspectResponseSchema,
+  AgentQueueDrainResponseSchema,
+  AgentQueueClearResponseSchema,
+  AgentRestartResponseSchema,
   ClientOutboxReportResponseSchema,
   ClientDiagnosticsReportResponseSchema,
   ClientDiagnosticsListResponseSchema,

@@ -56,6 +56,16 @@ export function renderQueueInspection(inspection: QueueInspection, limit: number
     lines.push(`  ${item.id}  ${formatTime(item.createdAt)}  ${preview(item.text)}`);
   }
   if (queued.length === 0) lines.push("  none");
+  const head = queued[0];
+  const headReceipt = head
+    ? inspection.receipts.find((receipt) => receipt.messageId === head.id)
+    : undefined;
+  if (headReceipt?.state === "pending") {
+    lines.push(
+      `  ! The first message is stuck: its delivery was interrupted, so the queue will not drain on its own.`,
+    );
+    lines.push(`    Run: paseo agent restart ${inspection.agentId}`);
+  }
 
   lines.push("");
   lines.push(`Recently delivered from the queue (newest first, ${limit} max)`);

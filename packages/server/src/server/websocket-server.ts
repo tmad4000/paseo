@@ -2004,6 +2004,10 @@ export class VoiceAssistantWebSocketServer {
         streamWorkflow: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
+        // COMPAT(agentRestart): fork feature. Remove gate after 2027-05-01.
+        agentRestart: true,
+        // COMPAT(queueDrain): fork feature. Remove gate after 2027-05-01.
+        queueDrain: this.agentQueueService !== null,
         // COMPAT(queueEditHold): added 2026-10-27; remove gate after 2027-04-27.
         queueEditHold: this.agentQueueService !== null,
         steerOnly: true,
