@@ -12,6 +12,12 @@ import {
   type VoiceFailureKind,
 } from "@/voice/voice-failure";
 import { createVoiceFailureCue, createVoiceReconnectedCue } from "@/voice/voice-failure-cue";
+import {
+  describePlaybackError,
+  isAutoplayBlockedError,
+  isPlaybackStoppedError,
+  playbackMimeType,
+} from "@/voice/audio-format";
 import type { AudioEngine, AudioPlaybackSource } from "@/voice/audio-engine-types";
 import {
   THINKING_TONE_NATIVE_PCM_BASE64,
@@ -39,6 +45,10 @@ const DISPLAY_VOLUME_RELEASE = 0.18;
 // Before voice stops over a failure, give its spoken cue this long to finish. A player that
 // never settles, such as one blocked by a phone call, must not hold the stop.
 const FAILURE_CUE_BEFORE_STOP_MAX_MS = 4_000;
+// After this many reply chunks in a row fail to play, stop trying for the rest of the voice
+// session: show and speak why, and let replies continue as text instead of failing silently.
+export const PLAYBACK_FAILURE_LIMIT = 3;
+const PLAYBACK_DISABLED_ERROR = "Playback disabled on this device after repeated failures";
 
 type TurnEventType = Extract<
   AgentStreamEventPayload["type"],
@@ -192,6 +202,10 @@ interface RuntimePlaybackState {
   activeGroupId: string | null;
   processing: boolean;
   generation: number;
+  /** Reply chunks that failed in a row; any success resets it. */
+  consecutiveFailures: number;
+  /** Set after PLAYBACK_FAILURE_LIMIT failures; cleared when voice starts again. */
+  textOnly: boolean;
 }
 
 interface CueState {
@@ -322,6 +336,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     activeGroupId: null,
     processing: false,
     generation: 0,
+    consecutiveFailures: 0,
+    textOnly: false,
   };
   const cue: CueState = {
     active: false,
@@ -396,10 +412,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     bytes: Uint8Array,
     format: string,
   ): { arrayBuffer(): Promise<ArrayBuffer>; size: number; type: string } {
-    let mimeType: string;
-    if (format === "pcm") mimeType = "audio/pcm;rate=24000;bits=16";
-    else if (format === "mp3") mimeType = "audio/mpeg";
-    else mimeType = `audio/${format}`;
+    const mimeType = playbackMimeType(format);
 
     return {
       size: bytes.byteLength,
@@ -461,6 +474,28 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     else await activeSession.adapter.audioPlayed(chunkId, error);
   }
 
+  function notePlaybackSuccess(): void {
+    playback.consecutiveFailures = 0;
+    // Audio got through, so a gesture unblocked the window.
+    if (failures.current() === "audio-blocked") clearFailures(["audio-blocked"]);
+  }
+
+  function notePlaybackFailure(error: unknown, description: string, mimeType: string): void {
+    // Our own cancellation (barge-in, a cue stopping) is not a device problem.
+    if (isPlaybackStoppedError(error)) return;
+    // Blocked until a gesture: show how to enable audio, and keep trying so the next chunk
+    // after a click plays. Counting it would switch a working device to text-only.
+    if (isAutoplayBlockedError(error)) {
+      if (state.snapshot.failure !== "audio-blocked")
+        void reportFailure("audio-blocked", description);
+      return;
+    }
+    playback.consecutiveFailures += 1;
+    if (playback.textOnly || playback.consecutiveFailures < PLAYBACK_FAILURE_LIMIT) return;
+    playback.textOnly = true;
+    void reportFailure("playback-failed", `${description} (type=${mimeType})`);
+  }
+
   async function processPlaybackQueue(serverId: string): Promise<void> {
     if (playback.processing) {
       return;
@@ -502,22 +537,28 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         let playbackError: string | undefined;
         let playbackTimeout: ReturnType<typeof setTimeout> | undefined;
         try {
-          if (group.shouldPlay) {
+          if (group.shouldPlay && playback.textOnly) {
+            playbackError = PLAYBACK_DISABLED_ERROR;
+          } else if (group.shouldPlay) {
             const timeout = new Promise<never>((_resolve, reject) => {
               playbackTimeout = setTimeout(() => {
                 reject(new Error("Audio playback timed out"));
               }, PLAYBACK_TIMEOUT_MS);
             });
             await Promise.race([deps.engine.play(nextChunk.source), timeout]);
+            notePlaybackSuccess();
           }
         } catch (error) {
           if (generation !== playback.generation) {
             return;
           }
-          console.error(`[VoiceRuntime] play error chunk=${group.nextChunkToPlay}:`, error);
-          playbackError = error instanceof Error ? error.message : String(error);
+          playbackError = describePlaybackError(error);
+          console.error(
+            `[VoiceRuntime] play error chunk=${group.nextChunkToPlay} type=${nextChunk.source.type}: ${playbackError}`,
+          );
           deps.engine.stop();
           deps.engine.clearQueue();
+          notePlaybackFailure(error, playbackError, nextChunk.source.type);
         } finally {
           clearTimeout(playbackTimeout);
         }
@@ -660,15 +701,16 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     });
   }
 
-  function reportFailure(kind: VoiceFailureKind): Promise<void> {
+  function reportFailure(kind: VoiceFailureKind, detail?: string): Promise<void> {
     recordVoiceDiagnostic({
       code: kind,
       operation: state.snapshot.voiceProvider ?? undefined,
-      message: `Voice failure: ${kind}`,
+      message: detail ? `Voice failure: ${kind}: ${detail}` : `Voice failure: ${kind}`,
     });
     const announce = failures.report(kind);
     patchSnapshot({ failure: failures.current() });
-    if (!announce) {
+    // A blocked context cannot play the cue either; the panel text says what to do.
+    if (!announce || kind === "audio-blocked") {
       return Promise.resolve();
     }
     // The thinking tone would otherwise suggest the agent is still working on what was said.
@@ -738,6 +780,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
   function resetToDisabledState(): void {
     failures.reset();
+    playback.consecutiveFailures = 0;
+    playback.textOnly = false;
     inputStatuses.clear();
     state.transportReady = false;
     state.attachmentId = null;
@@ -1218,6 +1262,9 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
             state.turnInProgress = false;
             uploader.reset();
             resetCaptureTelemetry();
+            // A fresh voice session gets another chance to play audio.
+            playback.consecutiveFailures = 0;
+            playback.textOnly = false;
             patchSnapshot((prev) => ({
               ...prev,
               isVoiceMode: true,

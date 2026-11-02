@@ -2485,6 +2485,10 @@ export const es: TranslationResources = {
       "host-disconnected":
         "Host desconectado. La entrada del micrófono está en pausa hasta que se reconecte.",
       "microphone-lost": "Se perdió el micrófono. La voz se detuvo.",
+      "playback-failed":
+        "No se pueden reproducir las respuestas de voz en este dispositivo. Las respuestas continúan como texto en el chat.",
+      "audio-blocked":
+        "El audio está bloqueado en esta ventana. Haz clic o pulsa una tecla para oír las respuestas de voz.",
     },
     actions: {
       interruptAgent: "Interrumpir al agente",

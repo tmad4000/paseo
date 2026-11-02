@@ -3,8 +3,9 @@ import type { DaemonServerInfo } from "@/stores/session-store";
 import type { AudioEngine } from "@/voice/audio-engine-types";
 import { createVoiceRuntime, type VoiceSessionAdapter } from "@/voice/voice-runtime";
 import { REALTIME_VOICE_VAD_CONFIG } from "@/voice/realtime-voice-config";
-import type { VoiceFailureKind } from "@/voice/voice-failure";
+import type { SpokenVoiceFailureKind } from "@/voice/voice-failure";
 import { createVoiceFailureCue, createVoiceReconnectedCue } from "@/voice/voice-failure-cue";
+import { createPlaybackStoppedError } from "@/voice/audio-format";
 
 const CUE_MIME_TYPE = "audio/pcm;rate=16000;bits=16";
 const THINKING_TONE_MIN_SILENCE_MS = 1500;
@@ -25,13 +26,14 @@ function createAudioEngineMock(): AudioEngine {
   };
 }
 
-const FAILURE_KINDS: VoiceFailureKind[] = [
+const FAILURE_KINDS: SpokenVoiceFailureKind[] = [
   "nothing-recognized",
   "recognition-stalled",
   "recognition-failed",
   "recognition-unavailable",
   "host-disconnected",
   "microphone-lost",
+  "playback-failed",
 ];
 
 /** Names of the local failure cues the engine was asked to play, in order. */
@@ -1147,5 +1149,153 @@ describe("optional GPT voice privacy", () => {
     await clear;
     expect(f.engine.startCapture).toHaveBeenCalledTimes(1);
     expect(f.runtime.getSnapshot().isVoiceMode).toBe(false);
+  });
+});
+
+describe("voice runtime playback fallback", () => {
+  function realtimeChunk(index: number, isLastChunk = false) {
+    // GPT Realtime sends a full MIME type, not a short name.
+    return {
+      ...createAudioPayload({
+        id: `r-${index}`,
+        groupId: "realtime-1",
+        chunkIndex: index,
+        isLastChunk,
+      }),
+      format: "audio/pcm;rate=24000;bits=16",
+    };
+  }
+
+  it("plays GPT Realtime audio as PCM instead of a doubled audio/audio MIME type", async () => {
+    const adapter = createSessionAdapter();
+    const { runtime, engine } = createRuntime();
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    runtime.handleAudioOutput("server-1", realtimeChunk(0, true));
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledWith("r-0"));
+    expect(vi.mocked(engine.play).mock.calls[0]?.[0].type).toBe("audio/pcm;rate=24000;bits=16");
+    await runtime.destroy();
+  });
+
+  it("after repeated failures shows, speaks and records why, then stops trying and reports text-only", async () => {
+    const recordDiagnostic = vi.fn();
+    const adapter = createSessionAdapter();
+    const engine = createAudioEngineMock();
+    const decodeError = Object.assign(new Error("Unable to decode audio data"), {
+      name: "EncodingError",
+    });
+    vi.mocked(engine.play).mockImplementation(async (source) => {
+      if (source.type.includes("rate=24000")) throw decodeError;
+      return 0.1;
+    });
+    const { runtime } = createRuntime({ engine, recordDiagnostic });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+
+    for (let index = 0; index < 5; index += 1) {
+      runtime.handleAudioOutput("server-1", realtimeChunk(index, index === 4));
+    }
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledTimes(5));
+
+    const replyAttempts = vi
+      .mocked(engine.play)
+      .mock.calls.filter(([source]) => source.type.includes("rate=24000"));
+    expect(replyAttempts).toHaveLength(3);
+    expect(adapter.audioPlayed).toHaveBeenCalledWith(
+      "r-0",
+      "EncodingError: Unable to decode audio data",
+    );
+    expect(adapter.audioPlayed).toHaveBeenCalledWith(
+      "r-4",
+      "Playback disabled on this device after repeated failures",
+    );
+    expect(runtime.getSnapshot().failure).toBe("playback-failed");
+    expect(recordDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "voice",
+        code: "playback-failed",
+        message: expect.stringContaining("EncodingError: Unable to decode audio data"),
+      }),
+    );
+    await vi.waitFor(() => expect(spokenFailureCues(engine)).toContain("playback-failed"));
+    await runtime.destroy();
+  });
+
+  it("blocked audio shows how to enable it, never switches to text-only, and plays after a gesture", async () => {
+    const recordDiagnostic = vi.fn();
+    const adapter = createSessionAdapter();
+    const engine = createAudioEngineMock();
+    const blocked = Object.assign(new Error("Audio output is blocked"), {
+      name: "NotAllowedError",
+    });
+    // Four chunks while the window has no gesture, then the user clicks and audio resumes.
+    let remainingBlocked = 4;
+    vi.mocked(engine.play).mockImplementation(async (source) => {
+      if (source.type.includes("rate=24000") && remainingBlocked > 0) {
+        remainingBlocked -= 1;
+        throw blocked;
+      }
+      return 0.1;
+    });
+    const { runtime } = createRuntime({ engine, recordDiagnostic });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+
+    for (let index = 0; index < 4; index += 1) {
+      runtime.handleAudioOutput("server-1", realtimeChunk(index));
+    }
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledTimes(4));
+    expect(runtime.getSnapshot().failure).toBe("audio-blocked");
+
+    runtime.handleAudioOutput("server-1", realtimeChunk(4, true));
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledWith("r-4"));
+    const replyAttempts = vi
+      .mocked(engine.play)
+      .mock.calls.filter(([source]) => source.type.includes("rate=24000"));
+    expect(replyAttempts).toHaveLength(5);
+    expect(runtime.getSnapshot().failure).toBeNull();
+    const codes = recordDiagnostic.mock.calls.map(([input]) => (input as { code: string }).code);
+    expect(codes).not.toContain("playback-failed");
+    expect(codes.filter((code) => code === "audio-blocked")).toHaveLength(1);
+    await runtime.destroy();
+  });
+
+  it("our own playback stops never count toward the text-only switch", async () => {
+    const adapter = createSessionAdapter();
+    const engine = createAudioEngineMock();
+    vi.mocked(engine.play)
+      .mockRejectedValueOnce(createPlaybackStoppedError())
+      .mockRejectedValueOnce(createPlaybackStoppedError())
+      .mockRejectedValueOnce(createPlaybackStoppedError())
+      .mockResolvedValueOnce(0.1);
+    const { runtime } = createRuntime({ engine });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    for (let index = 0; index < 4; index += 1) {
+      runtime.handleAudioOutput("server-1", realtimeChunk(index, index === 3));
+    }
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledWith("r-3"));
+    expect(vi.mocked(engine.play)).toHaveBeenCalledTimes(4);
+    expect(runtime.getSnapshot().failure).toBeNull();
+    await runtime.destroy();
+  });
+
+  it("a success between failures keeps playback on", async () => {
+    const adapter = createSessionAdapter();
+    const engine = createAudioEngineMock();
+    vi.mocked(engine.play)
+      .mockRejectedValueOnce(new Error("one"))
+      .mockRejectedValueOnce(new Error("two"))
+      .mockResolvedValueOnce(0.1)
+      .mockRejectedValueOnce(new Error("three"));
+    const { runtime } = createRuntime({ engine });
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    for (let index = 0; index < 4; index += 1) {
+      runtime.handleAudioOutput("server-1", realtimeChunk(index, index === 3));
+    }
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledTimes(4));
+    expect(runtime.getSnapshot().failure).toBeNull();
+    await runtime.destroy();
   });
 });

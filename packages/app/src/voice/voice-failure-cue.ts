@@ -1,6 +1,6 @@
 import { Buffer } from "buffer";
 import type { AudioPlaybackSource } from "./audio-engine-types";
-import type { VoiceFailureKind } from "./voice-failure";
+import type { SpokenVoiceFailureKind } from "./voice-failure";
 import {
   VOICE_FAILURE_PHRASE_MULAW_BASE64,
   VOICE_FAILURE_PHRASE_SAMPLE_RATE,
@@ -79,7 +79,7 @@ function buildCue(phrase: PhraseKey, withBuzz: boolean): AudioPlaybackSource {
 }
 
 /** The failure earcon followed by a spoken name for the failure. Played on the device. */
-export function createVoiceFailureCue(kind: VoiceFailureKind): AudioPlaybackSource {
+export function createVoiceFailureCue(kind: SpokenVoiceFailureKind): AudioPlaybackSource {
   return buildCue(kind, true);
 }
 
