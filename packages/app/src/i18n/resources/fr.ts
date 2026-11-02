@@ -2489,6 +2489,8 @@ export const fr: TranslationResources = {
       "microphone-lost": "Micro perdu. La session vocale s’est arrêtée.",
       "playback-failed":
         "Impossible de lire les réponses vocales sur cet appareil. Les réponses continuent sous forme de texte dans le chat.",
+      "audio-blocked":
+        "Le son est bloqué dans cette fenêtre. Cliquez ou appuyez sur une touche pour entendre les réponses vocales.",
     },
     actions: {
       interruptAgent: "Interrompre l’agent",

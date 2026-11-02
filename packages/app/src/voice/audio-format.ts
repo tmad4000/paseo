@@ -36,3 +36,27 @@ export function describePlaybackError(error: unknown): string {
   }
   return String(error);
 }
+
+const PLAYBACK_STOPPED_MESSAGE = "Playback stopped";
+
+/** Rejection for audio we cancelled on purpose (barge-in, a cue stopping, voice ending). */
+export function createPlaybackStoppedError(): Error {
+  const error = new Error(PLAYBACK_STOPPED_MESSAGE);
+  error.name = "AbortError";
+  return error;
+}
+
+/** Our own cancellation, not a device problem. Never counts as a playback failure. */
+export function isPlaybackStoppedError(error: unknown): boolean {
+  return error instanceof Error && error.message === PLAYBACK_STOPPED_MESSAGE;
+}
+
+/** The browser is holding audio until a click or key press; not a device failure. */
+export function isAutoplayBlockedError(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    "name" in error &&
+    (error as { name: unknown }).name === "NotAllowedError"
+  );
+}

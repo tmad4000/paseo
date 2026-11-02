@@ -2441,6 +2441,8 @@ export const ko: TranslationResources = {
       "microphone-lost": "마이크를 사용할 수 없습니다. 음성이 중지되었습니다.",
       "playback-failed":
         "이 기기에서 음성 답변을 재생할 수 없습니다. 답변은 채팅에 텍스트로 계속 표시됩니다.",
+      "audio-blocked":
+        "이 창에서 오디오가 차단되었습니다. 음성 답변을 들으려면 클릭하거나 키를 누르세요.",
     },
     actions: {
       interruptAgent: "에이전트 중단",

@@ -17,11 +17,16 @@ export type VoiceFailureKind =
   /** The device stopped delivering microphone audio. Voice stops. */
   | "microphone-lost"
   /** Replies repeatedly failed to play on this device. Input still works; replies stay text. */
-  | "playback-failed";
+  | "playback-failed"
+  /** The browser holds audio until a click or key press in this window. Not spoken. */
+  | "audio-blocked";
+
+/** Failures with a bundled spoken phrase. A blocked context cannot play one. */
+export type SpokenVoiceFailureKind = Exclude<VoiceFailureKind, "audio-blocked">;
 
 /** Failures after which nothing the user says reaches the agent. */
 export function isVoiceFailureBlocking(kind: VoiceFailureKind): boolean {
-  return kind !== "nothing-recognized" && kind !== "playback-failed";
+  return kind !== "nothing-recognized" && kind !== "playback-failed" && kind !== "audio-blocked";
 }
 
 /** Host `voice_input_state.recognitionIssue` values. Unknown values are ignored. */
@@ -51,6 +56,7 @@ const REANNOUNCE_AFTER_MS: Record<VoiceFailureKind, number> = {
   "host-disconnected": 30_000,
   "microphone-lost": 30_000,
   "playback-failed": 30_000,
+  "audio-blocked": 30_000,
 };
 
 /** A different kind this soon after an announcement is usually a consequence of it. */

@@ -4,7 +4,7 @@ import type {
   AudioEngineCallbacks,
   AudioPlaybackSource,
 } from "@/voice/audio-engine-types";
-import { isPcmMimeType } from "@/voice/audio-format";
+import { createPlaybackStoppedError, isPcmMimeType } from "@/voice/audio-format";
 
 interface QueuedAudio {
   audio: AudioPlaybackSource;
@@ -103,7 +103,8 @@ export function createAudioEngine(
     muted: boolean;
     queue: QueuedAudio[];
     processingQueue: boolean;
-    gestureResumeArmed: boolean;
+    /** Removes the armed resume-on-gesture listeners, if any. */
+    disarmGestureResume: (() => void) | null;
     activePlayback: {
       /** The playing Web Audio source, or the media-element fallback's pause handle. */
       source: { stop(): void };
@@ -122,7 +123,7 @@ export function createAudioEngine(
     muted: false,
     queue: [],
     processingQueue: false,
-    gestureResumeArmed: false,
+    disarmGestureResume: null,
     activePlayback: null,
   };
 
@@ -172,16 +173,19 @@ export function createAudioEngine(
   }
 
   function resumeOnNextGesture(context: AudioContext): void {
-    if (refs.gestureResumeArmed || typeof window === "undefined") return;
-    refs.gestureResumeArmed = true;
-    const resume = () => {
+    if (refs.disarmGestureResume || typeof window === "undefined") return;
+    const disarm = () => {
       window.removeEventListener("pointerdown", resume, true);
       window.removeEventListener("keydown", resume, true);
-      refs.gestureResumeArmed = false;
+      if (refs.disarmGestureResume === disarm) refs.disarmGestureResume = null;
+    };
+    const resume = () => {
+      disarm();
       if (context.state === "suspended") void context.resume().catch(() => undefined);
     };
     window.addEventListener("pointerdown", resume, true);
     window.addEventListener("keydown", resume, true);
+    refs.disarmGestureResume = disarm;
   }
 
   async function ensureCaptureContext(): Promise<AudioContext> {
@@ -360,6 +364,7 @@ export function createAudioEngine(
     },
 
     async destroy() {
+      refs.disarmGestureResume?.();
       this.stop();
       this.clearQueue();
       await stopCapture();
@@ -494,14 +499,14 @@ export function createAudioEngine(
         }
         if (!active.settled) {
           active.settled = true;
-          active.reject(new Error("Playback stopped"));
+          active.reject(createPlaybackStoppedError());
         }
       }
     },
 
     clearQueue() {
       while (refs.queue.length > 0) {
-        refs.queue.shift()!.reject(new Error("Playback stopped"));
+        refs.queue.shift()!.reject(createPlaybackStoppedError());
       }
       refs.processingQueue = false;
     },

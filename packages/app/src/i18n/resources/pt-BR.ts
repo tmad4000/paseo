@@ -2470,6 +2470,8 @@ export const ptBR: TranslationResources = {
       "microphone-lost": "Microfone perdido. A voz foi interrompida.",
       "playback-failed":
         "Não é possível reproduzir as respostas de voz neste dispositivo. As respostas continuam como texto no chat.",
+      "audio-blocked":
+        "O áudio está bloqueado nesta janela. Clique ou pressione uma tecla para ouvir as respostas de voz.",
     },
     actions: {
       interruptAgent: "Interromper agente",

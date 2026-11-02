@@ -12,7 +12,12 @@ import {
   type VoiceFailureKind,
 } from "@/voice/voice-failure";
 import { createVoiceFailureCue, createVoiceReconnectedCue } from "@/voice/voice-failure-cue";
-import { describePlaybackError, playbackMimeType } from "@/voice/audio-format";
+import {
+  describePlaybackError,
+  isAutoplayBlockedError,
+  isPlaybackStoppedError,
+  playbackMimeType,
+} from "@/voice/audio-format";
 import type { AudioEngine, AudioPlaybackSource } from "@/voice/audio-engine-types";
 import {
   THINKING_TONE_NATIVE_PCM_BASE64,
@@ -469,7 +474,22 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     else await activeSession.adapter.audioPlayed(chunkId, error);
   }
 
-  function notePlaybackFailure(description: string, mimeType: string): void {
+  function notePlaybackSuccess(): void {
+    playback.consecutiveFailures = 0;
+    // Audio got through, so a gesture unblocked the window.
+    if (failures.current() === "audio-blocked") clearFailures(["audio-blocked"]);
+  }
+
+  function notePlaybackFailure(error: unknown, description: string, mimeType: string): void {
+    // Our own cancellation (barge-in, a cue stopping) is not a device problem.
+    if (isPlaybackStoppedError(error)) return;
+    // Blocked until a gesture: show how to enable audio, and keep trying so the next chunk
+    // after a click plays. Counting it would switch a working device to text-only.
+    if (isAutoplayBlockedError(error)) {
+      if (state.snapshot.failure !== "audio-blocked")
+        void reportFailure("audio-blocked", description);
+      return;
+    }
     playback.consecutiveFailures += 1;
     if (playback.textOnly || playback.consecutiveFailures < PLAYBACK_FAILURE_LIMIT) return;
     playback.textOnly = true;
@@ -526,7 +546,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
               }, PLAYBACK_TIMEOUT_MS);
             });
             await Promise.race([deps.engine.play(nextChunk.source), timeout]);
-            playback.consecutiveFailures = 0;
+            notePlaybackSuccess();
           }
         } catch (error) {
           if (generation !== playback.generation) {
@@ -538,7 +558,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           );
           deps.engine.stop();
           deps.engine.clearQueue();
-          notePlaybackFailure(playbackError, nextChunk.source.type);
+          notePlaybackFailure(error, playbackError, nextChunk.source.type);
         } finally {
           clearTimeout(playbackTimeout);
         }
@@ -689,7 +709,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     });
     const announce = failures.report(kind);
     patchSnapshot({ failure: failures.current() });
-    if (!announce) {
+    // A blocked context cannot play the cue either; the panel text says what to do.
+    if (!announce || kind === "audio-blocked") {
       return Promise.resolve();
     }
     // The thinking tone would otherwise suggest the agent is still working on what was said.

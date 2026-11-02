@@ -2395,6 +2395,7 @@ export const zhCN: TranslationResources = {
       "host-disconnected": "主机已断开连接。重新连接前麦克风输入已暂停。",
       "microphone-lost": "麦克风已丢失。语音已停止。",
       "playback-failed": "无法在此设备上播放语音回复。回复将继续以文字形式显示在聊天中。",
+      "audio-blocked": "此窗口中的音频被阻止。点击或按任意键即可听到语音回复。",
     },
     actions: {
       interruptAgent: "中断智能体",

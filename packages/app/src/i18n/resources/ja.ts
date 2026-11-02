@@ -2450,6 +2450,8 @@ export const ja: TranslationResources = {
       "microphone-lost": "マイクが使えなくなりました。音声を停止しました。",
       "playback-failed":
         "このデバイスでは音声の返答を再生できません。返答はチャットにテキストで表示されます。",
+      "audio-blocked":
+        "このウィンドウでは音声がブロックされています。クリックするかキーを押すと音声の返答が聞こえます。",
     },
     actions: {
       interruptAgent: "エージェントを中断",

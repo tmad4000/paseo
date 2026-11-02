@@ -51,6 +51,18 @@ describe("web audio engine playback", () => {
     expect(performance.now() - started).toBeLessThan(5_000);
   });
 
+  it("removes the armed resume-on-gesture listeners when destroyed", async () => {
+    vi.spyOn(AudioContext.prototype, "state", "get").mockReturnValue("suspended");
+    vi.spyOn(AudioContext.prototype, "resume").mockReturnValue(new Promise<void>(() => {}));
+    const removed = vi.spyOn(window, "removeEventListener");
+    const player = createEngine();
+    await player.play(source(pcm16(10), "audio/pcm;rate=24000;bits=16")).catch(() => undefined);
+    await player.destroy();
+    engine = null;
+    const types = removed.mock.calls.map(([type]) => type);
+    expect(types).toEqual(expect.arrayContaining(["pointerdown", "keydown"]));
+  });
+
   it("plays a GPT Realtime PCM chunk instead of decoding it", async () => {
     await userEvent.click(document.body);
     const player = createEngine();
