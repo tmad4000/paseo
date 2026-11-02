@@ -10,6 +10,14 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Command Center workspace activity — pspin-787.8
+
+`cmdk-workspace-last-active`: workspace subtitles include the sidebar last-active instant in
+its compact relative format. Acceptance: Cmd+K shows message/activity/status fallback times
+on workspace rows without increasing row height; agent and sidebar rows retain their behavior.
+The empty-query workspace list remains alphabetical. Source added on
+`feat/cmdk-workspace-last-active`; installation follows the normal beta release.
+
 ## Decision routing experiment — pspin-ng3
 
 `decision-routing`: General → Sending selects Current LLM, Jev with OpenAI Decisions fallback,
