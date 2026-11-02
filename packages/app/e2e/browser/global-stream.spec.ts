@@ -251,11 +251,26 @@ for (const width of [390, 1440]) {
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("global-stream-all.png"), fullPage: true });
       await page.getByTestId("global-stream").getByTestId("stream-needs-you").click();
-      await page
-        .getByTestId(`global-stream-row-${first.id}`)
-        .getByRole("button", { name: "Done", exact: true })
-        .click();
+      await page.screenshot({ path: testInfo.outputPath("needs-you-now.png"), fullPage: true });
+      // Done lives under More in the triage row.
+      await firstRows.getByTestId("companion-entry-more").click();
+      await page.getByRole("menuitem", { name: "Done", exact: true }).click();
       await expect(firstRows.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
+      // Later sets it aside without a status change; the pinned switch finds it again.
+      await secondRows.getByRole("button", { name: "Later", exact: true }).click();
+      await expect(secondRows.getByText("Choose the release channel", { exact: true })).toHaveCount(
+        0,
+      );
+      await page.getByTestId("stream-show-later").click();
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("needs-you-later.png"), fullPage: true });
+      await secondRows.getByRole("button", { name: "Bring back", exact: true }).click();
+      await page.getByTestId("stream-show-now").click();
       await expect(
         secondRows.getByText("Choose the release channel", { exact: true }),
       ).toBeVisible();
@@ -309,6 +324,10 @@ for (const width of [390, 1440]) {
         .getByRole("button", { name: /Stream beta/ })
         .click();
       await expect(page).toHaveURL(new RegExp(`/workspace/${workspace.id}`));
+      // The chat opened from the Stream offers the way back, search intact.
+      await page.getByTestId("stream-return").first().click();
+      await expect(page).toHaveURL(/\/stream/);
+      await expect(page.getByTestId("global-stream-search")).toHaveValue("release channel");
     } finally {
       await client.removeProject(workspace.projectId);
       await client.close();
@@ -383,7 +402,8 @@ test("durable tasks page current work first, and evidence and reopen survive rec
     await expect(feed.getByRole("button", { name: "Load more" })).toBeVisible();
     await feed.getByRole("button", { name: "Load more" }).click();
     await expect(feed.getByRole("button", { name: "Load more" })).toHaveCount(0);
-    await expect(feed.getByTestId("stream-loaded-count")).toHaveText("53 items loaded");
+    // A complete list needs no count; it only shows while more is available.
+    await expect(feed.getByTestId("stream-loaded-count")).toHaveCount(0);
     const completed = feed.getByTestId("companion-entry-ask:ask-1");
     // FlatList may mount then evict a row while correcting estimated heights.
     // Move incrementally until the row mounts, then center it synchronously in

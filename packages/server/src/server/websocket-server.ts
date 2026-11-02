@@ -2000,6 +2000,8 @@ export class VoiceAssistantWebSocketServer {
         streamAnswers: true,
         // COMPAT(streamOpenAsks): fork feature; remove gate after 2027-04-29.
         streamOpenAsks: true,
+        // COMPAT(streamDefer): fork feature; remove gate after 2027-05-01.
+        streamDefer: true,
         // COMPAT(streamWorkflow): added 2026-10-27; remove gate after 2027-04-27.
         streamWorkflow: true,
         queueEdit: this.agentQueueService !== null,
