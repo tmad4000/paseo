@@ -85,11 +85,7 @@ export function createWorkerStallDetector(
       lastMonoAt = monoNow;
       lastWallAt = wallNow;
 
-      if (
-        options.unresponsiveAfterMs <= 0 ||
-        !ready ||
-        lastHeartbeatAt === null
-      ) {
+      if (options.unresponsiveAfterMs <= 0 || !ready || lastHeartbeatAt === null) {
         return { stalled: false };
       }
       if (wallDelta < 0 || monoDelta < 0 || wallDelta > maxTickGapMs || monoDelta > maxTickGapMs) {

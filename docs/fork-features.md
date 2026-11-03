@@ -12,13 +12,8 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 
 ## Wedged worker recovery — pspin-6b5
 
-`wedged-worker-recovery`: after readiness and a first heartbeat, the supervisor restarts a
-worker silent for five minutes by default. Bootstrap and older silent workers are not judged;
-a supervisor tick over five seconds late resets the silence window to protect starved hosts.
-`PASEO_WORKER_UNRESPONSIVE_RESTART_MS` sets the threshold; zero disables recovery. On a wedge,
-the supervisor logs process state and on macOS captures a two-second sample under the log
-directory's `diagnostics/` during the ten-second graceful-shutdown grace period, before the
-process-tree force kill and respawn.
+`wedged-worker-recovery`: the supervisor recovers a persistently unresponsive ready worker.
+See [recovery behavior and controls](../public-docs/configuration.md#unresponsive-worker-recovery-paseo-fork).
 Acceptance: detector tests cover readiness, heartbeat and starvation; supervisor regressions
 exercise blocked and SIGSTOP workers and preserve silent bootstrap workers. Source prepared on
 `fix/daemon-wedged-worker-recovery`; not yet in an installed build.
