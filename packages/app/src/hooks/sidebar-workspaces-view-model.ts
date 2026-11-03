@@ -47,6 +47,13 @@ export interface SidebarWorkspaceEntry extends SidebarStatusWorkspacePlacement {
   lastAssistantMessageAt?: Date | null;
   /** When the workspace's first top-level chat was created: the session's kickoff. */
   startedAt?: Date | null;
+  /**
+   * A person started or talked to one of its top-level chats. A workspace with no chat yet
+   * counts as mine. Absent on entries built without agent activity.
+   */
+  isMine?: boolean;
+  /** The agent that delegated its most recent top-level chat; drives the "delegated by" marker. */
+  delegatedByAgentId?: string | null;
   pinnedAt?: string | null;
   labels?: string[];
   // Checkout branch (null when not a git checkout or detached HEAD).
@@ -201,6 +208,8 @@ function sidebarActivityClocks(activity: WorkspaceAgentActivity | undefined) {
     lastUserMessageAt: activity?.lastUserMessageAt ?? null,
     lastAssistantMessageAt: activity?.lastAssistantMessageAt ?? null,
     startedAt: activity?.startedAt ?? null,
+    isMine: activity?.mine ?? true,
+    delegatedByAgentId: activity?.delegatedByAgentId ?? null,
   };
 }
 

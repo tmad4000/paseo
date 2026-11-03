@@ -50,6 +50,7 @@ import {
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
+import { SidebarMineChip } from "@/components/sidebar/sidebar-mine-chip";
 import { useSidebarFilterRequestFocus } from "@/components/sidebar/sidebar-filter-request";
 import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
@@ -992,6 +993,7 @@ function SidebarSearchControls() {
               <IconTooltipContent label={t("sidebar.routing.sendToChat")} />
             </TooltipContent>
           </Tooltip>
+          <SidebarMineChip />
           <SidebarFilterScopeMenu />
           <SidebarSortMenu
             sortMode={sortMode}

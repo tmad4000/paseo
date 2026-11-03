@@ -3165,6 +3165,7 @@ describe("create_agent MCP tool", () => {
           source: "voice",
         },
         workspaceId: "wks_voice",
+        createdBy: "agent:voice-agent",
       },
     );
     await rm(baseDir, { recursive: true, force: true });
@@ -3309,6 +3310,7 @@ describe("create_agent MCP tool", () => {
           source: "handoff",
         },
         workspaceId: "wks_parent",
+        createdBy: "agent:parent-agent",
       },
     );
   });
@@ -3369,6 +3371,7 @@ describe("create_agent MCP tool", () => {
           [PARENT_AGENT_ID_LABEL]: "parent-agent",
         },
         workspaceId: "wks_parent",
+        createdBy: "agent:parent-agent",
       },
     );
   });
@@ -5806,6 +5809,7 @@ describe("agent snapshot MCP serialization", () => {
         {
           id: "agent-compact",
           shortId: "agent-c",
+          createdBy: "human",
           title: null,
           provider: "codex",
           model: "gpt-5.4",
@@ -6182,6 +6186,7 @@ describe("agent snapshot MCP serialization", () => {
     expect(item).toEqual({
       id: "stored-archived-compact",
       shortId: "stored-",
+      createdBy: "human",
       title: "Stored agent",
       provider: "claude",
       model: "claude-sonnet-4-20250514",

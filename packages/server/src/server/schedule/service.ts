@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { SCHEDULE_SENDER } from "@getpaseo/protocol/user-message-sender";
 import type { Logger } from "pino";
 import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentSessionConfig } from "../agent/agent-sdk-types.js";
@@ -859,6 +860,7 @@ export class ScheduleService {
       await startAgentRun(this.agentManager, agent.id, wrappedPrompt, this.logger, {
         replaceRunning: true,
         activeTurnBehavior: "steer",
+        runOptions: { sender: SCHEDULE_SENDER },
       });
       const waitResult = await this.agentManager.waitForAgentEvent(agent.id, {
         waitForActive: true,
@@ -913,6 +915,7 @@ export class ScheduleService {
         promptFailure: "return-error",
         background: true,
         notifyOnFinish: false,
+        createdBy: SCHEDULE_SENDER,
       });
       const agent = created.snapshot;
       agentId = agent.id;
@@ -925,7 +928,9 @@ export class ScheduleService {
       if (created.initialPromptError) {
         throw created.initialPromptError;
       }
-      const result = await this.agentManager.runAgent(agent.id, schedule.prompt);
+      const result = await this.agentManager.runAgent(agent.id, schedule.prompt, {
+        sender: SCHEDULE_SENDER,
+      });
       const waitResult = await this.agentManager.waitForAgentEvent(agent.id, {
         waitForActive: true,
       });

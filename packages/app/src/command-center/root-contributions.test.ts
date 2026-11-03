@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
 import type { CommandCenterIconProps } from "./contributions";
-import { buildGroupingContributions, type GroupingCommandCenterSource } from "./root-contributions";
+import {
+  buildGroupingContributions,
+  buildMineFilterContribution,
+  type GroupingCommandCenterSource,
+} from "./root-contributions";
 
 function ProjectIcon(_props: CommandCenterIconProps) {
   return null;
@@ -120,5 +124,43 @@ describe("grouping command center contributions", () => {
         expect(contribution.rank).toBe(8);
       }
     }
+  });
+});
+
+describe("Mine filter command center contribution", () => {
+  function build(mineOnly: boolean) {
+    const applied: boolean[] = [];
+    const contribution = buildMineFilterContribution({
+      mineOnly,
+      labels: {
+        section: "Actions",
+        showMine: "Show only my sessions",
+        showAll: "Show all sessions",
+      },
+      setMineOnly: (value) => applied.push(value),
+    });
+    return { contribution, applied };
+  }
+
+  it("offers to show only my sessions while everything is shown, and turns the filter on", () => {
+    const { contribution, applied } = build(false);
+    expect(contribution.presentation.kind === "action" && contribution.presentation.title).toBe(
+      "Show only my sessions",
+    );
+    void contribution.run();
+    expect(applied).toEqual([true]);
+  });
+
+  it("offers to show all sessions while filtered, and turns the filter off", () => {
+    const { contribution, applied } = build(true);
+    expect(contribution.presentation.kind === "action" && contribution.presentation.title).toBe(
+      "Show all sessions",
+    );
+    void contribution.run();
+    expect(applied).toEqual([false]);
+  });
+
+  it("keeps one id in both states", () => {
+    expect(build(false).contribution.id).toBe(build(true).contribution.id);
   });
 });
