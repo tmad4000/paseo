@@ -1,5 +1,6 @@
 import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
+import { StreamReturnButton } from "@/companion-stream/stream-return";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -39,6 +40,11 @@ import {
 } from "@/composer/pill-styles";
 import { getActiveMessageSubmissions } from "@/composer/submission/model";
 import { RewindComposerRestoreProvider } from "@/components/rewind/composer-restore";
+import {
+  buildReplyQuote,
+  ComposerQuoteProvider,
+  insertReplyQuote,
+} from "@/components/reply/composer-quote";
 import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
@@ -85,9 +91,11 @@ import {
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
+import { useAgentHasChatLinks } from "@/chat-links/host";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
 import {
   selectAgentTimelineState,
   selectAgentTurnPresentation,
@@ -1230,12 +1238,14 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     rows: subagentRows,
   });
   const hasPluginComposerPills = useHasPluginComposerPills(serverId, workspaceId, agentId);
+  const hasChatLinks = useAgentHasChatLinks(serverId, agentId);
   const hasActiveComposer = !agentState.archivedAt && !isArchivingCurrentAgent;
   const hasVisibleAgentTracks = hasAgentTracks({
     subagentRows,
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
+    hasChatLinks,
   });
   // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
   const companionStreamAvailability = useHostFeatureAvailability(serverId, "companionStream");
@@ -1244,12 +1254,13 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     companionStreamAvailability !== false || artifactFeedAvailability !== false;
   // A host that turns out to offer neither view returns the pane to the chat.
   const visibleView = showViewSwitcher ? selectedView : "chat";
-  const rawAgentInputDraft = useAgentInputDraft({
-    draftKey: buildDraftStoreKey({
-      serverId,
-      agentId,
-    }),
-  });
+  const draftKey = buildDraftStoreKey({ serverId, agentId });
+  const rawAgentInputDraft = useAgentInputDraft({ draftKey });
+  const requestComposerFocus = useDraftStore((state) => state.requestComposerFocus);
+  // Reply quotes into the composer; focus it so the reply can be typed straight away.
+  const handleReplyQuoted = useCallback(() => {
+    requestComposerFocus({ draftKey });
+  }, [draftKey, requestComposerFocus]);
   // Stabilize the agentInputDraft object identity so that memo(AgentComposerSection) can bail out
   // when only toast state changes (which does not affect any draft field).
   const {
@@ -1290,6 +1301,37 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
+  // Reply in chat from a Stream card: quote the entry above the draft so a late reply still says
+  // what it answers, then focus the composer. Applied once the draft has loaded; a chat without a
+  // composer drops it. Pressing Reply again does not stack a second copy of the same quote.
+  const replyQuote = useAgentViewStore(
+    (state) => state.replyQuote[`${serverId}:${agentId}`] ?? null,
+  );
+  const clearReplyQuote = useAgentViewStore((state) => state.clearReplyQuote);
+  useEffect(() => {
+    if (!replyQuote || !isHydrated) return;
+    clearReplyQuote(serverId, agentId, replyQuote.requestId);
+    if (!hasActiveComposer) return;
+    const quoted = buildReplyQuote(replyQuote.text);
+    const currentText = textSource.getSnapshot();
+    if (quoted && !currentText.startsWith(quoted)) {
+      replaceText(insertReplyQuote({ currentText, quote: quoted }));
+    }
+    requestComposerFocus({ draftKey });
+    streamViewRef.current?.scrollToBottom("jump-to-bottom");
+  }, [
+    agentId,
+    clearReplyQuote,
+    draftKey,
+    hasActiveComposer,
+    isHydrated,
+    replaceText,
+    replyQuote,
+    requestComposerFocus,
+    serverId,
+    streamViewRef,
+    textSource,
+  ]);
   const composerSection = (
     <RenderProfile id={`AgentComposerSection:${agentId}`}>
       <AgentComposerSection
@@ -1336,6 +1378,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           archiveFinishedStatus={archiveFinishedSubagents.status}
           onArchiveFinished={archiveFinishedSubagents.archiveFinished}
           hasPluginComposerPills={hasPluginComposerPills}
+          hasChatLinks={hasChatLinks}
+          streamViewRef={streamViewRef}
         />
       ) : null}
     </View>
@@ -1408,62 +1452,70 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       setText={agentInputDraft.replaceText}
       onRewindComplete={handleRewindComplete}
     >
-      <ThreadsHostProvider
-        serverId={serverId}
+      <ComposerQuoteProvider
         agentId={agentId}
-        layoutWorkspaceId={threadsLayoutWorkspaceId}
+        textSource={agentInputDraft.textSource}
+        setText={agentInputDraft.replaceText}
+        onQuoted={handleReplyQuoted}
       >
-        <View style={styles.root}>
-          {/* Floats over the chat instead of sitting in its vertical stack: the host
+        <ThreadsHostProvider
+          serverId={serverId}
+          agentId={agentId}
+          layoutWorkspaceId={threadsLayoutWorkspaceId}
+        >
+          <View style={styles.root}>
+            {/* Floats over the chat instead of sitting in its vertical stack: the host
             capability can arrive after the first prompt has painted, and a band that
             appears then would shift every row (upstream's hydration specs pin that). */}
-          <View style={viewSwitcherStyle} pointerEvents="box-none">
-            {showViewSwitcher ? (
-              <SegmentedControl
-                options={viewOptions}
-                value={visibleView}
-                onValueChange={handleSetSelectedView}
-                size={isCompact ? "sm" : "xs"}
-                testID="agent-view-switcher"
-                segmentStyle={isCompact ? styles.compactSegment : undefined}
+            <View style={viewSwitcherStyle} pointerEvents="box-none">
+              <StreamReturnButton serverId={serverId} agentId={agentId} />
+              {showViewSwitcher ? (
+                <SegmentedControl
+                  options={viewOptions}
+                  value={visibleView}
+                  onValueChange={handleSetSelectedView}
+                  size={isCompact ? "sm" : "xs"}
+                  testID="agent-view-switcher"
+                  segmentStyle={isCompact ? styles.compactSegment : undefined}
+                />
+              ) : null}
+              <SessionPinButton serverId={serverId} agentId={agentId} />
+              <ThreadOriginControls
+                serverId={serverId}
+                agentId={agentId}
+                layoutWorkspaceId={threadsLayoutWorkspaceId}
+              />
+              <SubthreadsOpenButton />
+              <SessionChecklistButton />
+            </View>
+            {dock}
+            {!isChatVisible ? (
+              <CompanionFeed
+                serverId={serverId}
+                agentId={agentId}
+                cwd={cwd}
+                entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
+                artifacts={artifacts}
+                isSupported={companionStreamAvailability === true}
+                artifactsSupported={artifactFeedAvailability === true}
+                onOpenWorkspaceFile={onOpenWorkspaceFile}
+                onReturnToChat={handleReturnToChat}
+                onReplyInChat={handleReplyInChat}
               />
             ) : null}
-            <SessionPinButton serverId={serverId} agentId={agentId} />
-            <ThreadOriginControls
-              serverId={serverId}
-              agentId={agentId}
-              layoutWorkspaceId={threadsLayoutWorkspaceId}
-            />
-            <SubthreadsOpenButton />
-            <SessionChecklistButton />
-          </View>
-          {dock}
-          {!isChatVisible ? (
-            <CompanionFeed
-              serverId={serverId}
-              agentId={agentId}
-              cwd={cwd}
-              entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
-              artifacts={artifacts}
-              isSupported={companionStreamAvailability === true}
-              artifactsSupported={artifactFeedAvailability === true}
-              onOpenWorkspaceFile={onOpenWorkspaceFile}
-              onReturnToChat={handleReturnToChat}
-              onReplyInChat={handleReplyInChat}
-            />
-          ) : null}
 
-          {isArchivingCurrentAgent ? (
-            <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
-              <ThemedLoadingSpinner size="large" uniProps={foregroundColorMapping} />
-              <Text style={styles.archivingTitle}>{t("agentPanel.states.archivingTitle")}</Text>
-              <Text style={styles.archivingSubtitle}>
-                {t("agentPanel.states.archivingSubtitle")}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </ThreadsHostProvider>
+            {isArchivingCurrentAgent ? (
+              <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
+                <ThemedLoadingSpinner size="large" uniProps={foregroundColorMapping} />
+                <Text style={styles.archivingTitle}>{t("agentPanel.states.archivingTitle")}</Text>
+                <Text style={styles.archivingSubtitle}>
+                  {t("agentPanel.states.archivingSubtitle")}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </ThreadsHostProvider>
+      </ComposerQuoteProvider>
     </RewindComposerRestoreProvider>
   );
 });

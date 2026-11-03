@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import invariant from "tiny-invariant";
 import { useShallow } from "zustand/react/shallow";
-import { AgentStreamView } from "@/agent-stream/view";
+import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
+import { useStreamChatLinks } from "@/chat-links/host";
+import type { ChatLink } from "@/chat-links/model";
+import { ChatLinksTrack, type ChatLinkActions, type ChatLinksHistory } from "@/chat-links/track";
 import { getProviderIcon } from "@/components/provider-icons";
 import {
   resolveComposerTrackControlClearance,
@@ -35,33 +38,43 @@ const EMPTY_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 const NOOP_SUBAGENT = () => undefined;
 
-function resolveChildTrackClearance(childCount: number, isCompact: boolean) {
-  if (childCount === 0) return { tail: 0, controls: 0 };
+function resolveChildTrackClearance(pillCount: number, isCompact: boolean) {
+  if (pillCount === 0) return { tail: 0, controls: 0 };
   return {
     tail: resolveComposerTrackTailClearance(isCompact),
     controls: resolveComposerTrackControlClearance(isCompact),
   };
 }
 
+/** A read-only pane still gets its links; the track has no write actions. */
 function ProviderSubagentChildTrack({
   serverId,
   rows,
+  links,
+  linkActions,
+  linkHistory,
   onOpenProviderSubagent,
 }: {
   serverId: string;
   rows: ReturnType<typeof useSubagentsForParent>;
+  links: readonly ChatLink[];
+  linkActions: ChatLinkActions;
+  linkHistory: ChatLinksHistory;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
 }) {
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && links.length === 0) return null;
   return (
     <ComposerTrackBar>
-      <SubagentsTrack
-        serverId={serverId}
-        rows={rows}
-        onOpenSubagent={NOOP_SUBAGENT}
-        onOpenProviderSubagent={onOpenProviderSubagent}
-        onArchiveSubagent={NOOP_SUBAGENT}
-      />
+      {rows.length > 0 ? (
+        <SubagentsTrack
+          serverId={serverId}
+          rows={rows}
+          onOpenSubagent={NOOP_SUBAGENT}
+          onOpenProviderSubagent={onOpenProviderSubagent}
+          onArchiveSubagent={NOOP_SUBAGENT}
+        />
+      ) : null}
+      <ChatLinksTrack links={links} actions={linkActions} history={linkHistory} />
     </ComposerTrackBar>
   );
 }
@@ -107,9 +120,37 @@ function useProviderSubagentDescriptor(
   };
 }
 
+function useProviderSubagentLinks(input: {
+  serverId: string;
+  workspaceId: string;
+  /** Where the pane's tab lives, when that differs from the session's workspace. */
+  layoutWorkspaceId: string | undefined;
+  timeline: { tail: StreamItem[]; head: StreamItem[]; hasOlder?: boolean } | null;
+  isLoadingOlder: boolean;
+  loadOlder: () => boolean;
+  streamViewRef: React.RefObject<AgentStreamViewHandle | null>;
+}) {
+  const { serverId, timeline, isLoadingOlder, loadOlder, streamViewRef } = input;
+  const { links, actions: linkActions } = useStreamChatLinks({
+    serverId,
+    workspaceId: input.layoutWorkspaceId ?? input.workspaceId,
+    tail: timeline?.tail,
+    head: timeline?.head,
+    streamViewRef,
+  });
+  const hasOlder = timeline?.hasOlder === true;
+  const loadEarlier = useCallback(() => void loadOlder(), [loadOlder]);
+  const linkHistory = useMemo<ChatLinksHistory>(
+    () => ({ hasOlder, isLoadingOlder, loadOlder: loadEarlier }),
+    [hasOlder, isLoadingOlder, loadEarlier],
+  );
+  return { links, linkActions, linkHistory };
+}
+
 export function ProviderSubagentPanel() {
   const { t } = useTranslation();
-  const { serverId, target, openFileInWorkspace, openTab } = usePaneContext();
+  const { serverId, workspaceId, layoutWorkspaceId, target, openFileInWorkspace, openTab } =
+    usePaneContext();
   invariant(target.kind === "provider_subagent", "ProviderSubagentPanel requires provider target");
   const key = providerSubagentKey(serverId, target.parentAgentId, target.subagentId);
   const streamId = `provider:${encodeURIComponent(target.parentAgentId)}:${encodeURIComponent(target.subagentId)}`;
@@ -136,7 +177,7 @@ export function ProviderSubagentPanel() {
     parentAgentId: target.parentAgentId,
     providerParentSubagentId: target.subagentId,
   });
-  const childTrackClearance = resolveChildTrackClearance(childRows.length, isCompact);
+  const streamViewRef = useRef<AgentStreamViewHandle>(null);
   const openProviderChild = useCallback(
     (parentAgentId: string, subagentId: string) => {
       openTab({ kind: "provider_subagent", parentAgentId, subagentId });
@@ -197,6 +238,19 @@ export function ProviderSubagentPanel() {
     target.subagentId,
     timeline,
   ]);
+  const { links, linkActions, linkHistory } = useProviderSubagentLinks({
+    serverId,
+    workspaceId,
+    layoutWorkspaceId,
+    timeline,
+    isLoadingOlder,
+    loadOlder,
+    streamViewRef,
+  });
+  const childTrackClearance = resolveChildTrackClearance(
+    childRows.length + links.length,
+    isCompact,
+  );
   const firstTimelineSeq = timeline?.cursor?.startSeq ?? null;
   const progressKey =
     timeline?.epoch && firstTimelineSeq !== null ? `${timeline.epoch}:${firstTimelineSeq}` : null;
@@ -255,6 +309,7 @@ export function ProviderSubagentPanel() {
         </View>
       ) : null}
       <AgentStreamView
+        ref={streamViewRef}
         agentId={streamId}
         serverId={serverId}
         context={streamContext}
@@ -272,6 +327,9 @@ export function ProviderSubagentPanel() {
       <ProviderSubagentChildTrack
         serverId={serverId}
         rows={childRows}
+        links={links}
+        linkActions={linkActions}
+        linkHistory={linkHistory}
         onOpenProviderSubagent={openProviderChild}
       />
     </View>

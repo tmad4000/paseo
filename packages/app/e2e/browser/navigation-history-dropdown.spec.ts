@@ -51,6 +51,9 @@ test("visible history dropdown reaches older sessions and preserves Back/Forward
     await expect(menu).toBeVisible();
     const olderEntry = menu.getByTestId("navigation-back-history-item-16");
     await expect(olderEntry).toContainText(first.title);
+    // Each row carries its workspace's open tab count, as the sidebar row does.
+    await expect(menu.getByTestId("navigation-back-history-item-0-tab-count")).toHaveText("2");
+    await page.screenshot({ path: testInfo.outputPath("history-tab-counts.png") });
     await olderEntry.click();
     await expect(menu).toBeHidden();
     await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");

@@ -45,6 +45,8 @@ export interface SidebarWorkspaceEntry extends SidebarStatusWorkspacePlacement {
   lastMessageAt?: Date | null;
   lastUserMessageAt?: Date | null;
   lastAssistantMessageAt?: Date | null;
+  /** When the workspace's first top-level chat was created: the session's kickoff. */
+  startedAt?: Date | null;
   pinnedAt?: string | null;
   labels?: string[];
   // Checkout branch (null when not a git checkout or detached HEAD).
@@ -171,10 +173,7 @@ export function createSidebarWorkspaceEntry(input: {
     workspaceKind: input.workspace.workspaceKind,
     name: input.workspace.name,
     title: input.workspace.title ?? null,
-    lastActivityAt: activity?.lastActivityAt ?? null,
-    lastMessageAt: activity?.lastMessageAt ?? null,
-    lastUserMessageAt: activity?.lastUserMessageAt ?? null,
-    lastAssistantMessageAt: activity?.lastAssistantMessageAt ?? null,
+    ...sidebarActivityClocks(activity),
     pinnedAt: input.workspace.pinnedAt,
     labels: input.workspace.labels ?? EMPTY_WORKSPACE_LABELS,
     currentBranch: normalizeCurrentBranch(input.workspace.gitRuntime?.currentBranch),
@@ -194,6 +193,16 @@ export function createSidebarWorkspaceEntry(input: {
 }
 
 const EMPTY_WORKSPACE_LABELS: string[] = [];
+
+function sidebarActivityClocks(activity: WorkspaceAgentActivity | undefined) {
+  return {
+    lastActivityAt: activity?.lastActivityAt ?? null,
+    lastMessageAt: activity?.lastMessageAt ?? null,
+    lastUserMessageAt: activity?.lastUserMessageAt ?? null,
+    lastAssistantMessageAt: activity?.lastAssistantMessageAt ?? null,
+    startedAt: activity?.startedAt ?? null,
+  };
+}
 
 function deriveEffectiveWorkspaceStatus(input: {
   serverId: string;

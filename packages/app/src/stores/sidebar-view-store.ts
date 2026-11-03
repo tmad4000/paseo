@@ -106,7 +106,7 @@ const SidebarLabelFilterSchema = z.object({
 });
 const SidebarViewPersistedStateSchema = z.strictObject({
   groupMode: PersistedSidebarGroupModeSchema.optional(),
-  sortMode: z.enum(["manual", "recent", "user", "assistant", "title"]).optional(),
+  sortMode: z.enum(["manual", "recent", "user", "assistant", "started", "title"]).optional(),
   hostFilters: z.array(z.string()).optional(),
   hostFilter: z.string().nullable().optional(),
   projectFilters: z.array(z.string()).optional(),

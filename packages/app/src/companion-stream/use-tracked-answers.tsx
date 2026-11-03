@@ -1,13 +1,13 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useSessionStore } from "@/stores/session-store";
-import type { TimelinePosition } from "@/types/stream";
+import type { StreamItem, TimelinePosition } from "@/types/stream";
 import type { TimelineJump } from "@/agent-stream/use-timeline-anchor-jump";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { trackedQuestionEntryId } from "./answers-model";
@@ -15,6 +15,12 @@ import { splitEntryText } from "./entry-labels";
 import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
 import { delegationTarget, delegationTargetKey, type DelegationTarget } from "./delegation-pulse";
 import { useDelegatedHere, useDelegationPulses } from "./use-delegation-pulse";
+import {
+  chatMessageEvents,
+  computeChatSessions,
+  sessionsSignature,
+  type ChatSessions,
+} from "./answers-sessions";
 
 type TrackQuestionHandler = (
   text: string,
@@ -23,6 +29,7 @@ type TrackQuestionHandler = (
 ) => void;
 
 const NO_ENTRIES: CompanionEntry[] = [];
+const NO_ITEMS: StreamItem[] = [];
 
 /** The sessions working this chat's unresolved asks, one per child, in entry order. */
 function useDelegationTargets(
@@ -121,6 +128,36 @@ function useOwnerTitles(serverId: string, entries: readonly CompanionEntry[]) {
   }, [ownerIds, titlesKey]);
 }
 
+/**
+ * The chat's sessions from everything it has loaded: committed rows plus the turn streaming now.
+ * Message events are extracted per array, so a streaming chunk only rescans the small head.
+ * While older history is still unloaded, the first loaded session does not claim a start.
+ */
+function useChatSessions(serverId: string, agentId: string): ChatSessions {
+  const tail = useSessionStore(
+    (state) => state.sessions[serverId]?.agentStreamTail.get(agentId) ?? NO_ITEMS,
+  );
+  const head = useSessionStore(
+    (state) => state.sessions[serverId]?.agentStreamHead.get(agentId) ?? NO_ITEMS,
+  );
+  const hasOlder = useSessionStore(
+    (state) => state.sessions[serverId]?.agentTimelineHasOlder.get(agentId) ?? false,
+  );
+  const tailEvents = useMemo(() => chatMessageEvents(tail), [tail]);
+  const headEvents = useMemo(() => chatMessageEvents(head), [head]);
+  const computed = useMemo(
+    () => computeChatSessions([...tailEvents, ...headEvents], { historyComplete: !hasOlder }),
+    [hasOlder, headEvents, tailEvents],
+  );
+  // Streaming chunks rebuild the sessions without changing where anything sits; keep the
+  // previous object then, so the memoized pane does not re-render on every chunk.
+  const [stable, setStable] = useState(computed);
+  if (stable !== computed && sessionsSignature(stable) !== sessionsSignature(computed)) {
+    setStable(computed);
+  }
+  return sessionsSignature(stable) === sessionsSignature(computed) ? stable : computed;
+}
+
 /** The answers pane for one chat, fed by the agent's live Stream snapshot. */
 export function ChatTrackedAnswers({
   serverId,
@@ -157,6 +194,7 @@ export function ChatTrackedAnswers({
     [agentId, pulses, serverId],
   );
   const delegatedHere = useDelegatedHere(serverId, agentId, showOpenAsks);
+  const sessions = useChatSessions(serverId, agentId);
   // The jump callbacks change with every streamed row; reading them through a ref keeps the
   // pane's actions stable, so its memoized rows do not re-render while the agent streams.
   const jumpRef = useRef(jump);
@@ -169,6 +207,7 @@ export function ChatTrackedAnswers({
     return {
       jumpToAnchor: (anchor) => jumpRef.current.jumpToAnchor(anchor),
       jumpToMessage: (messageId) => jumpRef.current.jumpToMessage(messageId),
+      jumpToTarget: (target) => jumpRef.current.jumpToTarget(target),
       hasMessage: (messageId) => jumpRef.current.hasMessage(messageId),
       openChat: (target) => navigateToAgent({ serverId, agentId: target }),
       openSession: (target) =>
@@ -200,6 +239,7 @@ export function ChatTrackedAnswers({
       agentTitle={agentTitle}
       delegation={delegation}
       delegatedHere={delegatedHere}
+      sessions={sessions}
     />
   );
 }

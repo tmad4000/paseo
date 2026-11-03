@@ -23,32 +23,54 @@ function countSidebarWorkspaceTabs(layout: WorkspaceLayout | undefined): number 
   ).length;
 }
 
-export function WorkspaceTabCount({ workspaceKey }: { workspaceKey: string }) {
-  // Subscribe to the count alone: focus, streaming and tab-state changes don't repaint the row.
-  const count = useWorkspaceLayoutStore(
+/** Open tabs across a workspace's visible panes; subscribes to the count alone. */
+export function useWorkspaceTabCount(workspaceKey: string | null): number {
+  // Focus, streaming and tab-state changes don't repaint the caller.
+  return useWorkspaceLayoutStore(
     useCallback(
-      (state) => countSidebarWorkspaceTabs(state.layoutByWorkspace[workspaceKey]),
+      (state) =>
+        workspaceKey ? countSidebarWorkspaceTabs(state.layoutByWorkspace[workspaceKey]) : 0,
       [workspaceKey],
     ),
   );
+}
+
+/** The stacked-tabs mark and number; null when the workspace has no open tabs. */
+export function WorkspaceTabCountBadge({
+  count,
+  withTooltip = true,
+  testID = "sidebar-workspace-tab-count",
+}: {
+  count: number;
+  /** Off inside menus, where the row itself is the hover target. */
+  withTooltip?: boolean;
+  testID?: string;
+}) {
   const { t } = useTranslation();
   if (count === 0) return null;
   const label = t("sidebar.openTabs", { count });
+  const badge = (
+    <View style={styles.badge} accessible accessibilityLabel={label} accessibilityRole="text">
+      <TabsIcon size={12} uniProps={iconColor} />
+      <Text style={styles.count} testID={testID}>
+        {count}
+      </Text>
+    </View>
+  );
+  if (!withTooltip) return badge;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <View style={styles.badge} accessible accessibilityLabel={label} accessibilityRole="text">
-          <TabsIcon size={12} uniProps={iconColor} />
-          <Text style={styles.count} testID="sidebar-workspace-tab-count">
-            {count}
-          </Text>
-        </View>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
       <TooltipContent>
         <Text style={styles.tooltip}>{label}</Text>
       </TooltipContent>
     </Tooltip>
   );
+}
+
+export function WorkspaceTabCount({ workspaceKey }: { workspaceKey: string }) {
+  const count = useWorkspaceTabCount(workspaceKey);
+  return <WorkspaceTabCountBadge count={count} />;
 }
 
 const styles = StyleSheet.create((theme) => ({

@@ -24,15 +24,33 @@ vi.mock("react-native", () => ({
     onPress,
     testID,
     accessibilityLabel,
+    "aria-expanded": expanded,
   }: {
     children?: React.ReactNode;
     onPress?: () => void;
     testID?: string;
     accessibilityLabel?: string;
+    "aria-expanded"?: boolean;
   }) => (
-    <button type="button" data-testid={testID} aria-label={accessibilityLabel} onClick={onPress}>
+    <button
+      type="button"
+      data-testid={testID}
+      aria-label={accessibilityLabel}
+      aria-expanded={expanded}
+      onClick={onPress}
+    >
       {children}
     </button>
+  ),
+}));
+// Tooltip text stays in the DOM, hidden, so tests can read what desktop hover would show.
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
+  TooltipTrigger: ({ children }: { children?: React.ReactNode }) => children,
+  TooltipContent: ({ children }: { children?: React.ReactNode }) => (
+    <span hidden data-testid="tooltip">
+      {children}
+    </span>
   ),
 }));
 vi.mock("react-native-unistyles", () => ({
@@ -40,13 +58,11 @@ vi.mock("react-native-unistyles", () => ({
 }));
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
-  useTranslation: () => ({ t: i18n.t.bind(i18n) }),
+  useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }),
 }));
 vi.mock("lucide-react-native", () => ({
-  ChevronDown: () => null,
-  ChevronUp: () => null,
   HelpCircle: () => null,
-  X: () => null,
+  Minimize2: () => null,
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
 vi.mock("react-native-reanimated", () => ({
@@ -63,7 +79,20 @@ vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => tr
 vi.mock("@/hooks/use-compact-time-ago", () => ({
   useCompactTimeAgo: (date: Date | null) => (date ? "4m" : ""),
 }));
-vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
+const layout = vi.hoisted(() => ({ compact: false }));
+vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => layout.compact }));
+vi.mock("./answers-pane-store", async () => {
+  const { create } = await import("zustand");
+  return {
+    useAnswersPaneStore: create<{
+      minimized: boolean | null;
+      setMinimized: (minimized: boolean) => void;
+    }>()((set) => ({
+      minimized: null,
+      setMinimized: (minimized) => set({ minimized }),
+    })),
+  };
+});
 vi.mock("@/components/ui/status-badge", () => ({
   StatusBadge: ({ label }: { label: string }) => <span>{label}</span>,
 }));
@@ -86,6 +115,9 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
+import { useAnswersPaneStore } from "./answers-pane-store";
+import { computeChatSessions, type ChatMessageEvent } from "./answers-sessions";
+import { describeSegment } from "./answers-pane";
 import { followUpChatFixtureEntries, openAskFixtureEntries } from "./open-asks-fixture";
 
 const anchor = (startSeq: number, endSeq = startSeq) => ({ epoch: "e1", startSeq, endSeq });
@@ -141,6 +173,7 @@ function actions(overrides: Partial<TrackedAnswerActions> = {}): TrackedAnswerAc
   return {
     jumpToAnchor: vi.fn(),
     jumpToMessage: vi.fn(),
+    jumpToTarget: vi.fn(),
     openChat: vi.fn(),
     markSeen: vi.fn().mockResolvedValue(undefined),
     stopTracking: vi.fn().mockResolvedValue(undefined),
@@ -164,7 +197,11 @@ function renderPane(entries: CompanionEntry[], handlers = actions()) {
 beforeAll(async () => {
   await i18n.changeLanguage("en");
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  layout.compact = false;
+  useAnswersPaneStore.setState({ minimized: null });
+});
 
 describe("TrackedAnswersPane", () => {
   it("labels confirmed answers, unconfirmed possible answers and waiting questions", () => {
@@ -210,15 +247,22 @@ describe("TrackedAnswersPane", () => {
     renderPane([candidate], handlers);
     fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
     fireEvent.click(screen.getByTestId("tracked-answer-jump-answer"));
-    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(1, anchor(1));
-    expect(handlers.jumpToAnchor).toHaveBeenNthCalledWith(2, anchor(2, 3));
+    expect(handlers.jumpToTarget).toHaveBeenNthCalledWith(1, { anchor: anchor(1) });
+    expect(handlers.jumpToAnchor).toHaveBeenCalledWith(anchor(2, 3));
     cleanup();
     renderPane([askAnswered], handlers);
     expect(screen.queryByTestId("tracked-answer-jump-answer")).toBeNull();
     fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
     fireEvent.click(screen.getByTestId("tracked-answer-open-chat"));
-    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m7");
+    expect(handlers.jumpToTarget).toHaveBeenNthCalledWith(2, { messageId: "m7" });
     expect(handlers.openChat).toHaveBeenCalledWith("child-1");
+  });
+
+  it("jumps to a tracked ask's question by the host's source anchor", () => {
+    const handlers = actions();
+    renderPane([{ ...askAnswered, sourceAnchor: anchor(9) }], handlers);
+    fireEvent.click(screen.getByTestId("tracked-answer-jump-question"));
+    expect(handlers.jumpToTarget).toHaveBeenCalledWith({ anchor: anchor(9), messageId: "m7" });
   });
 
   it("keeps the answer listed until the host records it seen, and shows a failed save", async () => {
@@ -233,21 +277,39 @@ describe("TrackedAnswersPane", () => {
     expect(screen.getByText("Could not mark the answer seen")).toBeTruthy();
   });
 
-  it("collapses, and hiding lasts until a new or revised answer arrives", () => {
+  it("minimizes to a count pill that stays put as items arrive, and reopens", () => {
     const handlers = actions();
     const view = (entries: CompanionEntry[]) => (
       <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} />
     );
-    const { rerender, container } = render(view([askAnswered]));
-    fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
+    const { rerender } = render(view([askAnswered]));
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
     expect(screen.queryByText("Postgres 16.")).toBeNull();
-    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
-    expect(container.innerHTML).toBe("");
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("1");
     rerender(view([askAnswered, waiting]));
-    expect(container.innerHTML).toBe("");
-    const revised = { ...askAnswered, reply: { ...askAnswered.reply!, revision: 3 } };
-    rerender(view([revised, waiting]));
-    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("2");
+    expect(screen.getByTestId("tracked-answers-expand").getAttribute("aria-label")).toBe(
+      "Show questions and asks. 1 new · 1 waiting",
+    );
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByText("Postgres 16.")).toBeTruthy();
+    expect(screen.queryByTestId("tracked-answers-expand")).toBeNull();
+  });
+
+  it("starts minimized on phones, and remembers an explicit choice across chats", () => {
+    layout.compact = true;
+    renderPane([askAnswered]);
+    expect(screen.getByTestId("tracked-answers-expand")).toBeTruthy();
+    expect(screen.queryByText("Postgres 16.")).toBeNull();
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    cleanup();
+    renderPane([askAnswered]);
+    expect(screen.getByText("Postgres 16.")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    cleanup();
+    layout.compact = false;
+    renderPane([askAnswered]);
+    expect(screen.getByTestId("tracked-answers-expand")).toBeTruthy();
   });
 });
 
@@ -317,7 +379,7 @@ describe("TrackedAnswersPane open asks", () => {
     expect(screen.getByText("child-un")).toBeTruthy();
   });
 
-  it("jumps to a loaded source message, else opens the ask card; owners open their chat", () => {
+  it("jumps to an anchored or loaded source, else opens the ask card; owners open their chat", () => {
     const handlers = actions({ hasMessage: vi.fn((id: string) => id === "m-loaded") });
     const loaded = task("loaded", "in_progress", {
       sourceMessageId: "m-loaded",
@@ -327,13 +389,17 @@ describe("TrackedAnswersPane open asks", () => {
       sourceMessageId: "user message 2026-10-29 (no message id exposed)",
     });
     const none = task("none", "open");
-    renderAsks([loaded, prose, none], handlers);
+    // The host anchors a new ask to the message being answered, even without a message id.
+    const anchored = { ...task("anchored", "open"), sourceAnchor: anchor(5) };
+    renderAsks([loaded, prose, none, anchored], handlers);
     const open = (id: string) =>
       fireEvent.click(
         screen.getByTestId(`open-ask-ask:${id}`).querySelector('[data-testid="open-ask-open"]')!,
       );
     open("loaded");
-    expect(handlers.jumpToMessage).toHaveBeenCalledWith("m-loaded");
+    expect(handlers.jumpToTarget).toHaveBeenCalledWith({ messageId: "m-loaded" });
+    open("anchored");
+    expect(handlers.jumpToTarget).toHaveBeenLastCalledWith({ anchor: anchor(5) });
     expect(handlers.openAsk).not.toHaveBeenCalled();
     open("prose");
     open("none");
@@ -351,21 +417,13 @@ describe("TrackedAnswersPane open asks", () => {
     expect(screen.queryByTestId("open-ask-ask:db")).toBeNull();
   });
 
-  it("collapses, and hiding lasts until an answer arrives or an ask becomes blocked", () => {
-    const handlers = actions();
-    const view = (entries: CompanionEntry[]) => (
-      <TrackedAnswersPane entries={entries} agentId="parent-1" actions={handlers} showOpenAsks />
-    );
-    const progress = task("a", "in_progress");
-    const { rerender, container } = render(view([progress]));
-    fireEvent.click(screen.getByTestId("tracked-answers-toggle"));
+  it("minimizes with asks to a pill counting questions and asks together", () => {
+    renderAsks([askAnswered, task("a", "in_progress"), task("b", "blocked")]);
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
     expect(screen.queryByTestId("open-asks-section")).toBeNull();
-    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
-    expect(container.innerHTML).toBe("");
-    rerender(view([progress, task("b", "open")]));
-    expect(container.innerHTML).toBe("");
-    rerender(view([task("a", "blocked"), task("b", "open")]));
-    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+    expect(screen.getByTestId("tracked-answers-expand").textContent).toBe("3");
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByTestId("open-asks-section")).toBeTruthy();
   });
 
   it("shows the orchestration-chat fixture: 3 questions, 17 open asks, blocked first", () => {
@@ -391,6 +449,143 @@ describe("TrackedAnswersPane open asks", () => {
     expect(states).toEqual([...Array(5).fill("Blocked"), ...Array(3).fill("In progress")]);
     expect(screen.getByText("Mock builder")).toBeTruthy();
     expect(screen.getByText("Next: Graph save blocked on the same credential.")).toBeTruthy();
+  });
+});
+
+describe("TrackedAnswersPane session dividers", () => {
+  // Local wall-clock times in a past year, so labels never read Today or Yesterday.
+  const at = (day: number, hour: number, minute = 0) => new Date(2020, 9, day, hour, minute);
+  const said = (time: Date, role: ChatMessageEvent["role"] = "user"): ChatMessageEvent => ({
+    role,
+    time: time.getTime(),
+    keys: [],
+  });
+  const ask = (id: string, time: Date, state: "open" | "blocked" = "open"): CompanionEntry => ({
+    id: `ask:${id}`,
+    kind: "question",
+    status: "open",
+    timestamp: time.toISOString(),
+    text: `Task ${id}`,
+    truncated: false,
+    ask: { state, remaining: "", evidence: "", revision: 1, provenance: "explicit" },
+  });
+  // Morning session, five quiet hours, then an afternoon session.
+  const sessions = computeChatSessions(
+    [said(at(30, 9)), said(at(30, 9, 30), "assistant"), said(at(30, 14, 30))],
+    { historyComplete: true },
+  );
+
+  function renderSessions(entries: CompanionEntry[], handlers = actions()) {
+    return render(
+      <TrackedAnswersPane
+        entries={entries}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        sessions={sessions}
+      />,
+    );
+  }
+
+  it("groups asks under their sessions, newest first, blocked still first within one", () => {
+    renderSessions([
+      ask("morning-open", at(30, 9, 5)),
+      ask("morning-blocked", at(30, 9, 20), "blocked"),
+      ask("afternoon", at(30, 14, 35)),
+    ]);
+    const section = screen.getByTestId("open-asks-section");
+    const order = [...section.querySelectorAll("[data-testid]")]
+      .map((node) => node.getAttribute("data-testid")!)
+      .filter((id) => id.startsWith("session-divider") || id.startsWith("open-ask-ask:"));
+    expect(order).toEqual([
+      "session-divider-session",
+      "open-ask-ask:afternoon",
+      "session-divider-session",
+      "open-ask-ask:morning-blocked",
+      "open-ask-ask:morning-open",
+    ]);
+    expect(screen.getByText("New session after 5 h idle")).toBeTruthy();
+    expect(screen.getByText("Chat starts")).toBeTruthy();
+  });
+
+  it("shows no dividers when everything sits in one session and day", () => {
+    renderSessions([ask("a", at(30, 14, 35)), ask("b", at(30, 15))]);
+    expect(screen.queryByTestId(/^session-divider/)).toBeNull();
+  });
+
+  it("puts unknown times last and keeps questions in their own section", () => {
+    const unknown = { ...ask("bad", at(30, 9)), timestamp: "not a date" };
+    renderSessions([askAnswered, unknown, ask("now", at(30, 14, 35))]);
+    expect(screen.getByText("Time unknown")).toBeTruthy();
+    const section = screen.getByTestId("open-asks-section");
+    const ids = [...section.querySelectorAll("[data-testid]")].map((node) =>
+      node.getAttribute("data-testid"),
+    );
+    expect(ids.indexOf("session-divider-unknown")).toBeGreaterThan(ids.indexOf("open-ask-ask:now"));
+    expect(screen.getByTestId("tracked-answer-ask:db")).toBeTruthy();
+  });
+
+  it("keeps an expanded answer expanded through minimize and reopen", () => {
+    renderSessions([askAnswered, ask("now", at(30, 14, 35))]);
+    fireEvent.click(screen.getByTestId("tracked-answer-text"));
+    expect(screen.getByTestId("tracked-answer-text").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+    expect(screen.getByTestId("tracked-answer-text").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("explains every desktop control in a tooltip", () => {
+    renderSessions([askAnswered, ask("now", at(30, 14, 35))]);
+    const tips = screen.getAllByTestId("tooltip").map((node) => node.textContent);
+    expect(tips).toContain("Minimize to a small pill. Tap the pill to bring the pane back.");
+    expect(tips).toContain("Mark this answer seen. A revised answer shows here again.");
+    expect(tips).toContain("Jump to your question in Chat");
+    expect(tips).toContain("Open the chat that wrote this answer");
+    expect(tips).toContain("Jumps to the message that asked it, or opens its card in Stream");
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    expect(screen.getByTestId("tooltip").textContent).toMatch(/^Show questions and asks: /);
+  });
+
+  it("names days relative to now, and continued sessions and idle time plainly", () => {
+    const t = i18n.t.bind(i18n);
+    const now = new Date(2020, 9, 31, 12);
+    const session = {
+      start: at(31, 8).getTime(),
+      end: 0,
+      origin: "idle" as const,
+      idleMs: 125 * 60_000,
+    };
+    const today = describeSegment(
+      { key: "s", kind: "session", time: session.start, session, sortKey: 0 },
+      t,
+      "en-US",
+      now,
+    );
+    expect(today.title).toBe("Today, 8:00 AM");
+    expect(today.detail).toBe("New session after 2 h 5 min idle");
+    const continued = describeSegment(
+      { key: "d", kind: "day", time: at(30, 0).getTime(), session, sortKey: 0 },
+      t,
+      "en-US",
+      now,
+    );
+    expect(continued).toEqual({ title: "Yesterday", detail: "Session continues" });
+    const days = describeSegment(
+      {
+        key: "s2",
+        kind: "session",
+        time: 0,
+        session: { ...session, idleMs: 3 * 24 * 60 * 60_000 },
+        sortKey: 0,
+      },
+      t,
+      "en-US",
+      now,
+    );
+    expect(days.detail).toBe("New session after 3 d idle");
+    expect(
+      describeSegment({ key: "i", kind: "inherited", time: null, sortKey: 0 }, t, "en-US", now),
+    ).toEqual({ title: "From the parent chat", detail: "Before this fork" });
   });
 });
 
@@ -514,17 +709,19 @@ describe("TrackedAnswersPane delegated asks", () => {
     expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "laptop", agentId: "c-remote" });
   });
 
-  it("a hidden pane comes back when a delegated child newly needs attention", () => {
+  it("a minimized pane's pill counts a delegated child that newly needs attention", () => {
     const entries = [task("a", "in_progress", { delegatedAgentId: "c-1" })];
     const { update } = renderDelegated(entries, {
       "c-1": child({ status: "running", turnStartedAt: 1 }),
     });
-    fireEvent.click(screen.getByTestId("tracked-answers-dismiss"));
-    expect(screen.queryByTestId("tracked-answers-pane")).toBeNull();
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    const pill = () => screen.getByTestId("tracked-answers-expand").getAttribute("aria-label");
+    expect(pill()).toBe("Show questions and asks. 1 open ask");
     update({ "c-1": child({ status: "running", turnStartedAt: 2 }) });
-    expect(screen.queryByTestId("tracked-answers-pane")).toBeNull();
+    expect(pill()).toBe("Show questions and asks. 1 open ask");
     update({ "c-1": child({ status: "idle" }) });
-    expect(screen.getByTestId("tracked-answers-pane")).toBeTruthy();
+    expect(pill()).toBe("Show questions and asks. 1 open ask · 1 needs attention");
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
   });
 
   it("lists asks delegated to this chat, each linking back to its owner's ask", () => {

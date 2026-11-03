@@ -102,9 +102,10 @@ for (const width of [390, 1440]) {
       });
 
       // Opening, expanding and changing scope does not resolve a dependency.
+      // Needs you's triage row: Reply, Later, Details, More. Details only expands.
       await localRows
         .getByTestId("companion-entry-question:choice")
-        .getByRole("button", { name: "Read", exact: true })
+        .getByRole("button", { name: "Details", exact: true })
         .click();
       await local.getByTestId("stream-scope").click();
       expect(
@@ -112,8 +113,9 @@ for (const width of [390, 1440]) {
       ).toHaveLength(2);
       await localRows
         .getByTestId("companion-entry-question:choice")
-        .getByRole("button", { name: "Done", exact: true })
+        .getByTestId("companion-entry-more")
         .click();
+      await page.getByRole("menuitem", { name: "Done", exact: true }).click();
       await expect(localRows.getByTestId("companion-entry-question:choice")).toHaveCount(0);
       await expect(localRows.getByTestId("companion-entry-question:date")).toBeVisible();
 

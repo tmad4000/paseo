@@ -74,6 +74,8 @@ export const StreamUpdateRequestSchema = z.object({
     // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
     "set_reply",
     "mark_reply_seen",
+    // COMPAT(streamDefer): only sent to hosts advertising features.streamDefer.
+    "set_deferred",
   ]),
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().max(4000).optional(),
@@ -89,6 +91,8 @@ export const StreamUpdateRequestSchema = z.object({
   replyRevision: z.number().int().min(0).optional(),
   /** set_reply: the conversation that answered, when it is not the owning one. */
   answeredByAgentId: z.string().max(200).optional(),
+  /** set_deferred: true sets the entry aside for later, false brings it back. */
+  deferred: z.boolean().optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),

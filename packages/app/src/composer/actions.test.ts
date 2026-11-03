@@ -42,7 +42,9 @@ import {
   pickAndPersistImages,
   queueComposerMessage,
   queueComposerMessageOnServer,
+  orderQueuedComposerMessages,
   removeComposerAttachmentAtIndex,
+  reorderQueuedComposerMessagesLocally,
   sendQueuedComposerMessageNow,
   takeQueuedComposerMessage,
   toggleForgeAttachment,
@@ -800,6 +802,49 @@ describe("queueComposerMessage", () => {
       { kind: "image", metadata: image },
       review,
     ]);
+  });
+});
+
+describe("reorderQueuedComposerMessagesLocally", () => {
+  const queued = (id: string): QueuedComposerMessage => ({ id, text: id, attachments: [] });
+
+  it("moves a dropped message and keeps every message's content", () => {
+    const queue = createFakeQueue(
+      new Map([
+        ["agent", [queued("a"), queued("b"), queued("c")]],
+        ["other", [queued("x")]],
+      ]),
+    );
+    const moved = reorderQueuedComposerMessagesLocally({
+      agentId: "agent",
+      orderedIds: ["c", "a", "b"],
+      queue,
+    });
+    expect(moved).toBe(true);
+    expect(queue.state.get("agent")?.map((item) => item.id)).toEqual(["c", "a", "b"]);
+    expect(queue.state.get("other")?.map((item) => item.id)).toEqual(["x"]);
+  });
+
+  it("reports no move and leaves the queue untouched when the order is unchanged", () => {
+    const initial = new Map([["agent", [queued("a"), queued("b")]]]);
+    const queue = createFakeQueue(initial);
+    const before = queue.state;
+    expect(
+      reorderQueuedComposerMessagesLocally({ agentId: "agent", orderedIds: ["a", "b"], queue }),
+    ).toBe(false);
+    expect(queue.state).toBe(before);
+  });
+});
+
+describe("orderQueuedComposerMessages", () => {
+  const queued = (id: string) => ({ id });
+
+  it("ignores unknown ids and keeps omitted items in order at the end, like the host", () => {
+    const ordered = orderQueuedComposerMessages(
+      [queued("a"), queued("b"), queued("c"), queued("d")],
+      ["c", "ghost", "a"],
+    );
+    expect(ordered.map((item) => item.id)).toEqual(["c", "a", "b", "d"]);
   });
 });
 

@@ -53,6 +53,8 @@ interface DraftStoreActions {
     draftKey: string;
     attachment: WorkspaceFileComposerAttachment;
   }) => Promise<void>;
+  /** Asks the composer bound to this draft to take focus (Reply uses it after quoting). */
+  requestComposerFocus: (input: { draftKey: string }) => void;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
   collectActiveAttachmentIds: () => string[];
@@ -413,6 +415,15 @@ export const useDraftStore = create<DraftStore>()(
           };
         });
         scheduleAttachmentGc();
+      },
+
+      requestComposerFocus: ({ draftKey }) => {
+        set((state) => ({
+          attachmentFocusRequestByDraftKey: {
+            ...state.attachmentFocusRequestByDraftKey,
+            [draftKey]: (state.attachmentFocusRequestByDraftKey[draftKey] ?? 0) + 1,
+          },
+        }));
       },
 
       getCreateModalDraft: () => {

@@ -66,7 +66,7 @@ export function trackedQuestionEntryId(cursor: { epoch: string; seq: number }): 
 
 export interface TrackedAnswerLinks {
   questionAnchor?: TimelineAnchor;
-  /** A tracked ask's originating chat message; it has no timeline position. */
+  /** A tracked ask's originating chat message, found when Chat has it loaded. */
   questionMessageId?: string;
   answerAnchor?: TimelineAnchor;
   /** The chat that wrote the answer, when it is not the one showing the pane. */
@@ -77,7 +77,9 @@ export interface TrackedAnswerLinks {
 export function trackedAnswerLinks(entry: CompanionEntry, agentId: string): TrackedAnswerLinks {
   const answeredBy = entry.reply?.answeredByAgentId;
   return {
-    questionAnchor: entry.kind === "q_and_a" ? entry.questionAnchor : undefined,
+    // A tracked ask has no question anchor of its own; the host's source anchor places it.
+    questionAnchor:
+      (entry.kind === "q_and_a" ? entry.questionAnchor : undefined) ?? entry.sourceAnchor,
     questionMessageId: entry.kind === "question" ? entry.ask?.sourceMessageId : undefined,
     answerAnchor: entry.reply?.anchor,
     answeringAgentId: answeredBy && answeredBy !== agentId ? answeredBy : undefined,
@@ -137,14 +139,14 @@ export function selectOpenAsks(
   );
 }
 
-/** A newly blocked ask brings a hidden pane back; progress on other asks does not. */
+/** A newly blocked ask lights up a minimized pane; progress on other asks does not. */
 function blockedAskKey(item: OpenAsk): string | null {
   return item.state === "blocked" ? `blocked:${item.entry.id}` : null;
 }
 
 /**
- * Identifies what the pane is showing that should reopen it once hidden: answers, blocks, and
- * `attentionKeys` (delegated children that newly need the delegator).
+ * Identifies what the pane showed when minimized, so later answers, blocks, and
+ * `attentionKeys` (delegated children that newly need the delegator) stand out.
  */
 export function answersPaneSignature(
   answers: readonly TrackedAnswer[],
@@ -161,7 +163,7 @@ export function answersPaneSignature(
     .join("|");
 }
 
-/** True when the pane holds an answer or blocked ask that was not showing when it was hidden. */
+/** True when the pane holds an answer or blocked ask that was not showing when it was minimized. */
 export function hasUnhiddenPaneItems(
   answers: readonly TrackedAnswer[],
   asks: readonly OpenAsk[],

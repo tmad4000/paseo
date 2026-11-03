@@ -153,6 +153,8 @@ export interface SidebarWorkspaceMenuProps {
   openInFileManagerPath?: string | null;
   /** The exact instant behind the sidebar's compact last-active label. */
   lastActiveAt?: Date | null;
+  /** When the session was kicked off: its first top-level chat's creation time. */
+  startedAt?: Date | null;
   /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
@@ -202,6 +204,7 @@ function SidebarWorkspaceMenuItems({
   onTogglePin,
   openInFileManagerPath,
   lastActiveAt,
+  startedAt,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -303,16 +306,22 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
+      {lastActiveAt || startedAt ? <DropdownMenuSeparator /> : null}
       {lastActiveAt ? (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuHint
-            trailing={formatMessageTimestamp(lastActiveAt)}
-            testID={`sidebar-workspace-menu-last-active-${workspaceKey}`}
-          >
-            {t("sidebar.workspace.actions.lastActive")}
-          </DropdownMenuHint>
-        </>
+        <DropdownMenuHint
+          trailing={formatMessageTimestamp(lastActiveAt)}
+          testID={`sidebar-workspace-menu-last-active-${workspaceKey}`}
+        >
+          {t("sidebar.workspace.actions.lastActive")}
+        </DropdownMenuHint>
+      ) : null}
+      {startedAt ? (
+        <DropdownMenuHint
+          trailing={formatMessageTimestamp(startedAt)}
+          testID={`sidebar-workspace-menu-started-${workspaceKey}`}
+        >
+          {t("sidebar.workspace.actions.started")}
+        </DropdownMenuHint>
       ) : null}
     </>
   );
@@ -337,6 +346,7 @@ export function SidebarWorkspaceMenu({
   onTogglePin,
   openInFileManagerPath,
   lastActiveAt,
+  startedAt,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -397,6 +407,7 @@ export function SidebarWorkspaceMenu({
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
           lastActiveAt={lastActiveAt}
+          startedAt={startedAt}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -524,6 +535,7 @@ export function SidebarWorkspaceContextMenu({
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
           lastActiveAt={workspaceLastActiveAt(workspace)}
+          startedAt={workspace.startedAt}
         />
       </ContextMenuContent>
     </ContextMenu>

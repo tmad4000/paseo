@@ -300,6 +300,63 @@ test.describe("Composer attachments", () => {
     }
   });
 
+  test("dragging a queued message reorders the host queue", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-reorder-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while queued messages are rearranged.",
+    });
+    try {
+      for (const text of ["First queued", "Second queued", "Third queued"]) {
+        await fillComposerDraft(page, text);
+        await sendDraftToQueue(page);
+        await expectComposerDraft(page, "");
+      }
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["First queued", "Second queued", "Third queued"]);
+      const before = await agent.client.listQueuedAgentMessages(agent.agentId);
+      const [first, second, third] = before.items;
+
+      // Mouse: drag the second message's handle above the first.
+      const handle = page.getByTestId(`queued-message-drag-${second!.id}`);
+      const target = page.getByTestId(`queued-message-${first!.id}`);
+      const from = (await handle.boundingBox())!;
+      const to = (await target.boundingBox())!;
+      const x = from.x + from.width / 2;
+      await page.mouse.move(x, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(x, from.y + from.height / 2 - 7);
+      await page.mouse.move(x, to.y + 4, { steps: 8 });
+      await page.mouse.up();
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["Second queued", "First queued", "Third queued"]);
+
+      // Keyboard: the last message sits below the scrolled list; focus brings its handle into view.
+      await page.getByTestId(`queued-message-drag-${third!.id}`).focus();
+      // dnd-kit's screen-reader announcements mark each step, so keys are not sent before it measures.
+      const announcement = (text: string) =>
+        page.locator("[id^=DndLiveRegion]").filter({ hasText: text });
+      await page.keyboard.press("Space");
+      await expect(announcement(`${third!.id} was moved over droppable area`)).toHaveCount(1);
+      await page.keyboard.press("ArrowUp");
+      await expect(announcement(`was moved over droppable area ${first!.id}`)).toHaveCount(1);
+      await page.keyboard.press("Space");
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["Second queued", "Third queued", "First queued"]);
+
+      const after = await agent.client.listQueuedAgentMessages(agent.agentId);
+      expect(new Set(after.items.map((item) => item.id))).toEqual(
+        new Set(before.items.map((item) => item.id)),
+      );
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("the queue waits while a queued message is being edited", async ({ page }) => {
     test.setTimeout(120_000);
     const agent = await startRunningMockAgent(page, {

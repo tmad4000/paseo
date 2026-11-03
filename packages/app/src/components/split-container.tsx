@@ -33,6 +33,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
+import { useToast } from "@/contexts/toast-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ResizeHandle } from "@/components/resize-handle";
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/components/explorer-sidebar-layout";
 import { RetainedPanel } from "@/components/retained-panel";
 import {
+  focusMovedBehindMaximizedPane,
   hasMultipleVisiblePanes,
   resolveSplitContainerRoot,
   splitNodeContainsPane,
@@ -309,6 +311,50 @@ const dropCollisionDetection: CollisionDetection = (args) => {
   return closestCenter(args);
 };
 
+/**
+ * Anything that focuses a pane hidden behind the maximized one (Back/Forward, sidebar and
+ * Command Center jumps, pane shortcuts, splitting) restores the split so the destination is
+ * visible, then says so and offers to maximize where you landed. See docs/expo-router.md.
+ */
+function useRevealPaneBehindMaximized(input: {
+  root: SplitNode | null;
+  maximizedPaneId: string | null;
+  focusedPaneId: string | null;
+  restoreSplit: () => void;
+  maximizePane: (paneId: string) => void;
+}) {
+  const { root, maximizedPaneId, focusedPaneId, restoreSplit } = input;
+  const { t } = useTranslation();
+  const toast = useToast();
+  const maximizePane = useStableEvent(input.maximizePane);
+  const previousFocusedPaneIdRef = useRef(focusedPaneId);
+  useEffect(() => {
+    const previousFocusedPaneId = previousFocusedPaneIdRef.current;
+    previousFocusedPaneIdRef.current = focusedPaneId;
+    if (
+      !focusedPaneId ||
+      !focusMovedBehindMaximizedPane({
+        root,
+        maximizedPaneId,
+        previousFocusedPaneId,
+        focusedPaneId,
+      })
+    ) {
+      return;
+    }
+    restoreSplit();
+    toast.show(t("workspace.tabs.actions.unmaximizedToShowTab"), {
+      variant: "info",
+      testID: "pane-unmaximized-toast",
+      action: {
+        label: t("workspace.tabs.actions.maximizeShownPane"),
+        testID: "pane-unmaximized-toast-maximize",
+        onPress: () => maximizePane(focusedPaneId),
+      },
+    });
+  }, [focusedPaneId, maximizePane, maximizedPaneId, restoreSplit, root, t, toast]);
+}
+
 export function SplitContainer({
   layout,
   renderMainHeader,
@@ -393,16 +439,33 @@ export function SplitContainer({
       setMaximizedPane(null);
     }
   }, [focusModeEnabled, mainRoot, maximizedPaneId, workspaceHasMultiplePanes]);
+  const focusedPaneId = layout.focusedPaneId;
+  const maximizePane = useCallback(
+    (paneId: string) => {
+      setMaximizedPane({ workspaceKey, paneId });
+      // Keystrokes go to the focused pane, so it has to be the one left on screen.
+      if (focusedPaneId !== paneId) onFocusPane(paneId);
+    },
+    [focusedPaneId, onFocusPane, workspaceKey],
+  );
   const handleTogglePaneMaximized = useCallback(
     (paneId: string) => {
-      setMaximizedPane((current) =>
-        current?.workspaceKey === workspaceKey && current.paneId === paneId
-          ? null
-          : { workspaceKey, paneId },
-      );
+      if (maximizedPaneId === paneId) {
+        setMaximizedPane(null);
+      } else {
+        maximizePane(paneId);
+      }
     },
-    [workspaceKey],
+    [maximizePane, maximizedPaneId],
   );
+  const restoreSplit = useCallback(() => setMaximizedPane(null), []);
+  useRevealPaneBehindMaximized({
+    root: mainRoot,
+    maximizedPaneId,
+    focusedPaneId,
+    restoreSplit,
+    maximizePane,
+  });
   const handleCreateExplorerTab = useCallback(
     () => onCreateNewTab({ paneId: explorerSidebarPaneId ?? undefined }),
     [explorerSidebarPaneId, onCreateNewTab],

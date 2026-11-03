@@ -4,9 +4,10 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
+import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import {
   View,
-  ScrollView,
   Pressable,
   Text,
   StyleSheet as RNStyleSheet,
@@ -29,6 +30,7 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -40,6 +42,7 @@ import {
   Square,
   Pencil,
   Trash2,
+  GripVertical,
   AudioLines,
   CircleDot,
   FileText,
@@ -85,6 +88,7 @@ import {
   sendQueuedComposerMessageNow,
   updateQueuedComposerMessage,
   removeQueuedComposerMessageLocally,
+  reorderQueuedComposerMessagesLocally,
   toggleForgeAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
@@ -443,11 +447,21 @@ interface RenderQueueTrackArgs {
   /** Absent when the host cannot pause its queue for an edit. */
   handleHoldQueuedMessageForEdit?: (id: string, held: boolean) => void;
   handleQueueEditAsNewMessage: (text: string) => Promise<boolean>;
+  /** Full id list in the new order. Absent when the queue cannot be reordered. */
+  handleReorderQueuedMessages?: (orderedIds: string[]) => void;
+  reorderLabel: string;
   editLabel: string;
   saveLabel: string;
   cancelLabel: string;
   sendNowLabel: string;
 }
+
+interface QueueRow {
+  item: QueuedMessage;
+  detached: boolean;
+}
+
+const queueRowKey = (row: QueueRow): string => row.item.id;
 
 const DETACHED_QUEUE_EDIT_SUFFIX = ":detached";
 
@@ -507,6 +521,8 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
     handleSendQueuedNow,
     handleHoldQueuedMessageForEdit,
     handleQueueEditAsNewMessage,
+    handleReorderQueuedMessages,
+    reorderLabel,
     editLabel,
     saveLabel,
     cancelLabel,
@@ -531,7 +547,7 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   const persistedDetached = useDraftStore(
     useShallow((state) => listDetachedQueueEditIds(state.drafts, draftScope)),
   );
-  const rows = useMemo(() => {
+  const rows = useMemo((): QueueRow[] => {
     const queuedIds = new Set(queuedMessages.map((item) => item.id));
     const detachedById = new Map<string, QueuedMessage>();
     for (const id of persistedDetached) {
@@ -549,6 +565,79 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   const toggleExpanded = useCallback(() => setExpandedOverride(!expanded), [expanded]);
   // Collapsing hides queued rows, never an edit that has nowhere else to live.
   const visibleRows = expanded ? rows : rows.filter((row) => row.detached);
+  // Un-acked rows are unknown to the host, so they cannot be placed; they ride at the end.
+  const reorderableCount = visibleRows.filter(
+    (row) => !row.detached && !pendingMessageIds.has(row.item.id),
+  ).length;
+  const canReorder = handleReorderQueuedMessages !== undefined && reorderableCount > 1;
+  const handleDragEnd = useCallback(
+    (ordered: QueueRow[]) => handleReorderQueuedMessages?.(ordered.map((row) => row.item.id)),
+    [handleReorderQueuedMessages],
+  );
+  const renderDraggableRow = useCallback(
+    ({
+      item: { item, detached },
+      drag,
+      dragHandleProps,
+    }: DraggableRenderItemInfo<QueueRow>): ReactElement => (
+      <QueuedMessageRow
+        item={item}
+        detached={detached}
+        reorderLabel={
+          canReorder && !detached && !pendingMessageIds.has(item.id) ? reorderLabel : undefined
+        }
+        onDrag={drag}
+        dragHandleProps={dragHandleProps}
+        onEditingChange={handleEditingChange}
+        onHoldForEdit={handleHoldQueuedMessageForEdit}
+        onQueueAsNew={handleQueueEditAsNewMessage}
+        draftKey={`${draftScope}:${item.id}`}
+        onRemove={handleRemoveQueuedMessage}
+        removeLabel={removeLabel}
+        readLabel={readLabel}
+        isPending={pendingMessageIds.has(item.id)}
+        deliveryState={deliveryStates?.get(item.id)}
+        pendingLabel={resolveQueuedPendingLabel(
+          item.id,
+          removalFailedIds,
+          removalPendingIds,
+          removalFailedLabel,
+          removalPendingLabel,
+          pendingLabel,
+        )}
+        onSave={handleSaveQueuedMessage}
+        onSendNow={handleSendQueuedNow}
+        editLabel={editLabel}
+        saveLabel={saveLabel}
+        cancelLabel={cancelLabel}
+        sendNowLabel={sendNowLabel}
+      />
+    ),
+    [
+      canReorder,
+      cancelLabel,
+      deliveryStates,
+      draftScope,
+      editLabel,
+      handleEditingChange,
+      handleHoldQueuedMessageForEdit,
+      handleQueueEditAsNewMessage,
+      handleRemoveQueuedMessage,
+      handleSaveQueuedMessage,
+      handleSendQueuedNow,
+      pendingLabel,
+      pendingMessageIds,
+      readLabel,
+      removalFailedIds,
+      removalFailedLabel,
+      removalPendingIds,
+      removalPendingLabel,
+      removeLabel,
+      reorderLabel,
+      saveLabel,
+      sendNowLabel,
+    ],
+  );
   if (rows.length === 0) return null;
   return (
     <View style={styles.queueTrack}>
@@ -575,44 +664,21 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
         )}
       </Pressable>
       {visibleRows.length > 0 && (
-        <ScrollView
+        // Detached edits share the list (without a handle) so a row that leaves the
+        // queue mid-edit stays mounted and keeps its focus and cursor.
+        <DraggableList
           testID="composer-queue-list"
+          data={visibleRows}
+          keyExtractor={queueRowKey}
+          renderItem={renderDraggableRow}
+          onDragEnd={handleDragEnd}
+          useDragHandle
           style={styles.queueList}
+          containerStyle={styles.queueListContainer}
           contentContainerStyle={styles.queueListContent}
           keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-        >
-          {visibleRows.map(({ item, detached }) => (
-            <QueuedMessageRow
-              key={item.id}
-              item={item}
-              detached={detached}
-              onEditingChange={handleEditingChange}
-              onHoldForEdit={handleHoldQueuedMessageForEdit}
-              onQueueAsNew={handleQueueEditAsNewMessage}
-              draftKey={`${draftScope}:${item.id}`}
-              onRemove={handleRemoveQueuedMessage}
-              removeLabel={removeLabel}
-              readLabel={readLabel}
-              isPending={pendingMessageIds.has(item.id)}
-              deliveryState={deliveryStates?.get(item.id)}
-              pendingLabel={resolveQueuedPendingLabel(
-                item.id,
-                removalFailedIds,
-                removalPendingIds,
-                removalFailedLabel,
-                removalPendingLabel,
-                pendingLabel,
-              )}
-              onSave={handleSaveQueuedMessage}
-              onSendNow={handleSendQueuedNow}
-              editLabel={editLabel}
-              saveLabel={saveLabel}
-              cancelLabel={cancelLabel}
-              sendNowLabel={sendNowLabel}
-            />
-          ))}
-        </ScrollView>
+          extraData={visibleRows}
+        />
       )}
     </View>
   );
@@ -953,6 +1019,11 @@ interface QueuedMessageRowProps {
   item: QueuedMessage;
   /** The message left the queue while being edited. The edit lives on here until queued or discarded. */
   detached: boolean;
+  /** Present when the row can be dragged to a new place in the queue. */
+  reorderLabel?: string;
+  /** Native: starts the drag. Web drags start from `dragHandleProps` instead. */
+  onDrag: () => void;
+  dragHandleProps?: DraggableListDragHandleProps;
   onEditingChange: (item: QueuedMessage, editing: boolean) => void;
   onHoldForEdit?: (id: string, held: boolean) => void;
   onQueueAsNew: (text: string) => Promise<boolean>;
@@ -974,6 +1045,9 @@ interface QueuedMessageRowProps {
 function QueuedMessageRow({
   item,
   detached,
+  reorderLabel,
+  onDrag,
+  dragHandleProps,
   onEditingChange,
   onHoldForEdit,
   onQueueAsNew,
@@ -1320,6 +1394,12 @@ function QueuedMessageRow({
         />
       </Pressable>
       <View style={styles.queueActions}>
+        <QueuedMessageGrip
+          itemId={item.id}
+          label={reorderLabel}
+          drag={onDrag}
+          dragHandleProps={dragHandleProps}
+        />
         {!isPending && (
           <>
             <Pressable
@@ -1356,6 +1436,54 @@ function QueuedMessageRow({
           )}
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+// Space lifts and Escape cancels a keyboard drag; see resolveKeyboardFocusScope.
+const KEYBOARD_OWNER_DATASET = { keyboardOwner: "true" };
+const NO_DRAG_HANDLE_PROPS: DraggableListDragHandleProps = {};
+
+function QueuedMessageGrip({
+  itemId,
+  label,
+  drag,
+  dragHandleProps,
+}: {
+  itemId: string;
+  /** Absent when the row cannot move; nothing renders. */
+  label: string | undefined;
+  drag: () => void;
+  dragHandleProps: DraggableListDragHandleProps | undefined;
+}): ReactElement | null {
+  if (label === undefined) return null;
+  const icon = <ThemedGripVertical size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
+  if (isNative) {
+    return (
+      <Pressable
+        onPressIn={drag}
+        style={styles.queueDragHandle}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID={`queued-message-drag-${itemId}`}
+      >
+        {icon}
+      </Pressable>
+    );
+  }
+  // dnd-kit's attributes make this the focusable sortable handle (Space to lift, arrows to move).
+  const { attributes, listeners, setActivatorNodeRef } = dragHandleProps ?? NO_DRAG_HANDLE_PROPS;
+  return (
+    <View
+      {...attributes}
+      {...listeners}
+      ref={setActivatorNodeRef as unknown as Ref<View>}
+      dataSet={KEYBOARD_OWNER_DATASET}
+      accessibilityLabel={label}
+      style={styles.queueDragHandle}
+      testID={`queued-message-drag-${itemId}`}
+    >
+      {icon}
     </View>
   );
 }
@@ -2847,6 +2975,36 @@ function ComposerContentImpl({
     [queueMessage],
   );
 
+  const handleReorderQueuedMessages = useCallback(
+    (orderedIds: string[]) => {
+      // Optimistic: the row lands where it was dropped; the host's snapshot then
+      // replaces the list wholesale, so other devices and a refused move converge.
+      const moved = reorderQueuedComposerMessagesLocally({
+        agentId,
+        orderedIds,
+        queue: queueWriter,
+      });
+      if (!moved || !supportsAgentMessageQueue || !client) return;
+      void (async () => {
+        try {
+          const snapshot = await client.reorderQueuedAgentMessages(agentId, orderedIds);
+          applyAgentQueueSnapshot(serverId, snapshot);
+        } catch (error) {
+          setSendError(
+            error instanceof Error ? error.message : t("composer.errors.queueReorderFailed"),
+          );
+          // Put back the host's order; an equal-revision snapshot replaces the optimistic one.
+          try {
+            applyAgentQueueSnapshot(serverId, await client.listQueuedAgentMessages(agentId));
+          } catch {
+            // The next broadcast refreshes it.
+          }
+        }
+      })();
+    },
+    [agentId, applyAgentQueueSnapshot, client, queueWriter, serverId, supportsAgentMessageQueue, t],
+  );
+
   const handleRemoveQueuedMessage = useCallback(
     async (id: string): Promise<boolean> => {
       try {
@@ -3381,6 +3539,8 @@ function ComposerContentImpl({
         handleSendQueuedNow={handleSendQueuedNow}
         handleHoldQueuedMessageForEdit={handleHoldQueuedMessageForEdit}
         handleQueueEditAsNewMessage={handleQueueEditAsNewMessage}
+        handleReorderQueuedMessages={handleReorderQueuedMessages}
+        reorderLabel={t("composer.attachments.reorderQueuedMessage")}
         editLabel={t("composer.attachments.editQueuedMessage")}
         saveLabel={t("composer.attachments.saveQueuedMessage")}
         cancelLabel={t("composer.attachments.doneQueuedMessage")}
@@ -3400,6 +3560,7 @@ function ComposerContentImpl({
       handleSendQueuedNow,
       handleHoldQueuedMessageForEdit,
       handleQueueEditAsNewMessage,
+      handleReorderQueuedMessages,
       isAgentRunning,
       queuedMessages,
       pendingMessageIds,
@@ -3701,6 +3862,8 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[2],
   },
   queueList: { maxHeight: 240, flexShrink: 1 },
+  // The list's default container fills its parent, which collapses inside the auto-height composer.
+  queueListContainer: { flexGrow: 0, flexShrink: 1, flexBasis: "auto", maxHeight: 240 },
   queueListContent: { gap: theme.spacing[2], paddingBottom: theme.spacing[2] },
   queueReadItem: { flexDirection: "column", alignItems: "stretch" },
   queueHeader: {
@@ -3737,6 +3900,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
     gap: theme.spacing[2],
+  },
+  queueDragHandle: {
+    width: 24,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
   queueEditItem: {
     flexDirection: "column",
@@ -3837,6 +4006,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
 const ThemedAttachmentSpinner = withUnistyles(LoadingSpinner);
 const ThemedTrash = withUnistyles(Trash2);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedGripVertical = withUnistyles(GripVertical);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronUp = withUnistyles(ChevronUp);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);

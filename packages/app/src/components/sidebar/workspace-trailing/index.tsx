@@ -5,6 +5,7 @@ import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list"
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
 import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 
 export type { SidebarWorkspaceTrailing };
 
@@ -57,11 +58,20 @@ export function SidebarWorkspaceTrailingContent({
       <DiffStat additions={workspace.diffStat.additions} deletions={workspace.diffStat.deletions} />
     );
   }
-  const lastActiveAt = trailing === "timestamp" ? workspaceLastActiveAt(workspace) : null;
-  if (lastActiveAt) {
-    return <WorkspaceTimestamp lastActiveAt={lastActiveAt} />;
+  if (trailing === "timestamp") {
+    return <WorkspaceTimestampForSort workspace={workspace} />;
   }
   return null;
+}
+
+/**
+ * Sorted by kickoff, the stamp shows when each session started so the column reads in the same
+ * order as the list; every other sort keeps the last-active time.
+ */
+function WorkspaceTimestampForSort({ workspace }: { workspace: SidebarWorkspaceEntry }) {
+  const sortedByStart = useSidebarViewStore((state) => state.sortMode === "started");
+  const at = (sortedByStart ? workspace.startedAt : null) ?? workspaceLastActiveAt(workspace);
+  return at ? <WorkspaceTimestamp lastActiveAt={at} /> : null;
 }
 
 /**
