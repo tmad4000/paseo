@@ -1261,6 +1261,9 @@ export const es: TranslationResources = {
         splitDown: "Dividir panel hacia abajo",
         splitRightWithSession: "Dividir a la derecha con sesión…",
         splitDownWithSession: "Dividir hacia abajo con sesión…",
+        dropSessionOtherHost:
+          "Aquí solo se pueden soltar sesiones de este host. Usa una vista para combinar hosts.",
+        dropSessionNoSession: "Ese espacio de trabajo no tiene ninguna sesión para abrir.",
         changes: "Cambios",
         files: "Archivos",
         pullRequest: "Solicitud de extracción",

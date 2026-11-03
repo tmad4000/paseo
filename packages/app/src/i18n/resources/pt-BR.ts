@@ -1258,6 +1258,9 @@ export const ptBR: TranslationResources = {
         splitDown: "Dividir painel abaixo",
         splitRightWithSession: "Dividir à direita com sessão…",
         splitDownWithSession: "Dividir para baixo com sessão…",
+        dropSessionOtherHost:
+          "Somente sessões deste host podem ser soltas aqui. Use uma visualização para misturar hosts.",
+        dropSessionNoSession: "Esse espaço de trabalho não tem sessão para abrir.",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",

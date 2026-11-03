@@ -1254,6 +1254,9 @@ export const ja: TranslationResources = {
         splitDown: "下にペインを分割",
         splitRightWithSession: "セッションを右に分割表示…",
         splitDownWithSession: "セッションを下に分割表示…",
+        dropSessionOtherHost:
+          "ここにドロップできるのはこのホストのセッションだけです。複数のホストを並べるにはビューを使ってください。",
+        dropSessionNoSession: "このワークスペースには開くセッションがありません。",
         changes: "変更",
         files: "ファイル",
         pullRequest: "プルリクエスト",

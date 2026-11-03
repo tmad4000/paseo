@@ -1243,6 +1243,8 @@ export const ar: TranslationResources = {
         splitDown: "تقسيم الجزء لأسفل",
         splitRightWithSession: "تقسيم لليمين مع جلسة…",
         splitDownWithSession: "تقسيم للأسفل مع جلسة…",
+        dropSessionOtherHost: "يمكن إفلات جلسات هذا المضيف فقط هنا. استخدم عرضًا لدمج المضيفين.",
+        dropSessionNoSession: "لا توجد جلسة لفتحها في مساحة العمل هذه.",
         changes: "التغييرات",
         files: "الملفات",
         pullRequest: "طلب السحب",

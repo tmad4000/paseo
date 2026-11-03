@@ -1254,6 +1254,9 @@ export const ru: TranslationResources = {
         splitDown: "Разделить панель снизу",
         splitRightWithSession: "Разделить вправо с сессией…",
         splitDownWithSession: "Разделить вниз с сессией…",
+        dropSessionOtherHost:
+          "Сюда можно перетащить только сессии этого хоста. Чтобы совместить хосты, используйте вид.",
+        dropSessionNoSession: "В этом рабочем пространстве нет сессии для открытия.",
         changes: "Изменения",
         files: "Файлы",
         pullRequest: "PR",

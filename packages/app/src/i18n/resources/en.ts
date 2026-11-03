@@ -1243,6 +1243,9 @@ export const en = {
         splitDown: "Split pane down",
         splitRightWithSession: "Split right with session…",
         splitDownWithSession: "Split down with session…",
+        dropSessionOtherHost:
+          "Only sessions from this host can be dropped here. Use a View to mix hosts.",
+        dropSessionNoSession: "That workspace has no session to open.",
         changes: "Changes",
         files: "Files",
         pullRequest: "Pull request",
