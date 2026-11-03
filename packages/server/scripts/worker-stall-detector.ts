@@ -66,6 +66,7 @@ export function createWorkerStallDetector(
   return {
     markReady() {
       ready = true;
+      silenceWindowStartedAt = options.now();
     },
     recordWorkerHeartbeat() {
       const now = options.now();
@@ -77,7 +78,12 @@ export function createWorkerStallDetector(
       const previousTickAt = lastTickAt;
       lastTickAt = now;
 
-      if (options.unresponsiveAfterMs <= 0 || !ready || silenceWindowStartedAt === null) {
+      if (
+        options.unresponsiveAfterMs <= 0 ||
+        !ready ||
+        lastHeartbeatAt === null ||
+        silenceWindowStartedAt === null
+      ) {
         return { stalled: false };
       }
       if (previousTickAt !== null && now - previousTickAt > maxTickGapMs) {

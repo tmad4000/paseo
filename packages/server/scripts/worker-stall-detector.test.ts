@@ -73,6 +73,17 @@ describe("worker stall detector", () => {
     expect(clock.tickFor(THRESHOLD_MS * 3).stalled).toBe(false);
   });
 
+  test("counts silence no earlier than readiness after a bootstrap heartbeat", () => {
+    const clock = createClockedDetector();
+    clock.detector.recordWorkerHeartbeat();
+    expect(clock.tickFor(THRESHOLD_MS * 3).stalled).toBe(false);
+
+    clock.detector.markReady();
+    expect(clock.tickFor(1_000).stalled).toBe(false);
+    expect(clock.tickFor(THRESHOLD_MS - 2_000).stalled).toBe(false);
+    expect(clock.tickFor(1_000)).toMatchObject({ stalled: true, silentForMs: THRESHOLD_MS });
+  });
+
   test("does not count silence from a period when the supervisor was not scheduled either", () => {
     const clock = createClockedDetector();
     readyWithHeartbeat(clock.detector);

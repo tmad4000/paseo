@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Wedged worker recovery — pspin-6b5
+
+`wedged-worker-recovery`: after readiness and a first heartbeat, the supervisor restarts a
+worker silent for five minutes by default. Bootstrap and older silent workers are not judged;
+a supervisor tick over five seconds late resets the silence window to protect starved hosts.
+`PASEO_WORKER_UNRESPONSIVE_RESTART_MS` sets the threshold; zero disables recovery. On a wedge,
+the supervisor logs process state and on macOS captures a two-second sample under the log
+directory's `diagnostics/` before the existing graceful shutdown, process-tree kill and respawn.
+Acceptance: detector tests cover readiness, heartbeat and starvation; supervisor regressions
+exercise blocked and SIGSTOP workers and preserve silent bootstrap workers. Source prepared on
+`fix/daemon-wedged-worker-recovery`; not yet in an installed build.
+
 ## Command Center workspace activity — pspin-787.8
 
 `cmdk-workspace-last-active`: workspace subtitles include the sidebar last-active instant in
