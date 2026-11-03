@@ -25,8 +25,8 @@ export interface WorkerStallDetectorOptions {
   unresponsiveAfterMs: number;
   /** A supervisor tick later than this means the host itself was not running us. */
   maxSupervisorTickGapMs?: number;
-  /** Sleep-inclusive clock in milliseconds. */
-  now: () => number;
+  monotonicNow: () => number;
+  wallNow: () => number;
 }
 
 export type WorkerStallVerdict =
@@ -58,47 +58,52 @@ export function createWorkerStallDetector(
   const maxTickGapMs = options.maxSupervisorTickGapMs ?? DEFAULT_MAX_SUPERVISOR_TICK_GAP_MS;
   let ready = false;
   let lastHeartbeatAt: number | null = null;
-  // Start of the current window in which the worker has been silent while the
-  // supervisor demonstrably ran.
-  let silenceWindowStartedAt: number | null = null;
-  let lastTickAt: number | null = null;
+  let silentForMs = 0;
+  let lastMonoAt = options.monotonicNow();
+  let lastWallAt = options.wallNow();
+
+  function resetWindow() {
+    silentForMs = 0;
+    lastMonoAt = options.monotonicNow();
+    lastWallAt = options.wallNow();
+  }
 
   return {
     markReady() {
       ready = true;
-      silenceWindowStartedAt = options.now();
+      resetWindow();
     },
     recordWorkerHeartbeat() {
-      const now = options.now();
-      lastHeartbeatAt = now;
-      silenceWindowStartedAt = now;
+      resetWindow();
+      lastHeartbeatAt = lastMonoAt;
     },
     tick() {
-      const now = options.now();
-      const previousTickAt = lastTickAt;
-      lastTickAt = now;
+      const monoNow = options.monotonicNow();
+      const wallNow = options.wallNow();
+      const monoDelta = monoNow - lastMonoAt;
+      const wallDelta = wallNow - lastWallAt;
+      lastMonoAt = monoNow;
+      lastWallAt = wallNow;
 
       if (
         options.unresponsiveAfterMs <= 0 ||
         !ready ||
-        lastHeartbeatAt === null ||
-        silenceWindowStartedAt === null
+        lastHeartbeatAt === null
       ) {
         return { stalled: false };
       }
-      const tickGapMs = previousTickAt === null ? null : now - previousTickAt;
-      if (tickGapMs !== null && (tickGapMs < 0 || tickGapMs > maxTickGapMs)) {
-        silenceWindowStartedAt = now;
+      if (wallDelta < 0 || monoDelta < 0 || wallDelta > maxTickGapMs || monoDelta > maxTickGapMs) {
+        silentForMs = 0;
         return { stalled: false };
       }
-      const silentForMs = now - silenceWindowStartedAt;
+      silentForMs += Math.min(monoDelta, wallDelta);
       if (silentForMs < options.unresponsiveAfterMs) {
         return { stalled: false };
       }
       return {
         stalled: true,
         silentForMs,
-        lastHeartbeatAgoMs: lastHeartbeatAt === null ? null : now - lastHeartbeatAt,
+        lastHeartbeatAgoMs: Math.max(0, monoNow - lastHeartbeatAt),
       };
     },
   };

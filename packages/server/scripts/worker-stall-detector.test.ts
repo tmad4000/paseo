@@ -9,22 +9,28 @@ import {
 const THRESHOLD_MS = 300_000;
 
 function createClockedDetector(unresponsiveAfterMs = THRESHOLD_MS) {
-  let now = 0;
-  const detector = createWorkerStallDetector({ unresponsiveAfterMs, now: () => now });
+  let mono = 0;
+  let wall = 0;
+  const detector = createWorkerStallDetector({
+    unresponsiveAfterMs,
+    monotonicNow: () => mono,
+    wallNow: () => wall,
+  });
   return {
     detector,
     /** Advance the supervisor clock in regular one-second ticks, as its interval does. */
     tickFor(ms: number) {
       let verdict = detector.tick();
       for (let elapsed = 0; elapsed < ms; elapsed += 1_000) {
-        now += 1_000;
+        mono += 1_000;
+        wall += 1_000;
         verdict = detector.tick();
       }
       return verdict;
     },
     /** The supervisor itself was not scheduled (host sleep or starvation). */
     jump(ms: number) {
-      now += ms;
+      wall += ms;
     },
   };
 }
@@ -106,6 +112,26 @@ describe("worker stall detector", () => {
     expect(clock.tickFor(0).stalled).toBe(false);
     expect(clock.tickFor(THRESHOLD_MS - 1_000).stalled).toBe(false);
     expect(clock.tickFor(1_000)).toMatchObject({ stalled: true, silentForMs: THRESHOLD_MS });
+  });
+
+  test("resets after sleep before the first tick", () => {
+    const clock = createClockedDetector();
+    readyWithHeartbeat(clock.detector);
+    clock.jump(THRESHOLD_MS * 2);
+
+    expect(clock.tickFor(0).stalled).toBe(false);
+    expect(clock.tickFor(THRESHOLD_MS - 1_000).stalled).toBe(false);
+    expect(clock.tickFor(1_000)).toMatchObject({ stalled: true, silentForMs: THRESHOLD_MS });
+  });
+
+  test("does not count a forward wall clock step as elapsed silence", () => {
+    const clock = createClockedDetector(2_000);
+    readyWithHeartbeat(clock.detector);
+    clock.jump(3_000);
+
+    expect(clock.tickFor(0).stalled).toBe(false);
+    expect(clock.tickFor(1_000).stalled).toBe(false);
+    expect(clock.tickFor(1_000)).toMatchObject({ stalled: true, silentForMs: 2_000 });
   });
 
   test("is disabled by a zero threshold", () => {
