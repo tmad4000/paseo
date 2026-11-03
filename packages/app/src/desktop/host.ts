@@ -118,7 +118,11 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
-  openNew?: (options?: { pendingOpenProjectPath?: string | null }) => Promise<void>;
+  openNew?: (options?: {
+    pendingOpenProjectPath?: string | null;
+    /** Land the new window on this agent. Older desktop builds ignore it. */
+    agent?: { serverId: string; agentId: string } | null;
+  }) => Promise<void>;
   getCurrentWindow?: () => DesktopWindowBridge;
 }
 

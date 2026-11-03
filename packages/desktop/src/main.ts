@@ -979,8 +979,27 @@ async function bootstrap(): Promise<void> {
       options && typeof options === "object" && "pendingOpenProjectPath" in options
         ? (options as { pendingOpenProjectPath?: unknown }).pendingOpenProjectPath
         : null;
+    // "Open in new window" on an agent tab passes a structured target; the route
+    // is built here so the renderer cannot hand the window an arbitrary URL.
+    const agent =
+      options && typeof options === "object" && "agent" in options
+        ? (options as { agent?: unknown }).agent
+        : null;
+    const agentTarget =
+      agent &&
+      typeof agent === "object" &&
+      typeof (agent as { serverId?: unknown }).serverId === "string" &&
+      typeof (agent as { agentId?: unknown }).agentId === "string" &&
+      (agent as { serverId: string }).serverId.trim() &&
+      (agent as { agentId: string }).agentId.trim()
+        ? {
+            serverId: (agent as { serverId: string }).serverId.trim(),
+            agentId: (agent as { agentId: string }).agentId.trim(),
+          }
+        : null;
     await desktopWindowOwner.openAdditional({
       pendingProjectPath: typeof pendingPath === "string" ? pendingPath : null,
+      initialRoute: agentTarget ? buildAppDeepLinkRoute(agentTarget) : null,
     });
   });
 
