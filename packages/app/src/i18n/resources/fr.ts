@@ -131,6 +131,11 @@ export const fr: TranslationResources = {
     noReplyYet: "Attendez d'abord la réponse du fil.",
     parentUnavailable: "Le fil principal n'est plus disponible.",
   },
+  sidebarSessions: {
+    actions: "Actions pour {{title}}",
+    archive: "Archiver la session",
+    open: "Ouvrir {{title}} dans {{meta}}",
+  },
   sessionPins: {
     title: "Sessions épinglées",
     pin: "Épingler la session",
@@ -334,6 +339,7 @@ export const fr: TranslationResources = {
       groupByProject: "Grouper par projet",
       groupByStatus: "Grouper par statut",
       groupInOneList: "Afficher les chats en une seule liste",
+      groupAsSessions: "Afficher les chats en sessions",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -1849,6 +1855,7 @@ export const fr: TranslationResources = {
         project: "Projet",
         status: "Statut",
         list: "Une seule liste",
+        sessions: "Sessions",
         labels: "Libellés",
       },
       titleSource: {

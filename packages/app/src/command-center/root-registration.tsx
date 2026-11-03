@@ -12,6 +12,7 @@ import {
   Import,
   Keyboard,
   List,
+  MessagesSquare,
   PanelLeft,
   Plus,
   Settings,
@@ -67,6 +68,9 @@ const ThemedZap = withUnistyles(Zap, (theme) => ({ color: theme.colors.foregroun
 const ThemedHome = withUnistyles(Home, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedImport = withUnistyles(Import, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedMessagesSquare = withUnistyles(MessagesSquare, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
 const ThemedList = withUnistyles(List, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -121,6 +125,10 @@ function FolderIcon({ size }: CommandCenterIconProps) {
 
 function ListIcon({ size }: CommandCenterIconProps) {
   return <ThemedList size={size} strokeWidth={2.2} />;
+}
+
+function MessagesSquareIcon({ size }: CommandCenterIconProps) {
+  return <ThemedMessagesSquare size={size} strokeWidth={2.2} />;
 }
 
 function CircleDashedIcon({ size }: CommandCenterIconProps) {
@@ -411,8 +419,14 @@ export function CommandCenterRootActions() {
           groupByProject: t("shell.commandCenter.groupByProject"),
           groupByStatus: t("shell.commandCenter.groupByStatus"),
           groupInOneList: t("shell.commandCenter.groupInOneList"),
+          groupAsSessions: t("shell.commandCenter.groupAsSessions"),
         },
-        icons: { project: FolderIcon, status: CircleDashedIcon, list: ListIcon },
+        icons: {
+          project: FolderIcon,
+          status: CircleDashedIcon,
+          list: ListIcon,
+          sessions: MessagesSquareIcon,
+        },
         setGroupMode,
       }),
     );

@@ -14,7 +14,7 @@ export interface WorkspaceAgentActivity {
   startedAt?: Date;
 }
 
-function workspaceAgentStatus(agent: Agent): Agent["status"] {
+export function workspaceAgentStatus(agent: Agent): Agent["status"] {
   if (agent.turn.phase === "open") return "running";
   return agent.status === "running" ? "idle" : agent.status;
 }
@@ -128,7 +128,11 @@ function messageTimestamp(value: string | null | undefined): Date | undefined {
   return Number.isFinite(time) ? new Date(time) : undefined;
 }
 
-function agentMessageTimestamps(agent: Agent): { user: Date; assistant: Date; conversation: Date } {
+export function agentMessageTimestamps(agent: Agent): {
+  user: Date;
+  assistant: Date;
+  conversation: Date;
+} {
   // Daemons older than conversationMessageActivity send no messageActivity at all; their legacy
   // lastUserMessageAt keeps those chats in a sensible place under the message sorts.
   const user = agent.messageActivity

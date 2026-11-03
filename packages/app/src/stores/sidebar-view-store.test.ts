@@ -309,3 +309,10 @@ it("keeps one-list mode across a migration and falls back to project for unknown
   // "label" is a retired persisted mode; it reads back as the default.
   expect(migrateSidebarViewState({ groupMode: "label" }).groupMode).toBe("project");
 });
+
+it("keeps sessions mode across a migration", () => {
+  expect(migrateSidebarViewState({ groupMode: "sessions" }).groupMode).toBe("sessions");
+  useSidebarViewStore.getState().setGroupMode("sessions");
+  expect(useSidebarViewStore.getState().groupMode).toBe("sessions");
+  useSidebarViewStore.getState().setGroupMode("project");
+});

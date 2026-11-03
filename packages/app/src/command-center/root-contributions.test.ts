@@ -15,6 +15,10 @@ function ListIcon(_props: CommandCenterIconProps) {
   return null;
 }
 
+function SessionsIcon(_props: CommandCenterIconProps) {
+  return null;
+}
+
 function source(groupMode: SidebarGroupMode): {
   value: GroupingCommandCenterSource;
   applied: SidebarGroupMode[];
@@ -28,8 +32,9 @@ function source(groupMode: SidebarGroupMode): {
         groupByProject: "Group by project",
         groupByStatus: "Group by status",
         groupInOneList: "Show chats in one list",
+        groupAsSessions: "Show chats as sessions",
       },
-      icons: { project: ProjectIcon, status: StatusIcon, list: ListIcon },
+      icons: { project: ProjectIcon, status: StatusIcon, list: ListIcon, sessions: SessionsIcon },
       setGroupMode: (mode) => applied.push(mode),
     },
     applied,
@@ -43,20 +48,48 @@ function titles(mode: SidebarGroupMode): string[] {
 }
 
 describe("grouping command center contributions", () => {
-  it("offers status and one list while grouped by project", () => {
-    expect(titles("project")).toEqual(["Group by status", "Show chats in one list"]);
+  it("offers status, one list and sessions while grouped by project", () => {
+    expect(titles("project")).toEqual([
+      "Group by status",
+      "Show chats in one list",
+      "Show chats as sessions",
+    ]);
   });
 
-  it("offers project and one list while grouped by status", () => {
-    expect(titles("status")).toEqual(["Group by project", "Show chats in one list"]);
+  it("offers project, one list and sessions while grouped by status", () => {
+    expect(titles("status")).toEqual([
+      "Group by project",
+      "Show chats in one list",
+      "Show chats as sessions",
+    ]);
   });
 
-  it("offers project and status while shown as one list", () => {
-    expect(titles("list")).toEqual(["Group by project", "Group by status"]);
+  it("offers project, status and sessions while shown as one list", () => {
+    expect(titles("list")).toEqual([
+      "Group by project",
+      "Group by status",
+      "Show chats as sessions",
+    ]);
+  });
+
+  it("offers every workspace mode while shown as sessions", () => {
+    expect(titles("sessions")).toEqual([
+      "Group by project",
+      "Group by status",
+      "Show chats in one list",
+    ]);
+  });
+
+  it("finds Show chats as sessions by its own words only", () => {
+    const sessionsEntry = buildGroupingContributions(source("project").value).find(
+      (c) => c.id === "sidebar-grouping-sessions",
+    );
+    expect(sessionsEntry?.keywords).toEqual(expect.arrayContaining(["group", "sessions"]));
+    expect(sessionsEntry?.keywords).not.toContain("list");
   });
 
   it("never offers the mode you are already in", () => {
-    for (const mode of ["project", "status", "list"] as const) {
+    for (const mode of ["project", "status", "list", "sessions"] as const) {
       expect(buildGroupingContributions(source(mode).value).map((c) => c.id)).not.toContain(
         `sidebar-grouping-${mode}`,
       );
@@ -64,8 +97,13 @@ describe("grouping command center contributions", () => {
   });
 
   it("applies the mode each entry names, with that mode's icon", () => {
-    const icons = { project: ProjectIcon, status: StatusIcon, list: ListIcon };
-    for (const current of ["project", "status", "list"] as const) {
+    const icons = {
+      project: ProjectIcon,
+      status: StatusIcon,
+      list: ListIcon,
+      sessions: SessionsIcon,
+    };
+    for (const current of ["project", "status", "list", "sessions"] as const) {
       const fixture = source(current);
       for (const contribution of buildGroupingContributions(fixture.value)) {
         contribution.run();
@@ -79,7 +117,7 @@ describe("grouping command center contributions", () => {
 
   it("gives each target the same id from every mode that offers it", () => {
     const idsByTarget = new Map<SidebarGroupMode, Set<string>>();
-    for (const current of ["project", "status", "list"] as const) {
+    for (const current of ["project", "status", "list", "sessions"] as const) {
       const fixture = source(current);
       for (const contribution of buildGroupingContributions(fixture.value)) {
         contribution.run();
@@ -94,6 +132,7 @@ describe("grouping command center contributions", () => {
         project: ["sidebar-grouping-project"],
         status: ["sidebar-grouping-status"],
         list: ["sidebar-grouping-list"],
+        sessions: ["sidebar-grouping-sessions"],
       },
     );
   });
@@ -112,7 +151,7 @@ describe("grouping command center contributions", () => {
   });
 
   it("stays out of the default empty-query list", () => {
-    for (const mode of ["project", "status", "list"] as const) {
+    for (const mode of ["project", "status", "list", "sessions"] as const) {
       for (const contribution of buildGroupingContributions(source(mode).value)) {
         expect(contribution.visibility).toBe("query");
         expect(contribution.group).toBe("actions");

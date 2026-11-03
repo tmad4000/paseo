@@ -303,3 +303,19 @@ describe("buildSidebarProjection in one-list mode", () => {
     ]);
   });
 });
+
+describe("sessions grouping", () => {
+  it("builds no workspace groups and keeps pinned chats in the shortcut walk", () => {
+    const projection = buildSidebarProjection({
+      ...projectionInput({ groupMode: "sessions" }),
+      sortMode: "recent",
+    });
+    expect(projection.workspaceGroups).toEqual([]);
+    expect(projection.pinnedGroups.pinnedChats.map((entry) => entry.workspaceId)).toEqual([
+      "pinned",
+    ]);
+    expect(projection.shortcutModel.shortcutTargets.map((target) => target.workspaceId)).toEqual([
+      "pinned",
+    ]);
+  });
+});

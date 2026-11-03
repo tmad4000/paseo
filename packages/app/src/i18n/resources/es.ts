@@ -133,6 +133,11 @@ export const es: TranslationResources = {
     noReplyYet: "Espera primero la respuesta del hilo.",
     parentUnavailable: "El hilo principal ya no está disponible.",
   },
+  sidebarSessions: {
+    actions: "Acciones para {{title}}",
+    archive: "Archivar sesión",
+    open: "Abrir {{title}} en {{meta}}",
+  },
   sessionPins: {
     title: "Sesiones fijadas",
     pin: "Fijar sesión",
@@ -336,6 +341,7 @@ export const es: TranslationResources = {
       groupByProject: "Agrupar por proyecto",
       groupByStatus: "Agrupar por estado",
       groupInOneList: "Mostrar chats en una sola lista",
+      groupAsSessions: "Mostrar chats como sesiones",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -1853,6 +1859,7 @@ export const es: TranslationResources = {
         project: "Proyecto",
         status: "Estado",
         list: "Una sola lista",
+        sessions: "Sesiones",
         labels: "Etiquetas",
       },
       titleSource: {

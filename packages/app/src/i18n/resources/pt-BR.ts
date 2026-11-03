@@ -133,6 +133,11 @@ export const ptBR: TranslationResources = {
     noReplyYet: "Aguarde primeiro a resposta da conversa paralela.",
     parentUnavailable: "A conversa principal não está mais disponível.",
   },
+  sidebarSessions: {
+    actions: "Ações para {{title}}",
+    archive: "Arquivar sessão",
+    open: "Abrir {{title}} em {{meta}}",
+  },
   sessionPins: {
     title: "Sessões fixadas",
     pin: "Fixar sessão",
@@ -335,6 +340,7 @@ export const ptBR: TranslationResources = {
       groupByProject: "Agrupar por projeto",
       groupByStatus: "Agrupar por status",
       groupInOneList: "Mostrar chats em uma única lista",
+      groupAsSessions: "Mostrar chats como sessões",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "trocar modelo mudar modelo definir modelo selecionar modelo",
       thinkingGroupLabel: "Raciocínio",
@@ -1842,6 +1848,7 @@ export const ptBR: TranslationResources = {
         project: "Projeto",
         status: "Status",
         list: "Lista única",
+        sessions: "Sessões",
         labels: "Etiquetas",
       },
       titleSource: {
