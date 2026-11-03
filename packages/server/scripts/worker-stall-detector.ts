@@ -25,7 +25,7 @@ export interface WorkerStallDetectorOptions {
   unresponsiveAfterMs: number;
   /** A supervisor tick later than this means the host itself was not running us. */
   maxSupervisorTickGapMs?: number;
-  /** Monotonic clock in milliseconds. */
+  /** Sleep-inclusive clock in milliseconds. */
   now: () => number;
 }
 
@@ -86,9 +86,8 @@ export function createWorkerStallDetector(
       ) {
         return { stalled: false };
       }
-      if (previousTickAt !== null && now - previousTickAt > maxTickGapMs) {
-        // The supervisor was not scheduled either: host sleep or starvation, not a
-        // worker-specific wedge. Only count silence observed from here on.
+      const tickGapMs = previousTickAt === null ? null : now - previousTickAt;
+      if (tickGapMs !== null && (tickGapMs < 0 || tickGapMs > maxTickGapMs)) {
         silenceWindowStartedAt = now;
         return { stalled: false };
       }

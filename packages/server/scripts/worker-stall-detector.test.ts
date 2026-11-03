@@ -97,6 +97,17 @@ describe("worker stall detector", () => {
     expect(clock.tickFor(100_000)).toMatchObject({ stalled: true, silentForMs: THRESHOLD_MS });
   });
 
+  test("restarts the silence window when the clock moves backwards", () => {
+    const clock = createClockedDetector();
+    readyWithHeartbeat(clock.detector);
+
+    clock.tickFor(THRESHOLD_MS - 1_000);
+    clock.jump(-1_000);
+    expect(clock.tickFor(0).stalled).toBe(false);
+    expect(clock.tickFor(THRESHOLD_MS - 1_000).stalled).toBe(false);
+    expect(clock.tickFor(1_000)).toMatchObject({ stalled: true, silentForMs: THRESHOLD_MS });
+  });
+
   test("is disabled by a zero threshold", () => {
     const clock = createClockedDetector(0);
     readyWithHeartbeat(clock.detector);

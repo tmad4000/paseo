@@ -386,7 +386,8 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     let wedgeHandled = false;
     const stallDetector = createWorkerStallDetector({
       unresponsiveAfterMs: workerUnresponsiveRestartMs,
-      now: () => performance.now(),
+      // Wall time includes macOS sleep, unlike performance.now().
+      now: () => Date.now(),
     });
     const checkWorkerLiveness = (): void => {
       if (wedgeHandled || child !== currentChild || restarting || shuttingDown) {
