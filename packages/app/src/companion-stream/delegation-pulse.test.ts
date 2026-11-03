@@ -6,7 +6,9 @@ import {
   delegationTarget,
   deriveDelegationPulse,
   selectDelegatedHere,
+  selectUntrackedChildren,
   toDelegationChildSnapshot,
+  trackedChildIds,
   type DelegationChildSnapshot,
 } from "./delegation-pulse";
 
@@ -30,6 +32,7 @@ const child = (overrides: Partial<DelegationChildSnapshot> = {}): DelegationChil
   archived: false,
   title: "Worker",
   lastError: null,
+  openQuestionCount: 0,
   ...overrides,
 });
 
@@ -67,6 +70,31 @@ describe("deriveDelegationPulse", () => {
     });
   });
 
+  it("for an untracked child, idle and closed are at rest; permission and errors still need you", () => {
+    const untracked = { tracked: false };
+    expect(deriveDelegationPulse(child(), untracked)).toMatchObject({
+      kind: "idle",
+      needsAttention: false,
+      tracked: false,
+    });
+    expect(deriveDelegationPulse(child({ status: "closed" }), untracked).needsAttention).toBe(
+      false,
+    );
+    expect(
+      deriveDelegationPulse(child({ pendingPermissionCount: 1 }), untracked).needsAttention,
+    ).toBe(true);
+    expect(deriveDelegationPulse(child({ status: "error" }), untracked).needsAttention).toBe(true);
+  });
+
+  it("a child's own open questions hand the loop back, tracked or not, until it closes", () => {
+    const asking = child({ status: "running", turnStartedAt: 1, openQuestionCount: 2 });
+    expect(deriveDelegationPulse(asking)).toMatchObject({ questions: 2, needsAttention: true });
+    expect(deriveDelegationPulse(asking, { tracked: false }).needsAttention).toBe(true);
+    expect(
+      deriveDelegationPulse(child({ status: "closed", openQuestionCount: 2 }), { tracked: false }),
+    ).toMatchObject({ questions: 0, needsAttention: false });
+  });
+
   it("reports unknown, without attention, when this client has no snapshot", () => {
     expect(deriveDelegationPulse(null)).toMatchObject({ kind: "unknown", needsAttention: false });
   });
@@ -83,6 +111,12 @@ describe("toDelegationChildSnapshot", () => {
       archivedAt: null,
       title: "  Billing worker ",
       lastError: "",
+      companionEntries: [
+        { id: "question:q1", kind: "question", status: "open", text: "Which DB?" },
+        { id: "permission:p1", kind: "permission", status: "pending", text: "Run rm?" },
+        { id: "question:q2", kind: "question", status: "done", text: "Answered" },
+        { id: "ask:a", kind: "question", status: "open", text: "Task", ask: {} },
+      ],
     } as unknown as Agent;
     expect(toDelegationChildSnapshot(agent)).toEqual({
       status: "running",
@@ -93,6 +127,7 @@ describe("toDelegationChildSnapshot", () => {
       archived: false,
       title: "Billing worker",
       lastError: null,
+      openQuestionCount: 2,
     });
     expect(toDelegationChildSnapshot(undefined)).toBeNull();
   });
@@ -197,6 +232,68 @@ describe("selectDelegatedHere", () => {
   });
 });
 
+describe("untracked children", () => {
+  const entry = (id: string, value: Ask): CompanionEntry => ({
+    id,
+    kind: "question",
+    status: "open",
+    timestamp: "2026-11-02T09:00:00Z",
+    text: id,
+    truncated: false,
+    ask: value,
+  });
+  const agent = (id: string, extra: Partial<Agent> = {}) =>
+    ({
+      id,
+      title: `Chat ${id}`,
+      archivedAt: null,
+      parentAgentId: "orch",
+      createdAt: new Date(1_000),
+      ...extra,
+    }) as Agent;
+
+  it("collects every child an ask here follows, done or not, but never the chat itself", () => {
+    const ids = trackedChildIds(
+      [
+        entry("ask:a", ask({ delegatedAgentId: "kid-a" })),
+        entry("ask:b", ask({ state: "done", delegatedAgentId: "kid-b" })),
+        entry(
+          "ask:c",
+          ask({
+            sessions: [
+              { serverId: "srv", agentId: "orch" },
+              { serverId: "srv", agentId: "kid-c" },
+              { serverId: "laptop", agentId: "kid-remote" },
+            ],
+          }),
+        ),
+      ],
+      "srv",
+      "orch",
+    );
+    expect([...ids].sort()).toEqual(["kid-a", "kid-b", "kid-c"]);
+  });
+
+  it("lists live children of this chat that no ask tracks, newest first", () => {
+    const children = selectUntrackedChildren(
+      [
+        agent("old", { createdAt: new Date(1_000) }),
+        agent("new", { createdAt: new Date(3_000), title: "  Build worker " }),
+        agent("tracked", { createdAt: new Date(2_000) }),
+        agent("archived", { archivedAt: new Date(5_000) }),
+        agent("stranger", { parentAgentId: "someone-else" }),
+        agent("top-level", { parentAgentId: null }),
+      ],
+      "orch",
+      new Set(["tracked"]),
+    );
+    expect(children).toEqual([
+      { agentId: "new", title: "Build worker", createdAt: 3_000 },
+      { agentId: "old", title: "Chat old", createdAt: 1_000 },
+    ]);
+  });
+});
+
 describe("delegationAttentionKey", () => {
   it("keys only states that need the delegator, per state", () => {
     expect(delegationAttentionKey("ask:a", deriveDelegationPulse(child()))).toBe(
@@ -205,5 +302,12 @@ describe("delegationAttentionKey", () => {
     expect(
       delegationAttentionKey("ask:a", deriveDelegationPulse(child({ status: "running" }))),
     ).toBeNull();
+    // A new question from the child is new attention, even while its state stays the same.
+    expect(
+      delegationAttentionKey(
+        "ask:a",
+        deriveDelegationPulse(child({ status: "running", openQuestionCount: 1 })),
+      ),
+    ).toBe("child:ask:a:running:q1");
   });
 });

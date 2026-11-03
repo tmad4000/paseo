@@ -1,3 +1,4 @@
+import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { expect, test } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
@@ -5,7 +6,8 @@ import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-
 /**
  * A delegating chat watches its children live: the open-asks pane and the Stream card show each
  * child's state from the host's agent pushes, an idle child reads as an open loop, and both ends
- * link to each other.
+ * link to each other. A child it started without recording an ask still shows, under Delegated
+ * chats, from the host's parent label.
  */
 test("Delegated asks pulse live in the delegating chat and link both ways", async ({
   page,
@@ -34,7 +36,18 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
       modeId: "load-test",
       model: "e2e-fast-stream",
     });
+    // Started by the orchestrator, but its agent never recorded an ask for it.
+    const scout = await client.createAgent({
+      provider: "mock",
+      cwd: orchestrator.cwd,
+      workspaceId: orchestrator.workspaceId,
+      title: "Scout worker",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+      labels: { [PARENT_AGENT_ID_LABEL]: orchestrator.agentId },
+    });
     await client.waitForAgentUpsert(fixer.id, (s) => s.status === "running", 30_000);
+    await client.waitForAgentUpsert(scout.id, (s) => s.status === "idle", 30_000);
     await client.waitForAgentUpsert(docs.id, (s) => s.status === "idle", 30_000);
     // The host stores each as `ask:<id>`.
     const asks = [
@@ -61,7 +74,7 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
     await openAgentRoute(page, orchestrator);
     await expectComposerVisible(page);
     const pane = page.getByTestId("tracked-answers-pane");
-    const toggle = pane.getByTestId("tracked-answers-toggle");
+    const toggle = pane.getByTestId("tracked-answers-minimize");
     const deploy = pane.getByTestId("open-ask-ask:deploy");
     const docsRow = pane.getByTestId("open-ask-ask:docs");
 
@@ -72,6 +85,14 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
       /^Idle.* · ask still open$/,
     );
     await expect(toggle).toHaveAccessibleName(/2 open asks · 1 needs attention/);
+    // The untracked child is listed live with a link; at rest it asks nothing of the delegator.
+    const scoutRow = pane.getByTestId(`delegated-chat-${scout.id}`);
+    await expect(pane.getByText("Delegated chats · 1")).toBeVisible();
+    await expect(scoutRow).toContainText("Scout worker");
+    await expect(scoutRow.getByTestId("delegated-chat-open-status")).toHaveText(/^Idle/);
+    await expect(scoutRow.getByTestId("delegated-chat-open-status")).not.toContainText(
+      "ask still open",
+    );
     await page.screenshot({ path: testInfo.outputPath("pulse-running.png") });
 
     // The child stops: the delegating chat follows from the push, with no reload or reopen.
@@ -92,6 +113,10 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
       .filter({ hasText: "Docs worker" });
     await expect(card).toBeVisible();
     await expect(card).toContainText("ask still open");
+    // The chat's own Stream keeps the untracked child in view too.
+    await expect(
+      page.getByTestId("local-stream-workflow").getByTestId(`delegated-chat-${scout.id}`),
+    ).toContainText("Scout worker");
     await page.screenshot({ path: testInfo.outputPath("pulse-stream-card.png") });
 
     // One click to the child (a tab in this workspace); it links back to the ask it works.

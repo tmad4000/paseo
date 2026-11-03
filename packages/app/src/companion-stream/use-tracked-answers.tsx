@@ -14,7 +14,11 @@ import { trackedQuestionEntryId } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
 import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
 import { delegationTarget, delegationTargetKey, type DelegationTarget } from "./delegation-pulse";
-import { useDelegatedHere, useDelegationPulses } from "./use-delegation-pulse";
+import {
+  useDelegatedChildren,
+  useDelegatedHere,
+  useDelegationPulses,
+} from "./use-delegation-pulse";
 import {
   chatMessageEvents,
   computeChatSessions,
@@ -194,6 +198,7 @@ export function ChatTrackedAnswers({
     [agentId, pulses, serverId],
   );
   const delegatedHere = useDelegatedHere(serverId, agentId, showOpenAsks);
+  const delegatedChildren = useDelegatedChildren(serverId, agentId, showOpenAsks);
   const sessions = useChatSessions(serverId, agentId);
   // The jump callbacks change with every streamed row; reading them through a ref keeps the
   // pane's actions stable, so its memoized rows do not re-render while the agent streams.
@@ -239,6 +244,7 @@ export function ChatTrackedAnswers({
       agentTitle={agentTitle}
       delegation={delegation}
       delegatedHere={delegatedHere}
+      delegatedChildren={delegatedChildren}
       sessions={sessions}
     />
   );

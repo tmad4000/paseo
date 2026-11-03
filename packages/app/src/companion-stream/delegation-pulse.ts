@@ -1,4 +1,4 @@
-import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { needsUserInput, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { Agent } from "@/stores/session-store";
 
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
@@ -37,6 +37,8 @@ export interface DelegationChildSnapshot {
   archived: boolean;
   title: string | null;
   lastError: string | null;
+  /** Questions and decisions the child is waiting on a person for (its own Needs you items). */
+  openQuestionCount: number;
 }
 
 export interface DelegationPulse {
@@ -47,6 +49,13 @@ export interface DelegationPulse {
   since: number | null;
   title: string | null;
   error: string | null;
+  /** The child's own open questions for a person; each one hands the loop back. */
+  questions: number;
+  /**
+   * Whether an open ask in the delegating chat tracks this child. Untracked children (found by
+   * the host's parent label) have no ask that idle or closed could leave unfinished.
+   */
+  tracked: boolean;
 }
 
 export interface DelegationTarget {
@@ -74,6 +83,7 @@ export function toDelegationChildSnapshot(
     archived: Boolean(agent.archivedAt),
     title: agent.title?.trim() || null,
     lastError: agent.lastError?.trim() || null,
+    openQuestionCount: (agent.companionEntries ?? []).filter(needsUserInput).length,
   };
 }
 
@@ -88,19 +98,40 @@ function pulseKind(child: DelegationChildSnapshot): DelegationPulseKind {
   return "idle";
 }
 
-/** The child's state as the delegating chat should see it while the ask is still open. */
-export function deriveDelegationPulse(child: DelegationChildSnapshot | null): DelegationPulse {
+/**
+ * The child's state as the delegating chat should see it. With an open ask (`tracked`), an idle or
+ * closed child left the ask unfinished. Without one, only permission, errors and the child's own
+ * open questions need the delegator.
+ */
+export function deriveDelegationPulse(
+  child: DelegationChildSnapshot | null,
+  { tracked = true }: { tracked?: boolean } = {},
+): DelegationPulse {
   if (!child) {
-    return { kind: "unknown", needsAttention: false, since: null, title: null, error: null };
+    return {
+      kind: "unknown",
+      needsAttention: false,
+      since: null,
+      title: null,
+      error: null,
+      questions: 0,
+      tracked,
+    };
   }
   const kind = pulseKind(child);
+  const questions = kind === "closed" ? 0 : (child.openQuestionCount ?? 0);
+  const kindNeedsAttention = tracked
+    ? ATTENTION_KINDS.has(kind)
+    : kind === "permission" || kind === "error";
   return {
     kind,
-    needsAttention: ATTENTION_KINDS.has(kind),
+    needsAttention: kindNeedsAttention || questions > 0,
     since:
       kind === "running" ? (child.turnStartedAt ?? child.lastActivityAt) : child.lastActivityAt,
     title: child.title,
     error: kind === "error" ? child.lastError : null,
+    questions,
+    tracked,
   };
 }
 
@@ -171,5 +202,60 @@ export function selectDelegatedHere(
 
 /** Stable key per ask and attention state, so a newly idle child brings a hidden pane back. */
 export function delegationAttentionKey(entryId: string, pulse: DelegationPulse): string | null {
-  return pulse.needsAttention ? `child:${entryId}:${pulse.kind}` : null;
+  if (!pulse.needsAttention) return null;
+  return `child:${entryId}:${pulse.kind}${pulse.questions > 0 ? `:q${pulse.questions}` : ""}`;
+}
+
+/** A chat this one started (the host's parent label) that no ask in this chat links. */
+export interface DelegatedChild {
+  agentId: string;
+  title: string | null;
+  /** Epoch ms; newest children list first after those that need attention. */
+  createdAt: number;
+}
+
+/**
+ * Every agent id an ask in this chat already follows, done or not: those children show on their
+ * ask's card and need no second row.
+ */
+export function trackedChildIds(
+  entries: readonly CompanionEntry[],
+  serverId: string,
+  owningAgentId: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    const ask = entry.ask;
+    if (!ask) continue;
+    if (ask.delegatedAgentId) ids.add(ask.delegatedAgentId);
+    for (const session of ask.sessions ?? []) {
+      if (session.serverId === serverId && session.agentId !== owningAgentId) {
+        ids.add(session.agentId);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * Chats this one delegated to without recording an ask: live children whose parent is this chat.
+ * The host labels every agent created from another agent with its parent, so this works even when
+ * the delegating agent never wrote to the Stream. Archived children are finished business.
+ */
+export function selectUntrackedChildren(
+  agents: Iterable<Agent>,
+  parentAgentId: string,
+  tracked: ReadonlySet<string>,
+): DelegatedChild[] {
+  const children: DelegatedChild[] = [];
+  for (const agent of agents) {
+    if (agent.parentAgentId !== parentAgentId || agent.archivedAt) continue;
+    if (agent.id === parentAgentId || tracked.has(agent.id)) continue;
+    children.push({
+      agentId: agent.id,
+      title: agent.title?.trim() || null,
+      createdAt: agent.createdAt?.getTime?.() ?? 0,
+    });
+  }
+  return children.sort((a, b) => b.createdAt - a.createdAt);
 }

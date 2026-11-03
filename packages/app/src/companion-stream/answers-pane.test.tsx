@@ -115,6 +115,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
+import type { DelegatedChildPulse } from "./use-delegation-pulse";
 import { useAnswersPaneStore } from "./answers-pane-store";
 import { computeChatSessions, type ChatMessageEvent } from "./answers-sessions";
 import { describeSegment } from "./answers-pane";
@@ -612,6 +613,7 @@ describe("TrackedAnswersPane delegated asks", () => {
     archived: false,
     title: "Fix worker",
     lastError: null,
+    openQuestionCount: 0,
     ...overrides,
   });
   function delegationFrom(
@@ -722,6 +724,49 @@ describe("TrackedAnswersPane delegated asks", () => {
     update({ "c-1": child({ status: "idle" }) });
     expect(pill()).toBe("Show questions and asks. 1 open ask · 1 needs attention");
     fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+  });
+
+  it("lists chats this one started that no ask tracks, live, each opening its chat", () => {
+    const handlers = actions({ openSession: vi.fn() });
+    const pulse = (snapshot: DelegationChildSnapshot) =>
+      deriveDelegationPulse(snapshot, { tracked: false });
+    const delegatedChildren: DelegatedChildPulse[] = [
+      {
+        child: { agentId: "c-ask", title: "Schema worker", createdAt: 2 },
+        target: { serverId: "srv", agentId: "c-ask" },
+        pulse: pulse(child({ title: "Schema worker", openQuestionCount: 1 })),
+      },
+      {
+        child: { agentId: "c-rest", title: "Docs worker", createdAt: 1 },
+        target: { serverId: "srv", agentId: "c-rest" },
+        pulse: pulse(child({ title: "Docs worker" })),
+      },
+    ];
+    render(
+      <TrackedAnswersPane
+        entries={[]}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        delegatedChildren={delegatedChildren}
+      />,
+    );
+    expect(screen.getByText("Questions and asks")).toBeTruthy();
+    expect(screen.getByText("Delegated chats · 2")).toBeTruthy();
+    const statusIn = (agentId: string) =>
+      screen
+        .getByTestId(`delegated-chat-${agentId}`)
+        .querySelector('[data-testid="delegated-chat-open-status"]')?.textContent;
+    // An idle child no ask tracks is at rest; its question for you is what needs attention.
+    expect(statusIn("c-ask")).toBe("Idle 4m · 1 question for you");
+    expect(statusIn("c-rest")).toBe("Idle 4m");
+    expect(screen.getByText("1 needs attention")).toBeTruthy();
+    fireEvent.click(
+      screen
+        .getByTestId("delegated-chat-c-rest")
+        .querySelector('[data-testid="delegated-chat-open"]')!,
+    );
+    expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "srv", agentId: "c-rest" });
   });
 
   it("lists asks delegated to this chat, each linking back to its owner's ask", () => {

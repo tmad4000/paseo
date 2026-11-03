@@ -159,7 +159,10 @@ State comes from the child's agent snapshot in the session store, which the host
 `agent_update` pushes keep current for every non-archived agent with a workspace placement; one
 serialized selector (`useDelegationPulses`) re-renders a row only when its child changes. Nothing
 polls. Permission, idle, error and closed need the delegator: the header counts them (**N need
-attention**) and they bring a hidden pane back. An idle child is never read as a finished ask;
+attention**) and they light a minimized pane's pill. So does the child's own open question for a
+person (its Needs you items, `needsUserInput`): the line reads **Idle 3h · 1 question for you**,
+and a new question is new attention even when the state does not change. An idle child is never
+read as a finished ask;
 only the ask's own state can close it. Only the running dot moves: a slow opacity pulse that
 stops with reduced motion and in hidden retained panels.
 
@@ -167,6 +170,16 @@ The child links back. Its pane lists **Delegated to this chat · N**: each unres
 host whose working session is this chat, with its state and owning chat. Tapping one opens the
 owning chat on that ask's card in Stream. The lookup scans snapshots the client already holds
 (cached per agent map), so an owner outside them is not listed.
+
+Delegation without an ask is tracked too. The host labels every agent another agent creates with
+`paseo.parent-agent-id`, which the client reads as `Agent.parentAgentId`. **Delegated chats · N**
+lists this chat's live children that no ask here links (`selectUntrackedChildren`; an ask links a
+child by `delegatedAgentId` or a `sessions` entry, done or not). It appears in the floating pane
+and above the chat's own Stream Activity and Tasks, so the delegating chat always says the work
+went over there and links to it, even when its agent never recorded an ask. With no ask to leave
+unfinished, these rows read plain **Idle** and **Closed** with a muted dot. Only permission,
+errors and the child's open questions count as attention. Archived children drop out, and the
+first five show, then **Show N more**.
 
 Evidence (`delegation-pulse.spec.ts`, real mock children): a running and an idle child
 ([running](stream-answers/delegation-pulse-running.png)), the running child stopped and followed

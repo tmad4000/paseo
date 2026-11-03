@@ -39,6 +39,8 @@ import {
 import { splitEntryText } from "./entry-labels";
 import { entryChatTarget } from "./entry-source";
 import { DelegationPulseChip } from "./delegation-pulse-chip";
+import { DelegatedChatsList } from "./delegated-chats";
+import type { DelegatedChildPulse } from "./use-delegation-pulse";
 import {
   delegationAttentionKey,
   type DelegatedHereAsk,
@@ -85,6 +87,8 @@ interface TrackedAnswersPaneProps {
   delegation?: (entry: CompanionEntry) => AskDelegation | null;
   /** Asks other chats delegated to this one, each linking back to its owner. */
   delegatedHere?: readonly DelegatedHereAsk[];
+  /** Chats this one started that no ask tracks, live; each links to the child. */
+  delegatedChildren?: readonly DelegatedChildPulse[];
   /** The chat's sessions, computed from its whole loaded timeline; omitted, no dividers show. */
   sessions?: ChatSessions | null;
 }
@@ -103,6 +107,7 @@ const ASK_BADGES = {
 
 const NO_ASKS: OpenAsk[] = [];
 const NO_DELEGATED_HERE: readonly DelegatedHereAsk[] = [];
+const NO_DELEGATED_CHILDREN: readonly DelegatedChildPulse[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 
 type PaneRow<T> = { type: "divider"; segment: PaneSegment } | { type: "item"; item: T };
@@ -139,6 +144,7 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   agentTitle,
   delegation,
   delegatedHere = NO_DELEGATED_HERE,
+  delegatedChildren = NO_DELEGATED_CHILDREN,
   sessions,
 }: TrackedAnswersPaneProps) {
   const { t } = useTranslation();
@@ -154,12 +160,23 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     [asks, delegation],
   );
   const attentionKeys = useMemo(
-    () =>
-      asks.flatMap((item) => {
+    () => [
+      ...asks.flatMap((item) => {
         const pulse = delegations.get(item.entry.id)?.pulse;
         return (pulse && delegationAttentionKey(item.entry.id, pulse)) ?? [];
       }),
-    [asks, delegations],
+      ...delegatedChildren.flatMap(
+        (item) => delegationAttentionKey(`chat:${item.child.agentId}`, item.pulse) ?? [],
+      ),
+    ],
+    [asks, delegations, delegatedChildren],
+  );
+  const openChild = useCallback(
+    (target: DelegationTarget) => {
+      if (actions.openSession) actions.openSession(target);
+      else actions.openChat(target.agentId);
+    },
+    [actions],
   );
   const minimized = useAnswersPaneStore((state) => state.minimized) ?? isCompact;
   const setMinimized = useAnswersPaneStore((state) => state.setMinimized);
@@ -204,9 +221,9 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     if (scrollY.current > 0) scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
   }, []);
 
-  const total = items.length + asks.length + delegatedHere.length;
+  const total = items.length + asks.length + delegatedHere.length + delegatedChildren.length;
   if (total === 0) return null;
-  const hasAsks = asks.length + delegatedHere.length > 0;
+  const hasAsks = asks.length + delegatedHere.length + delegatedChildren.length > 0;
 
   const summary = paneSummary(t, {
     newCount,
@@ -342,9 +359,14 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
               )}
             </View>
           ) : null}
+          <DelegatedChatsList
+            items={delegatedChildren}
+            first={items.length + asks.length === 0}
+            onOpen={openChild}
+          />
           <DelegatedHereSection
             items={delegatedHere}
-            first={items.length + asks.length === 0}
+            first={items.length + asks.length + delegatedChildren.length === 0}
             actions={actions}
           />
         </ScrollView>

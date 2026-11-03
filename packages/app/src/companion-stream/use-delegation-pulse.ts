@@ -1,11 +1,14 @@
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import {
   delegationTargetKey,
   deriveDelegationPulse,
   selectDelegatedHere,
+  selectUntrackedChildren,
   toDelegationChildSnapshot,
+  trackedChildIds,
+  type DelegatedChild,
   type DelegatedHereAsk,
   type DelegationPulse,
   type DelegationTarget,
@@ -19,6 +22,7 @@ import { splitEntryText } from "./entry-labels";
  */
 export function useDelegationPulses(
   targets: readonly DelegationTarget[],
+  { tracked = true }: { tracked?: boolean } = {},
 ): (target: DelegationTarget) => DelegationPulse {
   const snapshotsKey = useSessionStore((state) =>
     JSON.stringify(
@@ -35,12 +39,12 @@ export function useDelegationPulses(
     const byKey = new Map(
       targets.map((target, index) => [
         delegationTargetKey(target),
-        deriveDelegationPulse(snapshots[index] ?? null),
+        deriveDelegationPulse(snapshots[index] ?? null, { tracked }),
       ]),
     );
     return (target: DelegationTarget) =>
-      byKey.get(delegationTargetKey(target)) ?? deriveDelegationPulse(null);
-  }, [snapshotsKey, targets]);
+      byKey.get(delegationTargetKey(target)) ?? deriveDelegationPulse(null, { tracked });
+  }, [snapshotsKey, targets, tracked]);
 }
 
 export function useDelegationPulse(target: DelegationTarget | null): DelegationPulse | null {
@@ -84,4 +88,84 @@ export function useDelegatedHere(
     return cached;
   });
   return useMemo(() => (key ? (JSON.parse(key) as DelegatedHereAsk[]) : NO_DELEGATED_HERE), [key]);
+}
+
+const NO_CHILDREN: DelegatedChild[] = [];
+
+/**
+ * Chats this one started that no ask here tracks, from the host's parent label on every agent it
+ * creates for another. Recomputed only when the agent map or this chat's entries change.
+ */
+export function useUntrackedChildren(
+  serverId: string,
+  agentId: string,
+  entries: readonly CompanionEntry[],
+  enabled: boolean,
+): DelegatedChild[] {
+  const tracked = useMemo(
+    () => trackedChildIds(entries, serverId, agentId),
+    [agentId, entries, serverId],
+  );
+  // Agent maps are replaced on every change, so scan once per map and tracked set, not per render.
+  const cache = useRef<{
+    agents: Map<string, Agent>;
+    tracked: Set<string>;
+    key: string;
+  } | null>(null);
+  const key = useSessionStore((state) => {
+    if (!enabled) return "";
+    const agents = state.sessions[serverId]?.agents;
+    if (!agents) return "";
+    const hit = cache.current;
+    if (hit && hit.agents === agents && hit.tracked === tracked) return hit.key;
+    const children = selectUntrackedChildren(agents.values(), agentId, tracked);
+    const next = children.length > 0 ? JSON.stringify(children) : "";
+    cache.current = { agents, tracked, key: next };
+    return next;
+  });
+  return useMemo(() => (key ? (JSON.parse(key) as DelegatedChild[]) : NO_CHILDREN), [key]);
+}
+
+/** An untracked child of this chat with its live state. */
+export interface DelegatedChildPulse {
+  child: DelegatedChild;
+  target: DelegationTarget;
+  pulse: DelegationPulse;
+}
+
+const NO_ENTRIES: CompanionEntry[] = [];
+const NO_CHILD_PULSES: DelegatedChildPulse[] = [];
+
+/**
+ * The chats this one delegated to without an ask, live, the ones that need the delegator first
+ * (a permission, an error, or an open question for a person), then newest.
+ */
+export function useDelegatedChildren(
+  serverId: string,
+  agentId: string,
+  enabled: boolean,
+): DelegatedChildPulse[] {
+  const entries = useSessionStore((state) => {
+    const session = state.sessions[serverId];
+    return (
+      (session?.agents.get(agentId) ?? session?.agentDetails.get(agentId))?.companionEntries ??
+      NO_ENTRIES
+    );
+  });
+  const children = useUntrackedChildren(serverId, agentId, entries, enabled);
+  const targets = useMemo(
+    () => children.map((child) => ({ serverId, agentId: child.agentId })),
+    [children, serverId],
+  );
+  const pulses = useDelegationPulses(targets, { tracked: false });
+  return useMemo(() => {
+    if (children.length === 0) return NO_CHILD_PULSES;
+    const rows = children.map((child, index) => ({
+      child,
+      target: targets[index]!,
+      pulse: pulses(targets[index]!),
+    }));
+    // Stable sort: attention first, otherwise newest first as selected.
+    return rows.sort((a, b) => Number(b.pulse.needsAttention) - Number(a.pulse.needsAttention));
+  }, [children, pulses, targets]);
 }

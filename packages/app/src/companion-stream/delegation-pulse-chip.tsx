@@ -64,7 +64,7 @@ export const DelegationPulseChip = memo(function DelegationPulseChip({
       testID={testID}
       dataSet={dataSet}
     >
-      <PulseDot kind={pulse.kind} />
+      <PulseDot kind={pulse.kind} quiet={pulse.tracked === false && !pulse.needsAttention} />
       <Text style={styles.name} numberOfLines={1}>
         {name}
       </Text>
@@ -79,8 +79,23 @@ export const DelegationPulseChip = memo(function DelegationPulseChip({
   );
 });
 
-/** "Running · 4m", "Idle 12m · ask still open", …; the time keeps itself current. */
+/**
+ * "Running · 4m", "Idle 12m · ask still open", "Idle 3h · 1 question for you", …; the time keeps
+ * itself current. A child no ask tracks reads plain "Idle" or "Closed": nothing was left open.
+ */
 export function useDelegationStatusLabel(pulse: DelegationPulse): string {
+  const { t } = useTranslation();
+  const state = useDelegationStateLabel(pulse);
+  if (!pulse.questions) return state;
+  return t("agentPanel.stream.answers.delegation.withQuestions", {
+    status: state,
+    questions: t("agentPanel.stream.answers.delegation.questionsForYou", {
+      count: pulse.questions,
+    }),
+  });
+}
+
+function useDelegationStateLabel(pulse: DelegationPulse): string {
   const { t } = useTranslation();
   const since = useMemo(() => (pulse.since === null ? null : new Date(pulse.since)), [pulse.since]);
   const elapsed = useCompactTimeAgo(since);
@@ -91,6 +106,13 @@ export function useDelegationStatusLabel(pulse: DelegationPulse): string {
         ? t("agentPanel.stream.answers.delegation.runningFor", { time: timed })
         : t("agentPanel.stream.answers.delegation.running");
     case "idle":
+      if (pulse.tracked === false) {
+        return timed
+          ? t("agentPanel.stream.answers.delegation.untrackedIdleFor", {
+              time: timed,
+            })
+          : t("agentPanel.stream.answers.delegation.untrackedIdle");
+      }
       return timed
         ? t("agentPanel.stream.answers.delegation.idleFor", { time: timed })
         : t("agentPanel.stream.answers.delegation.idle");
@@ -99,7 +121,11 @@ export function useDelegationStatusLabel(pulse: DelegationPulse): string {
     case "error":
       return t("agentPanel.stream.answers.delegation.error");
     case "closed":
-      return t("agentPanel.stream.answers.delegation.closed");
+      return t(
+        pulse.tracked === false
+          ? "agentPanel.stream.answers.delegation.untrackedClosed"
+          : "agentPanel.stream.answers.delegation.closed",
+      );
     case "starting":
       return t("agentPanel.stream.answers.delegation.starting");
     case "unknown":
@@ -107,7 +133,8 @@ export function useDelegationStatusLabel(pulse: DelegationPulse): string {
   }
 }
 
-function PulseDot({ kind }: { kind: DelegationPulseKind }) {
+/** `quiet`: an untracked child at rest; its dot is muted rather than a warning. */
+function PulseDot({ kind, quiet }: { kind: DelegationPulseKind; quiet: boolean }) {
   const reduceMotion = useReducedMotion();
   // A retained, hidden panel keeps its rows mounted; only a visible one pulses.
   const active = useRetainedPanelActive();
@@ -128,7 +155,7 @@ function PulseDot({ kind }: { kind: DelegationPulseKind }) {
     warning: styles.dotWarning,
     danger: styles.dotDanger,
     muted: styles.dotMuted,
-  }[DOT_TONE[kind]];
+  }[quiet && DOT_TONE[kind] === "warning" ? "muted" : DOT_TONE[kind]];
   return (
     <View style={styles.dotSlot}>
       <Animated.View
