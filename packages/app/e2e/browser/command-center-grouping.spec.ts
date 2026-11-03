@@ -2,6 +2,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { openCommandCenter } from "../support/helpers/command-center";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { getServerId } from "../support/helpers/server-id";
 
 const GROUP_BY_STATUS = "Group by status";
@@ -91,6 +92,58 @@ test.describe("Command center sidebar grouping", () => {
       await expect(statusList).toHaveCount(0);
     } finally {
       await seeded.cleanup().catch(() => undefined);
+    }
+  });
+});
+
+test.describe("Sidebar Needs you section", () => {
+  test.describe.configure({ timeout: 180_000 });
+
+  test("One list pins Needs you above the chats; Command Center hides and shows it", async ({
+    page,
+  }) => {
+    const owner = await seedMockAgentWorkspace({
+      repoPrefix: "sidebar-needs-you-",
+      title: "Needs you origin",
+    });
+    try {
+      await owner.client.updateStreamEntry({
+        agentId: owner.agentId,
+        action: "set_ask",
+        entryId: "sidebar-blocked",
+        expectedRevision: 0,
+        text: "Deploy from the sidebar",
+        ask: { state: "blocked", remaining: "Needs your go-ahead (sidebar)", evidence: "" },
+      });
+      await gotoAppShell(page);
+      await expect(page.getByTestId("sidebar-project-workspace-list-scroll")).toBeVisible({
+        timeout: 30_000,
+      });
+      await runGroupingEntry(page, ONE_LIST, GROUP_BY_PROJECT);
+      const section = page.getByTestId("sidebar-needs-you-section");
+      await expect(section).toBeVisible({ timeout: 30_000 });
+      await expect(section.getByText("Needs your go-ahead (sidebar)")).toBeVisible({
+        timeout: 30_000,
+      });
+
+      const panel = await openCommandCenter(page);
+      await panel.getByTestId("command-center-input").fill("needs you sidebar");
+      await panel.getByText("Hide Needs you in sidebar", { exact: true }).click();
+      await expect(section).toHaveCount(0);
+      const again = await openCommandCenter(page);
+      await again.getByTestId("command-center-input").fill("needs you sidebar");
+      await again.getByText("Show Needs you in sidebar", { exact: true }).click();
+      await expect(page.getByTestId("sidebar-needs-you-section")).toBeVisible({ timeout: 30_000 });
+
+      // Status grouping already lists the chat under Needs input instead.
+      await runGroupingEntry(page, GROUP_BY_STATUS, ONE_LIST);
+      await expect(page.getByTestId("sidebar-needs-you-section")).toHaveCount(0);
+      await expect(page.getByTestId("sidebar-status-group-needs_input")).toBeVisible({
+        timeout: 30_000,
+      });
+      await runGroupingEntry(page, GROUP_BY_PROJECT, GROUP_BY_STATUS);
+    } finally {
+      await owner.cleanup();
     }
   });
 });

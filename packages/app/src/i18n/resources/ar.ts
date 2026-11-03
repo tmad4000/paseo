@@ -1858,6 +1858,16 @@ export const ar: TranslationResources = {
       description: "غيّر عوامل تصفية الشريط الجانبي أو امسحها لعرض مساحات العمل.",
       clear: "مسح عوامل التصفية",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "المثبتة",
     },

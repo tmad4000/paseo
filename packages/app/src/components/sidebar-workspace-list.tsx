@@ -100,6 +100,7 @@ import {
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import { PinnedSectionHeader } from "@/components/sidebar/pinned-section-header";
+import { SidebarNeedsYouSection } from "@/components/sidebar/sidebar-needs-you-section";
 import {
   PinnedProjectsDivider,
   ProjectPinGlyph,
@@ -2077,7 +2078,15 @@ export function SidebarWorkspaceList({
       />
     );
 
-  return content;
+  // One list and Project get a pinned copy of Needs you's top items; Status already groups chats
+  // that need input.
+  if (groupMode === "status") return content;
+  return (
+    <View style={styles.withNeedsYou}>
+      <SidebarNeedsYouSection onNavigate={onWorkspacePress} />
+      {content}
+    </View>
+  );
 }
 
 /**
@@ -2610,6 +2619,9 @@ function ProjectModeList({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  withNeedsYou: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },

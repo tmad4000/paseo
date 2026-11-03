@@ -1869,6 +1869,16 @@ export const ko: TranslationResources = {
       description: "워크스페이스를 보려면 사이드바 필터를 변경하거나 지우세요.",
       clear: "필터 지우기",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "고정됨",
     },

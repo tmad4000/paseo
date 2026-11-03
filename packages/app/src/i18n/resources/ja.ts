@@ -1876,6 +1876,16 @@ export const ja: TranslationResources = {
         "ワークスペースを表示するにはサイドバーのフィルターを変更またはクリアしてください。",
       clear: "フィルターをクリア",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "固定済み",
     },

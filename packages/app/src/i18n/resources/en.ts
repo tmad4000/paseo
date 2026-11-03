@@ -1869,6 +1869,16 @@ export const en = {
       description: "Change or clear the sidebar filters to see workspaces.",
       clear: "Clear filters",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "Pinned",
     },

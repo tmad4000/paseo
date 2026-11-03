@@ -245,6 +245,7 @@ interface AgentState {
   pendingPermissionCount?: number;
   requiresAttention?: boolean;
   attentionReason?: AgentSnapshotPayload["attentionReason"];
+  companionEntries?: AgentSnapshotPayload["companionEntries"];
 }
 
 function createAgent(
@@ -290,6 +291,7 @@ function createAgent(
     attentionReason: input.attentionReason ?? null,
     attentionTimestamp: null,
     archivedAt: null,
+    ...(input.companionEntries ? { companionEntries: input.companionEntries } : {}),
   } satisfies AgentSnapshotPayload;
 }
 
@@ -511,6 +513,35 @@ describe("WorkspaceDirectory", () => {
     workspace.hasUnknownTerminal();
 
     await expect(workspace.workspaceStatus()).resolves.toBe("done");
+  });
+
+  test("a blocked ask waiting on the user puts its chat in needs_input; Later does not", async () => {
+    const blocked = {
+      id: "ask:deploy",
+      kind: "question" as const,
+      status: "open" as const,
+      timestamp: NOW,
+      text: "Deploy",
+      truncated: false,
+      ask: {
+        state: "blocked" as const,
+        remaining: "Needs your go-ahead",
+        evidence: "",
+        revision: 1,
+        provenance: "explicit" as const,
+      },
+    };
+    const workspace = new WorkspaceStatus();
+    workspace.hasRootAgent({ id: "blocked-agent", status: "idle", companionEntries: [blocked] });
+    await expect(workspace.workspaceStatus()).resolves.toBe("needs_input");
+
+    const later = new WorkspaceStatus();
+    later.hasRootAgent({
+      id: "later-agent",
+      status: "idle",
+      companionEntries: [{ ...blocked, deferredAt: NOW }],
+    });
+    await expect(later.workspaceStatus()).resolves.toBe("done");
   });
 
   test("working terminal does not override a higher-priority needs_input agent", async () => {

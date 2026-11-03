@@ -19,6 +19,7 @@ import {
   EyeOff,
   Folder,
   GitBranch,
+  Inbox,
   GitPullRequest,
   Globe,
   List,
@@ -56,6 +57,7 @@ import { workspaceLabelKey, type WorkspaceLabelColor } from "@getpaseo/protocol/
 import type { WorkspaceTitleSource } from "@/hooks/use-settings";
 import { SIDEBAR_CHECKS_DISPLAYS, type SidebarChecksDisplay } from "./checks-display";
 import { useSidebarDisplayPreferences, type SidebarTrailingChoice } from "./model";
+import { useNeedsYouSectionStore } from "@/companion-stream/needs-you-section-store";
 import { SIDEBAR_ROW_ITEMS, type SidebarRowItem } from "./row-items";
 import { useWorkspaceLabelProjection } from "@/workspace-labels";
 import { WorkspaceLabelDot } from "@/workspace-labels/swatch";
@@ -568,6 +570,7 @@ function ShowPage({ preferences }: { preferences: Preferences }): ReactElement {
           testID={`sidebar-row-item-${item}`}
         />
       ))}
+      <NeedsYouSectionItem />
       <ChecksSubTrigger />
       <MenuSeparator />
       {TRAILING_CHOICES.map((choice) => (
@@ -583,6 +586,27 @@ function ShowPage({ preferences }: { preferences: Preferences }): ReactElement {
         />
       ))}
     </>
+  );
+}
+
+const NeedsYouIcon = withUnistyles(Inbox);
+
+/** The pinned Needs you section above the list (One list and Project grouping). */
+function NeedsYouSectionItem(): ReactElement {
+  const { t } = useTranslation();
+  const enabled = useNeedsYouSectionStore((state) => state.enabled);
+  const setEnabled = useNeedsYouSectionStore((state) => state.setEnabled);
+  const toggle = useCallback(() => setEnabled(!enabled), [setEnabled, enabled]);
+  return (
+    <OptionItem
+      value="needs-you"
+      icon={NeedsYouIcon}
+      label={t("sidebar.needsYou.menuItem")}
+      selected={enabled}
+      closeOnSelect={false}
+      onSelect={toggle}
+      testID="sidebar-row-item-needs-you-section"
+    />
   );
 }
 
