@@ -38,7 +38,22 @@ import {
 } from "./answers-sessions";
 import { splitEntryText } from "./entry-labels";
 import { entryChatTarget } from "./entry-source";
+import { DelegationPulseChip } from "./delegation-pulse-chip";
+import { DelegatedChatsList } from "./delegated-chats";
+import type { DelegatedChildPulse } from "./use-delegation-pulse";
+import {
+  delegationAttentionKey,
+  type DelegatedHereAsk,
+  type DelegationPulse,
+  type DelegationTarget,
+} from "./delegation-pulse";
 import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
+
+/** The child working an ask, with its live state. */
+export interface AskDelegation {
+  target: DelegationTarget;
+  pulse: DelegationPulse;
+}
 
 export interface TrackedAnswerActions {
   jumpToAnchor: (anchor: TimelineAnchor) => void;
@@ -53,6 +68,10 @@ export interface TrackedAnswerActions {
   hasMessage: (messageId: string) => boolean;
   /** Shows the ask's card in this chat's Stream. */
   openAsk: (entry: CompanionEntry) => void;
+  /** Opens the session working a delegated ask, which may live on another host. */
+  openSession?: (target: DelegationTarget) => void;
+  /** Opens the chat that delegated an ask to this one, on that ask's card. */
+  openOwnerAsk?: (item: DelegatedHereAsk) => void;
 }
 
 interface TrackedAnswersPaneProps {
@@ -64,6 +83,12 @@ interface TrackedAnswersPaneProps {
   showOpenAsks?: boolean;
   /** A chat's title for an ask's delegated owner, when this client knows it. */
   agentTitle?: (agentId: string) => string | null | undefined;
+  /** The live child working an ask, if any; updates as the host pushes agent changes. */
+  delegation?: (entry: CompanionEntry) => AskDelegation | null;
+  /** Asks other chats delegated to this one, each linking back to its owner. */
+  delegatedHere?: readonly DelegatedHereAsk[];
+  /** Chats this one started that no ask tracks, live; each links to the child. */
+  delegatedChildren?: readonly DelegatedChildPulse[];
   /** The chat's sessions, computed from its whole loaded timeline; omitted, no dividers show. */
   sessions?: ChatSessions | null;
 }
@@ -81,6 +106,8 @@ const ASK_BADGES = {
 } as const satisfies Record<OpenAskState, { label: string; variant: StatusBadgeVariant }>;
 
 const NO_ASKS: OpenAsk[] = [];
+const NO_DELEGATED_HERE: readonly DelegatedHereAsk[] = [];
+const NO_DELEGATED_CHILDREN: readonly DelegatedChildPulse[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 
 type PaneRow<T> = { type: "divider"; segment: PaneSegment } | { type: "item"; item: T };
@@ -115,6 +142,9 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   actions,
   showOpenAsks = false,
   agentTitle,
+  delegation,
+  delegatedHere = NO_DELEGATED_HERE,
+  delegatedChildren = NO_DELEGATED_CHILDREN,
   sessions,
 }: TrackedAnswersPaneProps) {
   const { t } = useTranslation();
@@ -124,6 +154,29 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     () =>
       showOpenAsks ? selectOpenAsks(entries, new Set(items.map((item) => item.entry.id))) : NO_ASKS,
     [entries, items, showOpenAsks],
+  );
+  const delegations = useMemo(
+    () => new Map(asks.map((item) => [item.entry.id, delegation?.(item.entry) ?? null])),
+    [asks, delegation],
+  );
+  const attentionKeys = useMemo(
+    () => [
+      ...asks.flatMap((item) => {
+        const pulse = delegations.get(item.entry.id)?.pulse;
+        return (pulse && delegationAttentionKey(item.entry.id, pulse)) ?? [];
+      }),
+      ...delegatedChildren.flatMap(
+        (item) => delegationAttentionKey(`chat:${item.child.agentId}`, item.pulse) ?? [],
+      ),
+    ],
+    [asks, delegations, delegatedChildren],
+  );
+  const openChild = useCallback(
+    (target: DelegationTarget) => {
+      if (actions.openSession) actions.openSession(target);
+      else actions.openChat(target.agentId);
+    },
+    [actions],
   );
   const minimized = useAnswersPaneStore((state) => state.minimized) ?? isCompact;
   const setMinimized = useAnswersPaneStore((state) => state.setMinimized);
@@ -146,10 +199,10 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   }, [asks, items, sessions]);
 
   const minimize = useCallback(() => {
-    setMinimizedSignature(answersPaneSignature(items, asks));
+    setMinimizedSignature(answersPaneSignature(items, asks, attentionKeys));
     scrollRestored.current = false;
     setMinimized(true);
-  }, [asks, items, setMinimized]);
+  }, [asks, attentionKeys, items, setMinimized]);
   const expand = useCallback(() => setMinimized(false), [setMinimized]);
   const toggleAnswer = useCallback((entryId: string) => {
     setExpandedAnswers((current) => {
@@ -168,26 +221,27 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     if (scrollY.current > 0) scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
   }, []);
 
-  const total = items.length + asks.length;
+  const total = items.length + asks.length + delegatedHere.length + delegatedChildren.length;
   if (total === 0) return null;
+  const hasAsks = asks.length + delegatedHere.length + delegatedChildren.length > 0;
 
-  const summary = [
-    newCount > 0 ? t("agentPanel.stream.answers.newCount", { count: newCount }) : null,
-    waitingCount > 0 ? t("agentPanel.stream.answers.waitingCount", { count: waitingCount }) : null,
-    asks.length > 0 ? t("agentPanel.stream.answers.openAsksCount", { count: asks.length }) : null,
-    blockedCount > 0 ? t("agentPanel.stream.answers.blockedCount", { count: blockedCount }) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const summary = paneSummary(t, {
+    newCount,
+    waitingCount,
+    askCount: asks.length,
+    blockedCount,
+    attentionCount: attentionKeys.length,
+  });
   const title = t(
-    asks.length > 0 ? "agentPanel.stream.answers.titleWithAsks" : "agentPanel.stream.answers.title",
+    hasAsks ? "agentPanel.stream.answers.titleWithAsks" : "agentPanel.stream.answers.title",
   );
 
   if (minimized) {
+    // A delegated child that newly needs the delegator lights the pill like a new block does.
     const attention =
       minimizedSignature === null
-        ? newCount + blockedCount > 0
-        : hasUnhiddenPaneItems(items, asks, minimizedSignature);
+        ? newCount + blockedCount + attentionKeys.length > 0
+        : hasUnhiddenPaneItems(items, asks, minimizedSignature, attentionKeys);
     return (
       <View
         style={[styles.anchor, isCompact && styles.anchorCompact]}
@@ -298,12 +352,23 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
                         ? agentTitle?.(row.item.delegatedAgentId)
                         : undefined
                     }
+                    delegation={delegations.get(row.item.entry.id) ?? null}
                     actions={actions}
                   />
                 ),
               )}
             </View>
           ) : null}
+          <DelegatedChatsList
+            items={delegatedChildren}
+            first={items.length + asks.length === 0}
+            onOpen={openChild}
+          />
+          <DelegatedHereSection
+            items={delegatedHere}
+            first={items.length + asks.length + delegatedChildren.length === 0}
+            actions={actions}
+          />
         </ScrollView>
       </View>
     </View>
@@ -421,6 +486,64 @@ const SessionDivider = memo(function SessionDivider({
   );
 });
 
+type Translate = ReturnType<typeof useTranslation>["t"];
+
+/** The header's muted counts, in reading order; empty counts are left out. */
+function paneSummary(
+  t: Translate,
+  counts: {
+    newCount: number;
+    waitingCount: number;
+    askCount: number;
+    blockedCount: number;
+    attentionCount: number;
+  },
+): string {
+  const parts: [number, string][] = [
+    [counts.newCount, "agentPanel.stream.answers.newCount"],
+    [counts.waitingCount, "agentPanel.stream.answers.waitingCount"],
+    [counts.askCount, "agentPanel.stream.answers.openAsksCount"],
+    [counts.blockedCount, "agentPanel.stream.answers.blockedCount"],
+    [counts.attentionCount, "agentPanel.stream.answers.delegation.attentionCount"],
+  ];
+  return parts
+    .filter(([count]) => count > 0)
+    .map(([count, key]) => t(key, { count }))
+    .join(" · ");
+}
+
+/** Asks other chats delegated to this one; the child's way back to the loop's owner. */
+function DelegatedHereSection({
+  items,
+  first,
+  actions,
+}: {
+  items: readonly DelegatedHereAsk[];
+  first: boolean;
+  actions: TrackedAnswerActions;
+}) {
+  const { t } = useTranslation();
+  if (items.length === 0) return null;
+  return (
+    <View testID="delegated-here-section">
+      <SectionLabel
+        label={t("agentPanel.stream.answers.delegation.delegatedHereSection", {
+          count: items.length,
+        })}
+        first={first}
+      />
+      {items.map((item, index) => (
+        <DelegatedHereRow
+          key={`${item.ownerAgentId}:${item.entryId}`}
+          item={item}
+          first={index === 0}
+          actions={actions}
+        />
+      ))}
+    </View>
+  );
+}
+
 function SectionLabel({ label, first }: { label: string; first?: boolean }) {
   return (
     <Text
@@ -446,11 +569,13 @@ const OpenAskRow = memo(function OpenAskRow({
   item,
   first,
   ownerTitle,
+  delegation,
   actions,
 }: {
   item: OpenAsk;
   first: boolean;
   ownerTitle: string | null | undefined;
+  delegation: AskDelegation | null;
   actions: TrackedAnswerActions;
 }) {
   const { t } = useTranslation();
@@ -467,13 +592,32 @@ const OpenAskRow = memo(function OpenAskRow({
   const openOwner = useCallback(() => {
     if (delegatedAgentId) actions.openChat(delegatedAgentId);
   }, [actions, delegatedAgentId]);
+  const target = delegation?.target;
+  const openChild = useCallback(() => {
+    if (!target) return;
+    if (actions.openSession) actions.openSession(target);
+    else actions.openChat(target.agentId);
+  }, [actions, target]);
   const owner = delegatedAgentId ? ownerTitle?.trim() || shortAgentId(delegatedAgentId) : null;
+  const childName = delegation
+    ? delegation.pulse.title ||
+      (target?.agentId === delegatedAgentId ? ownerTitle?.trim() : null) ||
+      shortAgentId(delegation.target.agentId)
+    : null;
 
   return (
     <View style={[styles.row, !first && styles.rowBorder]} testID={`open-ask-${entry.id}`}>
       <View style={styles.askEyebrow}>
         <StatusBadge label={t(badge.label)} variant={badge.variant} />
-        {owner ? (
+        {delegation && childName ? (
+          <DelegationPulseChip
+            pulse={delegation.pulse}
+            name={childName}
+            onOpen={openChild}
+            testID="open-ask-owner"
+          />
+        ) : null}
+        {!delegation && owner ? (
           <PaneTooltip label={t("agentPanel.stream.answers.openOwnerLabel", { name: owner })}>
             <Pressable
               onPress={openOwner}
@@ -508,6 +652,50 @@ const OpenAskRow = memo(function OpenAskRow({
           ) : null}
         </Pressable>
       </PaneTooltip>
+    </View>
+  );
+});
+
+/** An ask another chat delegated here: its state, the owning chat as a link back, the ask. */
+const DelegatedHereRow = memo(function DelegatedHereRow({
+  item,
+  first,
+  actions,
+}: {
+  item: DelegatedHereAsk;
+  first: boolean;
+  actions: TrackedAnswerActions;
+}) {
+  const { t } = useTranslation();
+  const badge = ASK_BADGES[item.state];
+  const owner = item.ownerTitle || shortAgentId(item.ownerAgentId);
+  const openOwnerAsk = useCallback(() => {
+    if (actions.openOwnerAsk) actions.openOwnerAsk(item);
+    else actions.openChat(item.ownerAgentId);
+  }, [actions, item]);
+  return (
+    <View
+      style={[styles.row, !first && styles.rowBorder]}
+      testID={`delegated-here-${item.ownerAgentId}-${item.entryId}`}
+    >
+      <View style={styles.askEyebrow}>
+        <StatusBadge label={t(badge.label)} variant={badge.variant} />
+        <Text style={styles.hint} numberOfLines={1}>
+          {t("agentPanel.stream.answers.delegation.fromOwner", { name: owner })}
+        </Text>
+      </View>
+      <Pressable
+        onPress={openOwnerAsk}
+        accessibilityRole="link"
+        accessibilityLabel={t("agentPanel.stream.answers.delegation.openOwnerAskLabel", {
+          name: owner,
+        })}
+        testID="delegated-here-open"
+      >
+        <Text style={styles.question} numberOfLines={2}>
+          {item.headline}
+        </Text>
+      </Pressable>
     </View>
   );
 });

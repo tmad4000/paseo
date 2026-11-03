@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createVoiceFailureTracker,
   voiceFailureFromRecognitionIssue,
-  type VoiceFailureKind,
+  type SpokenVoiceFailureKind,
 } from "@/voice/voice-failure";
 import { createVoiceFailureCue, createVoiceReconnectedCue } from "@/voice/voice-failure-cue";
 
@@ -75,7 +75,7 @@ describe("voice failure tracker", () => {
   });
 
   it("builds a separate spoken cue for every failure, each led by the failure earcon", async () => {
-    const kinds: VoiceFailureKind[] = [
+    const kinds: SpokenVoiceFailureKind[] = [
       "nothing-recognized",
       "recognition-stalled",
       "recognition-failed",

@@ -135,6 +135,7 @@ import {
   updateAgentCommand,
   updateCompanionEntryCommand,
 } from "./agent/lifecycle-command.js";
+import { restartAgentCommand } from "./agent/restart-agent.js";
 import { buildStoredAgentPayload, toAgentPayload } from "./agent/agent-projections.js";
 import {
   appendTimelineItemIfAgentKnown,
@@ -696,6 +697,7 @@ const AGENT_QUEUE_RESPONSE_TYPES = {
   "agent.queue.send_now.request": "agent.queue.send_now.response",
   "agent.queue.list.request": "agent.queue.list.response",
   "agent.queue.reorder.request": "agent.queue.reorder.response",
+  "agent.queue.drain.request": "agent.queue.drain.response",
 } as const;
 
 function resolveWorkspaceLabelService(
@@ -2722,6 +2724,7 @@ export class Session {
       case "agent.queue.send_now.request":
       case "agent.queue.list.request":
       case "agent.queue.reorder.request":
+      case "agent.queue.drain.request":
         return this.handleAgentQueueRequest(msg);
       case "agent.queue.get_item_images.request":
         return this.handleAgentQueueGetItemImagesRequest(msg);
@@ -2733,6 +2736,18 @@ export class Session {
         return this.handleClientDiagnosticsReportRequest(msg);
       case "client.diagnostics.list.request":
         return this.handleClientDiagnosticsListRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  /** Restart agent and queue clear: the one-click recovery for a stuck agent. */
+  private dispatchAgentRecoveryMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.queue.clear.request":
+        return this.handleAgentQueueClearRequest(msg);
+      case "agent.restart.request":
+        return this.handleAgentRestartRequest(msg);
       default:
         return undefined;
     }
@@ -3210,7 +3225,11 @@ export class Session {
 
   /** Fork-added client-directed messages: UI tab commands and the agent queue. */
   private dispatchForkMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    return this.dispatchUiCommandMessage(msg) ?? this.dispatchAgentQueueMessage(msg);
+    return (
+      this.dispatchUiCommandMessage(msg) ??
+      this.dispatchAgentQueueMessage(msg) ??
+      this.dispatchAgentRecoveryMessage(msg)
+    );
   }
 
   private dispatchUiCommandMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -5463,6 +5482,98 @@ export class Session {
         return service.reorder(agentId, msg.itemIds);
       case "agent.queue.list.request":
         return service.list(agentId);
+      case "agent.queue.drain.request":
+        return service.drainNow(agentId);
+    }
+  }
+
+  private async handleAgentQueueClearRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.clear.request" }>,
+  ): Promise<void> {
+    const fail = (agentId: string, error: string) =>
+      this.emit({
+        type: "agent.queue.clear.response",
+        payload: { requestId: msg.requestId, agentId, queue: null, error },
+      });
+    const service = this.agentQueueService;
+    if (!service) return fail(msg.agentId, "This daemon does not support queued agent messages.");
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) return fail(msg.agentId, resolved.error);
+    try {
+      const result = await service.clear(resolved.agentId);
+      this.emit({
+        type: "agent.queue.clear.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: resolved.agentId,
+          queue: result.queue,
+          removed: result.removed,
+          kept: result.kept,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.warn({ err: error, agentId: resolved.agentId }, "Queue clear failed");
+      fail(resolved.agentId, errorToFriendlyMessage(error));
+    }
+  }
+
+  private async handleAgentRestartRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.restart.request" }>,
+  ): Promise<void> {
+    const fail = (agentId: string, error: string) =>
+      this.emit({
+        type: "agent.restart.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mode: null,
+          timelineSize: null,
+          queuedBefore: null,
+          queuedAfter: null,
+          recoveredHead: null,
+          queue: null,
+          error,
+        },
+      });
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) return fail(msg.agentId, resolved.error);
+    const agentId = resolved.agentId;
+    try {
+      const result = await restartAgentCommand(
+        {
+          agentManager: this.agentManager,
+          agentQueueService: this.agentQueueService,
+          loadAgent: (id) =>
+            ensureAgentLoaded(id, {
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              broadcastTimeline: true,
+              logger: this.sessionLogger,
+            }),
+          logger: this.sessionLogger,
+        },
+        agentId,
+      );
+      const live = this.agentManager.getAgent(agentId);
+      if (live) await this.agentUpdates.forwardLiveAgent(live);
+      this.emit({
+        type: "agent.restart.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mode: result.mode,
+          timelineSize: result.timelineSize,
+          queuedBefore: result.queue?.before ?? null,
+          queuedAfter: result.queue?.after ?? null,
+          recoveredHead: result.queue?.recoveredHead ?? null,
+          queue: result.queue?.snapshot ?? null,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, agentId }, "Failed to restart agent");
+      fail(agentId, errorToFriendlyMessage(error));
     }
   }
 

@@ -4,13 +4,21 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { i18n } from "@/i18n/i18next";
+import {
+  delegationTarget,
+  deriveDelegationPulse,
+  type DelegatedHereAsk,
+  type DelegationChildSnapshot,
+} from "./delegation-pulse";
 
 vi.mock("react-native", () => ({
   View: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
     <div data-testid={testID}>{children}</div>
   ),
   ScrollView: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
-  Text: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+  Text: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
+    <span data-testid={testID}>{children}</span>
+  ),
   Pressable: ({
     children,
     onPress,
@@ -57,6 +65,20 @@ vi.mock("lucide-react-native", () => ({
   Minimize2: () => null,
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: ({ testID }: { testID?: string }) => <span data-testid={testID} /> },
+  cancelAnimation: () => {},
+  useAnimatedStyle: () => ({}),
+  useReducedMotion: () => false,
+  useSharedValue: (value: number) => ({ value }),
+  withRepeat: (value: number) => value,
+  withTiming: (value: number) => value,
+}));
+// The live elapsed label is covered with the hook; here it reads as a fixed four minutes.
+vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
+vi.mock("@/hooks/use-compact-time-ago", () => ({
+  useCompactTimeAgo: (date: Date | null) => (date ? "4m" : ""),
+}));
 const layout = vi.hoisted(() => ({ compact: false }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => layout.compact }));
 vi.mock("./answers-pane-store", async () => {
@@ -92,7 +114,8 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
-import { TrackedAnswersPane, type TrackedAnswerActions } from "./answers-pane";
+import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
+import type { DelegatedChildPulse } from "./use-delegation-pulse";
 import { useAnswersPaneStore } from "./answers-pane-store";
 import { computeChatSessions, type ChatMessageEvent } from "./answers-sessions";
 import { describeSegment } from "./answers-pane";
@@ -564,5 +587,202 @@ describe("TrackedAnswersPane session dividers", () => {
     expect(
       describeSegment({ key: "i", kind: "inherited", time: null, sortKey: 0 }, t, "en-US", now),
     ).toEqual({ title: "From the parent chat", detail: "Before this fork" });
+  });
+});
+
+describe("TrackedAnswersPane delegated asks", () => {
+  const task = (
+    id: string,
+    state: "open" | "in_progress" | "blocked" | "done",
+    extra: Partial<NonNullable<CompanionEntry["ask"]>> = {},
+  ): CompanionEntry => ({
+    id: `ask:${id}`,
+    kind: "question",
+    status: "open",
+    timestamp: "2026-10-29T09:00:00Z",
+    text: `Task ${id}`,
+    truncated: false,
+    ask: { state, remaining: "", evidence: "", revision: 1, provenance: "explicit", ...extra },
+  });
+  const child = (overrides: Partial<DelegationChildSnapshot>): DelegationChildSnapshot => ({
+    status: "idle",
+    pendingPermissionCount: 0,
+    attentionReason: null,
+    turnStartedAt: null,
+    lastActivityAt: Date.parse("2026-10-29T09:10:00Z"),
+    archived: false,
+    title: "Fix worker",
+    lastError: null,
+    openQuestionCount: 0,
+    ...overrides,
+  });
+  function delegationFrom(
+    children: Record<string, DelegationChildSnapshot | null>,
+  ): (entry: CompanionEntry) => AskDelegation | null {
+    return (entry) => {
+      const target = delegationTarget(entry.ask, "srv", "parent-1");
+      if (!target) return null;
+      return { target, pulse: deriveDelegationPulse(children[target.agentId] ?? null) };
+    };
+  }
+  function renderDelegated(
+    entries: CompanionEntry[],
+    children: Record<string, DelegationChildSnapshot | null>,
+    handlers = actions(),
+    delegatedHere: DelegatedHereAsk[] = [],
+  ) {
+    const view = (nextChildren: typeof children) => (
+      <TrackedAnswersPane
+        entries={entries}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        agentTitle={agentTitle}
+        delegation={delegationFrom(nextChildren)}
+        delegatedHere={delegatedHere}
+      />
+    );
+    const result = render(view(children));
+    return { ...result, update: (next: typeof children) => result.rerender(view(next)) };
+  }
+  const statusOf = (askId: string) =>
+    screen
+      .getByTestId(`open-ask-ask:${askId}`)
+      .querySelector('[data-testid="open-ask-owner-status"]')?.textContent;
+
+  it("shows each delegated child's live state with elapsed time, and flags idle as open", () => {
+    renderDelegated(
+      [
+        task("run", "in_progress", { delegatedAgentId: "c-run" }),
+        task("perm", "in_progress", { delegatedAgentId: "c-perm" }),
+        task("idle", "in_progress", { delegatedAgentId: "c-idle" }),
+        task("err", "in_progress", { delegatedAgentId: "c-err" }),
+        task("gone", "open", { delegatedAgentId: "c-gone" }),
+        task("mine", "open"),
+      ],
+      {
+        "c-run": child({ status: "running", turnStartedAt: Date.parse("2026-10-29T09:00:00Z") }),
+        "c-perm": child({ status: "running", pendingPermissionCount: 1 }),
+        "c-idle": child({}),
+        "c-err": child({ status: "error", lastError: "exit 1" }),
+        "c-gone": null,
+      },
+    );
+    expect(statusOf("run")).toBe("Running · 4m");
+    expect(statusOf("perm")).toBe("Waiting on permission");
+    expect(statusOf("idle")).toBe("Idle 4m · ask still open");
+    expect(statusOf("err")).toBe("Errored");
+    expect(statusOf("gone")).toBe("Status unavailable");
+    // An ask this chat works itself has no child to show.
+    expect(statusOf("mine")).toBeUndefined();
+    // Permission, idle and error hand the loop back to the delegator; running does not.
+    expect(screen.getByText("6 open asks · 3 need attention")).toBeTruthy();
+    // The child's live title wins over the stale owner title.
+    expect(screen.getAllByText("Fix worker").length).toBe(4);
+  });
+
+  it("follows the child as its pushed state changes, without remounting", () => {
+    const { update } = renderDelegated([task("a", "in_progress", { delegatedAgentId: "c-1" })], {
+      "c-1": child({ status: "running", turnStartedAt: Date.parse("2026-10-29T09:00:00Z") }),
+    });
+    expect(statusOf("a")).toBe("Running · 4m");
+    update({ "c-1": child({ status: "idle" }) });
+    expect(statusOf("a")).toBe("Idle 4m · ask still open");
+    expect(screen.getByText("1 open ask · 1 needs attention")).toBeTruthy();
+    update({ "c-1": child({ archived: true }) });
+    expect(statusOf("a")).toBe("Closed · ask still open");
+  });
+
+  it("opens the child's session, including a linked session on another host", () => {
+    const handlers = actions({ openSession: vi.fn() });
+    renderDelegated(
+      [
+        task("linked", "in_progress", {
+          sessions: [
+            { serverId: "srv", agentId: "parent-1" },
+            { serverId: "laptop", agentId: "c-remote" },
+          ],
+        }),
+      ],
+      { "c-remote": child({ status: "running" }) },
+      handlers,
+    );
+    fireEvent.click(screen.getByTestId("open-ask-owner"));
+    expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "laptop", agentId: "c-remote" });
+  });
+
+  it("a minimized pane's pill counts a delegated child that newly needs attention", () => {
+    const entries = [task("a", "in_progress", { delegatedAgentId: "c-1" })];
+    const { update } = renderDelegated(entries, {
+      "c-1": child({ status: "running", turnStartedAt: 1 }),
+    });
+    fireEvent.click(screen.getByTestId("tracked-answers-minimize"));
+    const pill = () => screen.getByTestId("tracked-answers-expand").getAttribute("aria-label");
+    expect(pill()).toBe("Show questions and asks. 1 open ask");
+    update({ "c-1": child({ status: "running", turnStartedAt: 2 }) });
+    expect(pill()).toBe("Show questions and asks. 1 open ask");
+    update({ "c-1": child({ status: "idle" }) });
+    expect(pill()).toBe("Show questions and asks. 1 open ask · 1 needs attention");
+    fireEvent.click(screen.getByTestId("tracked-answers-expand"));
+  });
+
+  it("lists chats this one started that no ask tracks, live, each opening its chat", () => {
+    const handlers = actions({ openSession: vi.fn() });
+    const pulse = (snapshot: DelegationChildSnapshot) =>
+      deriveDelegationPulse(snapshot, { tracked: false });
+    const delegatedChildren: DelegatedChildPulse[] = [
+      {
+        child: { agentId: "c-ask", title: "Schema worker", createdAt: 2 },
+        target: { serverId: "srv", agentId: "c-ask" },
+        pulse: pulse(child({ title: "Schema worker", openQuestionCount: 1 })),
+      },
+      {
+        child: { agentId: "c-rest", title: "Docs worker", createdAt: 1 },
+        target: { serverId: "srv", agentId: "c-rest" },
+        pulse: pulse(child({ title: "Docs worker" })),
+      },
+    ];
+    render(
+      <TrackedAnswersPane
+        entries={[]}
+        agentId="parent-1"
+        actions={handlers}
+        showOpenAsks
+        delegatedChildren={delegatedChildren}
+      />,
+    );
+    expect(screen.getByText("Questions and asks")).toBeTruthy();
+    expect(screen.getByText("Delegated chats · 2")).toBeTruthy();
+    const statusIn = (agentId: string) =>
+      screen
+        .getByTestId(`delegated-chat-${agentId}`)
+        .querySelector('[data-testid="delegated-chat-open-status"]')?.textContent;
+    // An idle child no ask tracks is at rest; its question for you is what needs attention.
+    expect(statusIn("c-ask")).toBe("Idle 4m · 1 question for you");
+    expect(statusIn("c-rest")).toBe("Idle 4m");
+    expect(screen.getByText("1 needs attention")).toBeTruthy();
+    fireEvent.click(
+      screen
+        .getByTestId("delegated-chat-c-rest")
+        .querySelector('[data-testid="delegated-chat-open"]')!,
+    );
+    expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "srv", agentId: "c-rest" });
+  });
+
+  it("lists asks delegated to this chat, each linking back to its owner's ask", () => {
+    const handlers = actions({ openOwnerAsk: vi.fn() });
+    const item: DelegatedHereAsk = {
+      ownerAgentId: "orchestrator",
+      ownerTitle: "Orchestrator",
+      entryId: "ask:deploy",
+      headline: "Deploy the fix",
+      state: "in_progress",
+    };
+    renderDelegated([], {}, handlers, [item]);
+    expect(screen.getByText("Questions and asks")).toBeTruthy();
+    expect(screen.getByText("Delegated to this chat · 1")).toBeTruthy();
+    expect(screen.getByText("from Orchestrator")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("delegated-here-open"));
+    expect(handlers.openOwnerAsk).toHaveBeenCalledWith(item);
   });
 });

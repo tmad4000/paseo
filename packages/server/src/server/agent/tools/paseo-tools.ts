@@ -39,6 +39,7 @@ import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
 import { ensureAgentLoaded } from "../agent-loading.js";
+import { restartAgentCommand } from "../restart-agent.js";
 import {
   archiveByScope,
   killTerminalsForWorkspace,
@@ -2276,6 +2277,177 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       };
     },
   );
+
+  registerTool(
+    "restart_agent",
+    {
+      title: "Restart agent",
+      description:
+        "Restart the agent's provider process and resume the same session (context and timeline kept), then deliver its queued messages in order. Use this for a stuck agent: idle while its queue does not drain. A queue head whose earlier delivery attempt never finished is checked against the timeline: dropped if it already arrived, otherwise sent again.",
+      inputSchema: {
+        agentId: z.string(),
+      },
+      outputSchema: {
+        agentId: z.string(),
+        mode: z.string(),
+        timelineSize: z.number(),
+        queuedBefore: z.number().nullable(),
+        queuedAfter: z.number().nullable(),
+        recoveredHead: z.object({ itemId: z.string(), outcome: z.string() }).nullable(),
+      },
+    },
+    async ({ agentId }) => {
+      if (callerAgentId && agentId === callerAgentId) {
+        // Restarting the caller would kill the process running this tool call.
+        throw new Error(
+          "An agent cannot restart itself; ask another agent or the user to restart it.",
+        );
+      }
+      const result = await restartAgentCommand(
+        {
+          agentManager,
+          agentQueueService,
+          loadAgent: (id) =>
+            ensureAgentLoaded(id, { agentManager, agentStorage, logger: childLogger }),
+          logger: childLogger,
+        },
+        agentId,
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: result.agentId,
+          mode: result.mode,
+          timelineSize: result.timelineSize,
+          queuedBefore: result.queue?.before ?? null,
+          queuedAfter: result.queue?.after ?? null,
+          recoveredHead: result.queue?.recoveredHead ?? null,
+        }),
+      };
+    },
+  );
+
+  if (agentQueueService) {
+    const queueService = agentQueueService;
+    const queueItemsView = async (agentId: string) => {
+      const inspection = await queueService.inspect(agentId);
+      const receiptState = new Map(
+        inspection.receipts.map((receipt) => [receipt.messageId, receipt.state]),
+      );
+      return {
+        agentId,
+        revision: inspection.queue.revision,
+        items: inspection.queue.items.map((item) => ({
+          id: item.id,
+          createdAt: item.createdAt,
+          preview: item.text.length > 280 ? `${item.text.slice(0, 280)}…` : item.text,
+          imageCount: item.images?.length ?? 0,
+          attachmentCount: item.attachments?.length ?? 0,
+          receipt: receiptState.get(item.id) ?? null,
+        })),
+      };
+    };
+    const queueOutputSchema = {
+      agentId: z.string(),
+      revision: z.number(),
+      items: z.array(
+        z.object({
+          id: z.string(),
+          createdAt: z.string(),
+          preview: z.string(),
+          imageCount: z.number(),
+          attachmentCount: z.number(),
+          receipt: z.string().nullable(),
+        }),
+      ),
+    };
+
+    registerTool(
+      "list_queue",
+      {
+        title: "List queued messages",
+        description:
+          "List the messages queued for an agent, in delivery order, with each item's delivery receipt (null = not attempted, pending = attempt in progress or interrupted).",
+        inputSchema: { agentId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId }) => ({
+        content: [],
+        structuredContent: ensureValidJson(await queueItemsView(agentId)),
+      }),
+    );
+
+    registerTool(
+      "drain_queue",
+      {
+        title: "Drain queue",
+        description:
+          "Deliver the agent's queued messages now, in order, if the agent is idle. Sends the head immediately; the rest follow one per turn. Does not restart the agent; use restart_agent when the head is stuck.",
+        inputSchema: { agentId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId }) => {
+        await queueService.drainNow(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "send_queued_now",
+      {
+        title: "Send queued message now",
+        description:
+          "Send one queued message immediately, steering it into the active turn if the agent is running.",
+        inputSchema: { agentId: z.string(), itemId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId, itemId }) => {
+        await queueService.sendNow(agentId, itemId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "remove_queued_message",
+      {
+        title: "Remove queued message",
+        description: "Remove one queued message without sending it.",
+        inputSchema: { agentId: z.string(), itemId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId, itemId }) => {
+        await queueService.remove(agentId, itemId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "clear_queue",
+      {
+        title: "Clear queue",
+        description:
+          "Remove every queued message for an agent without sending them. Messages already being submitted are kept. The queue journal keeps a recoverable record.",
+        inputSchema: { agentId: z.string() },
+        outputSchema: { removed: z.number(), kept: z.number() },
+      },
+      async ({ agentId }) => {
+        const result = await queueService.clear(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ removed: result.removed, kept: result.kept }),
+        };
+      },
+    );
+  }
 
   registerTool(
     "update_agent",

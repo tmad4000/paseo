@@ -30,6 +30,7 @@ const PHRASES = {
   "recognition-unavailable": "Recognition unavailable.",
   "host-disconnected": "Host disconnected.",
   "microphone-lost": "Microphone lost.",
+  "playback-failed": "Can't play replies.",
   reconnected: "Reconnected.",
 };
 
