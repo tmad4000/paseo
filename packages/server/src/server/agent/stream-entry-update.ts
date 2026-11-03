@@ -168,22 +168,19 @@ function setAsk(
   const id = `ask:${input.entryId}`;
   const previous = entries.find((entry) => entry.id === id);
   const ask = parseAskEdit(input.ask, previous);
+  const blocker = parseAskBlocker(ask, input.inputRequest, previous);
   const revision = previous?.ask?.revision ?? 0;
   const entry = createTrackedAskEntry({
     id,
     text: input.text.trim(),
     ask,
+    blocker,
     previous,
     revision,
     agentId: input.agentId,
     serverId,
   });
-  if (
-    previous?.ask &&
-    previous.text === entry.text &&
-    JSON.stringify(TrackedAskInputSchema.parse(previous.ask)) === JSON.stringify(ask)
-  )
-    return entries;
+  if (isUnchangedAsk(previous, entry.text, ask, blocker)) return entries;
   if (previous?.ask?.canonicalTask)
     throw new Error("This is a task reference. Update its canonical origin instead.");
   if (input.expectedRevision !== revision)
@@ -192,6 +189,21 @@ function setAsk(
     );
   entry.ask!.revision = revision + 1;
   return previous ? entries.map((item) => (item.id === id ? entry : item)) : [...entries, entry];
+}
+
+/** Repeating an identical write is a no-op, so a lost acknowledgement can be retried. */
+function isUnchangedAsk(
+  previous: CompanionEntry | undefined,
+  text: string,
+  ask: TrackedAskInput,
+  blocker: CompanionEntry["inputRequest"],
+): boolean {
+  return Boolean(
+    previous?.ask &&
+    previous.text === text &&
+    JSON.stringify(TrackedAskInputSchema.parse(previous.ask)) === JSON.stringify(ask) &&
+    JSON.stringify(previous.inputRequest) === JSON.stringify(blocker),
+  );
 }
 
 /** A valid ask from an edit. An edit that omits expectsAnswer keeps the question waiting. */
@@ -209,6 +221,30 @@ function parseAskEdit(
   }
   validateAskCompletion(ask);
   return ask;
+}
+
+/**
+ * Who a blocked ask waits on. Defaults to the user, so a blocked ask reaches Needs you; naming an
+ * agent or external recipient keeps it out. A still-blocked edit keeps the previous blocker; the
+ * blocker is dropped when the ask leaves blocked, so a stale one never lingers.
+ */
+function parseAskBlocker(
+  ask: TrackedAskInput,
+  input: StreamEntryUpdate["inputRequest"],
+  previous: CompanionEntry | undefined,
+): CompanionEntry["inputRequest"] {
+  if (ask.state !== "blocked") {
+    if (input) throw new Error("A blocker only applies to a blocked ask");
+    return undefined;
+  }
+  const kept = previous?.ask?.state === "blocked" ? previous.inputRequest : undefined;
+  if (!input) return kept;
+  const request = StreamInputRequestSchema.parse(input);
+  if (request.recipient !== "user" && !request.recipientId)
+    throw new Error("Name the agent or external recipient");
+  if (request.task || request.subtaskId)
+    throw new Error("A blocker names who the ask waits on, not a task link");
+  return request;
 }
 
 /** The answer and its seen state belong to the question, not to one revision of the ask. */
@@ -276,6 +312,7 @@ interface AskEntryCreation {
   id: string;
   text: string;
   ask: TrackedAskInput;
+  blocker: CompanionEntry["inputRequest"];
   previous: CompanionEntry | undefined;
   revision: number;
   agentId: string;
@@ -285,6 +322,7 @@ function createTrackedAskEntry({
   id,
   text,
   ask,
+  blocker,
   previous,
   revision,
   agentId,
@@ -299,6 +337,7 @@ function createTrackedAskEntry({
     ...tagsFor(text),
     status: ask.state === "done" ? "done" : "open",
     ...answerStateOf(previous),
+    ...(blocker ? { inputRequest: blocker } : {}),
     ask: {
       taskId:
         previous?.ask?.taskId ??

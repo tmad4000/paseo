@@ -2640,7 +2640,8 @@ export class AgentManager {
   }
 
   private async validateStreamTaskReference(input: StreamEntryUpdate): Promise<void> {
-    const reference = input.ask?.canonicalTask ?? input.inputRequest?.task;
+    const linkedTask = questionTaskLink(input);
+    const reference = input.ask?.canonicalTask ?? linkedTask?.task;
     if (!reference || reference.serverId !== this.serverId) return;
     const liveOrigin = this.agents.get(reference.agentId);
     const storedOrigin = liveOrigin ? null : await this.registry?.get(reference.agentId);
@@ -2648,7 +2649,7 @@ export class AgentManager {
     const referencedTask = originEntries.find((entry) => entry.id === reference.entryId);
     if (!referencedTask?.ask || referencedTask.ask.canonicalTask)
       throw new Error("Task reference must name a canonical task on this host");
-    const subtaskId = input.inputRequest?.subtaskId;
+    const subtaskId = linkedTask?.subtaskId;
     if (subtaskId && !referencedTask.ask.subtasks?.some((subtask) => subtask.id === subtaskId))
       throw new Error("Input request subtask does not exist on its task");
   }
@@ -5959,4 +5960,10 @@ function resolveInitialOwnership(options?: {
   return options?.createdBy
     ? { messageActivity, createdBy: options.createdBy }
     : { messageActivity };
+}
+
+/** A question's task link. An ask's inputRequest is its blocker, never a link for the ask itself. */
+function questionTaskLink(input: StreamEntryUpdate) {
+  const request = input.action === "add_question" ? input.inputRequest : undefined;
+  return request?.task ? { task: request.task, subtaskId: request.subtaskId } : undefined;
 }
