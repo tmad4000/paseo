@@ -92,6 +92,12 @@ const common = {
   reply: StreamReplySchema.optional(),
   /** Personal review: the reply revision the user has seen. Independent of ask state. */
   replySeenRevision: z.number().int().min(0).optional(),
+  // COMPAT(streamDefer): fork feature; older hosts omit it.
+  /**
+   * Personal review: when the user set this aside for later. Independent of status; the host
+   * drops it when the entry is asked again, so a renewed request comes back on its own.
+   */
+  deferredAt: z.string().optional(),
   // COMPAT(streamSourceAnchors): fork feature; older hosts omit it.
   /**
    * Where in this chat's timeline the entry came from, so Show in chat can scroll there: the
