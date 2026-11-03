@@ -17,7 +17,8 @@ worker silent for five minutes by default. Bootstrap and older silent workers ar
 a supervisor tick over five seconds late resets the silence window to protect starved hosts.
 `PASEO_WORKER_UNRESPONSIVE_RESTART_MS` sets the threshold; zero disables recovery. On a wedge,
 the supervisor logs process state and on macOS captures a two-second sample under the log
-directory's `diagnostics/` before the existing graceful shutdown, process-tree kill and respawn.
+directory's `diagnostics/` during the ten-second graceful-shutdown grace period, before the
+process-tree force kill and respawn.
 Acceptance: detector tests cover readiness, heartbeat and starvation; supervisor regressions
 exercise blocked and SIGSTOP workers and preserve silent bootstrap workers. Source prepared on
 `fix/daemon-wedged-worker-recovery`; not yet in an installed build.
