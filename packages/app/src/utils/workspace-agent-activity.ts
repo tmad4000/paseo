@@ -1,6 +1,7 @@
 import type { Agent, WorkspaceDescriptor } from "@/stores/session-store";
 import { isWorkspaceRootAgent } from "@/subagents/policies";
 import { deriveSidebarStateBucket } from "./sidebar-agent-state";
+import { agentDelegatorId, agentHumanMessageAt, isMineAgent } from "./agent-ownership";
 
 export interface WorkspaceAgentActivity {
   agentId: string;
@@ -8,10 +9,15 @@ export interface WorkspaceAgentActivity {
   enteredAt: Date | null;
   lastActivityAt: Date;
   lastMessageAt?: Date;
+  /** Latest turn a person sent: the "Your last message" sort. */
   lastUserMessageAt?: Date;
   lastAssistantMessageAt?: Date;
   /** Earliest creation time among the workspace's top-level chats. */
   startedAt?: Date;
+  /** A person started or talked to one of the workspace's top-level chats. */
+  mine?: boolean;
+  /** Who delegated the workspace's most recent top-level chat, when another agent did. */
+  delegatedByAgentId?: string | null;
 }
 
 export function workspaceAgentStatus(agent: Agent): Agent["status"] {
@@ -30,6 +36,7 @@ export function buildWorkspaceAgentActivityIndex(
   const userAt = new Map<string, Date>();
   const assistantAt = new Map<string, Date>();
   const startedAt = new Map<string, Date>();
+  const mineWorkspaceIds = new Set<string>();
 
   for (const agent of agents.values()) {
     const parentAgent = agent.parentAgentId ? agents.get(agent.parentAgentId) : undefined;
@@ -43,6 +50,7 @@ export function buildWorkspaceAgentActivityIndex(
     recordLatestActivity(assistantAt, agent.workspaceId, clocks.assistant);
     recordLatestActivity(conversationAt, agent.workspaceId, clocks.conversation);
     recordEarliest(startedAt, agent.workspaceId, agent.createdAt);
+    if (isMineAgent(agent)) mineWorkspaceIds.add(agent.workspaceId);
 
     const enteredAt = agent.attentionTimestamp ?? agent.updatedAt;
     const latestActivityAt = latestActivityAtByWorkspaceId.get(agent.workspaceId);
@@ -63,6 +71,7 @@ export function buildWorkspaceAgentActivityIndex(
       status,
       enteredAt,
       lastActivityAt: agent.lastActivityAt,
+      delegatedByAgentId: agentDelegatorId(agent),
     });
   }
 
@@ -71,6 +80,7 @@ export function buildWorkspaceAgentActivityIndex(
     activity.lastUserMessageAt = userAt.get(workspaceId);
     activity.lastAssistantMessageAt = assistantAt.get(workspaceId);
     activity.startedAt = startedAt.get(workspaceId);
+    activity.mine = mineWorkspaceIds.has(workspaceId);
     activity.lastActivityAt =
       latestMessageAtByWorkspaceId.get(workspaceId) ?? activity.lastActivityAt;
     const previousActivity = previous?.get(workspaceId);
@@ -138,10 +148,12 @@ export function agentMessageTimestamps(agent: Agent): {
   const user = agent.messageActivity
     ? messageTimestamp(agent.messageActivity.lastUserMessageAt)
     : (agent.lastUserMessageAt ?? undefined);
+  // "Your last message" counts only turns a person sent, not prompts other agents injected.
+  const human = agentHumanMessageAt(agent) ?? undefined;
   const assistant = messageTimestamp(agent.messageActivity?.lastAssistantMessageAt);
   let conversation = user ?? assistant ?? agent.createdAt;
   if (user && assistant && assistant > user) conversation = assistant;
-  return { user: user ?? agent.createdAt, assistant: assistant ?? agent.createdAt, conversation };
+  return { user: human ?? agent.createdAt, assistant: assistant ?? agent.createdAt, conversation };
 }
 function sameMessageActivity(left: WorkspaceAgentActivity, right: WorkspaceAgentActivity): boolean {
   return (
@@ -149,6 +161,8 @@ function sameMessageActivity(left: WorkspaceAgentActivity, right: WorkspaceAgent
     left.lastMessageAt?.getTime() === right.lastMessageAt?.getTime() &&
     left.lastUserMessageAt?.getTime() === right.lastUserMessageAt?.getTime() &&
     left.lastAssistantMessageAt?.getTime() === right.lastAssistantMessageAt?.getTime() &&
-    left.startedAt?.getTime() === right.startedAt?.getTime()
+    left.startedAt?.getTime() === right.startedAt?.getTime() &&
+    left.mine === right.mine &&
+    left.delegatedByAgentId === right.delegatedByAgentId
   );
 }

@@ -4,6 +4,7 @@ import {
   StreamInputRequestSchema,
 } from "@getpaseo/protocol/companion-stream";
 import { appendStreamTags, parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
+import { agentSender } from "@getpaseo/protocol/user-message-sender";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
@@ -1988,6 +1989,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         queueService: agentQueueService,
         agentId,
         text: prompt,
+        ...(callerAgentId ? { sender: agentSender(callerAgentId) } : {}),
         ...(sessionMode ? { sessionMode } : {}),
         ...(interrupt !== undefined ? { interrupt } : {}),
         logger: childLogger,

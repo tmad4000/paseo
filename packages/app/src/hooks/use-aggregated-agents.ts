@@ -9,6 +9,9 @@ import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 export interface AggregatedAgent extends AgentDirectoryEntry {
   serverId: string;
   serverLabel: string;
+  /** For the "delegated by" subtitle; see utils/agent-ownership.ts. */
+  parentAgentId?: string | null;
+  createdBy?: Agent["createdBy"];
 }
 
 export interface AggregatedAgentsResult {
@@ -98,6 +101,8 @@ export function useAggregatedAgents(options?: {
           createdAt: agent.createdAt,
           labels: agent.labels,
           projectPlacement: agent.projectPlacement,
+          parentAgentId: agent.parentAgentId,
+          ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
         };
         const cacheKey = `${serverId}:${agent.id}`;
         const prev = prevAgentsRef.current.get(cacheKey);

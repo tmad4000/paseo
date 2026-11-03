@@ -339,6 +339,7 @@ export const ja: TranslationResources = {
       groupByProject: "プロジェクトでグループ化",
       groupByStatus: "ステータスでグループ化",
       groupInOneList: "チャットを1つのリストで表示",
+      showAllSessions: "すべてのセッションを表示",
       groupAsSessions: "チャットをセッションとして表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
@@ -1786,6 +1787,11 @@ export const ja: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "自分",
+        showMine: "自分のセッションのみ表示",
+        showAll: "すべてのセッションを表示（{{count}} 件非表示）",
+      },
       matches: {
         startChat: "「{{query}}」でチャットを開始",
         searchMessages: "メッセージで「{{query}}」を検索",
@@ -2581,6 +2587,7 @@ export const ja: TranslationResources = {
     backdrop: "メニューの背景",
   },
   subagents: {
+    delegatedBy: "{{name}} から委任",
     title: "サブエージェント",
     pillLabelOne: "サブエージェント 1 件",
     pillLabelMany: "サブエージェント {{count}} 件",

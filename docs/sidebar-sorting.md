@@ -7,7 +7,9 @@ groups and order project groups by their newest eligible conversation. Ties reta
 order, so renaming a tied row does not move it.
 
 Latest conversation activity uses the newer of the last accepted user message and the last completed
-assistant reply. Your last message uses only accepted user messages; AI’s last reply uses only
+assistant reply. Your last message uses only accepted user messages a person sent; prompts other
+agents inject, schedules and heartbeats advance Latest conversation activity but not Your last
+message ([who sent it](agent-lifecycle.md#who-sent-it)). AI’s last reply uses only
 completed assistant replies. Queue submission is not delivery:
 the user clock advances when the host accepts the actual prompt. Streaming tokens, tool output,
 settings, and title changes do not advance either clock. System-injected notifications are excluded.
@@ -99,3 +101,6 @@ by approximate times"). Until a host's server info arrives, the saved sort appli
 clocks and the menu shows no notice for it. The saved preference is never rewritten,
 and the menu's checkmark and trigger label name it. This keeps a client that updates before its host
 from losing the activity order it already had.
+
+A host that sends role clocks but no `lastHumanMessageAt` cannot tell a person from an agent. There
+Your last message uses the user clock for human-created chats and creation time for delegated ones.

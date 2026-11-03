@@ -126,6 +126,7 @@ test("switching chats promotes the newly visible catch-up while another visible 
 });
 
 class TimelineWorld {
+  errorAgents: (string[] | undefined)[] = [];
   constructor(private readonly observeMembership?: ViewedTimelineSyncPorts["observe"]) {}
   readonly errors: string[] = [];
   readonly releasedMemberships: string[][] = [];
@@ -194,7 +195,8 @@ class TimelineWorld {
         this.forcedTimelineTailReplacements.delete(agentId);
       }
     },
-    reportError: (error) => {
+    reportError: (error, agentIds) => {
+      this.errorAgents.push(agentIds);
       this.errors.push(error instanceof Error ? error.message : String(error));
       const waiter = this.errorWaiters.shift();
       if (waiter) waiter(this.errors.at(-1) ?? "");
@@ -774,6 +776,7 @@ test("a failed catch-up reports once and retries through the explicit retry poli
   const failed = await world.nextFetch("agent-a");
   failed.fail("timeline unavailable");
   const [error, retryCatchUp] = await Promise.all([world.nextError(), world.nextRetry()]);
+  expect(world.errorAgents.at(-1)).toEqual(["agent-a"]);
   expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("error");
 
   retryCatchUp();
@@ -933,6 +936,7 @@ test("membership failure autonomously retries without another visibility declara
   const failed = await world.nextMembership();
   failed.fail("subscription unavailable");
   const [error, retryMembership] = await Promise.all([world.nextError(), world.nextRetry()]);
+  expect(world.errorAgents.at(-1)).toEqual(["agent-a"]);
   expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("error");
 
   retryMembership();

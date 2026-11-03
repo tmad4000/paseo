@@ -78,6 +78,14 @@ Permission requests are notification checkpoints, not the end of that subscripti
 The permission notification includes the normalized request plus the child and request IDs, so the caller can inspect it and respond without fetching agent status.
 A watched child that closes before its finish event also notifies the caller so delegated work cannot disappear silently during archive or workspace teardown.
 
+### Who sent it
+
+Every `user_message` timeline item carries an optional `sender`, and every agent records `createdBy`, in one vocabulary (`packages/protocol/src/user-message-sender.ts`): `human`, `schedule`, or `agent:<id>`. Client sends, voice and the client queue record `human`. `send_agent_prompt`, agent-scoped `create_agent` (detached included) and child finish notifications record the agent. Schedules, heartbeats and hub executions record `schedule`. A queued item keeps its sender until delivery. A provider echo of a prompt Paseo started inherits that turn's sender.
+
+`createdBy` is independent of `paseo.parent-agent-id`: detach removes the parent label, `createdBy` stays. Top-level MCP callers have no agent id and record no sender, which never counts as human. `messageActivity.lastHumanMessageAt` advances only on `human` turns; it drives the "Your last message" sort ([sidebar sorting](sidebar-sorting.md)) and the [Mine filter](sidebar-filter.md#mine). Records written before this field existed resolve on load: no `createdBy` means `human` unless the agent has a parent label, and a human-created agent's `lastUserMessageAt` seeds its human time. Provider history carries no sender, so imported turns count as human only for human-created agents.
+
+The CLI `paseo send` arrives over the client WebSocket like any app, so it records `human` even when an agent runs it.
+
 ## Provider-managed child agents
 
 Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.
@@ -445,6 +453,8 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach   |
 | `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label     |
 | `labels["paseo.auto-open-agent-tab"]`        | `"true"?`     | Cross-client hint, stamped by `paseo run`, to auto-open the agent as a workspace tab |
+| `createdBy`                                  | `string?`     | `human`, `schedule` or `agent:<id>`; absent on records that predate it               |
+| `messageActivity.lastHumanMessageAt`         | `string?`     | Last turn a person sent; absent on records that predate it                           |
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                             |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.

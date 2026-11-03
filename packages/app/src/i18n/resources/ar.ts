@@ -336,6 +336,7 @@ export const ar: TranslationResources = {
       groupByProject: "تجميع حسب المشروع",
       groupByStatus: "تجميع حسب الحالة",
       groupInOneList: "عرض المحادثات في قائمة واحدة",
+      showAllSessions: "إظهار كل الجلسات",
       groupAsSessions: "عرض المحادثات كجلسات",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
@@ -1769,6 +1770,11 @@ export const ar: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "جلساتي",
+        showMine: "إظهار جلساتي فقط",
+        showAll: "إظهار كل الجلسات ({{count}} مخفية)",
+      },
       matches: {
         startChat: 'بدء محادثة بـ "{{query}}"',
         searchMessages: 'البحث في الرسائل عن "{{query}}"',
@@ -2556,6 +2562,7 @@ export const ar: TranslationResources = {
     backdrop: "خلفية القائمة",
   },
   subagents: {
+    delegatedBy: "فوّضها {{name}}",
     title: "الوكلاء الفرعيون",
     pillLabelOne: "وكيل فرعي واحد",
     pillLabelMany: "{{count}} وكلاء فرعيين",

@@ -22,6 +22,7 @@ export type MetaRowItem =
   | { kind: "changeRequest"; hint: PrHint }
   | { kind: "checks"; summary: CheckSummary; label: boolean }
   | { kind: "services"; summary: WorkspaceServiceSummary }
+  | { kind: "delegatedBy"; name: string }
   | { kind: "labels"; labels: readonly WorkspaceLabelDefinition[] };
 
 /**
@@ -40,6 +41,8 @@ export function selectMetaRowItems(input: {
   hasHostBadge: boolean;
   prHint: PrHint | null;
   serviceSummary: WorkspaceServiceSummary | null;
+  /** Name of the agent that delegated this workspace's chat. No toggle: it is provenance. */
+  delegatedBy?: string | null;
   labels: readonly WorkspaceLabelDefinition[];
   visible: SidebarRowItems;
   checksDisplay: SidebarChecksDisplay;
@@ -82,6 +85,10 @@ export function selectMetaRowItems(input: {
 
   if (serviceSummary && visible.services) {
     items.push({ kind: "services", summary: serviceSummary });
+  }
+
+  if (input.delegatedBy) {
+    items.push({ kind: "delegatedBy", name: input.delegatedBy });
   }
 
   if (labels.length > 0 && visible.labels) {

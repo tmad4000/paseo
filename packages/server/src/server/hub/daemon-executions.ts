@@ -5,6 +5,7 @@ import type {
   HubExecutionControlAction,
 } from "@getpaseo/protocol/messages";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import { SCHEDULE_SENDER } from "@getpaseo/protocol/user-message-sender";
 
 import type { AgentManager, AgentManagerEvent, ManagedAgent } from "../agent/agent-manager.js";
 import type { McpServerConfig } from "../agent/agent-sdk-types.js";
@@ -207,6 +208,7 @@ export class DaemonExecutions implements HubExecutionAgents {
         worktree: toCreateAgentWorktree(input.worktree),
         background: true,
         notifyOnFinish: false,
+        createdBy: SCHEDULE_SENDER,
         owner,
         onWorktreeCreated: (worktree) => {
           createdWorktree = worktree;

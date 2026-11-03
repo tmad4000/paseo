@@ -310,6 +310,37 @@ it("keeps one-list mode across a migration and falls back to project for unknown
   expect(migrateSidebarViewState({ groupMode: "label" }).groupMode).toBe("project");
 });
 
+describe("Mine filter preference", () => {
+  beforeEach(() => {
+    useSidebarViewStore.setState({ mineOnly: false, filterScope: "messages" });
+  });
+
+  it("toggles on and off in one step", () => {
+    useSidebarViewStore.getState().toggleMineOnly();
+    expect(useSidebarViewStore.getState().mineOnly).toBe(true);
+    useSidebarViewStore.getState().toggleMineOnly();
+    expect(useSidebarViewStore.getState().mineOnly).toBe(false);
+  });
+
+  it("is off for state written before v8", () => {
+    const migrated = migrateSidebarViewState({ groupMode: "status", sortMode: "user" });
+    expect(migrated.mineOnly).toBeUndefined();
+    useSidebarViewStore.setState({ ...migrated });
+    expect(useSidebarViewStore.getState().mineOnly).toBe(false);
+  });
+
+  it("survives a save and a version migration together with the filter scope", () => {
+    useSidebarViewStore.getState().setMineOnly(true);
+    useSidebarViewStore.getState().setFilterScope("names");
+    const saved = useSidebarViewStore.persist.getOptions().partialize!(
+      useSidebarViewStore.getState(),
+    );
+    const migrated = migrateSidebarViewState(JSON.parse(JSON.stringify(saved)));
+    expect(migrated.mineOnly).toBe(true);
+    expect(migrated.filterScope).toBe("names");
+  });
+});
+
 it("keeps sessions mode across a migration", () => {
   expect(migrateSidebarViewState({ groupMode: "sessions" }).groupMode).toBe("sessions");
   useSidebarViewStore.getState().setGroupMode("sessions");

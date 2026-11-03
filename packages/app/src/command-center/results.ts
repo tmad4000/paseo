@@ -1,3 +1,4 @@
+import { formatCompactTimeAgo } from "@/utils/time";
 import type { AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import {
   compareMatchScores,
@@ -153,6 +154,17 @@ export function scoreSearchFields(
 /** Join non-empty subtitle parts with " · ", dropping null/undefined/empty. */
 export function joinSubtitleParts(parts: readonly (string | null | undefined)[]): string {
   return parts.filter((part): part is string => Boolean(part)).join(" · ");
+}
+
+export function workspaceSubtitle(
+  parts: readonly (string | null | undefined)[],
+  lastActiveAt: Date | null,
+  now?: Date,
+): string {
+  return joinSubtitleParts([
+    ...parts,
+    lastActiveAt ? formatCompactTimeAgo(lastActiveAt, now) : null,
+  ]);
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type { AgentPermissionRequest } from "@getpaseo/protocol/agent-types";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
+import { resolveAgentCreatedBy } from "@getpaseo/protocol/user-message-sender";
 import {
   TURN_LIVENESS_IDLE,
   type ActiveTurnIdentity,
@@ -70,6 +71,7 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     updatedAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt?.toISOString() ?? null,
     messageActivity: agent.messageActivity,
+    ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
     status: agent.status,
     ...projectActiveTurn(agent),
     capabilities: agent.capabilities,
@@ -135,6 +137,7 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     attentionTimestamp,
     archivedAt,
     parentAgentId,
+    createdBy: resolveAgentCreatedBy({ createdBy: snapshot.createdBy, parentAgentId }),
     labels: snapshot.labels,
     artifacts: snapshot.artifacts,
     companionEntries: snapshot.companionEntries,
