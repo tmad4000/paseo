@@ -24,6 +24,10 @@ type SupervisorLifecycleMessage =
       reason?: string;
     };
 
+interface WorkerHeartbeatMessage {
+  type: "paseo:worker-heartbeat";
+}
+
 interface BootstrapResult {
   paseoHome: string;
   logger: ReturnType<typeof createRootLogger>;
@@ -285,6 +289,20 @@ async function main() {
       }
     });
     process.on("disconnect", () => exitAfterSupervisorLoss("ipc_disconnect_event"));
+
+    // Proof of event-loop progress for the supervisor's wedge detector. It is sent
+    // from this thread's timer, so it stops exactly when the event loop stops turning.
+    const workerHeartbeat = setInterval(() => {
+      if (supervisorExitRequested || process.connected === false) {
+        return;
+      }
+      try {
+        process.send?.({ type: "paseo:worker-heartbeat" } satisfies WorkerHeartbeatMessage);
+      } catch {
+        // The supervisor-loss guard below handles a broken channel.
+      }
+    }, 1000);
+    workerHeartbeat.unref();
 
     const timer = setInterval(() => {
       const ipcConnected = typeof process.connected === "boolean" ? process.connected : true;
