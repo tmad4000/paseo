@@ -315,3 +315,187 @@ it("keeps a legacy task's projected global identity through its first and later 
     projected.taskId,
   );
 });
+
+describe("blocked asks are needed input", () => {
+  const blocked = {
+    ...create,
+    ask: {
+      state: "blocked" as const,
+      remaining: "Needs your go-ahead to deploy to production\nThen verify the release.",
+      evidence: "",
+    },
+  };
+  const needsYouIds = (entries: CompanionEntry[], extra = {}) =>
+    listStreamRows(source(entries), { view: "needs_you", ...extra }, "host-a").rows.map(
+      (row) => row.item.kind === "entry" && row.item.entry.id,
+    );
+
+  it("a blocked ask appears in needs_you with its reason and leaves when revised", () => {
+    const entries = applyStreamEntryUpdate([], blocked, "host-a");
+    const rows = listStreamRows(source(entries), { view: "needs_you" }, "host-a").rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].archived).toBe(true);
+    const entry = rows[0].item.kind === "entry" ? rows[0].item.entry : undefined;
+    expect(entry?.ask?.remaining.split("\n")[0]).toBe(
+      "Needs your go-ahead to deploy to production",
+    );
+    const resumed = applyStreamEntryUpdate(
+      entries,
+      { ...blocked, expectedRevision: 1, ask: { ...blocked.ask, state: "in_progress" } },
+      "host-a",
+    );
+    expect(needsYouIds(resumed)).toEqual([]);
+  });
+
+  it("a revision of a set-aside blocked ask brings it back", () => {
+    let entries = applyStreamEntryUpdate([], blocked, "host-a");
+    entries = applyStreamEntryUpdate(entries, {
+      agentId: "origin",
+      action: "set_deferred",
+      entryId: "ask:ship",
+      deferred: true,
+    });
+    expect(entries[0].deferredAt).toEqual(expect.any(String));
+    const reblocked = applyStreamEntryUpdate(
+      entries,
+      {
+        ...blocked,
+        expectedRevision: 1,
+        ask: { ...blocked.ask, remaining: "Still needs your go-ahead" },
+      },
+      "host-a",
+    );
+    expect(reblocked[0]).not.toHaveProperty("deferredAt");
+  });
+
+  it("a question linked by inputRequest.task hides its blocked ask until the question is done", () => {
+    let entries = applyStreamEntryUpdate([], blocked, "host-a");
+    const question = {
+      agentId: "origin",
+      action: "add_question" as const,
+      entryId: "approve-deploy",
+      text: "Approve the production deploy?",
+      inputRequest: { kind: "approval" as const, recipient: "user" as const, task: origin },
+    };
+    entries = applyStreamEntryUpdate(entries, question, "host-a");
+    expect(needsYouIds(entries)).toEqual(["question:approve-deploy"]);
+    const answered = applyStreamEntryUpdate(
+      entries,
+      { ...question, status: "done" as const },
+      "host-a",
+    );
+    expect(needsYouIds(answered)).toEqual(["ask:ship"]);
+    // Text alone never links: an unlinked question with the same words shows both.
+    const unlinked = applyStreamEntryUpdate(
+      applyStreamEntryUpdate([], blocked, "host-a"),
+      { ...question, inputRequest: { kind: "approval" as const, recipient: "user" as const } },
+      "host-a",
+    );
+    expect(needsYouIds(unlinked).sort()).toEqual(["ask:ship", "question:approve-deploy"]);
+  });
+
+  it("a blocker recipient that is not the user keeps the ask out", () => {
+    const external = applyStreamEntryUpdate(
+      [],
+      {
+        ...blocked,
+        inputRequest: { kind: "action", recipient: "external", recipientId: "YouTube Studio" },
+      },
+      "host-a",
+    );
+    expect(external[0].inputRequest).toMatchObject({ recipient: "external" });
+    expect(needsYouIds(external)).toEqual([]);
+  });
+
+  it("group=blocked pages only blocked asks; askStates filters tasks", () => {
+    let entries = applyStreamEntryUpdate([], blocked, "host-a");
+    entries = applyStreamEntryUpdate(
+      entries,
+      {
+        agentId: "origin",
+        action: "add_question",
+        entryId: "pick",
+        text: "Pick a name",
+        inputRequest: { kind: "decision", recipient: "user" },
+      },
+      "host-a",
+    );
+    entries = applyStreamEntryUpdate(
+      entries,
+      { ...create, entryId: "other", text: "Other work" },
+      "host-a",
+    );
+    expect(needsYouIds(entries).sort()).toEqual(["ask:ship", "question:pick"]);
+    expect(needsYouIds(entries, { group: "blocked" })).toEqual(["ask:ship"]);
+    expect(needsYouIds(entries, { group: "question" })).toEqual(["question:pick"]);
+    expect(
+      listStreamRows(source(entries), { view: "tasks", askStates: ["blocked"] }, "host-a").rows.map(
+        (row) => row.item.kind === "entry" && row.item.entry.id,
+      ),
+    ).toEqual(["ask:ship"]);
+  });
+});
+
+describe("set_ask blocker", () => {
+  const blocked = {
+    ...create,
+    ask: { state: "blocked" as const, remaining: "Waiting on the reviewer", evidence: "" },
+  };
+
+  it("stores the blocker, keeps it while still blocked, and clears it on leaving blocked", () => {
+    const entries = applyStreamEntryUpdate(
+      [],
+      {
+        ...blocked,
+        inputRequest: { kind: "decision", recipient: "agent", recipientId: "reviewer" },
+      },
+      "host-a",
+    );
+    expect(entries[0].inputRequest).toEqual({
+      kind: "decision",
+      recipient: "agent",
+      recipientId: "reviewer",
+    });
+    const stillBlocked = applyStreamEntryUpdate(
+      entries,
+      { ...blocked, expectedRevision: 1, ask: { ...blocked.ask, remaining: "Reviewer is slow" } },
+      "host-a",
+    );
+    expect(stillBlocked[0].inputRequest?.recipientId).toBe("reviewer");
+    // Re-sending the same blocked edit is a no-op, not a new revision.
+    expect(
+      applyStreamEntryUpdate(
+        stillBlocked,
+        { ...blocked, expectedRevision: 2, ask: { ...blocked.ask, remaining: "Reviewer is slow" } },
+        "host-a",
+      ),
+    ).toBe(stillBlocked);
+    const resumed = applyStreamEntryUpdate(
+      stillBlocked,
+      { ...blocked, expectedRevision: 2, ask: { ...blocked.ask, state: "in_progress" } },
+      "host-a",
+    );
+    expect(resumed[0]).not.toHaveProperty("inputRequest");
+  });
+
+  it("rejects an unnamed agent, a task link, and a blocker on an ask that is not blocked", () => {
+    expect(() =>
+      applyStreamEntryUpdate([], {
+        ...blocked,
+        inputRequest: { kind: "input", recipient: "agent" },
+      }),
+    ).toThrow("Name the agent or external recipient");
+    expect(() =>
+      applyStreamEntryUpdate([], {
+        ...blocked,
+        inputRequest: { kind: "input", recipient: "user", task: origin },
+      }),
+    ).toThrow("not a task link");
+    expect(() =>
+      applyStreamEntryUpdate([], {
+        ...create,
+        inputRequest: { kind: "input", recipient: "user" },
+      }),
+    ).toThrow("only applies to a blocked ask");
+  });
+});

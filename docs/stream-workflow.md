@@ -62,6 +62,30 @@ Expired tool/plan permissions disappear from Needs you; an expired provider ques
 remains an unresolved input. Reading, dismissing, marking an answer seen or sending
 an unrelated reply does not resolve any input or complete any task.
 
+## Blocked asks are needed input
+
+A tracked ask in state `blocked` is needed input by default: it appears in global Needs you,
+in `list_stream_asks needsYou=true`, in the per-chat answers pane and in delegation pulses,
+all through the one `needsUserInput` predicate. The host already requires a blocker
+description in `remaining`; its first line is the reason shown on the card, so agents start
+it with what they need ("Needs your go-ahead to deploy to production").
+
+- **Blocker.** `set_stream_ask` accepts an optional `blocker` (stored as the ask entry's
+  `inputRequest`, without task links). Recipient `agent` or `external` with a `recipientId`
+  keeps the ask out of Needs you. A still-blocked edit keeps the previous blocker; leaving
+  `blocked` clears it, so a stale blocker never lingers.
+- **Dedupe.** When an open needed-input question names the ask through `inputRequest.task`
+  (`{serverId, agentId, entryId: "ask:<askId>"}`), Needs you shows only the question; the ask
+  returns when the question is done. Text is never matched; legacy prose links show both.
+- **Mirrors** (`canonicalTask`) never count; the canonical origin does.
+- **Later.** Set-aside works unchanged, and any revision of the ask clears it.
+- **No auto-expiry.** Archived chats keep their blocked asks in Needs you, like questions.
+- **Filters.** Needs you requests may carry `group` (`blocked`, `question`, `permission`), and
+  task reads may carry `askStates`. Both are sent only to hosts advertising
+  `features.streamBlockedAsks`; older hosts filter Needs you server-side, so their blocked
+  asks stay out until they update. `list_stream_asks` also takes `states` and `compact`
+  (small triage rows, default page 25).
+
 ## Views and compatibility
 
 `stream.list.request.view` selects activity/tasks/questions/saved/needs_you.

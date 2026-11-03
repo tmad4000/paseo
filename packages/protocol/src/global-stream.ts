@@ -5,6 +5,7 @@ import {
   TimelineAnchorSchema,
   TrackedAskInputSchema,
   StreamInputRequestSchema,
+  NeedsYouGroupSchema,
 } from "./companion-stream.js";
 
 export const StreamViewSchema = z.enum(["activity", "tasks", "questions", "saved", "needs_you"]);
@@ -44,6 +45,14 @@ export const StreamListRequestSchema = z.object({
   userQuestionsOnly: z.boolean().optional(),
   // COMPAT(streamTags): only sent to hosts advertising features.streamTags. Entries must carry all.
   tags: z.array(z.string().max(100)).max(20).optional(),
+  // COMPAT(streamBlockedAsks): only sent to hosts advertising features.streamBlockedAsks.
+  /** needs_you only: one group (blocked asks, questions or permissions). */
+  group: NeedsYouGroupSchema.optional(),
+  /** Tracked asks in these states only. */
+  askStates: z
+    .array(z.enum(["open", "in_progress", "blocked", "done"]))
+    .max(4)
+    .optional(),
 });
 export const StreamTagCountSchema = z.object({ tag: z.string(), count: z.number().int() });
 export const StreamListResponseSchema = z.object({

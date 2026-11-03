@@ -3,6 +3,8 @@ import {
   isCompanionEntryPending,
   isUserQuestionEntry,
   needsUserInput,
+  needsYouGroup,
+  streamReferenceKey,
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
 import type {
@@ -126,11 +128,47 @@ function matchesEntryFilters(entry: CompanionEntry, options: StreamListOptions):
   if (options.view === "tasks" && (!entry.ask || entry.ask.canonicalTask)) return false;
   if (options.view === "questions" && !isUserQuestionEntry(entry)) return false;
   if (options.view === "needs_you" && !needsUserInput(entry)) return false;
+  if (!matchesGroupAndAskState(entry, options)) return false;
   if (options.view === "saved" && entry.kind !== "pin") return false;
   if (options.asksOnly && !entry.ask) return false;
   if (options.userQuestionsOnly && !isUserQuestionEntry(entry)) return false;
   if (options.filter === "pending" && !isCompanionEntryPending(entry)) return false;
   return options.filter !== "pinned" || entry.kind === "pin";
+}
+
+/**
+ * Asks that an open question already stands for: the question names the ask as its task
+ * (inputRequest.task), so Needs you shows one card for both. Never matched by text.
+ */
+function indexAsksRaisedAsQuestions(sources: readonly StreamSource[]): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const source of sources) {
+    if (source.internal) continue;
+    for (const entry of source.companionEntries ?? []) {
+      const task = entry.inputRequest?.task;
+      if (task && !entry.ask && needsUserInput(entry)) keys.add(streamReferenceKey(task));
+    }
+  }
+  return keys;
+}
+
+function isAskRaisedAsQuestion(
+  entry: CompanionEntry,
+  sourceId: string,
+  raised: ReadonlySet<string>,
+  serverId?: string,
+): boolean {
+  if (!entry.ask || !raised.size) return false;
+  const own = { serverId: serverId ?? "", agentId: sourceId, entryId: entry.id };
+  return [entry.ask.origin, serverId ? own : undefined].some(
+    (reference) => reference && raised.has(streamReferenceKey(reference)),
+  );
+}
+
+function matchesGroupAndAskState(entry: CompanionEntry, options: StreamListOptions): boolean {
+  if (options.group && (!needsUserInput(entry) || needsYouGroup(entry) !== options.group))
+    return false;
+  return !options.askStates || (!!entry.ask && options.askStates.includes(entry.ask.state));
 }
 
 type TaskSessionIndex = ReadonlyMap<string, NonNullable<CompanionEntry["ask"]>["sessions"]>;
@@ -156,6 +194,8 @@ function collectStreamRows(
   const rows: StreamRow[] = [];
   const allSources = [...sources];
   const taskSessions = indexTaskSessions(allSources, serverId);
+  const needsYou = options.view === "needs_you" || Boolean(options.group);
+  const raised = needsYou ? indexAsksRaisedAsQuestions(allSources) : new Set<string>();
   for (const source of allSources) {
     if (options.agentId && source.id !== options.agentId) continue;
     if (isHiddenSource(source, options)) continue;
@@ -169,6 +209,7 @@ function collectStreamRows(
     for (const stored of source.companionEntries ?? []) {
       const entry = withTags(stored);
       if (!matchesEntryFilters(entry, options)) continue;
+      if (needsYou && isAskRaisedAsQuestion(entry, source.id, raised, serverId)) continue;
       if (!matchesRelatedSession(source, entry, options, serverId, taskSessions)) continue;
       rows.push(projectEntryRow(base, entry, serverId));
     }
