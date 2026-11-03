@@ -20,6 +20,12 @@ const state = vi.hoisted(() => ({
 function clickDone() {
   state.updateStatus?.("question:q", "done");
 }
+// Delegated chats have their own coverage in answers-pane and delegation-pulse tests.
+vi.mock("./delegated-chats", () => ({ DelegatedChatsList: () => null }));
+vi.mock("./use-delegation-pulse", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./use-delegation-pulse")>()),
+  useDelegatedChildren: () => [],
+}));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
