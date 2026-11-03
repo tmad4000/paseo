@@ -4,6 +4,7 @@ import {
   buildContributionSections,
   filterAndRankBuiltInResults,
   joinSubtitleParts,
+  workspaceSubtitle,
   moveActiveResultId,
   PINNED_SECTION_BAND,
   preserveActiveResultId,
@@ -543,4 +544,12 @@ describe("joinSubtitleParts", () => {
     // No branch: degrades to project (or host · project).
     expect(joinSubtitleParts([null, "paseo", null])).toBe("paseo");
   });
+});
+
+it("keeps workspace activity compact in the subtitle and omits missing clocks", () => {
+  const now = new Date("2026-11-02T12:00:00Z");
+  expect(workspaceSubtitle(["Paseo", "main"], new Date("2026-11-02T11:55:00Z"), now)).toBe(
+    "Paseo · main · 5m",
+  );
+  expect(workspaceSubtitle(["host", "Paseo", null], null, now)).toBe("host · Paseo");
 });
