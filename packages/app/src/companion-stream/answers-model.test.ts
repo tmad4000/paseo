@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { CompanionEntry, StreamReply } from "@getpaseo/protocol/companion-stream";
+import {
+  askBlockerReason as askNextAction,
+  type CompanionEntry,
+  type StreamReply,
+} from "@getpaseo/protocol/companion-stream";
 import { findAnchoredItem, findMessageItem } from "@/agent-stream/use-timeline-anchor-jump";
 import type { StreamItem } from "@/types/stream";
 import {
   answersPaneSignature,
-  askNextAction,
   hasUnhiddenAnswers,
   hasUnhiddenPaneItems,
   selectOpenAsks,

@@ -159,6 +159,14 @@ export const ar: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    groupBlocked: "Blocked",
+    groupQuestions: "Questions",
+    groupPermissions: "Permissions",
+    waitingOnYou: "Waiting on you:",
+    goAhead: "Go ahead",
+    goAheadText: "Go ahead.",
+    goAheadHint: "Opens a reply with a go-ahead for you to edit and send. Nothing is sent yet.",
+    unblocksTask: "Unblocks a blocked task",
     nowPartial: "الآن · {{count}}+",
     laterPartial: "لاحقًا · {{count}}+",
     nothingNow: "لا شيء يحتاج إليك الآن.",
@@ -170,7 +178,7 @@ export const ar: TranslationResources = {
     backToNeedsYou: "العودة إلى Needs you",
     backToStream: "العودة إلى Stream",
     needsYouDescription:
-      "Concrete input, decisions, approvals and actions requested from you. Answers waiting for you to read are separate.",
+      "Blocked work, concrete input, decisions, approvals and permissions waiting on you. Answers waiting for you to read are separate.",
     allSessions: "All sessions",
     thisChat: "This chat",
     scopeDescription:
