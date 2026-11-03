@@ -27,9 +27,12 @@ async function trackQuestion(page: Page, prompt: string, compact: boolean): Prom
   }).toPass({ timeout: 45_000 });
 }
 
-// The expanded pane floats over Chat; collapse it to reach messages beneath, as a user would.
+// The open card's Minimize header, or the minimized pill; exactly one shows at a time.
+const PANE_TOGGLE = /^tracked-answers-(minimize|expand)$/;
+
+// The open pane floats over Chat; minimize it to reach messages beneath, as a user would.
 async function setPaneExpanded(page: Page, expanded: boolean): Promise<void> {
-  const toggle = page.getByTestId("tracked-answers-toggle");
+  const toggle = page.getByTestId(PANE_TOGGLE);
   if ((await toggle.getAttribute("aria-expanded")) !== String(expanded)) await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", String(expanded));
 }
@@ -53,7 +56,7 @@ async function answer(agent: Agent, entryId: string, text: string, replyRevision
 }
 
 for (const width of [390, 1440]) {
-  test(`Answers pane: agent asks, Track Q&A candidates, revisions, seen and hide at ${width}px`, async ({
+  test(`Answers pane: agent asks, Track Q&A candidates, revisions, seen and minimize at ${width}px`, async ({
     page,
   }, testInfo) => {
     test.setTimeout(180_000);
@@ -70,7 +73,7 @@ for (const width of [390, 1440]) {
       await openAgentRoute(page, agent);
       await expectComposerVisible(page);
       const pane = page.getByTestId("tracked-answers-pane");
-      const toggle = pane.getByTestId("tracked-answers-toggle");
+      const toggle = pane.getByTestId(PANE_TOGGLE);
 
       // An ask the agent tracks waits in the pane with no tap from the user.
       await agent.client.updateStreamEntry({
@@ -82,7 +85,7 @@ for (const width of [390, 1440]) {
         ask: { state: "in_progress", remaining: "Check the staging config", evidence: "" },
       });
       await expect(toggle).toHaveAccessibleName(/1 waiting/);
-      // Compact starts collapsed so it never takes the chat over; desktop starts expanded.
+      // Compact starts minimized so it never takes the chat over; desktop starts open.
       await expect(toggle).toHaveAttribute("aria-expanded", String(width >= 768));
       await setPaneExpanded(page, true);
       const askRow = pane.getByTestId("tracked-answer-ask:staging-db");
@@ -153,13 +156,19 @@ for (const width of [390, 1440]) {
       await answer(agent, "ask:staging-db", "Postgres 16.4 after the upgrade.", 1);
       await expect(askRow.getByText("New answer")).toBeVisible();
 
-      // Collapse keeps the summary; hiding lasts until an answer arrives that was not showing.
-      await toggle.click();
+      // Minimizing leaves a small pill that keeps the summary; it never disappears, stays
+      // through new answers, and reopens on tap.
+      await setPaneExpanded(page, false);
       await expect(pane.getByText(second)).toHaveCount(0);
-      await pane.getByTestId("tracked-answers-dismiss").click();
-      await expect(pane).toHaveCount(0);
+      await expect(toggle).toHaveAccessibleName(/^Show questions and asks\. .*new/);
+      const pillBox = await toggle.boundingBox();
+      expect(pillBox && pillBox.width < 120).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`tracked-answers-pill-${width}.png`) });
       await answer(agent, "ask:staging-db", "Postgres 16.4 on the shared cluster.", 2);
       await expect(pane).toBeVisible();
+      await setPaneExpanded(page, true);
+      await expect(pane.getByText("Your questions", { exact: true })).toBeVisible();
+      await expect(askRow.getByText("Postgres 16.4 on the shared cluster.")).toBeVisible();
     } finally {
       await agent.cleanup();
     }

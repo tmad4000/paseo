@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  focusMovedBehindMaximizedPane,
   hasMultipleVisiblePanes,
   resolveSplitContainerRoot,
   splitNodeContainsPane,
@@ -58,6 +59,68 @@ describe("split focus root", () => {
       hasMultipleVisiblePanes({
         ...root,
         group: { ...root.group, children: [pane("left"), hiddenPane("right")] },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("focus moving behind a maximized pane", () => {
+  const withHidden: SplitNode = {
+    kind: "group",
+    group: {
+      id: "root",
+      direction: "horizontal",
+      children: [pane("left"), pane("right"), hiddenPane("parked")],
+      sizes: [0.4, 0.4, 0.2],
+    },
+  };
+  const moved = (input: {
+    maximizedPaneId: string | null;
+    previousFocusedPaneId: string | null;
+    focusedPaneId: string | null;
+    root?: SplitNode | null;
+  }) => focusMovedBehindMaximizedPane({ root: withHidden, ...input });
+
+  it("reports Back, a jump or a shortcut landing on a covered pane", () => {
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "left", focusedPaneId: "right" }),
+    ).toBe(true);
+  });
+
+  it("ignores focus that stays on, or returns to, the maximized pane", () => {
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "left", focusedPaneId: "left" }),
+    ).toBe(false);
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "right", focusedPaneId: "left" }),
+    ).toBe(false);
+  });
+
+  it("does not react to maximize toggling while focus is unchanged", () => {
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "right", focusedPaneId: "right" }),
+    ).toBe(false);
+  });
+
+  it("ignores panes outside the maximizable tree and panes that are hidden anyway", () => {
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "left", focusedPaneId: "explorer" }),
+    ).toBe(false);
+    expect(
+      moved({ maximizedPaneId: "left", previousFocusedPaneId: "left", focusedPaneId: "parked" }),
+    ).toBe(false);
+  });
+
+  it("does nothing when no pane is maximized", () => {
+    expect(
+      moved({ maximizedPaneId: null, previousFocusedPaneId: "left", focusedPaneId: "right" }),
+    ).toBe(false);
+    expect(
+      moved({
+        maximizedPaneId: "left",
+        previousFocusedPaneId: "left",
+        focusedPaneId: "right",
+        root: null,
       }),
     ).toBe(false);
   });

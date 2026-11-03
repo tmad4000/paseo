@@ -187,6 +187,52 @@ describe("shared task workflow", () => {
   });
 });
 
+it("sets a request aside without changing its status, and brings it back when asked again", () => {
+  const ask = {
+    agentId: "origin",
+    action: "add_question" as const,
+    entryId: "pick-db",
+    text: "Pick the staging database",
+    inputRequest: { kind: "decision" as const, recipient: "user" as const },
+  };
+  const entries = applyStreamEntryUpdate([], ask);
+  const later = applyStreamEntryUpdate(entries, {
+    agentId: "origin",
+    action: "set_deferred",
+    entryId: "question:pick-db",
+    deferred: true,
+  });
+  expect(later[0].deferredAt).toEqual(expect.any(String));
+  expect(later[0]).toMatchObject({ kind: "question", status: "open" });
+  expect(needsUserInput(later[0])).toBe(true);
+  // Setting it aside twice is a no-op, not a new timestamp.
+  expect(
+    applyStreamEntryUpdate(later, {
+      agentId: "origin",
+      action: "set_deferred",
+      entryId: "question:pick-db",
+      deferred: true,
+    }),
+  ).toBe(later);
+  const back = applyStreamEntryUpdate(later, {
+    agentId: "origin",
+    action: "set_deferred",
+    entryId: "question:pick-db",
+    deferred: false,
+  });
+  expect(back[0]).not.toHaveProperty("deferredAt");
+  const askedAgain = applyStreamEntryUpdate(later, { ...ask, text: "Pick staging DB, now urgent" });
+  expect(askedAgain[0]).not.toHaveProperty("deferredAt");
+  expect(() =>
+    applyStreamEntryUpdate(entries, {
+      agentId: "origin",
+      action: "set_deferred",
+      entryId: "x",
+      deferred: true,
+    }),
+  ).toThrow("no longer exists");
+});
+
 it("keeps a migrated or copied task visible with its original authority, and refuses local writes", () => {
   const entries = applyStreamEntryUpdate([], create, "host-a");
   expect(entries[0].ask?.origin).toEqual(origin);

@@ -10,6 +10,8 @@ export interface WorkspaceAgentActivity {
   lastMessageAt?: Date;
   lastUserMessageAt?: Date;
   lastAssistantMessageAt?: Date;
+  /** Earliest creation time among the workspace's top-level chats. */
+  startedAt?: Date;
 }
 
 function workspaceAgentStatus(agent: Agent): Agent["status"] {
@@ -27,6 +29,7 @@ export function buildWorkspaceAgentActivityIndex(
   const conversationAt = new Map<string, Date>();
   const userAt = new Map<string, Date>();
   const assistantAt = new Map<string, Date>();
+  const startedAt = new Map<string, Date>();
 
   for (const agent of agents.values()) {
     const parentAgent = agent.parentAgentId ? agents.get(agent.parentAgentId) : undefined;
@@ -39,6 +42,7 @@ export function buildWorkspaceAgentActivityIndex(
     recordLatestActivity(userAt, agent.workspaceId, clocks.user);
     recordLatestActivity(assistantAt, agent.workspaceId, clocks.assistant);
     recordLatestActivity(conversationAt, agent.workspaceId, clocks.conversation);
+    recordEarliest(startedAt, agent.workspaceId, agent.createdAt);
 
     const enteredAt = agent.attentionTimestamp ?? agent.updatedAt;
     const latestActivityAt = latestActivityAtByWorkspaceId.get(agent.workspaceId);
@@ -66,6 +70,7 @@ export function buildWorkspaceAgentActivityIndex(
     activity.lastMessageAt = conversationAt.get(workspaceId);
     activity.lastUserMessageAt = userAt.get(workspaceId);
     activity.lastAssistantMessageAt = assistantAt.get(workspaceId);
+    activity.startedAt = startedAt.get(workspaceId);
     activity.lastActivityAt =
       latestMessageAtByWorkspaceId.get(workspaceId) ?? activity.lastActivityAt;
     const previousActivity = previous?.get(workspaceId);
@@ -95,6 +100,12 @@ function recordLatestActivity(
 ) {
   const previous = activityByWorkspaceId.get(workspaceId);
   if (!previous || at > previous) activityByWorkspaceId.set(workspaceId, at);
+}
+
+function recordEarliest(earliestByWorkspaceId: Map<string, Date>, workspaceId: string, at: Date) {
+  if (!Number.isFinite(at.getTime())) return;
+  const previous = earliestByWorkspaceId.get(workspaceId);
+  if (!previous || at < previous) earliestByWorkspaceId.set(workspaceId, at);
 }
 
 function areWorkspaceAgentActivityIndexesIdentical(
@@ -133,6 +144,7 @@ function sameMessageActivity(left: WorkspaceAgentActivity, right: WorkspaceAgent
     left.lastActivityAt.getTime() === right.lastActivityAt.getTime() &&
     left.lastMessageAt?.getTime() === right.lastMessageAt?.getTime() &&
     left.lastUserMessageAt?.getTime() === right.lastUserMessageAt?.getTime() &&
-    left.lastAssistantMessageAt?.getTime() === right.lastAssistantMessageAt?.getTime()
+    left.lastAssistantMessageAt?.getTime() === right.lastAssistantMessageAt?.getTime() &&
+    left.startedAt?.getTime() === right.startedAt?.getTime()
   );
 }

@@ -4,6 +4,7 @@ import { connectToDaemon } from "../../utils/client.js";
 import type { CommandOptions, ListResult, CommandError } from "../../output/index.js";
 import {
   permitResponseSchema,
+  respondToPermissionConfirmed,
   toPermissionResponseItem,
   type PermissionResponseItem,
 } from "./allow.js";
@@ -82,7 +83,7 @@ export async function runDenyCommand(
     // Deny permissions
     const results: PermissionResponseItem[] = await Promise.all(
       permissionsToDeny.map(async (permission) => {
-        await client.respondToPermission(resolvedAgentId, permission.id, {
+        await respondToPermissionConfirmed(client, resolvedAgentId, permission, {
           behavior: "deny",
           ...(options.message ? { message: options.message } : {}),
           ...(options.interrupt ? { interrupt: true } : {}),

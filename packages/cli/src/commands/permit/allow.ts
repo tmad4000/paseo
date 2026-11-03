@@ -1,5 +1,8 @@
 import type { Command } from "commander";
-import type { AgentPermissionRequest } from "@getpaseo/protocol/agent-types";
+import type {
+  AgentPermissionRequest,
+  AgentPermissionResponse,
+} from "@getpaseo/protocol/agent-types";
 import { connectToDaemon } from "../../utils/client.js";
 import type { CommandOptions, ListResult, OutputSchema, CommandError } from "../../output/index.js";
 
@@ -45,6 +48,64 @@ export function toPermissionResponseItem(
     name: permission.name,
     result,
   };
+}
+
+/**
+ * How long `permit allow` / `permit deny` wait for the daemon to confirm the response.
+ * The daemon answers as soon as the provider has accepted it, so this only bounds a
+ * lost or unreachable host.
+ */
+export const PERMIT_RESPONSE_TIMEOUT_MS = 15_000;
+
+interface PermissionResponder {
+  respondToPermissionAndWait(
+    agentId: string,
+    requestId: string,
+    response: AgentPermissionResponse,
+    timeout?: number,
+  ): Promise<unknown>;
+}
+
+function isResponseTimeout(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if ((err as { code?: unknown }).code === "DAEMON_REQUEST_TIMEOUT") return true;
+  return err.message.startsWith("Timeout waiting for message");
+}
+
+/**
+ * Send a permission response and wait for the daemon's confirmation.
+ *
+ * A fire-and-forget send reported success even when the frame never reached the
+ * daemon (for example when an `ssh://` tunnel was torn down right after the send),
+ * leaving the request pending on the host. Waiting for `agent_permission_resolved`
+ * makes a lost or rejected response a failed command instead of a false "allowed".
+ */
+export async function respondToPermissionConfirmed(
+  client: PermissionResponder,
+  agentId: string,
+  permission: AgentPermissionRequest,
+  response: AgentPermissionResponse,
+  timeoutMs: number = PERMIT_RESPONSE_TIMEOUT_MS,
+): Promise<void> {
+  const verb = response.behavior === "allow" ? "allow" : "deny";
+  try {
+    await client.respondToPermissionAndWait(agentId, permission.id, response, timeoutMs);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isResponseTimeout(err)) {
+      const error: CommandError = {
+        code: "PERMISSION_RESPONSE_TIMEOUT",
+        message: `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the daemon to confirm ${verb} of ${permission.id}`,
+        details: "The request may still be pending; check with `paseo permit ls`",
+      };
+      throw error;
+    }
+    const error: CommandError = {
+      code: verb === "allow" ? "ALLOW_PERMISSION_FAILED" : "DENY_PERMISSION_FAILED",
+      message: `Failed to ${verb} permission ${permission.id}: ${message}`,
+    };
+    throw error;
+  }
 }
 
 export type PermitAllowResult = ListResult<PermissionResponseItem>;
@@ -129,7 +190,7 @@ export async function runAllowCommand(
     // Allow permissions
     const results: PermissionResponseItem[] = await Promise.all(
       permissionsToAllow.map(async (permission) => {
-        await client.respondToPermission(resolvedAgentId, permission.id, {
+        await respondToPermissionConfirmed(client, resolvedAgentId, permission, {
           behavior: "allow",
           ...(updatedInput ? { updatedInput } : {}),
         });

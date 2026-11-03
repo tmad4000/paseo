@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SearchField } from "@/components/ui/search-field";
@@ -20,6 +22,7 @@ import { TagCloud } from "./tag-cloud";
 import { StreamWorkflowFeed } from "./global-screen";
 import { StreamNoteComposer } from "./note-composer";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { useApplyStreamFocus } from "./use-stream-focus";
 
 export { EntryCard } from "./entry-card";
 
@@ -112,7 +115,21 @@ function LegacyCompanionFeed({
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The search field is uncontrolled; a new key shows a search set from outside it.
+  const [searchKey, setSearchKey] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
+  const focusScope = useMemo(() => ({ serverId, agentId }), [serverId, agentId]);
+  // Chat's floating pane opens an ask's card: the Checklist, searched down to it.
+  useApplyStreamFocus(focusScope, (focus) => {
+    setViewTab("checklist");
+    setOnlyOpen(false);
+    setFilter("all");
+    setTags([]);
+    // Older hosts without durableStream list snapshot entries unsearched; the Checklist still
+    // shows the ask among the chat's others.
+    setSearch(focus.query);
+    setSearchKey((value) => value + 1);
+  });
 
   const pendingFilter = onlyOpen ? "pending" : "all";
   const query = useGlobalStream({
@@ -221,6 +238,19 @@ function LegacyCompanionFeed({
     },
     [save, agentId],
   );
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  const handleShowInChat = useCallback(
+    (target: ChatJumpTarget) => openChatAt(serverId, agentId, target),
+    [openChatAt, serverId, agentId],
+  );
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  const handleReplyInChat = useCallback(
+    (entry: CompanionEntry) => {
+      requestReplyQuote(serverId, agentId, entry.text);
+      onReplyInChat();
+    },
+    [requestReplyQuote, serverId, agentId, onReplyInChat],
+  );
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
       void artifactPins.current.save(serverId, agentId, artifact.path, save).catch(() => undefined);
@@ -244,7 +274,8 @@ function LegacyCompanionFeed({
           entry={item.entry}
           serverId={serverId}
           onReturnToChat={onReturnToChat}
-          onReplyInChat={onReplyInChat}
+          onReplyInChat={handleReplyInChat}
+          onShowInChat={handleShowInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
           onTagPress={query.supportsTags ? tagFilter.add : undefined}
@@ -257,7 +288,8 @@ function LegacyCompanionFeed({
       openArtifact,
       handlePinArtifact,
       onReturnToChat,
-      onReplyInChat,
+      handleReplyInChat,
+      handleShowInChat,
       handleUpdateStatus,
       handleRemovePin,
       saving,
@@ -318,6 +350,7 @@ function LegacyCompanionFeed({
 
         {supportsDurableStream ? (
           <SearchField
+            key={searchKey}
             value={search}
             onChangeText={setSearch}
             placeholder={t("agentPanel.stream.search")}
@@ -428,6 +461,7 @@ function LegacyCompanionFeed({
       tagFilter.toggle,
       tagFilter.setPinned,
       tagFilter.error,
+      searchKey,
     ],
   );
 

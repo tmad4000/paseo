@@ -28,12 +28,20 @@ import {
 
 export type ToastVariant = "default" | "info" | "success" | "warning" | "error";
 
+/** One follow-up the toast offers, e.g. undoing what it reports. Pressing it dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+  testID?: string;
+}
+
 export interface ToastShowOptions {
   icon?: ReactNode;
   variant?: ToastVariant;
   durationMs?: number | null;
   nativeAndroid?: boolean;
   testID?: string;
+  action?: ToastAction;
 }
 
 export interface ToastState {
@@ -44,6 +52,7 @@ export interface ToastState {
   variant: ToastVariant;
   durationMs: number | null;
   testID?: string;
+  action?: ToastAction;
 }
 
 export interface ToastApi {
@@ -55,6 +64,8 @@ export interface ToastApi {
 type ToastViewportPlacement = "app-shell" | "panel";
 
 const DEFAULT_DURATION_MS = 2200;
+// Long enough to read the message and reach the button.
+const DEFAULT_ACTION_DURATION_MS = 5000;
 const TOAST_MAX_WIDTH = 480;
 const toastEntering = FadeIn.duration(140);
 const toastExiting = FadeOut.duration(140);
@@ -83,6 +94,11 @@ function presentToast(
   }
   const message = toDisplayErrorMessage(rawMessage);
   return { content: message, nativeMessage: message, variant: "warning" };
+}
+
+function resolveToastDuration(options: ToastShowOptions | undefined): number | null {
+  if (options?.durationMs !== undefined) return options.durationMs;
+  return options?.action ? DEFAULT_ACTION_DURATION_MS : DEFAULT_DURATION_MS;
 }
 
 export function useToastHost(): {
@@ -115,8 +131,10 @@ export function useToastHost(): {
       rawMessage,
       requestedVariant,
     );
-    const durationMs = options?.durationMs === undefined ? DEFAULT_DURATION_MS : options.durationMs;
-    const nativeAndroid = options?.nativeAndroid ?? false;
+    const action = options?.action;
+    const durationMs = resolveToastDuration(options);
+    // A native Android toast cannot hold a button.
+    const nativeAndroid = (options?.nativeAndroid ?? false) && !action;
 
     if (Platform.OS === "android" && nativeAndroid && nativeMessage) {
       const duration =
@@ -134,6 +152,7 @@ export function useToastHost(): {
       variant,
       durationMs,
       testID: options?.testID,
+      action,
     });
   }, []);
 
@@ -238,7 +257,12 @@ export function ToastViewport({
             testID={toast.testID ?? "app-toast"}
             accessibilityRole="alert"
           >
-            <ToastCard toast={toast} onHoverIn={pauseDismiss} onHoverOut={resumeDismiss} />
+            <ToastCard
+              toast={toast}
+              onHoverIn={pauseDismiss}
+              onHoverOut={resumeDismiss}
+              onDismiss={onDismiss}
+            />
           </Animated.View>
         ) : null}
       </View>
@@ -256,10 +280,12 @@ function ToastCard({
   toast,
   onHoverIn,
   onHoverOut,
+  onDismiss,
 }: {
   toast: ToastState;
   onHoverIn: () => void;
   onHoverOut: () => void;
+  onDismiss: () => void;
 }) {
   let defaultIcon: ReactNode = null;
   if (toast.variant === "info") {
@@ -295,8 +321,32 @@ function ToastCard({
           {toast.content}
         </View>
       )}
+      {toast.action ? <ToastActionButton action={toast.action} onDismiss={onDismiss} /> : null}
     </Pressable>
   );
+}
+
+function ToastActionButton({ action, onDismiss }: { action: ToastAction; onDismiss: () => void }) {
+  const { onPress } = action;
+  const handlePress = useCallback(() => {
+    onDismiss();
+    onPress();
+  }, [onDismiss, onPress]);
+  return (
+    <Pressable
+      testID={action.testID ?? "app-toast-action"}
+      accessibilityRole="button"
+      accessibilityLabel={action.label}
+      onPress={handlePress}
+      style={actionStyle}
+    >
+      <Text style={styles.actionLabel}>{action.label}</Text>
+    </Pressable>
+  );
+}
+
+function actionStyle({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) {
+  return [styles.action, hovered || pressed ? styles.actionActive : null];
 }
 
 const animatedStyles = NativeStyleSheet.create({
@@ -353,5 +403,20 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  action: {
+    flexShrink: 0,
+    marginLeft: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  actionActive: {
+    backgroundColor: theme.colors.surface2,
+  },
+  actionLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

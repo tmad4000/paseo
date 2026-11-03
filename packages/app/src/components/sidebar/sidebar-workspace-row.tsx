@@ -459,6 +459,7 @@ function WorkspaceRowTrailingActions({
                 archivePendingLabel={archivePendingLabel}
                 archiveShortcutKeys={archiveShortcutKeys}
                 lastActiveAt={workspaceLastActiveAt(workspace)}
+                startedAt={workspace.startedAt}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>

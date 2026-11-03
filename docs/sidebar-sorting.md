@@ -1,7 +1,7 @@
 # Sidebar conversation sorting
 
-The sidebar offers Latest conversation activity (the default), Your last message, AI’s last reply, Manual order,
-and Title A–Z. The chosen mode persists on this device. Select Manual order to arrange rows by dragging.
+The sidebar offers Latest conversation activity (the default), Your last message, AI’s last reply,
+Date started, Manual order, and Title A–Z. The chosen mode persists on this device. Select Manual order to arrange rows by dragging.
 Pinned rows retain their saved order. Message sorts order unpinned rows within project/status
 groups and order project groups by their newest eligible conversation. Ties retain stored
 order, so renaming a tied row does not move it.
@@ -25,6 +25,17 @@ falls back to creation time when its user clock is unknown. AI’s last reply li
 creation time when its assistant clock is unknown. A known original timestamp wins even
 when it predates an imported conversation's creation time. Reopening, refreshing undated history,
 or reconnecting does not synthesize new activity.
+
+## Date started
+
+Date started orders rows by when each session was kicked off, newest first: the creation time of
+the workspace's earliest root agent, using the same archived/child exclusions as workspace
+activity. New messages never move a row under this sort. Project groups order by their newest
+kickoff. Rows with no known start date keep stored order at the bottom. While this sort is active,
+the row's compact timestamp shows the start date instead of last activity, so the column reads in
+list order. The workspace ... and right-click menus always show the exact **Started** date and
+time beneath **Last active**. The value is computed in the client from agent `createdAt`, so it
+works against every host version.
 
 ## Reviewing sessions
 
@@ -58,8 +69,11 @@ default applies it on each of its hosts; the host Workspaces settings page sets 
 The New workspace and Quick launch project pickers use the same order and pins: **Pinned** rows
 first, then **Projects** (headers only while the search field is empty and both groups have
 rows). The pin button on a picker row pins or unpins without selecting it; the Default shows its
-house marker instead. Pins only reorder the picker; its initial project still comes from the
-route or the last active project.
+house marker instead. Pin controls name the project for keyboard/voice access, show their action
+on hover or keyboard focus, and retain a thumb-sized target on compact/native layouts. Enter,
+Space and pointer activation toggle only the pin, without choosing the project or closing the
+picker; Escape still dismisses it. Pins only reorder the picker; they do not change its initial
+project selection. See [Quick launch](quick-launch.md#destination) for its default destination.
 
 ## Host compatibility
 

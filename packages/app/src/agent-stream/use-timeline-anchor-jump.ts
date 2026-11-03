@@ -8,7 +8,8 @@ import type { StreamViewportHandle } from "./strategy";
 
 interface PendingAnchorJump {
   requestId: number;
-  anchor: TimelineAnchor;
+  /** An anchor, or a loaded row waiting for the history window to reveal it. */
+  target: { kind: "anchor"; anchor: TimelineAnchor } | { kind: "item"; itemId: string };
   fetchSettled: boolean;
   hasScrolled: boolean;
 }
@@ -41,22 +42,42 @@ export function findAnchoredItem(
   });
 }
 
-/** A loaded user message by provider or client message id, as recorded on a tracked ask. */
+/**
+ * A loaded message by provider or client message id, as recorded on a tracked ask or a pin.
+ * A pinned assistant message is found by its first block.
+ */
 export function findMessageItem(
   items: readonly StreamItem[],
   messageId: string,
 ): StreamItem | undefined {
   return items.find(
     (item) =>
-      item.kind === "user_message" &&
-      (item.messageId === messageId || item.clientMessageId === messageId),
+      (item.kind === "user_message" &&
+        (item.messageId === messageId || item.clientMessageId === messageId)) ||
+      (item.kind === "assistant_message" && item.messageId === messageId),
   );
+}
+
+/** Where a Stream entry sits in Chat: a timeline anchor, a message id, or both. */
+export interface ChatJumpTarget {
+  anchor?: TimelineAnchor;
+  messageId?: string;
 }
 
 export interface TimelineJump {
   jumpToAnchor: (anchor: TimelineAnchor) => void;
   /** Only messages already loaded in Chat; a message id carries no timeline position. */
   jumpToMessage: (messageId: string) => void;
+  /** True when the message is loaded in Chat, so jumpToMessage can land on it. */
+  hasMessage: (messageId: string) => boolean;
+  /** Any loaded row by its id — an assistant block, a tool call — not only user messages. */
+  jumpToItem: (itemId: string) => void;
+  hasItem: (itemId: string) => boolean;
+  /**
+   * A loaded message wins, since its id survives a new timeline epoch. Otherwise the anchor
+   * loads the window around it; an anchor from an older epoch is unavailable.
+   */
+  jumpToTarget: (target: ChatJumpTarget) => void;
 }
 
 /**
@@ -97,7 +118,11 @@ export function useTimelineAnchorJump({
 
   useEffect(() => {
     if (pendingJump === null || pendingJump.hasScrolled) return;
-    const target = findAnchoredItem(loadedItems, pendingJump.anchor);
+    const pendingTarget = pendingJump.target;
+    const target =
+      pendingTarget.kind === "anchor"
+        ? findAnchoredItem(loadedItems, pendingTarget.anchor)
+        : loadedItems.find((item) => item.id === pendingTarget.itemId);
     if (target) {
       if (!scrollTo(target)) return;
       setPendingJump((current) =>
@@ -123,11 +148,21 @@ export function useTimelineAnchorJump({
       const loaded = findAnchoredItem(loadedItems, anchor);
       if (loaded) {
         if (!scrollTo(loaded)) {
-          setPendingJump({ requestId, anchor, fetchSettled: true, hasScrolled: false });
+          setPendingJump({
+            requestId,
+            target: { kind: "anchor", anchor },
+            fetchSettled: true,
+            hasScrolled: false,
+          });
         }
         return;
       }
-      setPendingJump({ requestId, anchor, fetchSettled: false, hasScrolled: false });
+      setPendingJump({
+        requestId,
+        target: { kind: "anchor", anchor },
+        fetchSettled: false,
+        hasScrolled: false,
+      });
       void getHostRuntimeStore()
         .fetchAgentTimeline(
           serverId,
@@ -155,5 +190,47 @@ export function useTimelineAnchorJump({
     },
     [loadedItems, onUnavailable, scrollTo],
   );
-  return useMemo(() => ({ jumpToAnchor, jumpToMessage }), [jumpToAnchor, jumpToMessage]);
+  const hasMessage = useCallback(
+    (messageId: string) => findMessageItem(loadedItems, messageId) !== undefined,
+    [loadedItems],
+  );
+  const jumpToItem = useCallback(
+    (itemId: string) => {
+      nextRequestIdRef.current += 1;
+      const requestId = nextRequestIdRef.current;
+      setPendingJump(null);
+      const loaded = loadedItems.find((item) => item.id === itemId);
+      if (!loaded) {
+        onUnavailable();
+        return;
+      }
+      // Revealing an older part of the loaded history renders it first; the effect above scrolls
+      // once it is visible.
+      if (!scrollTo(loaded)) {
+        setPendingJump({
+          requestId,
+          target: { kind: "item", itemId },
+          fetchSettled: true,
+          hasScrolled: false,
+        });
+      }
+    },
+    [loadedItems, onUnavailable, scrollTo],
+  );
+  const hasItem = useCallback(
+    (itemId: string) => loadedItems.some((item) => item.id === itemId),
+    [loadedItems],
+  );
+  const jumpToTarget = useCallback(
+    (target: ChatJumpTarget) => {
+      if (target.messageId && hasMessage(target.messageId)) jumpToMessage(target.messageId);
+      else if (target.anchor) jumpToAnchor(target.anchor);
+      else onUnavailable();
+    },
+    [hasMessage, jumpToAnchor, jumpToMessage, onUnavailable],
+  );
+  return useMemo(
+    () => ({ jumpToAnchor, jumpToMessage, hasMessage, jumpToItem, hasItem, jumpToTarget }),
+    [hasItem, hasMessage, jumpToAnchor, jumpToItem, jumpToMessage, jumpToTarget],
+  );
 }

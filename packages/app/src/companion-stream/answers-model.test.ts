@@ -3,11 +3,16 @@ import type { CompanionEntry, StreamReply } from "@getpaseo/protocol/companion-s
 import { findAnchoredItem, findMessageItem } from "@/agent-stream/use-timeline-anchor-jump";
 import type { StreamItem } from "@/types/stream";
 import {
+  answersPaneSignature,
+  askNextAction,
   hasUnhiddenAnswers,
+  hasUnhiddenPaneItems,
+  selectOpenAsks,
   selectTrackedAnswers,
   trackedAnswersSignature,
   trackedQuestionEntryId,
 } from "./answers-model";
+import { openAskFixtureEntries } from "./open-asks-fixture";
 
 const reply = (overrides: Partial<StreamReply> = {}): StreamReply => ({
   text: "a",
@@ -125,5 +130,95 @@ describe("tracked answers model", () => {
     expect(findAnchoredItem(items, { epoch: "e1", startSeq: 9, endSeq: 9 })).toBeUndefined();
     expect(findMessageItem(items, "m4")?.id).toBe("q");
     expect(findMessageItem(items, "missing")).toBeUndefined();
+  });
+});
+
+describe("open asks model", () => {
+  const withState = (id: string, state: "open" | "in_progress" | "blocked" | "done", at: string) =>
+    ask(id, id, {
+      timestamp: at,
+      ask: { state, remaining: "", evidence: "", revision: 1, provenance: "explicit" },
+    });
+
+  it("lists unresolved asks blocked first, then in progress, then open; newest first", () => {
+    const items = selectOpenAsks([
+      withState("ask:open", "open", "2026-10-29T09:00:00Z"),
+      withState("ask:old-progress", "in_progress", "2026-10-29T08:00:00Z"),
+      withState("ask:blocked", "blocked", "2026-10-29T07:00:00Z"),
+      withState("ask:new-progress", "in_progress", "2026-10-29T09:30:00Z"),
+      withState("ask:done", "done", "2026-10-29T10:00:00Z"),
+      qa("tracked-message"),
+    ]);
+    expect(items.map((item) => [item.entry.id, item.state])).toEqual([
+      ["ask:blocked", "blocked"],
+      ["ask:new-progress", "in_progress"],
+      ["ask:old-progress", "in_progress"],
+      ["ask:open", "open"],
+    ]);
+  });
+
+  it("skips asks listed as questions and linked duplicates of a canonical task", () => {
+    const canonical = ask("ask:dup", "Duplicate", {
+      ask: {
+        state: "in_progress",
+        remaining: "",
+        evidence: "",
+        revision: 1,
+        provenance: "explicit",
+        canonicalTask: { serverId: "s", agentId: "a", entryId: "ask:origin" },
+      },
+    });
+    const items = selectOpenAsks(
+      [ask("ask:q", "Which port?"), ask("ask:task", "Refactor the sidebar"), canonical],
+      new Set(["ask:q"]),
+    );
+    expect(items.map((item) => item.entry.id)).toEqual(["ask:task"]);
+  });
+
+  it("takes the first non-empty line of remaining as the next action, with its owner", () => {
+    expect(askNextAction("\n  Ship build 2.  \nThen verify.")).toBe("Ship build 2.");
+    expect(askNextAction("")).toBe("");
+    const [item] = selectOpenAsks([
+      ask("ask:x", "X", {
+        ask: {
+          state: "blocked",
+          remaining: "Jacob decides.\nThen build.",
+          evidence: "",
+          delegatedAgentId: "child-1",
+          revision: 1,
+          provenance: "explicit",
+        },
+      }),
+    ]);
+    expect(item).toMatchObject({ nextAction: "Jacob decides.", delegatedAgentId: "child-1" });
+  });
+
+  it("brings a hidden pane back for a newly blocked ask, not for other ask changes", () => {
+    const entries = [withState("ask:a", "in_progress", "2026-10-29T09:00:00Z")];
+    const hidden = answersPaneSignature([], selectOpenAsks(entries));
+    expect(hasUnhiddenPaneItems([], selectOpenAsks(entries), hidden)).toBe(false);
+    const more = [...entries, withState("ask:b", "open", "2026-10-29T09:10:00Z")];
+    expect(hasUnhiddenPaneItems([], selectOpenAsks(more), hidden)).toBe(false);
+    const blocked = [withState("ask:a", "blocked", "2026-10-29T09:00:00Z")];
+    expect(hasUnhiddenPaneItems([], selectOpenAsks(blocked), hidden)).toBe(true);
+    const blockedHidden = answersPaneSignature([], selectOpenAsks(blocked));
+    expect(hasUnhiddenPaneItems([], selectOpenAsks(blocked), blockedHidden)).toBe(false);
+    const answer = selectTrackedAnswers([qa("one", { reply: reply() })]);
+    expect(hasUnhiddenPaneItems(answer, selectOpenAsks(blocked), blockedHidden)).toBe(true);
+  });
+
+  it("splits the orchestration-chat fixture into 3 questions and 17 open asks", () => {
+    const entries = openAskFixtureEntries({ release: "agent-release" });
+    expect(entries.filter((entry) => entry.ask?.state !== "done")).toHaveLength(20);
+    const questions = selectTrackedAnswers(entries);
+    const asks = selectOpenAsks(entries, new Set(questions.map((item) => item.entry.id)));
+    expect(questions).toHaveLength(3);
+    expect(asks).toHaveLength(17);
+    expect(asks.slice(0, 5).every((item) => item.state === "blocked")).toBe(true);
+    expect(asks.slice(5).some((item) => item.state === "blocked")).toBe(false);
+    expect(asks.at(-1)?.state).toBe("open");
+    expect(asks.find((item) => item.entry.id === "ask:asc-agreements")?.delegatedAgentId).toBe(
+      "agent-release",
+    );
   });
 });

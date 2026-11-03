@@ -7,6 +7,7 @@ import {
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
 import { applyStreamEntryUpdate, assertStreamWriteAuthority } from "./stream-entry-update.js";
 import { attachCandidateReplies, hasCandidateWork } from "./stream-answers.js";
+import { attachSourceAnchors } from "./stream-source-anchor.js";
 import type {
   StreamListOptions,
   StreamEntryUpdate,
@@ -2576,6 +2577,16 @@ export class AgentManager {
     assertStreamWriteAuthority(entries, input, this.serverId);
     await this.validateStreamTaskReference(input);
     let next = applyStreamEntryUpdate(entries, input, this.serverId);
+    next = attachSourceAnchors({
+      before: entries,
+      after: next,
+      timeline: this.timelineStore.has(input.agentId)
+        ? {
+            rows: this.timelineStore.getRows(input.agentId),
+            epoch: this.timelineStore.getEpoch(input.agentId),
+          }
+        : null,
+    });
     if (input.action === "add_q_and_a" && liveAgent) {
       // A question tracked after its reply arrived is answered now, not at the next turn.
       next = this.attachTrackedAnswers(liveAgent.id, next, liveAgent.lifecycle === "idle");

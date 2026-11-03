@@ -1,4 +1,5 @@
 import * as native from "@getpaseo/expo-two-way-audio";
+import { createPlaybackStoppedError } from "@/voice/audio-format";
 import type {
   AudioEngine,
   AudioEngineCallbacks,
@@ -352,14 +353,14 @@ export function createAudioEngine(
       refs.activePlayback = null;
       if (active && !active.settled) {
         active.settled = true;
-        active.reject(new Error("Playback stopped"));
+        active.reject(createPlaybackStoppedError());
       }
       releaseSessionIfIdle();
     },
 
     clearQueue() {
       while (refs.queue.length > 0) {
-        refs.queue.shift()!.reject(new Error("Playback stopped"));
+        refs.queue.shift()!.reject(createPlaybackStoppedError());
       }
       // Only the running consumer releases processingQueue. Clearing it here
       // starts a second consumer before a canceled playAudio() has unwound.

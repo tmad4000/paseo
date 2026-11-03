@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.10.0-beta.23 - 2026-11-02
+
+### Added
+
+- Links track and Peek: every URL in a chat is collected in one place and previewed in place ([#154](https://github.com/tmad4000/paseo/pull/154))
+- Reply quotes a message into the same chat; Pin becomes Save to Stream ([#153](https://github.com/tmad4000/paseo/pull/153))
+- Sessions show their start date, with a new Date started sort ([#155](https://github.com/tmad4000/paseo/pull/155))
+- The Questions and asks pane separates items by session ([#158](https://github.com/tmad4000/paseo/pull/158))
+- Stream: Show in chat jumps to the source message; Reply in chat quotes it and focuses the composer ([#157](https://github.com/tmad4000/paseo/pull/157))
+- Needs you: compact cards, a Later section that resurfaces when the agent asks again, inline reply to an agent's question, and a chip to return to Needs you from a chat ([#159](https://github.com/tmad4000/paseo/pull/159))
+
+### Fixed
+
+- The Questions and asks pane minimizes to a small count pill at the edge instead of hiding with no way back; tap the pill to reopen it ([#156](https://github.com/tmad4000/paseo/pull/156))
+- `paseo permit allow`/`deny` confirms with the daemon before reporting success ([#152](https://github.com/tmad4000/paseo/pull/152))
+
+## 0.10.0-beta.22 - 2026-10-29
+
+### Added
+
+- Drag queued messages into a new order; the grip also works from the keyboard on web, and the host drains in the new order ([#146](https://github.com/tmad4000/paseo/pull/146))
+- Back and Forward history rows show each workspace's open tab count ([#145](https://github.com/tmad4000/paseo/pull/145))
+
+### Fixed
+
+- Navigating to a tab in a pane hidden behind a maximized pane now reveals it instead of appearing to do nothing ([#145](https://github.com/tmad4000/paseo/pull/145))
+- Pinning or unpinning a project in the project picker keeps the picker open, your selection intact and keyboard focus on the pin; pins are shared with sidebar favorites ([#150](https://github.com/tmad4000/paseo/pull/150))
+
+## 0.10.0-beta.21 - 2026-10-29
+
+### Added
+
+- The floating chat pane lists unresolved asks with state, owner links and next actions alongside questions ([#142](https://github.com/tmad4000/paseo/pull/142))
+- Hover Back or Forward to preview and choose any retained visit; explicit keyboard and touch history menus remain available ([#143](https://github.com/tmad4000/paseo/pull/143))
+- Workspace rows show open-tab counts for one tab as well as larger workspaces, including inactive tabs ([#143](https://github.com/tmad4000/paseo/pull/143))
+- Agents can describe other chats in their workspace, including focus summaries and open asks ([#140](https://github.com/tmad4000/paseo/pull/140))
+
+### Fixed
+
+- Editing a queued message holds delivery while the edit is open and preserves detached drafts if the original message is sent or removed ([#138](https://github.com/tmad4000/paseo/pull/138))
+- Large receipt scans no longer exhaust file descriptors and prevent agent or git-command launches ([#139](https://github.com/tmad4000/paseo/pull/139))
+
 ## 0.10.0-beta.20 - 2026-10-27
 
 ### Added

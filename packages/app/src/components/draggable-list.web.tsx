@@ -197,6 +197,7 @@ export function DraggableList<T>({
   ListHeaderComponent,
   ListEmptyComponent,
   showsVerticalScrollIndicator = true,
+  keyboardShouldPersistTaps,
   scrollEnabled = true,
   extraData: _extraData,
   useDragHandle = false,
@@ -245,6 +246,7 @@ export function DraggableList<T>({
           style={style}
           contentContainerStyle={contentContainerStyle}
           showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+          keyboardShouldPersistTaps={keyboardShouldPersistTaps}
         >
           {ListHeaderComponent}
           {items.length === 0 && ListEmptyComponent}

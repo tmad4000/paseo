@@ -43,6 +43,21 @@ const MOCK_LOAD_TEST_INTERVAL_MS = 40;
 function getPositiveFeatureInteger(value: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
 }
+
+interface MockShellToolCall {
+  command: string;
+  output: string;
+}
+
+/** `mockShellToolCalls`: completed shell calls a settled turn emits before its reply. */
+function getMockShellToolCalls(value: unknown): MockShellToolCall[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: unknown) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const { command, output } = entry as Record<string, unknown>;
+    return typeof command === "string" && typeof output === "string" ? [{ command, output }] : [];
+  });
+}
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4Kj8AAAAASUVORK5CYII=";
 
@@ -740,6 +755,7 @@ export class MockLoadTestAgentSession implements AgentSession {
   private modeId: string | null;
   private modelId: string | null;
   private readonly assistantResponse: string | null;
+  private readonly shellToolCalls: MockShellToolCall[];
   private readonly streamingAssistantResponse: string | null;
   private readonly streamingAssistantIntervalMs: number;
   private readonly rewindError: string | null;
@@ -755,6 +771,7 @@ export class MockLoadTestAgentSession implements AgentSession {
       typeof options.config.featureValues?.mockAssistantResponse === "string"
         ? options.config.featureValues.mockAssistantResponse
         : null;
+    this.shellToolCalls = getMockShellToolCalls(options.config.featureValues?.mockShellToolCalls);
     this.streamingAssistantResponse =
       typeof options.config.featureValues?.mockStreamingAssistantResponse === "string"
         ? options.config.featureValues.mockStreamingAssistantResponse
@@ -1263,6 +1280,17 @@ export class MockLoadTestAgentSession implements AgentSession {
     this.clearTurnTimer(turn);
     this.emitTurnStarted(turn);
 
+    this.shellToolCalls.forEach((call, index) => {
+      this.emitTimeline(
+        turn.turnId,
+        createToolCall({
+          callId: `${turn.turnId}:mock-shell:${index}`,
+          name: "Bash",
+          status: "completed",
+          detail: { type: "shell", command: call.command, output: call.output, exitCode: 0 },
+        }),
+      );
+    });
     this.emitTimeline(turn.turnId, {
       type: "assistant_message",
       text: finalText,

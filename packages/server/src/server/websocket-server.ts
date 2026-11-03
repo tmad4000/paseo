@@ -1998,10 +1998,18 @@ export class VoiceAssistantWebSocketServer {
         streamTags: true,
         // COMPAT(streamAnswers): fork feature; remove gate after 2027-04-26.
         streamAnswers: true,
+        // COMPAT(streamOpenAsks): fork feature; remove gate after 2027-04-29.
+        streamOpenAsks: true,
+        // COMPAT(streamDefer): fork feature; remove gate after 2027-05-01.
+        streamDefer: true,
         // COMPAT(streamWorkflow): added 2026-10-27; remove gate after 2027-04-27.
         streamWorkflow: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
+        // COMPAT(agentRestart): fork feature. Remove gate after 2027-05-01.
+        agentRestart: true,
+        // COMPAT(queueDrain): fork feature. Remove gate after 2027-05-01.
+        queueDrain: this.agentQueueService !== null,
         // COMPAT(queueEditHold): added 2026-10-27; remove gate after 2027-04-27.
         queueEditHold: this.agentQueueService !== null,
         steerOnly: true,

@@ -529,10 +529,11 @@ function ProjectOptionItem({
     () => (
       <ProjectPickerPinToggle
         hosts={pinHosts}
+        projectName={label}
         testID={`new-workspace-project-picker-pin-${projectViewKey}`}
       />
     ),
-    [pinHosts, projectViewKey],
+    [pinHosts, projectViewKey, label],
   );
   const placeholderLabel = projectIconPlaceholderLabelFromDisplayName(label);
   const placeholderInitial = placeholderLabel.charAt(0).toUpperCase() || "?";
@@ -659,10 +660,9 @@ function NewWorkspaceProjectPickerOption({
       pinHosts={project.hosts}
     />
   );
-  if (!sectionStart) return item;
   return (
     <View>
-      <ProjectPickerSectionHeader section={sectionStart} />
+      {sectionStart ? <ProjectPickerSectionHeader section={sectionStart} /> : null}
       {item}
     </View>
   );
