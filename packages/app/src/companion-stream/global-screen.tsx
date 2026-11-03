@@ -45,6 +45,9 @@ import { useStreamReturnStore, type StreamPlace } from "./stream-return";
 import { useToast } from "@/contexts/toast-context";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { splitLater } from "./needs-you-later";
+import { DelegatedChatsList } from "./delegated-chats";
+import type { DelegationTarget } from "./delegation-pulse";
+import { useDelegatedChildren } from "./use-delegation-pulse";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -68,6 +71,19 @@ export interface WorkflowLocalContext extends WorkflowScope {
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
   onReturnToChat: () => void;
   onReplyInChat: () => void;
+}
+
+function openDelegatedChat(target: DelegationTarget) {
+  navigateToAgent({ serverId: target.serverId, agentId: target.agentId });
+}
+
+/**
+ * This chat's delegated work that no ask tracks, above its Activity and Tasks: the delegating
+ * chat keeps sight of every child it started, live, with a link over to each one.
+ */
+function ScopedDelegatedChats({ scope }: { scope: WorkflowScope }) {
+  const items = useDelegatedChildren(scope.serverId, scope.agentId, true);
+  return <DelegatedChatsList items={items} onOpen={openDelegatedChat} first showHint />;
 }
 
 /** Global and local views query the same canonical rows. Scope never owns another task store. */
@@ -306,6 +322,9 @@ export function StreamWorkflowFeed({
             onTogglePin={tagFilter.setPinned}
             error={tagFilter.error}
           />
+        ) : null}
+        {scope && local && (view === "activity" || view === "tasks") ? (
+          <ScopedDelegatedChats scope={scope} />
         ) : null}
         {scope ? (
           <WorkflowComposer

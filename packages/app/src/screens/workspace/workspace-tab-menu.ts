@@ -41,24 +41,33 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   findInChat: i18n.t("workspace.tabs.menu.findInChat", { defaultValue: "Find in chat" }),
 };
 
+export type WorkspaceTabMenuIcon =
+  | "app-window"
+  | "archive"
+  | "arrow-left-to-line"
+  | "arrow-right-to-line"
+  | "circle"
+  | "circle-check"
+  | "copy"
+  | "copy-x"
+  | "file-code-2"
+  | "layout-panel-left"
+  | "list-ordered"
+  | "pencil"
+  | "refresh-ccw-dot"
+  | "rotate-cw"
+  | "search"
+  | "send"
+  | "square"
+  | "trash-2"
+  | "x";
+
 export type WorkspaceTabMenuEntry =
   | {
       kind: "item";
       key: string;
       label: string;
-      icon?:
-        | "copy"
-        | "rotate-cw"
-        | "arrow-left-to-line"
-        | "arrow-right-to-line"
-        | "copy-x"
-        | "pencil"
-        | "x"
-        | "file-code-2"
-        | "search"
-        | "layout-panel-left"
-        | "circle"
-        | "circle-check";
+      icon?: WorkspaceTabMenuIcon;
       hint?: string;
       tooltip?: string;
       disabled?: boolean;

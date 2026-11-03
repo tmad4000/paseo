@@ -184,6 +184,7 @@ export class VoiceSession {
   private realtime: OpenAiRealtime | null = null;
   private readonly realtimeHome?: string;
   private voiceProvider: "paseo" | "openai-realtime" = "paseo";
+  private lastPlaybackErrorResponseId: string | null = null;
   private readonly realtimeAudioDurations = new Map<
     string,
     { responseId: string; duration: number }
@@ -1606,6 +1607,14 @@ export class VoiceSession {
     if (chunk) {
       this.realtimeAudioDurations.delete(id);
       if (!error) this.realtime?.acknowledgeAudio(chunk.responseId, chunk.duration);
+      else if (this.lastPlaybackErrorResponseId !== chunk.responseId) {
+        // Once per response: the client cannot play GPT Realtime audio, so the user hears nothing.
+        this.lastPlaybackErrorResponseId = chunk.responseId;
+        this.sessionLogger.warn(
+          { agentId: this.voiceModeAgentId, responseId: chunk.responseId, chunkId: id, error },
+          "Client could not play realtime voice audio",
+        );
+      }
       return;
     }
     this.ttsManager.confirmAudioPlayed(id, error);

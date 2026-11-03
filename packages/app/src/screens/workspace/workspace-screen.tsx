@@ -47,6 +47,7 @@ import { SplitContainer } from "@/components/split-container";
 import { RetainedPanel } from "@/components/retained-panel";
 import { WorkspaceActions } from "@/git/workspace-actions";
 import { WorkspaceOpenInEditorButton } from "@/workspace/open-in-editor/button";
+import { useAgentTabControlMenuEntries } from "@/screens/workspace/use-agent-tab-control-menu-entries";
 import { WorkspaceScriptsButton } from "@/screens/workspace/workspace-scripts-button";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useNavigateToImportedAgent } from "@/hooks/use-import-session";
@@ -619,7 +620,12 @@ function MobileWorkspaceTabOption({
     agentId: tab.target.kind === "agent" ? tab.target.agentId : null,
     unread,
   });
-  const menuEntries = buildWorkspaceTabMenuEntries({
+  const agentControlEntries = useAgentTabControlMenuEntries({
+    tab,
+    serverId: normalizedServerId,
+    menuTestIDBase,
+  });
+  const baseMenuEntries = buildWorkspaceTabMenuEntries({
     surface: "mobile",
     tab,
     index: tabIndex,
@@ -639,6 +645,13 @@ function MobileWorkspaceTabOption({
     onFindInChat,
     labels: tabMenuLabels,
   });
+  const menuEntries = useMemo(
+    () =>
+      agentControlEntries.length === 0
+        ? baseMenuEntries
+        : [...agentControlEntries, ...baseMenuEntries],
+    [agentControlEntries, baseMenuEntries],
+  );
 
   const fallbackLabels = useMemo(
     () => ({

@@ -144,12 +144,20 @@ function blockedAskKey(item: OpenAsk): string | null {
   return item.state === "blocked" ? `blocked:${item.entry.id}` : null;
 }
 
-/** Identifies what the pane showed when minimized, so later answers and blocks stand out. */
+/**
+ * Identifies what the pane showed when minimized, so later answers, blocks, and
+ * `attentionKeys` (delegated children that newly need the delegator) stand out.
+ */
 export function answersPaneSignature(
   answers: readonly TrackedAnswer[],
   asks: readonly OpenAsk[],
+  attentionKeys: readonly string[] = [],
 ): string {
-  return [trackedAnswersSignature(answers), ...asks.flatMap((item) => blockedAskKey(item) ?? [])]
+  return [
+    trackedAnswersSignature(answers),
+    ...asks.flatMap((item) => blockedAskKey(item) ?? []),
+    ...attentionKeys,
+  ]
     .filter(Boolean)
     .sort()
     .join("|");
@@ -160,10 +168,12 @@ export function hasUnhiddenPaneItems(
   answers: readonly TrackedAnswer[],
   asks: readonly OpenAsk[],
   hidden: string | null,
+  attentionKeys: readonly string[] = [],
 ): boolean {
   if (hidden === null) return true;
   if (hasUnhiddenAnswers(answers, hidden)) return true;
   const hiddenKeys = new Set(hidden.split("|"));
+  if (attentionKeys.some((key) => !hiddenKeys.has(key))) return true;
   return asks.some((item) => {
     const key = blockedAskKey(item);
     return key !== null && !hiddenKeys.has(key);
