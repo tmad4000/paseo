@@ -53,8 +53,10 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     },
   },
   window: {
-    openNew: (options?: { pendingOpenProjectPath?: string | null }) =>
-      ipcRenderer.invoke("paseo:window:openNew", options),
+    openNew: (options?: {
+      pendingOpenProjectPath?: string | null;
+      agent?: { serverId: string; agentId: string } | null;
+    }) => ipcRenderer.invoke("paseo:window:openNew", options),
     getCurrentWindow: () => ({
       minimize: () => ipcRenderer.invoke("paseo:window:minimize"),
       close: () => ipcRenderer.invoke("paseo:window:close"),

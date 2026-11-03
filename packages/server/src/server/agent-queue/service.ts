@@ -64,6 +64,26 @@ const MAX_INSPECTED_RECEIPTS = 50;
  */
 export const QUEUE_EDIT_HOLD_TTL_MS = 60_000;
 
+/**
+ * What Restart agent did about a head item whose delivery receipt was stuck in
+ * `pending` (its sender is gone, so the queue would never drain it again).
+ * `delivered`: the agent's timeline already holds the message, so it was
+ * dropped from the queue and recorded as drained. `resend`: no trace of it, so
+ * the receipt was cleared and the drain sends it again — a possible duplicate
+ * is preferred over a lost message.
+ */
+export interface StalledHeadRecovery {
+  itemId: string;
+  outcome: "delivered" | "resend";
+}
+
+export interface AgentQueueClearResult {
+  queue: AgentQueueSnapshot;
+  removed: number;
+  /** Items that could not be removed because they were already being submitted. */
+  kept: number;
+}
+
 interface EditHold {
   itemId: string;
   expiresAt: number;
@@ -611,6 +631,82 @@ export class AgentQueueService {
     this.editHolds.delete(agentId);
     this.lastLifecycle.delete(agentId);
     this.lastPermissionCount.delete(agentId);
+  }
+
+  /**
+   * Explicit "deliver now": drains the queue head if the agent is free, without
+   * waiting for a running → idle edge. Nothing drains at daemon startup, and a
+   * queue left behind by a restart otherwise waits forever on an idle agent.
+   * Resolves once this drain attempt settles; later items keep draining on the
+   * normal idle edges, one per turn, in order.
+   */
+  async drainNow(agentId: string): Promise<AgentQueueSnapshot> {
+    this.scheduleDrain(agentId);
+    await this.drainTails.get(agentId);
+    return this.list(agentId);
+  }
+
+  /**
+   * Clears a stuck head receipt so the queue can move again. Only Restart agent
+   * calls this: it is the user's explicit statement that the previous dispatch
+   * is dead. `isDelivered` checks the agent's timeline for the message id.
+   * Returns null when the head was not stalled (no receipt, or still sending).
+   */
+  async recoverStalledHead(
+    agentId: string,
+    isDelivered: (item: StoredQueuedMessage) => boolean,
+  ): Promise<StalledHeadRecovery | null> {
+    const receipts = this.receipts;
+    if (!receipts) return null;
+    const head = (await this.store.get(agentId)).items[0];
+    if (!head) return null;
+    if (this.sendNowClaims.has(`${agentId}\0${head.id}`)) return null;
+    if ((await receipts.get(agentId, head.id)) !== "pending") return null;
+
+    const delivered = isDelivered(head);
+    const settled = await receipts.settleStalePending(
+      agentId,
+      head.id,
+      delivered ? "completed" : "absent",
+    );
+    if (!settled) return null;
+    if (delivered) {
+      const drained = await this.store.mutate(agentId, (current) =>
+        current.items.some((item) => item.id === head.id)
+          ? {
+              ...current,
+              items: current.items.filter((item) => item.id !== head.id),
+              drainedIds: recordDrainedId(current.drainedIds, head.id),
+            }
+          : current,
+      );
+      this.publish(drained);
+    }
+    this.logger.info(
+      { agentId, itemId: head.id, outcome: delivered ? "delivered" : "resend" },
+      "Recovered stalled queue head",
+    );
+    return { itemId: head.id, outcome: delivered ? "delivered" : "resend" };
+  }
+
+  /** Removes every queued item through the normal remove path; claimed items stay. */
+  async clear(agentId: string): Promise<AgentQueueClearResult> {
+    const items = (await this.store.get(agentId)).items;
+    let removed = 0;
+    let kept = 0;
+    for (const item of items) {
+      try {
+        await this.remove(agentId, item.id);
+        removed++;
+      } catch (error) {
+        kept++;
+        this.logger.info(
+          { err: error, agentId, itemId: item.id },
+          "Queue clear kept an item that is being submitted",
+        );
+      }
+    }
+    return { queue: await this.list(agentId), removed, kept };
   }
 
   private handleAgentState(agentId: string, lifecycle: AgentLifecycleStatus): void {
