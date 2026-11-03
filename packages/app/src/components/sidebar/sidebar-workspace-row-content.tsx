@@ -1,6 +1,8 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
 import { Text, View, type BlurEvent, type FocusEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
 import { isWeb } from "@/constants/platform";
@@ -181,22 +183,35 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     <View style={styles.workspaceRowContent}>
       <View style={styles.workspaceRowMain}>
         {leadingProjectName ? (
-          <ProjectStatusIndicator
-            iconDataUri={leadingProjectIconDataUri}
-            displayName={leadingProjectName}
-            projectViewKey={workspace.projectViewKey}
-            statusBucket={workspace.statusBucket}
-            backdrop={backdrop}
-            loading={isLoading}
-            testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
-          />
-        ) : (
-          <WorkspaceStatusIndicator
+          <WorkspaceStatusTooltip
             bucket={workspace.statusBucket}
-            workspaceKind={workspace.workspaceKind}
             loading={isLoading}
-            reserveIdleSpace={reserveIdleStatusIndicatorSpace}
-          />
+            // The project icon carries no badge when idle, so there is no status to explain.
+            showIdle={false}
+          >
+            <ProjectStatusIndicator
+              iconDataUri={leadingProjectIconDataUri}
+              displayName={leadingProjectName}
+              projectViewKey={workspace.projectViewKey}
+              statusBucket={workspace.statusBucket}
+              backdrop={backdrop}
+              loading={isLoading}
+              testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
+            />
+          </WorkspaceStatusTooltip>
+        ) : (
+          <WorkspaceStatusTooltip
+            bucket={workspace.statusBucket}
+            loading={isLoading}
+            showIdle={reserveIdleStatusIndicatorSpace}
+          >
+            <WorkspaceStatusIndicator
+              bucket={workspace.statusBucket}
+              workspaceKind={workspace.workspaceKind}
+              loading={isLoading}
+              reserveIdleSpace={reserveIdleStatusIndicatorSpace}
+            />
+          </WorkspaceStatusTooltip>
         )}
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
@@ -226,6 +241,44 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     </View>
   );
 });
+
+type StatusTooltipKey = SidebarStateBucket | "loading";
+
+/** Every leading status mark explains itself on hover: a bare dot or ring says nothing alone. */
+function WorkspaceStatusTooltip({
+  bucket,
+  loading,
+  showIdle,
+  children,
+}: {
+  bucket: SidebarStateBucket | null;
+  loading: boolean;
+  /** Idle rows only get a tooltip where they actually draw an idle mark. */
+  showIdle: boolean;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const key: StatusTooltipKey | null = loading ? "loading" : bucket;
+  if (key === null || (key === "done" && !showIdle)) return children;
+  const labels: Record<StatusTooltipKey, string> = {
+    loading: t("sidebar.workspace.status.indicator.loading"),
+    running: t("sidebar.workspace.status.indicator.running"),
+    needs_input: t("sidebar.workspace.status.indicator.needs_input"),
+    attention: t("sidebar.workspace.status.indicator.attention"),
+    failed: t("sidebar.workspace.status.indicator.failed"),
+    done: t("sidebar.workspace.status.indicator.done"),
+  };
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <View collapsable={false}>{children}</View>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="center" offset={6}>
+        <Text style={styles.statusTooltipText}>{labels[key]}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function WorkspaceStatusIndicator({
   bucket,
@@ -518,6 +571,10 @@ export function SidebarWorkspaceTrailingActionOverlay({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  statusTooltipText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.popoverForeground,
+  },
   workspaceRowContent: {
     position: "relative",
   },

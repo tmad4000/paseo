@@ -35,7 +35,10 @@ export function useWorkspaceTabCount(workspaceKey: string | null): number {
   );
 }
 
-/** The stacked-tabs mark and number; null when the workspace has no open tabs. */
+/**
+ * The stacked-tabs mark and number. Null at zero or one tab: a lone tab is the default state, so
+ * counting it is noise. The badge only earns its space once a workspace holds several.
+ */
 export function WorkspaceTabCountBadge({
   count,
   withTooltip = true,
@@ -47,7 +50,7 @@ export function WorkspaceTabCountBadge({
   testID?: string;
 }) {
   const { t } = useTranslation();
-  if (count === 0) return null;
+  if (count <= 1) return null;
   const label = t("sidebar.openTabs", { count });
   const badge = (
     <View style={styles.badge} accessible accessibilityLabel={label} accessibilityRole="text">

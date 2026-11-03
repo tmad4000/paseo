@@ -1893,6 +1893,14 @@ export const ru: TranslationResources = {
       status: {
         serviceRunning: "Сервис {{name}} запущен",
         serviceUnhealthy: "Сервис {{name}} работает некорректно",
+        indicator: {
+          loading: "Запуск",
+          running: "Работает: агент выполняется",
+          needs_input: "Нужны вы: агент ждёт разрешения или ответа",
+          attention: "Готово: есть непрочитанный результат",
+          failed: "Ошибка: агент остановился с ошибкой",
+          done: "Простой: ничего нового",
+        },
         creating: "Создание...",
       },
       checks: {
@@ -1906,6 +1914,8 @@ export const ru: TranslationResources = {
       actions: {
         markAsRead: "Отметить как прочитанное",
         markAsReadNamed: "Отметить «{{name}}» как прочитанное",
+        markAsReadHint:
+          "Отметить как прочитанное: убирает индикатор завершения/ошибки этого рабочего пространства",
         menu: "Действия рабочего пространства",
         newWorkspace: "Новое рабочее пространство",
         showMore: "Показать ещё",

@@ -1882,6 +1882,14 @@ export const ko: TranslationResources = {
       status: {
         serviceRunning: "서비스 {{name}} 실행 중",
         serviceUnhealthy: "서비스 {{name}} 비정상",
+        indicator: {
+          loading: "시작 중",
+          running: "작업 중: 에이전트가 실행 중입니다",
+          needs_input: "확인 필요: 에이전트가 권한이나 답변을 기다리고 있습니다",
+          attention: "완료: 읽지 않은 새 출력이 있습니다",
+          failed: "오류: 에이전트가 오류로 중지되었습니다",
+          done: "유휴: 새 소식 없음",
+        },
         creating: "생성하는 중...",
       },
       checks: {
@@ -1895,6 +1903,7 @@ export const ko: TranslationResources = {
       actions: {
         markAsRead: "읽음으로 표시",
         markAsReadNamed: "{{name}} 읽음으로 표시",
+        markAsReadHint: "읽음으로 표시: 이 워크스페이스의 완료/오류 표시를 지웁니다",
         menu: "워크스페이스 작업",
         newWorkspace: "새 워크스페이스",
         showMore: "더 보기",

@@ -1915,6 +1915,14 @@ export const fr: TranslationResources = {
       status: {
         serviceRunning: "Service {{name}} en cours",
         serviceUnhealthy: "Service {{name}} en échec",
+        indicator: {
+          loading: "Démarrage",
+          running: "En cours : un agent s’exécute",
+          needs_input: "Vous attend : un agent attend une autorisation ou une réponse",
+          attention: "Terminé : nouveaux résultats non lus",
+          failed: "Erreur : un agent s’est arrêté sur une erreur",
+          done: "Inactif : rien de nouveau",
+        },
         creating: "Création...",
       },
       checks: {
@@ -1928,6 +1936,8 @@ export const fr: TranslationResources = {
       actions: {
         markAsRead: "Marquer comme lu",
         markAsReadNamed: "Marquer {{name}} comme lu",
+        markAsReadHint:
+          "Marquer comme lu : efface l’indicateur terminé/erreur de cet espace de travail",
         menu: "ActionsWorkspace",
         newWorkspace: "Nouvel espace de travail",
         showMore: "Afficher plus",

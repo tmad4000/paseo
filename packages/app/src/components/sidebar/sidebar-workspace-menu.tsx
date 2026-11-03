@@ -2,7 +2,7 @@ import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/
 import type { ManualStatusTarget } from "@/agent-status/model";
 import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, type PressableStateCallbackType } from "react-native";
+import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   Archive,
@@ -38,6 +38,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { workspaceLastActiveAt } from "@/components/sidebar/workspace-trailing";
 import { formatMessageTimestamp } from "@/utils/time";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
@@ -107,17 +108,27 @@ export function SidebarWorkspaceMarkReadButton({
   // Touch has no hover to aim with, so the check gets a full 44pt target (32pt box + slop).
   const isTouch = isNative || isCompact;
   return (
-    <Pressable
-      hitSlop={isTouch ? 6 : 4}
-      style={isTouch ? markReadTouchStyle : markReadStyle}
-      // The row is itself a button on web, and a <button> cannot nest inside another.
-      accessibilityRole={isWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name })}
-      onPress={onMarkAsRead}
-      testID={`sidebar-workspace-mark-as-read-${workspace.workspaceKey}`}
-    >
-      {renderMarkReadIcon}
-    </Pressable>
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <View collapsable={false}>
+          <Pressable
+            hitSlop={isTouch ? 6 : 4}
+            style={isTouch ? markReadTouchStyle : markReadStyle}
+            // The row is itself a button on web, and a <button> cannot nest inside another.
+            accessibilityRole={isWeb ? undefined : "button"}
+            accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name })}
+            accessibilityHint={t("sidebar.workspace.actions.markAsReadHint")}
+            onPress={onMarkAsRead}
+            testID={`sidebar-workspace-mark-as-read-${workspace.workspaceKey}`}
+          >
+            {renderMarkReadIcon}
+          </Pressable>
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={6}>
+        <Text style={styles.tooltipText}>{t("sidebar.workspace.actions.markAsReadHint")}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -372,15 +383,24 @@ export function SidebarWorkspaceMenu({
   const pages = useMemo(() => [...labelPages, ...statusPages], [labelPages, statusPages]);
   return (
     <DropdownMenu compactMode="sheet" open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger
-        hitSlop={8}
-        style={triggerStyle}
-        accessibilityRole={isWeb ? undefined : "button"}
-        accessibilityLabel={t("sidebar.workspace.actions.menu")}
-        testID={`sidebar-workspace-kebab-${workspaceKey}`}
-      >
-        {renderTriggerIcon}
-      </DropdownMenuTrigger>
+      <Tooltip delayDuration={300} enabledOnDesktop={!open}>
+        <TooltipTrigger asChild>
+          <View collapsable={false}>
+            <DropdownMenuTrigger
+              hitSlop={8}
+              style={triggerStyle}
+              accessibilityRole={isWeb ? undefined : "button"}
+              accessibilityLabel={t("sidebar.workspace.actions.menu")}
+              testID={`sidebar-workspace-kebab-${workspaceKey}`}
+            >
+              {renderTriggerIcon}
+            </DropdownMenuTrigger>
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center" offset={6}>
+          <Text style={styles.tooltipText}>{t("sidebar.workspace.actions.menu")}</Text>
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent
         align="end"
         width={260}
@@ -555,6 +575,10 @@ function markReadTouchStyle({ pressed }: PressableStateCallbackType) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  tooltipText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.popoverForeground,
+  },
   trigger: {
     padding: 2,
     borderRadius: 4,
