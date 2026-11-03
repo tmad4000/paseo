@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0-beta.23 - 2026-11-02
+
+### Added
+
+- Links track and Peek: every URL in a chat is collected in one place and previewed in place ([#154](https://github.com/tmad4000/paseo/pull/154))
+- Reply quotes a message into the same chat; Pin becomes Save to Stream ([#153](https://github.com/tmad4000/paseo/pull/153))
+- Sessions show their start date, with a new Date started sort ([#155](https://github.com/tmad4000/paseo/pull/155))
+- The Questions and asks pane separates items by session ([#158](https://github.com/tmad4000/paseo/pull/158))
+- Stream: Show in chat jumps to the source message; Reply in chat quotes it and focuses the composer ([#157](https://github.com/tmad4000/paseo/pull/157))
+- Needs you: compact cards, a Later section that resurfaces when the agent asks again, inline reply to an agent's question, and a chip to return to Needs you from a chat ([#159](https://github.com/tmad4000/paseo/pull/159))
+
+### Fixed
+
+- The Questions and asks pane minimizes to a small count pill at the edge instead of hiding with no way back; tap the pill to reopen it ([#156](https://github.com/tmad4000/paseo/pull/156))
+- `paseo permit allow`/`deny` confirms with the daemon before reporting success ([#152](https://github.com/tmad4000/paseo/pull/152))
+
 ## 0.10.0-beta.22 - 2026-10-29
 
 ### Added

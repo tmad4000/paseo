@@ -1,5 +1,6 @@
 import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
+import { StreamReturnButton } from "@/companion-stream/stream-return";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -1467,6 +1468,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             capability can arrive after the first prompt has painted, and a band that
             appears then would shift every row (upstream's hydration specs pin that). */}
             <View style={viewSwitcherStyle} pointerEvents="box-none">
+              <StreamReturnButton serverId={serverId} agentId={agentId} />
               {showViewSwitcher ? (
                 <SegmentedControl
                   options={viewOptions}
