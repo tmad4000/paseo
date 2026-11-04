@@ -37,10 +37,20 @@ const gatedCiJobs = new Map([
 
 test("browser-consuming CI jobs use the supported Ubuntu runner", () => {
   const workflow = loadYaml(readFileSync(ciWorkflowPath, "utf8"));
-  for (const id of ["typecheck", "app-tests", "playwright-1", "playwright-2", "playwright-3", "playwright-4"]) {
+  for (const id of [
+    "typecheck",
+    "app-tests",
+    "playwright-1",
+    "playwright-2",
+    "playwright-3",
+    "playwright-4",
+  ]) {
     const job = workflow.jobs[id];
     assert.equal(job["runs-on"], "ubuntu-24.04", id);
-    assert.ok(job.steps.some((step) => step.run?.includes("playwright install")), id);
+    assert.ok(
+      job.steps.some((step) => step.run?.includes("playwright install")),
+      id,
+    );
   }
 });
 
