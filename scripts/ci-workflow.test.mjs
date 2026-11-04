@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { relative as relativePath } from "node:path";
+import { createRequire } from "node:module";
 import test from "node:test";
+
+const { load: loadYaml } = createRequire(import.meta.url)("js-yaml");
 
 const repoRoot = new URL("../", import.meta.url);
 const ciWorkflowPath = new URL(".github/workflows/ci.yml", repoRoot);
@@ -31,6 +34,15 @@ const gatedCiJobs = new Map([
   ["cli-tests-2", { name: "cli-tests (shard 2/3)", contract: "cli" }],
   ["cli-tests-3", { name: "cli-tests (shard 3/3)", contract: "cli" }],
 ]);
+
+test("browser-consuming CI jobs use the supported Ubuntu runner", () => {
+  const workflow = loadYaml(readFileSync(ciWorkflowPath, "utf8"));
+  for (const id of ["typecheck", "app-tests", "playwright-1", "playwright-2", "playwright-3", "playwright-4"]) {
+    const job = workflow.jobs[id];
+    assert.equal(job["runs-on"], "ubuntu-24.04", id);
+    assert.ok(job.steps.some((step) => step.run?.includes("playwright install")), id);
+  }
+});
 
 function jobBlocks(source) {
   const jobs = new Map();
