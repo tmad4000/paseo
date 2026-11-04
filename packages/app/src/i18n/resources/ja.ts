@@ -132,6 +132,11 @@ export const ja: TranslationResources = {
     noReplyYet: "先にスレッドの回答を待ってください。",
     parentUnavailable: "メインスレッドは利用できなくなりました。",
   },
+  sidebarSessions: {
+    actions: "{{title}} の操作",
+    archive: "セッションをアーカイブ",
+    open: "{{meta}} の {{title}} を開く",
+  },
   sessionPins: {
     title: "固定したセッション",
     pin: "セッションを固定",
@@ -335,6 +340,7 @@ export const ja: TranslationResources = {
       groupByStatus: "ステータスでグループ化",
       groupInOneList: "チャットを1つのリストで表示",
       showAllSessions: "すべてのセッションを表示",
+      groupAsSessions: "チャットをセッションとして表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
       thinkingGroupLabel: "思考",
@@ -1829,6 +1835,7 @@ export const ja: TranslationResources = {
         project: "プロジェクト",
         status: "ステータス",
         list: "1つのリスト",
+        sessions: "セッション",
         labels: "ラベル",
       },
       titleSource: {

@@ -22,6 +22,7 @@ import {
   GitPullRequest,
   Globe,
   List,
+  MessagesSquare,
   Server,
   Settings2,
   Tag,
@@ -92,6 +93,7 @@ const GROUPING_ICONS: Record<SidebarGroupMode, OptionIcon> = {
   project: withUnistyles(Folder),
   status: withUnistyles(CircleDashed),
   list: withUnistyles(List),
+  sessions: withUnistyles(MessagesSquare),
 };
 
 const TITLE_SOURCE_ICONS: Record<WorkspaceTitleSource, OptionIcon> = {
@@ -131,6 +133,7 @@ const GROUPING_LABEL_KEYS: Record<SidebarGroupMode, string> = {
   project: "sidebar.display.grouping.project",
   status: "sidebar.display.grouping.status",
   list: "sidebar.display.grouping.list",
+  sessions: "sidebar.display.grouping.sessions",
 };
 
 const TITLE_SOURCE_LABEL_KEYS: Record<WorkspaceTitleSource, string> = {

@@ -130,6 +130,11 @@ export const ko: TranslationResources = {
     noReplyYet: "먼저 스레드의 답변을 기다리세요.",
     parentUnavailable: "메인 스레드를 더 이상 사용할 수 없습니다.",
   },
+  sidebarSessions: {
+    actions: "{{title}} 작업",
+    archive: "세션 보관",
+    open: "{{meta}}에서 {{title}} 열기",
+  },
   sessionPins: {
     title: "고정된 세션",
     pin: "세션 고정",
@@ -332,6 +337,7 @@ export const ko: TranslationResources = {
       groupByStatus: "상태별 그룹화",
       groupInOneList: "채팅을 하나의 목록으로 표시",
       showAllSessions: "모든 세션 보기",
+      groupAsSessions: "채팅을 세션으로 표시",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -1823,6 +1829,7 @@ export const ko: TranslationResources = {
         project: "프로젝트",
         status: "상태",
         list: "하나의 목록",
+        sessions: "세션",
         labels: "레이블",
       },
       titleSource: {

@@ -130,6 +130,11 @@ export const ar: TranslationResources = {
     noReplyYet: "انتظر إجابة السلسلة أولاً.",
     parentUnavailable: "لم تعد المحادثة الرئيسية متاحة.",
   },
+  sidebarSessions: {
+    actions: "إجراءات {{title}}",
+    archive: "أرشفة الجلسة",
+    open: "فتح {{title}} في {{meta}}",
+  },
   sessionPins: {
     title: "الجلسات المثبتة",
     pin: "تثبيت الجلسة",
@@ -332,6 +337,7 @@ export const ar: TranslationResources = {
       groupByStatus: "تجميع حسب الحالة",
       groupInOneList: "عرض المحادثات في قائمة واحدة",
       showAllSessions: "إظهار كل الجلسات",
+      groupAsSessions: "عرض المحادثات كجلسات",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
       thinkingGroupLabel: "التفكير",
@@ -1812,6 +1818,7 @@ export const ar: TranslationResources = {
         project: "المشروع",
         status: "الحالة",
         list: "قائمة واحدة",
+        sessions: "الجلسات",
         labels: "التسميات",
       },
       titleSource: {

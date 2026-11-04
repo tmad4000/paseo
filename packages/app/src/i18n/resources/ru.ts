@@ -132,6 +132,11 @@ export const ru: TranslationResources = {
     noReplyYet: "Сначала дождитесь ответа в ветке.",
     parentUnavailable: "Основной чат больше недоступен.",
   },
+  sidebarSessions: {
+    actions: "Действия для {{title}}",
+    archive: "Архивировать сеанс",
+    open: "Открыть {{title}} в {{meta}}",
+  },
   sessionPins: {
     title: "Закреплённые сеансы",
     pin: "Закрепить сеанс",
@@ -335,6 +340,7 @@ export const ru: TranslationResources = {
       groupByStatus: "Группировать по статусу",
       groupInOneList: "Показывать чаты одним списком",
       showAllSessions: "Показать все сессии",
+      groupAsSessions: "Показывать чаты как сеансы",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -1833,6 +1839,7 @@ export const ru: TranslationResources = {
         project: "Проект",
         status: "Статус",
         list: "Один список",
+        sessions: "Сеансы",
         labels: "Метки",
       },
       titleSource: {
