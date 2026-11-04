@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { relative as relativePath } from "node:path";
-import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-
-const { load: loadYaml } = createRequire(import.meta.url)("js-yaml");
 
 const repoRoot = new URL("../", import.meta.url);
 const ciWorkflowPath = new URL(".github/workflows/ci.yml", repoRoot);
@@ -36,7 +35,16 @@ const gatedCiJobs = new Map([
 ]);
 
 test("browser-consuming CI jobs use the supported Ubuntu runner", () => {
-  const workflow = loadYaml(readFileSync(ciWorkflowPath, "utf8"));
+  // The changes job runs before npm install; Ruby and its YAML parser ship on the runner.
+  const workflow = JSON.parse(
+    execFileSync("ruby", [
+      "-rjson",
+      "-ryaml",
+      "-e",
+      "puts JSON.generate(YAML.safe_load_file(ARGV.fetch(0), aliases: true))",
+      fileURLToPath(ciWorkflowPath),
+    ]),
+  );
   for (const id of [
     "typecheck",
     "app-tests",
