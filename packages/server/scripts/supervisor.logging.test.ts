@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,7 +27,6 @@ async function runSupervisorFixture(options: {
   fileSizeLimitBlocks?: number;
   /** Occupy the log path with a directory so the supervisor cannot open daemon.log. */
   blockLogPath?: boolean;
-  workerUnresponsiveRestartMs?: number;
 }): Promise<{
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -35,7 +34,6 @@ async function runSupervisorFixture(options: {
   log: string;
   stdout: string;
   stderr: string;
-  diagnosticsFiles: string[];
 }> {
   const tempDir = await mkdtemp(path.join(tmpdir(), "paseo-supervisor-log-"));
   const logPath = path.join(tempDir, "daemon.log");
@@ -62,7 +60,6 @@ async function runSupervisorFixture(options: {
         workerEnv: process.env,
         workerExecArgv: [],
         restartOnCrash: ${JSON.stringify(options.restartOnCrash ?? false)},
-        workerUnresponsiveRestartMs: ${String(options.workerUnresponsiveRestartMs)},
         logFile: {
           path: ${JSON.stringify(logPath)},
           rotate: { maxSize: "1m", maxFiles: 2 },
@@ -120,8 +117,7 @@ async function runSupervisorFixture(options: {
   });
 
   const log = await readFile(logPath, "utf8");
-  const diagnosticsFiles = await readdir(path.join(tempDir, "diagnostics")).catch(() => []);
-  return { code, signal, elapsedMs: Date.now() - startedAt, log, stdout, stderr, diagnosticsFiles };
+  return { code, signal, elapsedMs: Date.now() - startedAt, log, stdout, stderr };
 }
 
 describe("supervisor durable logging", () => {
@@ -270,9 +266,6 @@ describe("supervisor durable logging", () => {
   test("does not restart a worker based on heartbeat absence", async () => {
     const result = await runSupervisorFixture({
       timeoutMs: 20_000,
-      // A worker that never sends heartbeats (still bootstrapping, or an older worker)
-      // is never judged, even with a wedge threshold far below its silence.
-      workerUnresponsiveRestartMs: 2_000,
       workerSource: `
         import { existsSync, writeFileSync } from "node:fs";
 
@@ -299,98 +292,6 @@ describe("supervisor durable logging", () => {
     expect(result.log).not.toContain('"reason":"unexpected_silent_worker_restart"');
     expect(result.log).not.toContain('"msg":"Worker heartbeat timed out; restarting worker"');
   }, 25_000);
-
-  // A wedged worker: it was healthy and sending heartbeats, then its main thread blocks
-  // in the kernel forever (the M4 incidents froze inside a native lock wait). It ignores
-  // graceful shutdown and SIGTERM, so only the supervisor can recover it.
-  function wedgingWorkerSource(wedge: string): string {
-    return `
-      import { existsSync, writeFileSync } from "node:fs";
-
-      process.on("message", (message) => {
-        if (message?.type === "paseo:graceful-shutdown") process.exit(0);
-      });
-      const marker = process.argv[1] + ".started";
-      if (!existsSync(marker)) {
-        writeFileSync(marker, "started");
-        setInterval(() => process.send?.({ type: "paseo:worker-heartbeat" }), 200);
-        setTimeout(() => { ${wedge} }, 1_000);
-      } else {
-        process.send?.({ type: "paseo:shutdown", reason: "replacement_worker_started" });
-        setInterval(() => {}, 1_000);
-      }
-    `;
-  }
-
-  test("restarts a worker whose event loop is permanently wedged", async () => {
-    const result = await runSupervisorFixture({
-      timeoutMs: 30_000,
-      workerUnresponsiveRestartMs: 2_000,
-      workerSource: wedgingWorkerSource(
-        "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);",
-      ),
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.log).toContain('"msg":"Worker unresponsive; restarting wedged worker"');
-    expect(result.log).toContain(
-      '"msg":"Worker did not exit after graceful shutdown request; forcing process tree kill"',
-    );
-    expect(result.log).toContain('"msg":"Wedged worker diagnostics"');
-    expect(result.log).toContain('"reason":"replacement_worker_started"');
-  }, 35_000);
-
-  test.skipIf(isPlatform("win32"))(
-    "restarts a stopped worker and records that it was stopped",
-    async () => {
-      const result = await runSupervisorFixture({
-        timeoutMs: 30_000,
-        workerUnresponsiveRestartMs: 2_000,
-        workerSource: wedgingWorkerSource('process.kill(process.pid, "SIGSTOP");'),
-      });
-
-      expect(result.code).toBe(0);
-      expect(result.log).toContain('"msg":"Worker unresponsive; restarting wedged worker"');
-      expect(result.log).toContain('"reason":"replacement_worker_started"');
-      const diagnostics = result.log
-        .split("\n")
-        .filter((line) => line.includes('"msg":"Wedged worker diagnostics"'))
-        .map((line) => JSON.parse(line) as { workerProcessState?: string });
-      expect(diagnostics).toHaveLength(1);
-      // ps STAT column: T = stopped.
-      expect(diagnostics[0]?.workerProcessState?.split(/\s+/)[2]).toMatch(/^T/);
-      if (isPlatform("darwin")) {
-        expect
-          .soft(result.diagnosticsFiles.some((file) => file.startsWith("worker-wedge-")))
-          .toBe(true);
-      }
-    },
-    35_000,
-  );
-
-  test("does not restart a heartbeating worker for a stall shorter than the threshold", async () => {
-    const result = await runSupervisorFixture({
-      timeoutMs: 15_000,
-      workerUnresponsiveRestartMs: 4_000,
-      workerSource: `
-        process.on("message", (message) => {
-          if (message?.type === "paseo:graceful-shutdown") process.exit(0);
-        });
-        setInterval(() => process.send?.({ type: "paseo:worker-heartbeat" }), 200);
-        setTimeout(() => {
-          const until = Date.now() + 2_500;
-          while (Date.now() < until) {}
-        }, 500);
-        setTimeout(() => {
-          process.send?.({ type: "paseo:shutdown", reason: "transient_stall_test_complete" });
-        }, 5_000);
-      `,
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.log).toContain('"reason":"transient_stall_test_complete"');
-    expect(result.log).not.toContain("Worker unresponsive");
-  }, 20_000);
 
   test("forces shutdown when a worker ignores the graceful shutdown request", async () => {
     const result = await runSupervisorFixture({
