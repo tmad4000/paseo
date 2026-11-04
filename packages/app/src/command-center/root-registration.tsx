@@ -15,6 +15,7 @@ import {
   PanelLeft,
   Plus,
   Settings,
+  UserRound,
   Zap,
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
@@ -42,7 +43,7 @@ import {
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
 import { useCommandCenterActions } from "./provider";
-import { buildGroupingContributions } from "./root-contributions";
+import { buildGroupingContributions, buildMineFilterContribution } from "./root-contributions";
 
 const ThemedPlus = withUnistyles(Plus, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
@@ -72,6 +73,9 @@ const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedPanelLeft = withUnistyles(PanelLeft, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedUserRound = withUnistyles(UserRound, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 
@@ -131,6 +135,10 @@ function PanelLeftIcon({ size }: CommandCenterIconProps) {
   return <ThemedPanelLeft size={size} strokeWidth={2.2} />;
 }
 
+function UserRoundIcon({ size }: CommandCenterIconProps) {
+  return <ThemedUserRound size={size} strokeWidth={2.2} />;
+}
+
 export function CommandCenterRootActions() {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
   const { t } = useTranslation();
@@ -147,6 +155,8 @@ export function CommandCenterRootActions() {
   // each time host filters are reconciled.
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const setGroupMode = useSidebarViewStore((state) => state.setGroupMode);
+  const mineOnly = useSidebarViewStore((state) => state.mineOnly);
+  const setMineOnly = useSidebarViewStore((state) => state.setMineOnly);
   const isCompact = useIsCompactFormFactor();
   const toggleMobileAgentList = usePanelStore((state) => state.toggleMobileAgentList);
   const toggleDesktopAgentList = usePanelStore((state) => state.toggleDesktopAgentList);
@@ -415,6 +425,16 @@ export function CommandCenterRootActions() {
         icons: { project: FolderIcon, status: CircleDashedIcon, list: ListIcon },
         setGroupMode,
       }),
+      buildMineFilterContribution({
+        mineOnly,
+        labels: {
+          section: t("shell.commandCenter.actions"),
+          showMine: t("sidebar.filterSidebar.mine.showMine"),
+          showAll: t("shell.commandCenter.showAllSessions"),
+        },
+        icon: UserRoundIcon,
+        setMineOnly,
+      }),
     );
 
     return availableActions;
@@ -422,12 +442,14 @@ export function CommandCenterRootActions() {
     groupMode,
     homeRoute,
     keyboardActionDispatcher,
+    mineOnly,
     openAddProject,
     openImportSession,
     overrides,
     schedulesRoute,
     sessionsRoute,
     setGroupMode,
+    setMineOnly,
     setShortcutsDialogOpen,
     settingsRoute,
     shortcutPlatform,

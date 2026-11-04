@@ -33,6 +33,8 @@ import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sideba
 import { SCRIM_WIDTH, TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import { WorkspaceTabCount } from "./workspace-tab-count";
+import { useSessionStore } from "@/stores/session-store";
+import { formatDelegatorName } from "@/utils/agent-ownership";
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const needsInputColorMapping = (theme: Theme) => ({
@@ -170,6 +172,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
+  const delegatedBy = useDelegatorName(workspace.serverId, workspace.delegatedByAgentId ?? null);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -229,6 +232,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             hostBadge={hostBadge ?? null}
             prHint={workspace.prHint}
             serviceSummary={serviceSummary}
+            delegatedBy={delegatedBy}
             labels={labels}
           />
         </View>
@@ -278,6 +282,14 @@ function WorkspaceStatusTooltip({
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/** The delegating agent's title from this host's directory, or its short id. */
+function useDelegatorName(serverId: string, delegatorId: string | null): string | null {
+  const delegatorTitle = useSessionStore((state) =>
+    delegatorId ? (state.sessions[serverId]?.agents.get(delegatorId)?.title ?? null) : null,
+  );
+  return delegatorId ? formatDelegatorName({ delegatorId, delegatorTitle }) : null;
 }
 
 function WorkspaceStatusIndicator({

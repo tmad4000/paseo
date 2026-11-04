@@ -207,3 +207,10 @@ A preview has no backdrop or focus trap, does not dismiss the keyboard, and expo
 surface ref to `useHoverSafeZone`. The surface keeps pointer events while the overlay passes
 through to the trigger. Escape closes it. Press/keyboard menus retain the normal modal defaults;
 compact sheets are unchanged. Use a plain View to track mouse movement and never open for touch.
+
+The New Tab (+) button uses the same preview for its split choices
+(`screens/workspace/new-tab-split-preview.tsx`). Because its click opens a different menu, the
+preview is a second, context-only menu around the button: hover, long-press and right-click open
+the split choices, and a press still opens New Tab. It attaches `useHoverSafeZone` only while the
+preview is open, since every pane renders a + button, and waits for the pointer to leave before
+offering again after a choice.

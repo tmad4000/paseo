@@ -327,6 +327,7 @@ export const en = {
       groupByProject: "Group by project",
       groupByStatus: "Group by status",
       groupInOneList: "Show chats in one list",
+      showAllSessions: "Show all sessions",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -1774,6 +1775,11 @@ export const en = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "Mine",
+        showMine: "Show only my sessions",
+        showAll: "Show all sessions ({{count}} hidden)",
+      },
       matches: {
         startChat: 'Start a chat with "{{query}}"',
         searchMessages: 'Search messages for "{{query}}"',
@@ -2607,6 +2613,7 @@ export const en = {
     backdrop: "Menu backdrop",
   },
   subagents: {
+    delegatedBy: "delegated by {{name}}",
     title: "Subagents",
     pillLabelOne: "1 subagent",
     pillLabelMany: "{{count}} subagents",

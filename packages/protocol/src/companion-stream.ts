@@ -25,8 +25,17 @@ export const TrackedAskInputSchema = z.object({
   sessions: z.array(StreamSessionSchema).max(100).optional(),
   /** Explicitly link an older duplicate to its canonical origin; never infer from matching text. */
   canonicalTask: StreamReferenceSchema.optional(),
-  state: z.enum(["open", "in_progress", "blocked", "done"]),
-  remaining: z.string().max(4000),
+  state: z
+    .enum(["open", "in_progress", "blocked", "done"])
+    .describe(
+      "open | in_progress | blocked (cannot continue; blocked asks reach the user's Needs you, remaining says why) | done",
+    ),
+  remaining: z
+    .string()
+    .max(4000)
+    .describe(
+      "What is left. When blocked, start with what you need from the user (the first line is the Needs you reason).",
+    ),
   evidence: z.string().max(4000),
   sourceMessageId: z.string().max(200).optional(),
   delegatedAgentId: z.string().max(200).optional(),
@@ -200,11 +209,46 @@ export function isCompanionEntryPending(entry: CompanionEntry): boolean {
 
 /** Human intervention only. A user's unanswered ask or unread result never belongs here. */
 export function needsUserInput(entry: CompanionEntry): boolean {
-  if (entry.ask || entry.kind === "q_and_a") return false;
+  if (entry.kind === "q_and_a") return false;
+  // COMPAT(streamBlockedAsks): a blocked ask waits on the user unless its blocker names someone
+  // else. Mirrors never count; the canonical origin does.
+  if (entry.ask) return isBlockedAskOnUser(entry);
   if (entry.kind === "permission") return entry.status === "pending";
   if (entry.kind !== "question" || entry.status === "done") return false;
   if (entry.inputRequest) return entry.inputRequest.recipient === "user";
   // Explicit legacy set_stream_question/manual inputs and expired provider questions only.
   // Prose-inferred outcome:<turn>:question candidates are not proven human obligations.
   return entry.id.startsWith("question:") || entry.id.startsWith("permission:");
+}
+
+/** A canonical tracked ask in state blocked whose blocker is the user (the default). */
+export function isBlockedAskOnUser(entry: CompanionEntry): boolean {
+  const ask = entry.ask;
+  if (!ask || ask.canonicalTask || ask.state !== "blocked") return false;
+  return (entry.inputRequest?.recipient ?? "user") === "user";
+}
+
+export const NeedsYouGroupSchema = z.enum(["blocked", "question", "permission"]);
+export type NeedsYouGroup = z.infer<typeof NeedsYouGroupSchema>;
+
+/** Which Needs you group an entry belongs to. Only meaningful when needsUserInput is true. */
+export function needsYouGroup(entry: CompanionEntry): NeedsYouGroup {
+  if (entry.ask) return "blocked";
+  if (entry.kind === "permission") return "permission";
+  return "question";
+}
+
+/** The ask's next action or blocker: the first non-empty line of its remaining work. */
+export function askBlockerReason(remaining: string): string {
+  return (
+    remaining
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
+  );
+}
+
+/** Stable key for a task reference, used to match a question's inputRequest.task to its ask. */
+export function streamReferenceKey(reference: StreamReference): string {
+  return JSON.stringify([reference.serverId, reference.agentId, reference.entryId]);
 }

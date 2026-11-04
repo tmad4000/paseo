@@ -688,6 +688,8 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     clientMessageId: z.string().optional(),
+    /** UserMessageSender: "human" | "schedule" | "agent:<id>". Absent on older daemons. */
+    sender: z.string().optional(),
   }),
   z.object({
     type: z.literal("assistant_message"),
@@ -831,6 +833,8 @@ const AgentActiveTurnPayloadSchema = z.object({
 export const AgentMessageActivitySchema = z.object({
   lastUserMessageAt: z.string().nullable(),
   lastAssistantMessageAt: z.string().nullable(),
+  /** Latest user turn sent by a person. Absent on daemons that predate sender tracking. */
+  lastHumanMessageAt: z.string().nullable().optional(),
 });
 
 export const AgentSnapshotPayloadSchema = z.object({
@@ -846,6 +850,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   updatedAt: z.string(),
   lastUserMessageAt: z.string().nullable(),
   messageActivity: AgentMessageActivitySchema.optional(),
+  /** UserMessageSender that created the agent. Absent on older daemons and legacy records. */
+  createdBy: z.string().optional(),
   status: AgentStatusSchema,
   activeTurn: AgentActiveTurnPayloadSchema.nullable().optional(),
   capabilities: AgentCapabilityFlagsSchema,
@@ -883,6 +889,8 @@ export const AgentListItemPayloadSchema = z.object({
   updatedAt: z.string(),
   lastUserMessageAt: z.string().nullable(),
   messageActivity: AgentMessageActivitySchema.optional(),
+  /** UserMessageSender that created the agent. Absent on older daemons and legacy records. */
+  createdBy: z.string().optional(),
   archivedAt: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
@@ -4584,6 +4592,8 @@ export const ServerInfoStatusPayloadSchema = z
         streamOpenAsks: z.boolean().optional(),
         // COMPAT(streamDefer): fork feature; Needs you items can be set aside for later.
         streamDefer: z.boolean().optional(),
+        // COMPAT(streamBlockedAsks): fork feature; blocked asks are in Needs you, which accepts group.
+        streamBlockedAsks: z.boolean().optional(),
         streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),

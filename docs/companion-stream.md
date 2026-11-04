@@ -246,7 +246,9 @@ On hosts with `streamWorkflow`, **Tasks** shows canonical tracked asks, **Q&A** 
 your questions, **Saved** shows pins and file references, and **Needs you** shows concrete
 input dependencies. The same records appear globally and in linked worker chats; local
 scope is a filter. Current tasks precede completed history. Older hosts retain Activity
-and Saved with an update notice for new views. **Load more** reads older pages.
+and Saved with an update notice for new views. A blocked ask is needed input: it appears in
+Needs you with the first line of `remaining` as its reason unless its blocker names someone
+else ([blocked asks](stream-workflow.md#blocked-asks-are-needed-input)). **Load more** reads older pages.
 See [shared workflow](stream-workflow.md) for identity, ownership and migration details.
 Refresh and reconnect reread durable records;
 offline pages remain readable with a stale-data notice. Cached data is not an offline archive.

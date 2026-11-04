@@ -142,4 +142,19 @@ describe("selectMetaRowItems", () => {
     const items = select({ prHint: { ...PR_HINT, checksStatus: undefined } });
     expect(kinds(items)).toEqual(["host", "changeRequest", "services", "labels"]);
   });
+
+  it("adds the delegated-by marker before labels, regardless of display toggles", () => {
+    const visible = {
+      ...DEFAULT_SIDEBAR_ROW_ITEMS,
+      changeRequest: false,
+      services: false,
+    };
+    const items = select({ visible, prHint: null, delegatedBy: "Planner" });
+    expect(kinds(items).slice(-2)).toEqual(["delegatedBy", "labels"]);
+    expect(items.find((item) => item.kind === "delegatedBy")).toEqual({
+      kind: "delegatedBy",
+      name: "Planner",
+    });
+    expect(kinds(select({ delegatedBy: null }))).not.toContain("delegatedBy");
+  });
 });

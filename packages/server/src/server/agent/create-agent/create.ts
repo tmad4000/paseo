@@ -27,6 +27,11 @@ import {
   emitLiveTimelineItemIfAgentKnown,
 } from "../timeline-append.js";
 import { resolveCreateAgentIntent } from "./intent.js";
+import {
+  agentSender,
+  HUMAN_SENDER,
+  type UserMessageSender,
+} from "@getpaseo/protocol/user-message-sender";
 
 export interface CreateAgentSessionWorktreeResult {
   sessionConfig: AgentSessionConfig;
@@ -58,6 +63,8 @@ export type EnsureWorkspaceForCreate = (
 
 export interface CreateAgentFromSessionInput {
   kind: "session";
+  /** Defaults to human: a session create comes from a Paseo client. */
+  createdBy?: UserMessageSender;
   onAgentReady?: (agent: ManagedAgent) => Promise<void>;
   agentId?: string;
   config: AgentSessionConfig;
@@ -83,6 +90,8 @@ export interface CreateAgentFromSessionInput {
 
 export interface CreateAgentFromMcpInput {
   kind: "mcp";
+  /** Defaults to the caller agent; absent for top-level MCP callers. */
+  createdBy?: UserMessageSender;
   provider: string;
   title: string;
   initialPrompt?: string;
@@ -184,6 +193,12 @@ export async function createAgentCommand(
       ? await resolveSessionCreateAgent(dependencies, input)
       : await resolveMcpCreateAgent(dependencies, input);
 
+  const createdBy = resolveCreateAgentSender(input);
+  if (createdBy) {
+    resolved.createOptions = { ...resolved.createOptions, createdBy };
+    resolved.runOptions = { ...resolved.runOptions, sender: createdBy };
+  }
+
   const snapshot = await dependencies.agentManager.createAgent(
     resolved.config,
     input.kind === "session" ? input.agentId : undefined,
@@ -229,6 +244,12 @@ export async function createAgentCommand(
     initialPromptError,
     ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
   };
+}
+
+function resolveCreateAgentSender(input: CreateAgentCommandInput): UserMessageSender | undefined {
+  if (input.createdBy) return input.createdBy;
+  if (input.kind === "session") return HUMAN_SENDER;
+  return input.callerAgentId ? agentSender(input.callerAgentId) : undefined;
 }
 
 async function resolveSessionCreateAgent(

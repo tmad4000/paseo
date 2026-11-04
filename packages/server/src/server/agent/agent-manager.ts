@@ -2,8 +2,14 @@ import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
   emptyMessageActivity,
+  seedLegacyHumanActivity,
   type MessageActivity,
 } from "./message-activity.js";
+import {
+  isHumanSender,
+  resolveAgentCreatedBy,
+  type UserMessageSender,
+} from "@getpaseo/protocol/user-message-sender";
 import { selectSessionSearchExcerpts, type SessionSearchExcerpt } from "../session-search.js";
 import { applyStreamEntryUpdate, assertStreamWriteAuthority } from "./stream-entry-update.js";
 import { attachCandidateReplies, hasCandidateWork } from "./stream-answers.js";
@@ -218,6 +224,20 @@ function formatProviderList(providers: readonly string[]): string {
   return providers.length > 0 ? providers.join(", ") : "none";
 }
 
+function resolveRecordCreatedBy(record: StoredAgentRecord): UserMessageSender {
+  return resolveAgentCreatedBy({
+    createdBy: record.createdBy,
+    parentAgentId: getParentAgentIdFromLabels(record.labels),
+  });
+}
+
+function resolveManagedAgentCreatedBy(agent: ManagedAgent): UserMessageSender {
+  return resolveAgentCreatedBy({
+    createdBy: agent.createdBy,
+    parentAgentId: getParentAgentIdFromLabels(agent.labels),
+  });
+}
+
 function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   const config: AgentSessionConfig = {
     provider: record.provider,
@@ -349,6 +369,8 @@ export interface CreateAgentOptions {
   owner?: AgentOwner;
   artifacts?: AgentArtifact[];
   companionEntries?: CompanionEntry[];
+  /** UserMessageSender that requested the agent. */
+  createdBy?: UserMessageSender;
 }
 
 export interface AgentManagerOptions {
@@ -489,6 +511,10 @@ interface ManagedAgentBase {
   historyPrimed: boolean;
   lastUserMessageAt: Date | null;
   messageActivity?: MessageActivity;
+  /** UserMessageSender that created this agent; absent on records that predate it. */
+  createdBy?: string;
+  /** Sender of the foreground turn in flight, applied to provider-echoed prompts. */
+  activeTurnSender?: UserMessageSender;
   assistantActivityTurnId?: string;
   activeTurnId: string | null;
   activeTurnStartedAt: Date | null;
@@ -1458,6 +1484,7 @@ export class AgentManager {
       artifacts: options.artifacts,
       historyPrimed: true,
       companionEntries: options.companionEntries,
+      ...(options.createdBy ? { createdBy: options.createdBy } : {}),
     });
     if (!agent.internal) {
       this.pluginLifecycle?.emit("agent.created", {
@@ -1486,6 +1513,7 @@ export class AgentManager {
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
       messageActivity?: MessageActivity;
+      createdBy?: string;
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
@@ -1521,6 +1549,7 @@ export class AgentManager {
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
       messageActivity?: MessageActivity;
+      createdBy?: string;
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
@@ -1774,6 +1803,7 @@ export class AgentManager {
         updatedAt: existing.updatedAt,
         lastUserMessageAt: existing.lastUserMessageAt,
         messageActivity: existing.messageActivity,
+        createdBy: existing.createdBy,
         historyPrimed: rehydrateFromDisk ? false : preservedHistoryPrimed,
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
@@ -2092,7 +2122,11 @@ export class AgentManager {
         persistence: record.persistence ?? null,
         historyPrimed: true,
         lastUserMessageAt: record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null,
-        messageActivity: record.messageActivity ?? emptyMessageActivity(),
+        messageActivity: seedLegacyHumanActivity(
+          record.messageActivity ?? emptyMessageActivity(),
+          resolveRecordCreatedBy(record),
+        ),
+        ...(record.createdBy ? { createdBy: record.createdBy } : {}),
         lastUsage: undefined,
         lastError: record.lastError ?? undefined,
         attention,
@@ -2606,7 +2640,8 @@ export class AgentManager {
   }
 
   private async validateStreamTaskReference(input: StreamEntryUpdate): Promise<void> {
-    const reference = input.ask?.canonicalTask ?? input.inputRequest?.task;
+    const linkedTask = questionTaskLink(input);
+    const reference = input.ask?.canonicalTask ?? linkedTask?.task;
     if (!reference || reference.serverId !== this.serverId) return;
     const liveOrigin = this.agents.get(reference.agentId);
     const storedOrigin = liveOrigin ? null : await this.registry?.get(reference.agentId);
@@ -2614,7 +2649,7 @@ export class AgentManager {
     const referencedTask = originEntries.find((entry) => entry.id === reference.entryId);
     if (!referencedTask?.ask || referencedTask.ask.canonicalTask)
       throw new Error("Task reference must name a canonical task on this host");
-    const subtaskId = input.inputRequest?.subtaskId;
+    const subtaskId = linkedTask?.subtaskId;
     if (subtaskId && !referencedTask.ask.subtasks?.some((subtask) => subtask.id === subtaskId))
       throw new Error("Input request subtask does not exist on its task");
   }
@@ -2672,7 +2707,9 @@ export class AgentManager {
       return false;
     }
     if (options?.clientMessageId) {
-      this.recordSubmittedPrompt(agent, prompt, options.clientMessageId);
+      this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
+        sender: options.sender,
+      });
       this.emitState(agent);
     }
     const dispatch = (event: AgentStreamEvent): void => {
@@ -2850,6 +2887,7 @@ export class AgentManager {
       const turnStartedAt = new Date();
       pendingRun.start = { status: "started", turnId };
       agent.activeForegroundTurnId = turnId;
+      agent.activeTurnSender = options?.sender;
       this.openActiveTurn(agent, turnId, turnStartedAt);
       agent.lifecycle = "running";
       this.touchUpdatedAt(agent);
@@ -2873,6 +2911,7 @@ export class AgentManager {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
           messageId: options.clientMessageId,
           turnId,
+          ...(options.sender ? { sender: options.sender } : {}),
           providerMessageId:
             stagedSubmittedPromptEcho?.item.type === "user_message"
               ? stagedSubmittedPromptEcho.item.messageId
@@ -2933,6 +2972,7 @@ export class AgentManager {
       this.runs.rememberFinalizedTurn(mutableAgent, turnId);
     }
     mutableAgent.activeForegroundTurnId = null;
+    mutableAgent.activeTurnSender = undefined;
     this.applyActiveTurnTerminal(mutableAgent, turnId);
     const terminalError = mutableAgent.lastError;
     const shouldHoldBusyForReplacement = mutableAgent.pendingReplacement && !terminalError;
@@ -3038,7 +3078,7 @@ export class AgentManager {
         expectedTurnId,
       });
       if (admission.status === "accepted") {
-        await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+        await this.recordAcceptedSteer(agent, prompt, options, expectedTurnId);
       }
       return admission;
     });
@@ -3068,7 +3108,7 @@ export class AgentManager {
             expectedTurnId,
           });
           if (admission.status === "accepted") {
-            await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+            await this.recordAcceptedSteer(agent, prompt, options, expectedTurnId);
           }
           return admission;
         })
@@ -3171,15 +3211,17 @@ export class AgentManager {
   private async recordAcceptedSteer(
     agent: ActiveManagedAgent,
     prompt: AgentPromptInput,
-    clientMessageId: string | undefined,
+    options: AgentRunOptions | undefined,
     expectedTurnId: string,
   ): Promise<void> {
+    const clientMessageId = options?.clientMessageId;
     if (!clientMessageId) {
       return;
     }
     this.recordSubmittedPrompt(agent, prompt, clientMessageId, {
       messageId: clientMessageId,
       turnId: expectedTurnId,
+      ...(options.sender ? { sender: options.sender } : {}),
     });
     this.emitState(agent);
   }
@@ -3769,6 +3811,7 @@ export class AgentManager {
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
       messageActivity?: MessageActivity;
+      createdBy?: string;
       labels?: Record<string, string>;
       timeline?: AgentTimelineItem[];
       timelineRows?: AgentTimelineRow[];
@@ -3959,6 +4002,7 @@ export class AgentManager {
           updatedAt?: Date;
           lastUserMessageAt?: Date | null;
           messageActivity?: MessageActivity;
+          createdBy?: string;
           labels?: Record<string, string>;
           historyPrimed?: boolean;
           lastUsage?: AgentUsage;
@@ -4004,7 +4048,7 @@ export class AgentManager {
       ),
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,
       lastUserMessageAt: options?.lastUserMessageAt ?? null,
-      messageActivity: resolveInitialMessageActivity(options),
+      ...resolveInitialOwnership(options),
       lastUsage: options?.lastUsage,
       lastError: options?.lastError,
       attention: resolveInitialAttention(options?.attention),
@@ -4481,9 +4525,12 @@ export class AgentManager {
     agent: ActiveManagedAgent,
     events: Iterable<Extract<AgentStreamEvent, { type: "timeline" }>>,
   ): void {
-    const historical = deriveHistoricalMessageActivity(events);
+    const historical = deriveHistoricalMessageActivity(events, {
+      unattributedIsHuman: isHumanSender(resolveManagedAgentCreatedBy(agent)),
+    });
     const previous = agent.messageActivity ?? emptyMessageActivity();
     let next = advanceMessageActivity(previous, "user", historical.lastUserMessageAt ?? undefined);
+    next = advanceMessageActivity(next, "human", historical.lastHumanMessageAt ?? undefined);
     next = advanceMessageActivity(
       next,
       "assistant",
@@ -4801,14 +4848,24 @@ export class AgentManager {
       return;
     }
 
-    this.recordAndDispatchTimelineItem(agent.id, event.item, event.provider, event.turnId);
-    if (event.item.type === "user_message") {
+    // A provider-echoed prompt has no sender of its own; it belongs to the turn Paseo started.
+    const item =
+      event.item.type === "user_message" && !event.item.sender && agent.activeTurnSender
+        ? { ...event.item, sender: agent.activeTurnSender }
+        : event.item;
+    this.recordAndDispatchTimelineItem(agent.id, item, event.provider, event.turnId);
+    if (item.type === "user_message") {
       agent.lastUserMessageAt = new Date();
-      agent.messageActivity = advanceMessageActivity(
+      const at = event.timestamp ?? agent.lastUserMessageAt;
+      let activity = advanceMessageActivity(
         agent.messageActivity ?? emptyMessageActivity(),
         "user",
-        event.timestamp ?? agent.lastUserMessageAt,
+        at,
       );
+      if (isHumanSender(item.sender) && !isSystemInjectedEnvelope(item.text)) {
+        activity = advanceMessageActivity(activity, "human", at);
+      }
+      agent.messageActivity = activity;
       this.emitState(agent);
     }
     flags.shouldDispatchEvent = false;
@@ -5129,7 +5186,12 @@ export class AgentManager {
     agent: ActiveManagedAgent,
     prompt: AgentPromptInput,
     clientMessageId: string,
-    options?: { messageId?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      messageId?: string;
+      providerMessageId?: string;
+      turnId?: string;
+      sender?: UserMessageSender;
+    },
   ): void {
     if (this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId)) {
       return;
@@ -5137,17 +5199,22 @@ export class AgentManager {
     this.touchUpdatedAt(agent);
     agent.lastUserMessageAt = new Date();
     if (!isSystemInjectedEnvelope(submittedPromptText(prompt))) {
-      agent.messageActivity = advanceMessageActivity(
+      let activity = advanceMessageActivity(
         agent.messageActivity ?? emptyMessageActivity(),
         "user",
         agent.lastUserMessageAt,
       );
+      if (isHumanSender(options?.sender)) {
+        activity = advanceMessageActivity(activity, "human", agent.lastUserMessageAt);
+      }
+      agent.messageActivity = activity;
     }
     const item: AgentTimelineItem = {
       type: "user_message",
       text: submittedPromptText(prompt),
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
+      ...(options?.sender ? { sender: options.sender } : {}),
     };
     this.recordAndDispatchTimelineItem(agent.id, item, agent.provider, options?.turnId, options);
   }
@@ -5874,4 +5941,29 @@ function resolveInitialMessageActivity(options?: {
   messageActivity?: MessageActivity;
 }): MessageActivity {
   return options?.messageActivity ?? emptyMessageActivity();
+}
+
+/** Message activity with legacy human time seeded, plus the recorded creator. */
+function resolveInitialOwnership(options?: {
+  messageActivity?: MessageActivity;
+  createdBy?: string;
+  labels?: Record<string, string>;
+}): { messageActivity: MessageActivity; createdBy?: string } {
+  const createdBy = resolveAgentCreatedBy({
+    createdBy: options?.createdBy,
+    parentAgentId: getParentAgentIdFromLabels(options?.labels),
+  });
+  const messageActivity = seedLegacyHumanActivity(
+    resolveInitialMessageActivity(options),
+    createdBy,
+  );
+  return options?.createdBy
+    ? { messageActivity, createdBy: options.createdBy }
+    : { messageActivity };
+}
+
+/** A question's task link. An ask's inputRequest is its blocker, never a link for the ask itself. */
+function questionTaskLink(input: StreamEntryUpdate) {
+  const request = input.action === "add_question" ? input.inputRequest : undefined;
+  return request?.task ? { task: request.task, subtaskId: request.subtaskId } : undefined;
 }

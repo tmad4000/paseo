@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import {
   TrackedAskInputSchema,
   StreamInputRequestSchema,
+  askBlockerReason,
 } from "@getpaseo/protocol/companion-stream";
+import type { StreamRow } from "@getpaseo/protocol/global-stream";
 import { appendStreamTags, parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
+import { agentSender } from "@getpaseo/protocol/user-message-sender";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
@@ -180,6 +183,28 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+/** A small list_stream_asks row: enough to triage without full evidence, subtasks or replies. */
+function compactStreamAskRow(row: StreamRow, entryId: string | null, askId: string | null) {
+  const entry = row.item.kind === "entry" ? row.item.entry : null;
+  const ask = entry?.ask;
+  return {
+    askId,
+    entryId,
+    agentId: row.agentId,
+    agentTitle: row.agentTitle,
+    archived: row.archived,
+    kind: entry?.kind ?? row.item.kind,
+    state: ask?.state ?? null,
+    headline: askBlockerReason(
+      entry?.text ?? (row.item.kind === "artifact" ? row.item.artifact.path : ""),
+    ),
+    next: ask ? askBlockerReason(ask.remaining) || null : null,
+    blockedOn: ask?.state === "blocked" ? (entry?.inputRequest ?? { recipient: "user" }) : null,
+    revision: ask?.revision ?? null,
+    timestamp: row.timestamp,
+  };
 }
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -1988,6 +2013,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         queueService: agentQueueService,
         agentId,
         text: prompt,
+        ...(callerAgentId ? { sender: agentSender(callerAgentId) } : {}),
         ...(sessionMode ? { sessionMode } : {}),
         ...(interrupt !== undefined ? { interrupt } : {}),
         logger: childLogger,
@@ -2513,7 +2539,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track a durable ask",
       description:
-        "Create or revise a canonical task stored with its source conversation. Keep one record across continuation/delegation: link execution sessions with ask.sessions, and edit this origin from other sessions using agentId. taskId returned on reads is immutable. Mark an existing mirrored ask with ask.canonicalTask only when its exact canonical host/agent/entry is known; the mirror becomes read-only history and leaves current-work views. Never deduplicate by text. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. This does not prompt or run any agent.",
+        "Create or revise a canonical task stored with its source conversation. Keep one record across continuation/delegation: link execution sessions with ask.sessions, and edit this origin from other sessions using agentId. taskId returned on reads is immutable. Mark an existing mirrored ask with ask.canonicalTask only when its exact canonical host/agent/entry is known; the mirror becomes read-only history and leaves current-work views. Never deduplicate by text. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. state=blocked means the work cannot continue. Blocked asks appear in the user's Needs you automatically, with the first line of remaining as the reason, so start remaining with what you need from them (for example 'Needs your go-ahead to deploy to production'). If the blocker is not the user, set blocker (recipient agent or external, with recipientId) so it stays out of Needs you. If you already raised the input with set_stream_question, link that question to this ask (its inputRequest.task) instead of describing it twice. When the user unblocks you, revise the ask to in_progress in the same turn. This records context, never grants permission, and does not prompt or run any agent.",
       inputSchema: {
         agentId: z
           .string()
@@ -2531,9 +2557,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         expectedRevision: z.number().int().min(0),
         text: z.string().min(1).max(4000),
         ask: TrackedAskInputSchema,
+        blocker: StreamInputRequestSchema.omit({ task: true, subtaskId: true })
+          .optional()
+          .describe(
+            "Only with state=blocked: who the ask waits on. Defaults to the user. recipient 'agent' or 'external' (with recipientId) keeps it out of Needs you. kind: approval for a go-ahead, action when the user must do something, input or decision otherwise. A still-blocked edit keeps the previous blocker; leaving blocked clears it.",
+          ),
       },
     },
-    async ({ agentId, askId, expectedRevision, text, ask }) => {
+    async ({ agentId, askId, expectedRevision, text, ask, blocker }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) throw new Error("An agentId is required");
       await agentManager.updateCompanionEntry({
@@ -2543,6 +2574,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         expectedRevision,
         text,
         ask,
+        inputRequest: blocker,
       });
       return {
         content: [],
@@ -2578,11 +2610,33 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .boolean()
           .optional()
           .describe(
-            "List concrete human intervention requests, not user questions waiting for agent answers.",
+            "List what waits on a person: blocked asks (reason in remaining), open input/decision/approval/action requests and pending permissions. Not user questions waiting for agent answers.",
+          ),
+        states: z
+          .array(z.enum(["open", "in_progress", "blocked", "done"]))
+          .min(1)
+          .max(4)
+          .optional()
+          .describe("Only tracked asks in these states, for example ['blocked']."),
+        compact: z
+          .boolean()
+          .optional()
+          .describe(
+            "Return small rows (askId, entryId, agentId, agentTitle, kind, state, headline, next, blockedOn, revision, timestamp) instead of full entries. Default page size 25. Use this for global reads.",
           ),
       },
     },
-    async ({ agentId, cursor, unresolvedOnly, limit, questions, global: globally, needsYou }) => {
+    async ({
+      agentId,
+      cursor,
+      unresolvedOnly,
+      limit,
+      questions,
+      global: globally,
+      needsYou,
+      states,
+      compact,
+    }) => {
       const targetAgentId = globally ? undefined : (agentId ?? callerAgentId);
       if (!globally && !targetAgentId) throw new Error("An agentId is required");
       let view: "needs_you" | "questions" | "tasks" = "tasks";
@@ -2593,23 +2647,20 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         view,
         includeArchived: true,
         cursor,
-        limit,
+        limit: limit ?? (compact ? 25 : undefined),
+        askStates: states,
         filter: unresolvedOnly && !questions && !needsYou ? "pending" : "all",
+      });
+      const rows = page.rows.map((row) => {
+        const entryId = row.item.kind === "entry" ? row.item.entry.id : null;
+        const askId = entryId?.startsWith("ask:") ? entryId.slice(4) : null;
+        return compact
+          ? compactStreamAskRow(row, entryId, askId)
+          : Object.assign({}, row, { entryId, askId });
       });
       return {
         content: [],
-        structuredContent: ensureValidJson({
-          ...page,
-          rows: page.rows.map((row) =>
-            Object.assign({}, row, {
-              entryId: row.item.kind === "entry" ? row.item.entry.id : null,
-              askId:
-                row.item.kind === "entry" && row.item.entry.id.startsWith("ask:")
-                  ? row.item.entry.id.slice(4)
-                  : null,
-            }),
-          ),
-        }),
+        structuredContent: ensureValidJson({ ...page, rows }),
       };
     },
   );
@@ -2673,7 +2724,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track an open Stream question",
       description:
-        "Keep one concrete input/decision/approval/action request in Stream and global Needs you. inputRequest identifies its exact recipient, canonical task/subtask and source message. Multiple requests can remain open while agent work continues. Do not record the user's own questions here; use set_stream_ask expectsAnswer. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. This records context, never grants permission or sends a chat message.",
+        "Keep one concrete input/decision/approval/action request in Stream and global Needs you. inputRequest identifies its exact recipient, canonical task/subtask and source message. Multiple requests can remain open while agent work continues. Do not record the user's own questions here; use set_stream_ask expectsAnswer. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. When the input unblocks a tracked ask, set inputRequest.task to that ask (its serverId, agentId and entryId 'ask:<askId>' from list_stream_asks); Needs you then shows one card for both. This records context, never grants permission or sends a chat message.",
       inputSchema: {
         agentId: z.string().optional().describe("Defaults to this calling agent."),
         questionId: z

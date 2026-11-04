@@ -334,6 +334,7 @@ export const fr: TranslationResources = {
       groupByProject: "Grouper par projet",
       groupByStatus: "Grouper par statut",
       groupInOneList: "Afficher les chats en une seule liste",
+      showAllSessions: "Afficher toutes les sessions",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -1806,6 +1807,11 @@ export const fr: TranslationResources = {
       moveDraft: "Wrong chat? Move draft",
     },
     filterSidebar: {
+      mine: {
+        label: "Les miennes",
+        showMine: "Afficher uniquement mes sessions",
+        showAll: "Afficher toutes les sessions ({{count}} masquées)",
+      },
       matches: {
         startChat: "Démarrer une discussion avec « {{query}} »",
         searchMessages: "Rechercher « {{query}} » dans les messages",
@@ -2623,6 +2629,7 @@ export const fr: TranslationResources = {
     backdrop: "Toile de fond du menu",
   },
   subagents: {
+    delegatedBy: "déléguée par {{name}}",
     title: "Sous-agents",
     pillLabelOne: "1 sous-agent",
     pillLabelMany: "{{count}} sous-agents",

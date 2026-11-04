@@ -1,13 +1,22 @@
-import { fork, spawn, type ChildProcess } from "child_process";
+import { execFile, fork, spawn, type ChildProcess } from "child_process";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import {
   createStream as createRotatingFileStream,
   type RotatingFileStream,
 } from "rotating-file-stream";
 import { signalProcessTree } from "../src/utils/tree-kill.js";
+import {
+  createWorkerStallDetector,
+  resolveWorkerUnresponsiveRestartMs,
+} from "./worker-stall-detector.js";
 
 const WORKER_HEARTBEAT_INTERVAL_MS = 1_000;
 const WORKER_TERMINATION_GRACE_MS = 10_000;
+const WEDGE_PS_TIMEOUT_MS = 5_000;
+const WEDGE_SAMPLE_SECONDS = 2;
+const WEDGE_SAMPLE_TIMEOUT_MS = 8_000;
 
 interface SupervisorLogFileOptions {
   path: string;
@@ -36,6 +45,10 @@ interface SupervisorHeartbeatMessage {
   type: "paseo:supervisor-heartbeat";
 }
 
+interface WorkerHeartbeatMessage {
+  type: "paseo:worker-heartbeat";
+}
+
 interface SupervisorGracefulShutdownMessage {
   type: "paseo:graceful-shutdown";
   reason: string;
@@ -58,6 +71,12 @@ interface SupervisorOptions {
   restartOnCrash?: boolean;
   onSupervisorExit?: () => Promise<void> | void;
   logFile?: SupervisorLogFileOptions;
+  /**
+   * How long a ready worker that has been sending heartbeats may stay silent, while
+   * the supervisor itself keeps running, before it is treated as wedged and restarted.
+   * Defaults to PASEO_WORKER_UNRESPONSIVE_RESTART_MS or five minutes; 0 disables.
+   */
+  workerUnresponsiveRestartMs?: number;
 }
 
 export interface SupervisorController {
@@ -98,6 +117,75 @@ function parseLifecycleMessage(msg: unknown): WorkerLifecycleMessage | null {
     };
   }
   return null;
+}
+
+function isWorkerHeartbeatMessage(msg: unknown): msg is WorkerHeartbeatMessage {
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    "type" in msg &&
+    (msg as { type?: unknown }).type === "paseo:worker-heartbeat"
+  );
+}
+
+function runBounded(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      { timeout: timeoutMs, maxBuffer: 64 * 1024 },
+      (error, stdout, stderr) => {
+        const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
+        resolve({ ok: !error, output: error && !output ? error.message : output });
+      },
+    );
+  });
+}
+
+// Best-effort evidence for why a worker wedged, captured before it is killed. `ps`
+// state shows whether the process was stopped (T) or blocked; on macOS a short
+// native `sample` shows which threads and locks were stuck. Never throws.
+async function captureWedgedWorkerDiagnostics(
+  pid: number,
+  diagnosticsDir: string | null,
+): Promise<Record<string, unknown>> {
+  if (process.platform === "win32") {
+    return {};
+  }
+  const result: Record<string, unknown> = {};
+  const ps = await runBounded(
+    "ps",
+    ["-o", "pid=,ppid=,stat=,etime=,rss=,time=,%cpu=", "-p", String(pid)],
+    WEDGE_PS_TIMEOUT_MS,
+  );
+  result.workerProcessState = ps.output;
+  if (
+    process.platform === "darwin" &&
+    diagnosticsDir &&
+    process.env.PASEO_WORKER_WEDGE_SAMPLE !== "0"
+  ) {
+    try {
+      await mkdir(diagnosticsDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const samplePath = path.join(diagnosticsDir, `worker-wedge-${pid}-${stamp}.txt`);
+      const sample = await runBounded(
+        "/usr/bin/sample",
+        [String(pid), String(WEDGE_SAMPLE_SECONDS), "-file", samplePath],
+        WEDGE_SAMPLE_TIMEOUT_MS,
+      );
+      result.nativeSamplePath = sample.ok ? samplePath : null;
+      if (!sample.ok) {
+        result.nativeSampleError = sample.output.slice(0, 500);
+      }
+    } catch (error) {
+      result.nativeSampleError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return result;
 }
 
 function toRotatingFileStreamSize(size: string): string {
@@ -172,6 +260,11 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
   const workerEnv = options.workerEnv ?? process.env;
   const workerExecArgv = options.workerExecArgv ?? ["--import", "tsx"];
   const resolveWorkerSpawnSpec = options.resolveWorkerSpawnSpec;
+  const workerUnresponsiveRestartMs =
+    options.workerUnresponsiveRestartMs ?? resolveWorkerUnresponsiveRestartMs(process.env);
+  const diagnosticsDir = options.logFile
+    ? path.join(path.dirname(options.logFile.path), "diagnostics")
+    : null;
 
   let child: ChildProcess | null = null;
   let restarting = false;
@@ -290,8 +383,46 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
     const currentChild = child;
     let reachedReady = false;
+    let wedgeHandled = false;
+    const stallDetector = createWorkerStallDetector({
+      unresponsiveAfterMs: workerUnresponsiveRestartMs,
+      monotonicNow: () => performance.now(),
+      wallNow: () => Date.now(),
+    });
+    const checkWorkerLiveness = (): void => {
+      if (wedgeHandled || child !== currentChild || restarting || shuttingDown) {
+        return;
+      }
+      const verdict = stallDetector.tick();
+      if (!verdict.stalled) {
+        return;
+      }
+      wedgeHandled = true;
+      const workerPid = currentChild.pid ?? null;
+      const fields = {
+        silentForMs: Math.round(verdict.silentForMs),
+        lastHeartbeatAgoMs:
+          verdict.lastHeartbeatAgoMs === null ? null : Math.round(verdict.lastHeartbeatAgoMs),
+        thresholdMs: workerUnresponsiveRestartMs,
+        supervisorPid: process.pid,
+        workerPid,
+      };
+      process.stderr.write(
+        `[${options.name}] Worker unresponsive for ${Math.round(verdict.silentForMs / 1000)}s while the supervisor stayed responsive. Restarting worker...\n`,
+      );
+      writeLifecycleLog("Worker unresponsive; restarting wedged worker", fields);
+      // Capture runs inside the graceful-shutdown grace period, before the force kill.
+      if (workerPid !== null) {
+        void (async () => {
+          const diagnostics = await captureWedgedWorkerDiagnostics(workerPid, diagnosticsDir);
+          writeLifecycleLog("Wedged worker diagnostics", { ...fields, ...diagnostics });
+        })();
+      }
+      requestRestart("worker_unresponsive");
+    };
     // Serialize endpoint writes with exit/clear before allowing another worker to spawn.
     const heartbeat = setInterval(() => {
+      checkWorkerLiveness();
       const message: SupervisorHeartbeatMessage = { type: "paseo:supervisor-heartbeat" };
       if (currentChild.connected) {
         currentChild.send?.(message, (error) => {
@@ -322,6 +453,12 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     });
 
     child.on("message", (msg: unknown) => {
+      if (isWorkerHeartbeatMessage(msg)) {
+        if (child === currentChild) {
+          stallDetector.recordWorkerHeartbeat();
+        }
+        return;
+      }
       const lifecycleMessage = parseLifecycleMessage(msg);
       if (!lifecycleMessage || child !== currentChild) {
         return;
@@ -329,6 +466,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
       if (lifecycleMessage.type === "paseo:ready") {
         reachedReady = true;
+        stallDetector.markReady();
         writeLifecycleLog("Worker ready", { listen: lifecycleMessage.listen });
         publication = publication
           .then(() =>
