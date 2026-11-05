@@ -2981,6 +2981,12 @@ export const ja: TranslationResources = {
         label: "チャットを開いたときに既読にする",
         description: "オフの場合、既読にするかメッセージを送信するまでチャットは未読のままです",
       },
+      sortTabsByActivity: {
+        section: "タブ",
+        label: "最近のアクティビティでタブを並べ替える",
+        description:
+          "オンにすると、最新のアクティビティがあるチャットがタブ列の先頭に移動します。オフにすると、タブは配置した場所に留まります",
+      },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",
         description: "デフォルトでAIのエージェント思考・推論ブロックを完全に展開して表示します",

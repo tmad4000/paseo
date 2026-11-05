@@ -3003,6 +3003,12 @@ export const ptBR: TranslationResources = {
         description:
           "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
       },
+      sortTabsByActivity: {
+        section: "Abas",
+        label: "Ordenar abas por atividade recente",
+        description:
+          "Quando ativado, o chat com a atividade mais recente vai para o início da fileira de abas. Quando desativado, as abas ficam onde você as colocou",
+      },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",
         description:

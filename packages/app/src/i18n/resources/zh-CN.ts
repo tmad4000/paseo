@@ -2918,6 +2918,11 @@ export const zhCN: TranslationResources = {
         label: "打开聊天时标记为已读",
         description: "关闭后，聊天会保持未读，直到你将其标记为已读或向其发送消息",
       },
+      sortTabsByActivity: {
+        section: "标签页",
+        label: "按最近活动排序标签页",
+        description: "开启后，最近有活动的聊天会移到标签栏最前面。关闭后，标签页保持在你放置的位置",
+      },
       autoExpandReasoning: {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
