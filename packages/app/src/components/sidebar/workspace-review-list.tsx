@@ -25,8 +25,14 @@ import { collectAllTabs, findPaneById } from "@/stores/workspace-layout-actions"
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 import { buildMarkReadMenuEntries, useAgentReadAction } from "@/workspace/use-agent-read-action";
+import { formatMessageTimestamp } from "@/utils/time";
 import { useSidebarModel } from "./sidebar-model";
-import { workspaceNeedsInputAgents, workspaceReviewAgents } from "./workspace-review-model";
+import { NeedsInputTimestamp } from "./workspace-trailing";
+import {
+  needsInputSince,
+  workspaceNeedsInputAgents,
+  workspaceReviewAgents,
+} from "./workspace-review-model";
 
 const PREVIEW_LIMIT = 3;
 
@@ -146,6 +152,11 @@ function AttentionRow({
   ]
     .filter(Boolean)
     .join(" · ");
+  const sinceMs = kind === "needs-input" ? needsInputSince(agent) : 0;
+  const since = sinceMs > 0 ? new Date(sinceMs) : null;
+  const rowLabel = since
+    ? `${title} · ${labels} · ${t("sidebar.needsInputSince", { time: formatMessageTimestamp(since) })}`
+    : `${title} · ${labels}`;
   const target = useMemo(
     () => ({ kind: "agent" as const, serverId, agentId: agent.id }),
     [agent.id, serverId],
@@ -213,13 +224,18 @@ function AttentionRow({
         <ContextMenuTrigger
           onPress={open}
           accessibilityRole="button"
-          accessibilityLabel={`${title} · ${labels}`}
+          accessibilityLabel={rowLabel}
           style={styles.row}
           testID={`workspace-${kind}-agent-${agent.id}`}
         >
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.titleLine}>
+            <Text style={[styles.title, styles.titleText]} numberOfLines={1}>
+              {title}
+            </Text>
+            {since ? (
+              <NeedsInputTimestamp since={since} testID={`workspace-${kind}-time-${agent.id}`} />
+            ) : null}
+          </View>
           <Text style={styles.meta} numberOfLines={1}>
             {labels}
           </Text>
@@ -261,6 +277,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1],
     borderRadius: theme.borderRadius.sm,
   },
+  titleLine: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  titleText: { flex: 1, minWidth: 0 },
   title: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,

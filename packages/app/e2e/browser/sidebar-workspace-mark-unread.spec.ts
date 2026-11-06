@@ -691,6 +691,25 @@ test("needs input expands to exact sessions in project and status grouping and k
   const toggle = list.getByRole("button", { name: "Needs input (2)", exact: true });
   await expect(subjectRow).toContainText("Unread subject");
   await expect(siblingRow).toContainText("Newest agent");
+  // Each session shows when it started needing input; the newest marker sorts first.
+  const rows = list.locator('[data-testid^="workspace-needs-input-agent-"]');
+  await expect(rows.first()).toHaveAttribute(
+    "data-testid",
+    `workspace-needs-input-agent-${sibling.id}`,
+  );
+  for (const id of [subject.agentId, sibling.id]) {
+    await expect(page.getByTestId(`workspace-needs-input-time-${id}`)).toHaveText(/\S/);
+    await expect(page.getByTestId(`workspace-needs-input-time-${id}-label`)).toHaveAttribute(
+      "aria-label",
+      /^Needing input since /,
+    );
+  }
+  // The workspace row's trailing time is the needs-input time, not its general activity.
+  const subjectWorkspaceRow = workspaceRow(page, subject.workspaceId).first();
+  await expect(
+    subjectWorkspaceRow.getByTestId("sidebar-workspace-needs-input-timestamp-label"),
+  ).toHaveAttribute("aria-label", /^Needing input since /);
+  await expect(subjectWorkspaceRow.getByTestId("sidebar-workspace-timestamp")).toHaveCount(0);
   await toggle.focus();
   await page.keyboard.press("Enter");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -699,6 +718,9 @@ test("needs input expands to exact sessions in project and status grouping and k
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await selectSidebarStatusGrouping(page);
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    subjectWorkspaceRow.getByTestId("sidebar-workspace-needs-input-timestamp-label"),
+  ).toHaveAttribute("aria-label", /^Needing input since /);
   await toggle.click();
   await siblingRow.click();
   await expectSelectedAgent(page, sibling.id);

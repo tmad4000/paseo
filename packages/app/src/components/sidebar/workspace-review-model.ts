@@ -16,7 +16,8 @@ export type ReviewAgent = Pick<
   | "requiresAttention"
   | "attentionReason"
   | "messageActivity"
->;
+> &
+  Partial<Pick<Agent, "attentionTimestamp" | "lastActivityAt" | "updatedAt">>;
 
 type AttentionBucket = "attention" | "needs_input";
 
@@ -67,11 +68,9 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>(
         if (rows.length === 0) next.set(agent.workspaceId, rows);
         rows.push(agent);
       }
+      const time = bucket === "needs_input" ? needsInputSince : reviewReplyTime;
       for (const rows of next.values())
-        rows.sort(
-          (left, right) =>
-            reviewReplyTime(right) - reviewReplyTime(left) || left.id.localeCompare(right.id),
-        );
+        rows.sort((left, right) => time(right) - time(left) || left.id.localeCompare(right.id));
       index = next;
       cache.set(agents, index);
     }
@@ -81,6 +80,33 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>(
 
 export const workspaceReviewAgents = createWorkspaceReviewSelector<Agent>();
 export const workspaceNeedsInputAgents = createWorkspaceReviewSelector<Agent>("needs_input");
+
+function epoch(date: Date | null | undefined): number {
+  const time = date?.getTime() ?? Number.NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+/**
+ * When a session started needing input, in epoch ms (0 when unknown).
+ *
+ * A permission attention edge carries its own timestamp. Otherwise the session's last activity is
+ * the moment it blocked: the host stamps every live stream event, the permission request included,
+ * and a session waiting on someone emits nothing further. A manual Needs input marker stamps it too.
+ */
+export function needsInputSince(agent: ReviewAgent): number {
+  if (agent.attentionReason === "permission") {
+    const attention = epoch(agent.attentionTimestamp);
+    if (attention > 0) return attention;
+  }
+  return epoch(agent.lastActivityAt) || epoch(agent.updatedAt);
+}
+
+/** The newest needs-input start across a workspace's sessions, or null when none needs input. */
+export function newestNeedsInputSince(agents: readonly ReviewAgent[]): number | null {
+  // Rows are already sorted newest first.
+  const newest = agents[0];
+  return newest ? needsInputSince(newest) || null : null;
+}
 
 function reviewReplyTime(agent: ReviewAgent): number {
   const reply = Date.parse(agent.messageActivity?.lastAssistantMessageAt ?? "");

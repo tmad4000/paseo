@@ -1681,6 +1681,7 @@ export const zhCN: TranslationResources = {
   sidebar: {
     reviewActions: "{{title}} 的审阅操作",
     needsInputSessions: "需要输入 ({{count}})",
+    needsInputSince: "自 {{time}} 起需要输入",
     sessionActions: "{{title}} 的会话操作",
     reviewSessions: "审阅 ({{count}})",
     openTabs_one: "{{count}} 个打开的标签页",

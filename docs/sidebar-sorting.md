@@ -66,6 +66,14 @@ sessions that normally live under their parent. Selecting a row opens that exact
 it does not approve a permission or clear its Needs input marker. Resolved requests leave
 the preview as the host directory updates. Review previews keep their separate collapse state.
 
+While any of its sessions needs input, a workspace row's trailing time shows when the newest one
+started needing input instead of general activity, in every sort and grouping. Each preview row
+shows its own compact time, and rows sort newest first. A hover tooltip and the accessibility
+label read **Needing input since …**. A permission edge's attention timestamp wins; otherwise the
+time is the session's last activity, which the host stamps on the permission request or manual
+marker itself and which stays put while the session waits. Before the session directory loads,
+the host's needs-input bucket entry time stands in. Other rows keep the time described above.
+
 ## Reviewing sessions
 
 Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;
