@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, View, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react-native";
@@ -161,6 +162,42 @@ export function ProjectStatusIndicator({
   );
 }
 
+/**
+ * A session row's leading visual in Sessions grouping: the chat's provider glyph carrying the
+ * same corner status badge a project icon does, so both kinds of row read status identically.
+ */
+export function SessionStatusIndicator({
+  children,
+  statusBucket,
+  backdrop,
+  testID,
+}: {
+  /** The provider glyph the badge annotates. */
+  children: ReactNode;
+  statusBucket: SidebarStateBucket;
+  backdrop: SidebarSurfaceBackdrop;
+  testID?: string;
+}) {
+  const badgeContent = getProjectStatusBadgeContent(statusBucket);
+  return (
+    <View
+      style={styles.projectLeadingVisualSlot}
+      testID={testID ?? `session-status-indicator-${statusBucket}`}
+    >
+      <View style={[styles.projectIconBox, styles.sessionIconBox]}>
+        {children}
+        {badgeContent === null ? null : (
+          <ProjectStatusBadge
+            content={badgeContent}
+            statusBucket={statusBucket}
+            backdrop={backdrop}
+          />
+        )}
+      </View>
+    </View>
+  );
+}
+
 function ProjectStatusBadge({
   content,
   statusBucket,
@@ -284,6 +321,10 @@ const styles = StyleSheet.create((theme) => {
       position: "relative",
       width: theme.iconSize.md,
       height: theme.iconSize.md,
+    },
+    sessionIconBox: {
+      alignItems: "center",
+      justifyContent: "center",
     },
     projectIconFallbackText: {
       fontSize: 9,

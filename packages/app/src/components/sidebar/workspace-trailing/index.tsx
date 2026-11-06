@@ -79,10 +79,16 @@ function WorkspaceTimestampForSort({ workspace }: { workspace: SidebarWorkspaceE
  * re-renders the component that owns it — keeping that component down to a single `<Text>` is
  * what stops a minute tick from reaching the row, the list, or the diff stat next door.
  */
-function WorkspaceTimestamp({ lastActiveAt }: { lastActiveAt: Date }) {
+export function WorkspaceTimestamp({
+  lastActiveAt,
+  testID = "sidebar-workspace-timestamp",
+}: {
+  lastActiveAt: Date;
+  testID?: string;
+}) {
   const label = useCompactTimeAgo(lastActiveAt);
   return (
-    <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
+    <Text style={styles.timestamp} numberOfLines={1} testID={testID}>
       {label}
     </Text>
   );

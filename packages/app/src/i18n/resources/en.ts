@@ -128,6 +128,11 @@ export const en = {
     noReplyYet: "Wait for the thread's answer first.",
     parentUnavailable: "The main thread is no longer available.",
   },
+  sidebarSessions: {
+    actions: "Actions for {{title}}",
+    archive: "Archive session",
+    open: "Open {{title}} in {{meta}}",
+  },
   sessionPins: {
     title: "Pinned sessions",
     pin: "Pin session",
@@ -328,6 +333,7 @@ export const en = {
       groupByStatus: "Group by status",
       groupInOneList: "Show chats in one list",
       showAllSessions: "Show all sessions",
+      groupAsSessions: "Show chats as sessions",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -1699,6 +1705,8 @@ export const en = {
   },
   sidebar: {
     reviewActions: "Review actions for {{title}}",
+    needsInputSessions: "Needs input ({{count}})",
+    sessionActions: "Session actions for {{title}}",
     reviewSessions: "Review ({{count}})",
     openTabs_one: "{{count}} open tab",
     openTabs: "{{count}} open tabs",
@@ -1823,6 +1831,7 @@ export const en = {
         project: "Project",
         status: "Status",
         list: "One list",
+        sessions: "Sessions",
         labels: "Labels",
       },
       titleSource: {
@@ -3104,6 +3113,12 @@ export const en = {
         section: "Read status",
         label: "Mark chats read when opened",
         description: "When off, a chat stays unread until you mark it read or send it a message",
+      },
+      sortTabsByActivity: {
+        section: "Tabs",
+        label: "Sort tabs by recent activity",
+        description:
+          "When on, the chat with the latest activity moves to the front of the tab row. When off, tabs stay where you put them",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

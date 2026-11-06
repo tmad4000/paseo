@@ -9,3 +9,16 @@ export async function enableReadOnOpen(page: Page): Promise<void> {
     localStorage.setItem("@paseo:app-settings", JSON.stringify({ markReadOnOpen: true }));
   });
 }
+
+/**
+ * Seed app settings for this page on every navigation. Pass every setting the flow needs in
+ * one call: like `enableReadOnOpen`, each call replaces the stored settings object.
+ */
+export async function seedAppSettings(
+  page: Page,
+  settings: Record<string, unknown>,
+): Promise<void> {
+  await page.addInitScript((value) => {
+    localStorage.setItem("@paseo:app-settings", JSON.stringify(value));
+  }, settings);
+}

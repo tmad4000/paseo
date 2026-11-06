@@ -82,20 +82,6 @@ Listen addresses, authentication, relay endpoints and TLS, worktree allocation, 
 
 Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, relay endpoints and TLS, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
 
-## Unresponsive worker recovery (Paseo Fork)
-
-The supervisor restarts a worker after five minutes without a heartbeat, once it has
-reached readiness and sent its first heartbeat. A supervisor tick delayed by more than
-five seconds resets the silence window to avoid restarting workers after host sleep or
-starvation. Bootstrap workers and older workers that never send heartbeats are not judged.
-
-Set `PASEO_WORKER_UNRESPONSIVE_RESTART_MS` in the supervisor's launch environment to
-change the threshold in milliseconds; `0` disables recovery. Invalid or negative values
-use the default. A restart logs process state and, on macOS when file logging is configured,
-attempts a two-second native sample in the log directory's `diagnostics/` folder. Set
-`PASEO_WORKER_WEDGE_SAMPLE=0` in the supervisor's environment to disable sampling. The
-supervisor requests graceful shutdown before force-killing the process tree and respawning.
-
 ## Conversation share links (Paseo Fork)
 
 Sharing is off until you configure a publisher or a separate share-only listener. The publisher
