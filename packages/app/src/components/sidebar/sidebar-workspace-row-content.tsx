@@ -2,6 +2,7 @@ import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
 import { Text, View, type BlurEvent, type FocusEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
+import { useWorkspaceSeenNotRead } from "@/workspace/use-agent-seen";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
 import { isWeb } from "@/constants/platform";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
@@ -171,6 +172,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
   const delegatedBy = useDelegatorName(workspace.serverId, workspace.delegatedByAgentId ?? null);
+  const seenNotRead = useWorkspaceSeenNotRead(workspace.serverId, workspace.workspaceId);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -191,6 +193,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             statusBucket={workspace.statusBucket}
             backdrop={backdrop}
             loading={isLoading}
+            seen={seenNotRead}
             testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
           />
         ) : (
@@ -198,6 +201,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             bucket={workspace.statusBucket}
             workspaceKind={workspace.workspaceKind}
             loading={isLoading}
+            seen={seenNotRead}
             reserveIdleSpace={reserveIdleStatusIndicatorSpace}
           />
         )}
@@ -243,11 +247,14 @@ function WorkspaceStatusIndicator({
   bucket,
   workspaceKind,
   loading = false,
+  seen = false,
   reserveIdleSpace = true,
 }: {
   bucket: SidebarWorkspaceEntry["statusBucket"];
   workspaceKind: SidebarWorkspaceEntry["workspaceKind"];
   loading?: boolean;
+  /** Every chat with readable attention here was looked at on this device: a hollow ring. */
+  seen?: boolean;
   reserveIdleSpace?: boolean;
 }) {
   // Busy is the only status that moves, and it is the ring rather than a dot for the same
@@ -280,8 +287,12 @@ function WorkspaceStatusIndicator({
 
   if (bucket === "attention") {
     return (
-      <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-attention">
-        <View style={styles.standaloneStatusDot} />
+      <View
+        style={styles.workspaceStatusDot}
+        testID="workspace-status-indicator-attention"
+        dataSet={seen ? SEEN_DATA_SET : undefined}
+      >
+        <View style={seen ? styles.standaloneStatusRing : styles.standaloneStatusDot} />
       </View>
     );
   }
@@ -311,6 +322,8 @@ function WorkspaceStatusIndicator({
     </View>
   );
 }
+
+const SEEN_DATA_SET = { readState: "seen" } as const;
 
 function StatusDotOverlay({ dotColorStyle }: { dotColorStyle: ViewStyle }) {
   return <View style={[styles.statusDotOverlay, dotColorStyle]} />;
@@ -577,6 +590,13 @@ const styles = StyleSheet.create((theme) => ({
     height: STATUS_INDICATOR_FILLED_DOT_SIZE,
     borderRadius: theme.borderRadius.full,
     backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
+  },
+  standaloneStatusRing: {
+    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
   },
   idleStatusDot: {
     width: STATUS_INDICATOR_FILLED_DOT_SIZE,

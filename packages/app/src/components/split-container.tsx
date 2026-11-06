@@ -81,7 +81,10 @@ import {
   WorkspaceTabIcon,
 } from "@/screens/workspace/workspace-tab-presentation";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
-import { sortTabsByActivity } from "@/screens/workspace/workspace-tab-activity";
+import {
+  sortTabsByActivity,
+  type UnreadTabStates,
+} from "@/screens/workspace/workspace-tab-activity";
 import { useSettings } from "@/hooks/use-settings";
 import {
   createDefaultLayout,
@@ -107,7 +110,7 @@ interface SplitContainerProps {
   isWorkspaceFocused: boolean;
   uiTabs: WorkspaceTab[];
   activityByAgentId: Map<string, number>;
-  unreadTabIds: Set<string>;
+  unreadTabIds: UnreadTabStates;
   hoveredCloseTabKey: string | null;
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   closingTabIds: Set<string>;
@@ -1271,6 +1274,7 @@ function SplitPaneView({
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
         unread: unreadTabIds.has(tab.tabId),
+        seen: unreadTabIds.get(tab.tabId) === "seen",
       })),
     [
       activeTabDescriptor?.key,

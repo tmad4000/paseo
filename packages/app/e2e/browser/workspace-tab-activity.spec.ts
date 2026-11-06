@@ -160,3 +160,60 @@ test("background tab activity keeps the tab order by default at desktop", async 
     await session.cleanup();
   }
 });
+
+// Two-level read status: looking at a tab marks it seen (ring), only an explicit read clears it.
+test("a looked-at tab is seen, not read, until it is marked read at desktop", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const session = await seedMockAgentWorkspace({
+    repoPrefix: "workspace-tab-seen-",
+    title: `first-${randomUUID().slice(0, 6)}`,
+  });
+  try {
+    const second = await session.client.createAgent({
+      provider: "mock",
+      cwd: session.cwd,
+      workspaceId: session.workspaceId,
+      title: "second tab",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+    });
+    await openAgentRoute(page, session);
+    await openAgentRoute(page, { workspaceId: session.workspaceId, agentId: second.id });
+    const firstTab = page.getByTestId(`workspace-tab-agent_${session.agentId}`);
+    const unread = page.getByTestId(`workspace-tab-unread-agent_${session.agentId}`);
+    const seen = page.getByTestId(`workspace-tab-seen-agent_${session.agentId}`);
+    await expect(firstTab).toBeVisible();
+    await expect(unread).toHaveCount(0);
+
+    // Background activity: new, a filled badge on the tab icon.
+    await session.client.sendAgentMessage(session.agentId, "Report a short result");
+    await session.client.waitForFinish(session.agentId);
+    await expect(unread).toBeVisible();
+    await expect(unread).toHaveAttribute("data-read-state", "new");
+    await expect(seen).toHaveCount(0);
+
+    // Looking at it (past the dwell) makes it seen: still unread, now a ring.
+    await firstTab.click();
+    await expect(seen).toBeVisible();
+    await expect(unread).toHaveAttribute("data-read-state", "seen");
+
+    // Seen sticks after leaving the tab.
+    await page.getByTestId(`workspace-tab-agent_${second.id}`).click();
+    await expect(seen).toBeVisible();
+
+    // New activity after the look turns it back into new.
+    await session.client.sendAgentMessage(session.agentId, "Report another short result");
+    await session.client.waitForFinish(session.agentId);
+    await expect(seen).toHaveCount(0);
+    await expect(unread).toHaveAttribute("data-read-state", "new");
+
+    // Only the explicit read clears the badge.
+    await firstTab.hover();
+    await page.getByTestId(`workspace-tab-mark-as-read-agent_${session.agentId}`).click();
+    await expect(unread).toHaveCount(0);
+    await expect(seen).toHaveCount(0);
+  } finally {
+    await session.cleanup();
+  }
+});
