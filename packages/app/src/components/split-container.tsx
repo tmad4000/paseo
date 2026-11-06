@@ -83,6 +83,7 @@ import {
 } from "@/screens/workspace/workspace-tab-presentation";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { sortTabsByActivity } from "@/screens/workspace/workspace-tab-activity";
+import { useSettings } from "@/hooks/use-settings";
 import {
   createDefaultLayout,
   findPaneById,
@@ -1268,11 +1269,18 @@ function SplitPaneView({
   );
   const paneTabs = useMemo(() => paneState.tabs.map((tab) => tab.descriptor), [paneState.tabs]);
   const activeTabDescriptor = paneState.activeTab?.descriptor ?? null;
+  // Off by default in the fork: tabs keep their opened/dragged order instead of jumping to the
+  // front whenever their chat gets activity. Unread dots still show what changed.
+  const sortTabsByRecentActivity = useSettings((settings) => settings.sortTabsByActivity);
+  const tabRowActivity = sortTabsByRecentActivity ? activityByAgentId : null;
   const desktopTabRowItems = useMemo<WorkspaceDesktopTabRowItem[]>(
     () =>
-      sortTabsByActivity(
-        paneTabs.map((tab) => ({ tab })),
-        activityByAgentId,
+      (tabRowActivity
+        ? sortTabsByActivity(
+            paneTabs.map((tab) => ({ tab })),
+            tabRowActivity,
+          )
+        : paneTabs.map((tab) => ({ tab }))
       ).map(({ tab }) => ({
         tab,
         isActive: tab.key === activeTabDescriptor?.key,
@@ -1282,7 +1290,7 @@ function SplitPaneView({
       })),
     [
       activeTabDescriptor?.key,
-      activityByAgentId,
+      tabRowActivity,
       closingTabIds,
       hoveredCloseTabKey,
       paneTabs,

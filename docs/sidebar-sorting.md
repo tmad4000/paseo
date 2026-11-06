@@ -39,6 +39,33 @@ list order. The workspace ... and right-click menus always show the exact **Star
 time beneath **Last active**. The value is computed in the client from agent `createdAt`, so it
 works against every host version.
 
+## Sessions grouping
+
+Sessions grouping lists chats instead of workspaces below the pinned section: every unarchived
+top-level chat in the workspaces the host, project and label filters leave, across hosts, in one
+headerless list. Subagent chats stay under their parent, and pinned sessions stay in their own
+section, so neither repeats here. Each row's clock is that chat's own, with the same role clocks,
+fallbacks and Date started rules as workspace rows; ties fall back to a stable host and agent key.
+Manual order follows the arranged project and workspace order, then each workspace's chats oldest
+first, because chats have no arrangement of their own. Title A–Z sorts by chat title.
+
+The find field matches chat titles only, so a project name alone does not keep its chats. The
+In messages tier and find-or-start are unchanged. A row opens its chat in its home workspace and
+does not mark it read; the row's check and menu do that, as review rows do. Keyboard workspace
+shortcuts number only the pinned workspaces in this mode.
+
+## Sessions needing input
+
+Workspace rows expose **Needs input (N)** with up to three exact session titles and an
+expansion control for the rest. Collapse is saved per host and workspace on this device.
+The preview appears in project, status and one-list grouping, including pinned workspaces.
+Search keeps its title-match rows instead of the preview.
+
+Permission requests and manual Needs input markers both count, including blocked child
+sessions that normally live under their parent. Selecting a row opens that exact session;
+it does not approve a permission or clear its Needs input marker. Resolved requests leave
+the preview as the host directory updates. Review previews keep their separate collapse state.
+
 ## Reviewing sessions
 
 Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;

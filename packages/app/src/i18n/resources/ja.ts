@@ -132,6 +132,11 @@ export const ja: TranslationResources = {
     noReplyYet: "先にスレッドの回答を待ってください。",
     parentUnavailable: "メインスレッドは利用できなくなりました。",
   },
+  sidebarSessions: {
+    actions: "{{title}} の操作",
+    archive: "セッションをアーカイブ",
+    open: "{{meta}} の {{title}} を開く",
+  },
   sessionPins: {
     title: "固定したセッション",
     pin: "セッションを固定",
@@ -335,6 +340,7 @@ export const ja: TranslationResources = {
       groupByStatus: "ステータスでグループ化",
       groupInOneList: "チャットを1つのリストで表示",
       showAllSessions: "すべてのセッションを表示",
+      groupAsSessions: "チャットをセッションとして表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
       thinkingGroupLabel: "思考",
@@ -1708,6 +1714,8 @@ export const ja: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} のレビュー操作",
+    needsInputSessions: "入力が必要 ({{count}})",
+    sessionActions: "{{title}} のセッション操作",
     reviewSessions: "レビュー ({{count}})",
     openTabs_one: "{{count}} 個の開いているタブ",
     openTabs: "{{count}} 個の開いているタブ",
@@ -1832,6 +1840,7 @@ export const ja: TranslationResources = {
         project: "プロジェクト",
         status: "ステータス",
         list: "1つのリスト",
+        sessions: "セッション",
         labels: "ラベル",
       },
       titleSource: {
@@ -2976,6 +2985,12 @@ export const ja: TranslationResources = {
         section: "既読状態",
         label: "チャットを開いたときに既読にする",
         description: "オフの場合、既読にするかメッセージを送信するまでチャットは未読のままです",
+      },
+      sortTabsByActivity: {
+        section: "タブ",
+        label: "最近のアクティビティでタブを並べ替える",
+        description:
+          "オンにすると、最新のアクティビティがあるチャットがタブ列の先頭に移動します。オフにすると、タブは配置した場所に留まります",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

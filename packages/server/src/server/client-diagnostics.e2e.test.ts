@@ -34,9 +34,15 @@ describe("client error diagnostics", () => {
     const phone = await connect({ clientId: "cid_phone_e2e", appVersion: "0.10.0-beta.16" });
     expect(phone.getLastServerInfoMessage()?.features?.clientDiagnostics).toBe(true);
 
+    // Times are relative to now: the host drops events past its retention window (14 days), so a
+    // fixed date eventually ages out and the listing comes back empty.
+    const minute = 60_000;
+    const occurredAt = new Date(Date.now() - 60 * minute).toISOString();
+    const lastOccurredAt = new Date(Date.now() - 59 * minute).toISOString();
+    const afterEvents = new Date(Date.now() - 30 * minute).toISOString();
     const rejection = {
       id: "cd-e2e-1",
-      occurredAt: "2026-10-22T22:52:40.000Z",
+      occurredAt,
       count: 1,
       source: "voice" as const,
       severity: "error" as const,
@@ -58,7 +64,7 @@ describe("client error diagnostics", () => {
     const retry = await phone.reportClientDiagnostics({
       deviceLabel: "iPhone",
       platform: "ios",
-      events: [{ ...rejection, count: 3, lastOccurredAt: "2026-10-22T22:53:05.000Z" }],
+      events: [{ ...rejection, count: 3, lastOccurredAt }],
     });
     expect(retry.acknowledgedIds).toEqual(["cd-e2e-1"]);
 
@@ -70,7 +76,7 @@ describe("client error diagnostics", () => {
     expect(stored).toMatchObject({
       id: "cd-e2e-1",
       count: 3,
-      lastOccurredAt: "2026-10-22T22:53:05.000Z",
+      lastOccurredAt,
       code: "realtime_state_error",
       operation: "realtime:unavailable",
       clientId: "cid_phone_e2e",
@@ -84,8 +90,6 @@ describe("client error diagnostics", () => {
 
     // Filters reach the host.
     expect((await reader.listClientDiagnostics({ source: "toast" })).events).toEqual([]);
-    expect(
-      (await reader.listClientDiagnostics({ since: "2026-10-22T23:00:00.000Z" })).events,
-    ).toEqual([]);
+    expect((await reader.listClientDiagnostics({ since: afterEvents })).events).toEqual([]);
   });
 });

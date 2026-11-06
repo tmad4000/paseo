@@ -130,6 +130,11 @@ export const zhCN: TranslationResources = {
     noReplyYet: "请先等待话题的回答。",
     parentUnavailable: "主对话已不可用。",
   },
+  sidebarSessions: {
+    actions: "{{title}} 的操作",
+    archive: "归档会话",
+    open: "在 {{meta}} 中打开 {{title}}",
+  },
   sessionPins: {
     title: "已固定的会话",
     pin: "固定会话",
@@ -330,6 +335,7 @@ export const zhCN: TranslationResources = {
       groupByStatus: "按状态分组",
       groupInOneList: "以单一列表显示聊天",
       showAllSessions: "显示所有会话",
+      groupAsSessions: "以会话显示聊天",
       modelGroupLabel: "模型",
       modelSearchKeywords: "切换模型 更改模型 设置模型 选择模型",
       thinkingGroupLabel: "思考",
@@ -1673,6 +1679,8 @@ export const zhCN: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} 的审阅操作",
+    needsInputSessions: "需要输入 ({{count}})",
+    sessionActions: "{{title}} 的会话操作",
     reviewSessions: "审阅 ({{count}})",
     openTabs_one: "{{count}} 个打开的标签页",
     openTabs: "{{count}} 个打开的标签页",
@@ -1797,6 +1805,7 @@ export const zhCN: TranslationResources = {
         project: "项目",
         status: "状态",
         list: "单一列表",
+        sessions: "会话",
         labels: "标签",
       },
       titleSource: {
@@ -2912,6 +2921,11 @@ export const zhCN: TranslationResources = {
         section: "已读状态",
         label: "打开聊天时标记为已读",
         description: "关闭后，聊天会保持未读，直到你将其标记为已读或向其发送消息",
+      },
+      sortTabsByActivity: {
+        section: "标签页",
+        label: "按最近活动排序标签页",
+        description: "开启后，最近有活动的聊天会移到标签栏最前面。关闭后，标签页保持在你放置的位置",
       },
       autoExpandReasoning: {
         label: "始终展开推理过程",

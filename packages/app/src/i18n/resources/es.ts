@@ -133,6 +133,11 @@ export const es: TranslationResources = {
     noReplyYet: "Espera primero la respuesta del hilo.",
     parentUnavailable: "El hilo principal ya no está disponible.",
   },
+  sidebarSessions: {
+    actions: "Acciones para {{title}}",
+    archive: "Archivar sesión",
+    open: "Abrir {{title}} en {{meta}}",
+  },
   sessionPins: {
     title: "Sesiones fijadas",
     pin: "Fijar sesión",
@@ -337,6 +342,7 @@ export const es: TranslationResources = {
       groupByStatus: "Agrupar por estado",
       groupInOneList: "Mostrar chats en una sola lista",
       showAllSessions: "Mostrar todas las sesiones",
+      groupAsSessions: "Mostrar chats como sesiones",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -1738,6 +1744,8 @@ export const es: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Acciones de revisión para {{title}}",
+    needsInputSessions: "Necesita intervención ({{count}})",
+    sessionActions: "Acciones de sesión para {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} pestaña abierta",
     openTabs: "{{count}} pestañas abiertas",
@@ -1862,6 +1870,7 @@ export const es: TranslationResources = {
         project: "Proyecto",
         status: "Estado",
         list: "Una sola lista",
+        sessions: "Sesiones",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -3017,6 +3026,12 @@ export const es: TranslationResources = {
         label: "Marcar chats como leídos al abrirlos",
         description:
           "Si está desactivado, un chat sigue sin leer hasta que lo marques como leído o le envíes un mensaje",
+      },
+      sortTabsByActivity: {
+        section: "Pestañas",
+        label: "Ordenar pestañas por actividad reciente",
+        description:
+          "Si está activado, el chat con la actividad más reciente pasa al principio de la fila de pestañas. Si está desactivado, las pestañas se quedan donde las pusiste",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

@@ -18,11 +18,23 @@ export type ReviewAgent = Pick<
   | "messageActivity"
 >;
 
-function needsReview<T extends ReviewAgent>(agent: T, agents: ReadonlyMap<string, T>): boolean {
+type AttentionBucket = "attention" | "needs_input";
+
+function needsAttention<T extends ReviewAgent>(
+  agent: T,
+  agents: ReadonlyMap<string, T>,
+  bucket: AttentionBucket,
+): boolean {
   if (agent.archivedAt || !agent.workspaceId) return false;
   const review = getReviewStatus(agent.labels);
   const parent = agent.parentAgentId ? agents.get(agent.parentAgentId) : undefined;
-  if (!isWorkspaceRootAgent(agent, parent) && !shouldAutoOpenAgentTab(agent) && !review)
+  // A blocked child must be reachable even when it normally lives under its parent.
+  if (
+    bucket === "attention" &&
+    !isWorkspaceRootAgent(agent, parent) &&
+    !shouldAutoOpenAgentTab(agent) &&
+    !review
+  )
     return false;
   let status = agent.status;
   if (agent.turn.phase === "open") status = "running";
@@ -34,12 +46,14 @@ function needsReview<T extends ReviewAgent>(agent: T, agents: ReadonlyMap<string
       pendingPermissionCount: agent.pendingPermissions.length,
       requiresAttention: agent.requiresAttention,
       attentionReason: agent.attentionReason,
-    }) === "attention"
+    }) === bucket
   );
 }
 
 /** Index each immutable host directory once, rather than rescanning it for every workspace row. */
-export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
+export function createWorkspaceReviewSelector<T extends ReviewAgent>(
+  bucket: AttentionBucket = "attention",
+) {
   const cache = new WeakMap<ReadonlyMap<string, T>, ReadonlyMap<string, readonly T[]>>();
   const empty: readonly T[] = [];
   return (agents: ReadonlyMap<string, T> | undefined, workspaceId: string): readonly T[] => {
@@ -48,7 +62,7 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
     if (!index) {
       const next = new Map<string, T[]>();
       for (const agent of agents.values()) {
-        if (!agent.workspaceId || !needsReview(agent, agents)) continue;
+        if (!agent.workspaceId || !needsAttention(agent, agents, bucket)) continue;
         const rows = next.get(agent.workspaceId) ?? [];
         if (rows.length === 0) next.set(agent.workspaceId, rows);
         rows.push(agent);
@@ -66,6 +80,7 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
 }
 
 export const workspaceReviewAgents = createWorkspaceReviewSelector<Agent>();
+export const workspaceNeedsInputAgents = createWorkspaceReviewSelector<Agent>("needs_input");
 
 function reviewReplyTime(agent: ReviewAgent): number {
   const reply = Date.parse(agent.messageActivity?.lastAssistantMessageAt ?? "");

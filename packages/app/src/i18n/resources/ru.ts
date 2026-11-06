@@ -132,6 +132,11 @@ export const ru: TranslationResources = {
     noReplyYet: "Сначала дождитесь ответа в ветке.",
     parentUnavailable: "Основной чат больше недоступен.",
   },
+  sidebarSessions: {
+    actions: "Действия для {{title}}",
+    archive: "Архивировать сеанс",
+    open: "Открыть {{title}} в {{meta}}",
+  },
   sessionPins: {
     title: "Закреплённые сеансы",
     pin: "Закрепить сеанс",
@@ -335,6 +340,7 @@ export const ru: TranslationResources = {
       groupByStatus: "Группировать по статусу",
       groupInOneList: "Показывать чаты одним списком",
       showAllSessions: "Показать все сессии",
+      groupAsSessions: "Показывать чаты как сеансы",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -1712,6 +1718,8 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Действия проверки для {{title}}",
+    needsInputSessions: "Требуется ввод ({{count}})",
+    sessionActions: "Действия с сеансом {{title}}",
     reviewSessions: "Проверка ({{count}})",
     openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",
@@ -1836,6 +1844,7 @@ export const ru: TranslationResources = {
         project: "Проект",
         status: "Статус",
         list: "Один список",
+        sessions: "Сеансы",
         labels: "Метки",
       },
       titleSource: {
@@ -2994,6 +3003,12 @@ export const ru: TranslationResources = {
         label: "Отмечать чаты прочитанными при открытии",
         description:
           "Если выключено, чат остаётся непрочитанным, пока вы не отметите его прочитанным или не отправите сообщение",
+      },
+      sortTabsByActivity: {
+        section: "Вкладки",
+        label: "Сортировать вкладки по недавней активности",
+        description:
+          "Если включено, чат с последней активностью перемещается в начало ряда вкладок. Если выключено, вкладки остаются там, где вы их разместили",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",
