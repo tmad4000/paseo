@@ -63,6 +63,7 @@ import {
 import { renderWorkspaceTabMenuIcon } from "@/screens/workspace/workspace-tab-menu-icon";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
+import type { TabReadState } from "@/screens/workspace/workspace-tab-activity";
 import type { Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
@@ -507,6 +508,8 @@ export interface WorkspaceDesktopTabRowItem {
   tab: WorkspaceTabDescriptor;
   isActive: boolean;
   unread: boolean;
+  /** Unread, but already looked at on this device: the icon badge is a ring, not filled. */
+  seen?: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
 }
@@ -548,9 +551,10 @@ function completeWorkspaceTabLabelWidths(
     if (!measurement || measurement.label !== label || measurement.width <= 0) {
       return null;
     }
-    // Both dots sit in the content row, so the label must truncate before either one.
-    const dotAllowance = Number(modified) + Number(unread);
-    // An unread tab also reserves room for its read check (see `tabReadControlSpace`).
+    // The modified dot sits in the content row, so the label must truncate before it. The read
+    // state lives on the icon's corner badge and takes no row width of its own.
+    const dotAllowance = Number(modified);
+    // An unread tab still reserves room for its read check (see `tabReadControlSpace`).
     const readControlAllowance = unread ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
     widths.push(
       measurement.width +
@@ -728,7 +732,7 @@ function TabHandleContent({
   tabLabelSkeletonStyle,
   tabLabelStyle,
   modifiedTestId,
-  unread,
+  readState,
   reserveReadControl,
 }: {
   presentation: WorkspaceTabPresentation;
@@ -738,7 +742,7 @@ function TabHandleContent({
   tabLabelSkeletonStyle: React.ComponentProps<typeof View>["style"];
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
-  unread: boolean;
+  readState: TabReadState;
   /** Keep the title clear of the read check, which the overlay draws without a solid scrim. */
   reserveReadControl: boolean;
 }) {
@@ -751,7 +755,12 @@ function TabHandleContent({
   return (
     <View style={styles.tabHandle} dataSet={tabHandleDataSet}>
       <View style={styles.tabIcon}>
-        <WorkspaceTabIcon presentation={presentation} active={isHighlighted} backdrop={backdrop} />
+        <WorkspaceTabIcon
+          presentation={presentation}
+          active={isHighlighted}
+          backdrop={backdrop}
+          readState={readState}
+        />
       </View>
       {showLabel && presentation.titleState === "loading" ? (
         <View style={tabLabelSkeletonStyle} />
@@ -769,9 +778,6 @@ function TabHandleContent({
           accessibilityLabel={t("workspace.tabs.modified")}
           testID={modifiedTestId}
         />
-      ) : null}
-      {unread ? (
-        <View style={styles.tabUnreadDot} testID={`workspace-tab-unread-${presentation.key}`} />
       ) : null}
       {reserveReadControl ? <View style={styles.tabReadControlSpace} /> : null}
     </View>
@@ -930,6 +936,7 @@ function TabChip({
   tab,
   isActive,
   unread,
+  seen,
   readAction,
   isDragging,
   isFocused,
@@ -951,6 +958,7 @@ function TabChip({
   tab: WorkspaceTabDescriptor;
   isActive: boolean;
   unread: boolean;
+  seen: boolean;
   readAction: AgentReadAction;
   isDragging: boolean;
   isFocused: boolean;
@@ -978,6 +986,14 @@ function TabChip({
   );
   const statusPages = useAgentStatusMenuPages(statusTarget);
   const { t } = useTranslation();
+  let readState: TabReadState = "read";
+  if (unread) readState = seen ? "seen" : "new";
+  let unreadHint: string | undefined;
+  if (readState === "new") {
+    unreadHint = t("workspace.tabs.newActivity", { defaultValue: "New activity" });
+  } else if (readState === "seen") {
+    unreadHint = t("workspace.tabs.seenNotRead", { defaultValue: "Seen, not read" });
+  }
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
   );
@@ -1050,11 +1066,7 @@ function TabChip({
               onPress={handleNavigateTab}
               accessibilityRole="button"
               accessibilityLabel={accessibilityLabel}
-              accessibilityHint={
-                unread
-                  ? t("workspace.tabs.newActivity", { defaultValue: "New activity" })
-                  : undefined
-              }
+              accessibilityHint={unreadHint}
               accessibilityState={tabAccessibilityState}
               aria-selected={isActive}
             >
@@ -1066,7 +1078,7 @@ function TabChip({
                 tabLabelSkeletonStyle={tabLabelSkeletonStyle}
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
-                unread={unread}
+                readState={readState}
                 reserveReadControl={readAction.canMarkRead}
               />
             </ContextMenuTrigger>
@@ -1760,6 +1772,7 @@ function ResolvedDesktopTabChip({
         tab={item.tab}
         isActive={item.isActive}
         unread={item.unread}
+        seen={item.seen === true}
         readAction={readAction}
         isDragging={isDragging}
         isFocused={isFocused}
@@ -1997,13 +2010,6 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.foregroundMuted,
-  },
-  tabUnreadDot: {
-    width: TAB_MODIFIED_DOT_SIZE,
-    height: TAB_MODIFIED_DOT_SIZE,
-    flexShrink: 0,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.accent,
   },
   newTabTooltipText: {
     color: theme.colors.foreground,

@@ -150,10 +150,13 @@ import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-reque
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
   reconcileTabActivity,
+  collectUnreadTabStates,
+  type UnreadTabStates,
   sortTabsByActivity,
   type TabActivityState,
 } from "@/screens/workspace/workspace-tab-activity";
 import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
+import { useTabSeenDwell } from "@/screens/workspace/use-tab-seen-dwell";
 import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import {
   resolveWorkspaceExplorerToggleOwner,
@@ -446,7 +449,7 @@ interface MobileWorkspaceTabSwitcherProps {
   activeTab: WorkspaceTabDescriptor | null;
   tabSwitcherOptions: ComboboxOption[];
   tabByKey: Map<string, WorkspaceTabDescriptor>;
-  unreadTabIds: Set<string>;
+  unreadTabIds: UnreadTabStates;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
@@ -559,6 +562,7 @@ function MobileWorkspaceTabOption({
   selected,
   active,
   unread,
+  seen,
   onPress,
   onCopyResumeCommand,
   onCopyAgentId,
@@ -581,6 +585,8 @@ function MobileWorkspaceTabOption({
   selected: boolean;
   active: boolean;
   unread: boolean;
+  /** Unread, but this device has already looked at it: a ring instead of a filled badge. */
+  seen: boolean;
   onPress: () => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
@@ -689,11 +695,12 @@ function MobileWorkspaceTabOption({
         selected={selected}
         active={active}
         unread={unread}
+        seen={seen}
         onPress={onPress}
         trailingAccessory={trailingAccessory}
       />
     ),
-    [selected, active, unread, onPress, trailingAccessory],
+    [selected, active, unread, seen, onPress, trailingAccessory],
   );
 
   return (
@@ -780,6 +787,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           selected={selected}
           active={active}
           unread={unreadTabIds.has(tab.tabId)}
+          seen={unreadTabIds.get(tab.tabId) === "seen"}
           onPress={onPress}
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
@@ -2272,6 +2280,21 @@ function WorkspaceScreenContent({
     [activityByAgentId, tabs],
   );
   const tabReadPolicy = useTabReadPolicy(allActivityTabs, normalizedServerId);
+  const seenDwellCandidate = useMemo(
+    () =>
+      activeTab?.descriptor.target.kind === "agent" && normalizedServerId
+        ? {
+            tabId: activeTab.descriptor.tabId,
+            serverId: normalizedServerId,
+            agentId: activeTab.descriptor.target.agentId,
+          }
+        : null,
+    [activeTab, normalizedServerId],
+  );
+  const dwelledTabIds = useTabSeenDwell({
+    candidate: seenDwellCandidate,
+    enabled: isRouteFocused,
+  });
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
@@ -2281,13 +2304,11 @@ function WorkspaceScreenContent({
         activityByAgentId,
         viewedTabIds,
         tabReadPolicy,
+        dwelledTabIds,
       ),
     );
-  }, [activityByAgentId, allActivityTabs, tabReadPolicy, viewedTabIds]);
-  const unreadTabIds = useMemo(
-    () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
-    [tabActivity],
-  );
+  }, [activityByAgentId, allActivityTabs, dwelledTabIds, tabReadPolicy, viewedTabIds]);
+  const unreadTabIds = useMemo(() => collectUnreadTabStates(tabActivity), [tabActivity]);
   const hasSetupTab = useMemo(
     () =>
       uiTabs.some(
@@ -4015,6 +4036,7 @@ function WorkspaceScreenContent({
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
         unread: unreadTabIds.has(tab.tabId),
+        seen: unreadTabIds.get(tab.tabId) === "seen",
       })),
     [
       activeTabDescriptor?.tabId,

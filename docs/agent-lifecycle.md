@@ -228,6 +228,29 @@ restores the old focus-driven reads; the choice is per device (`AppSettings.mark
 - Each check is labelled with what it reads ("Mark ‹name› as read"). The sidebar check appears on
   hover, on keyboard focus within the row, and always on touch, where it is a 44pt target. On web
   it has no button role because the row is already a `<button>`, the same as the row's kebab.
+- **Seen vs read.** Between "new" and "read" sits a third, device-local level: _seen, not read_.
+  A tab counts as seen once it has been the focused pane's tab, in a focused window, for
+  `TAB_SEEN_DWELL_MS` (1.5 s) without interruption, so flicking through tabs with Ctrl+Tab does
+  not count. Seen is automatic and cheap; read stays a deliberate act (check, menu, sent prompt).
+  The tab icon's corner badge carries the level: **filled** for new activity, a **hollow ring**
+  for seen-not-read, nothing once read; accent colour normally, red when the agent failed. The
+  running ring and the needs-input alert keep priority over it. Sidebar session and workspace
+  rows and the phone tab switcher draw the same filled/ring pair (a workspace row rings only
+  when every chat with readable attention in it was seen).
+  - Seen marks live next to the read marks (`seenThroughByAgentKey` in
+    `stores/agent-read-marks-store.ts`), per device, never on the host. They record the _seen
+    clock_: the later of the agent's last activity and its readable attention stamp
+    (`agentSeenClock`). New activity, a new finish or a "Mark as unread" (which stamps fresh
+    attention, and also drops the local seen mark) therefore turns the ring back into a filled
+    badge.
+  - Seen never clears host attention: `hasClearableAgentAttention` still means "not read", the
+    read check still shows on seen tabs, and other devices still show it unread.
+  - With "Mark chats read when opened" on, viewing already reads, so the seen level never appears.
+  - Test IDs: `workspace-tab-unread-<key>` marks any unread badge (with `data-read-state` =
+    `new` | `seen`); `workspace-tab-seen-<key>` is the ring itself.
+  - Code: `reconcileTabActivity`'s `readState`, `useTabSeenDwell`
+    (`screens/workspace/use-tab-seen-dwell.ts`) and `useAgentSeenNotRead` /
+    `useWorkspaceSeenNotRead` (`workspace/use-agent-seen.ts`).
 - The policy lives in `shouldClearAgentAttention` (`packages/app/src/utils/agent-attention.ts`),
   `reconcileTabActivity` (`packages/app/src/screens/workspace/workspace-tab-activity.ts`),
   `workspace/mark-read.ts`, and the host's `isReadClearable`

@@ -1188,6 +1188,7 @@ export const ja: TranslationResources = {
       loading: "読み込み中...",
       modified: "未保存の変更",
       newActivity: "新しいアクティビティ",
+      seenNotRead: "表示済み・未読",
       loadingAgentTitle: "エージェントタイトルを読み込み中",
       fallback: {
         newAgent: "新しいエージェント",

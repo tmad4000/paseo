@@ -1183,6 +1183,7 @@ export const ko: TranslationResources = {
       loading: "불러오는 중...",
       modified: "저장되지 않은 변경사항",
       newActivity: "새 활동",
+      seenNotRead: "봤지만 읽지 않음",
       loadingAgentTitle: "에이전트 제목 불러오는 중",
       fallback: {
         newAgent: "새 에이전트",
