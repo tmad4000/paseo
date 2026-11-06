@@ -130,6 +130,11 @@ export const ko: TranslationResources = {
     noReplyYet: "먼저 스레드의 답변을 기다리세요.",
     parentUnavailable: "메인 스레드를 더 이상 사용할 수 없습니다.",
   },
+  sidebarSessions: {
+    actions: "{{title}} 작업",
+    archive: "세션 보관",
+    open: "{{meta}}에서 {{title}} 열기",
+  },
   sessionPins: {
     title: "고정된 세션",
     pin: "세션 고정",
@@ -340,6 +345,7 @@ export const ko: TranslationResources = {
       groupByStatus: "상태별 그룹화",
       groupInOneList: "채팅을 하나의 목록으로 표시",
       showAllSessions: "모든 세션 보기",
+      groupAsSessions: "채팅을 세션으로 표시",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -1707,6 +1713,8 @@ export const ko: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} 검토 작업",
+    needsInputSessions: "입력 필요 ({{count}})",
+    sessionActions: "{{title}} 세션 작업",
     reviewSessions: "검토 ({{count}})",
     openTabs_one: "열린 탭 {{count}}개",
     openTabs: "열린 탭 {{count}}개",
@@ -1831,6 +1839,7 @@ export const ko: TranslationResources = {
         project: "프로젝트",
         status: "상태",
         list: "하나의 목록",
+        sessions: "세션",
         labels: "레이블",
       },
       titleSource: {
@@ -2974,6 +2983,12 @@ export const ko: TranslationResources = {
         label: "채팅을 열면 읽음으로 표시",
         description:
           "끄면 읽음으로 표시하거나 메시지를 보낼 때까지 채팅이 읽지 않음 상태로 유지됩니다",
+      },
+      sortTabsByActivity: {
+        section: "탭",
+        label: "최근 활동순으로 탭 정렬",
+        description:
+          "켜면 가장 최근에 활동한 채팅이 탭 줄의 맨 앞으로 이동합니다. 끄면 탭이 놓은 자리에 그대로 있습니다",
       },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",

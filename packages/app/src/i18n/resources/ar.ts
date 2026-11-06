@@ -130,6 +130,11 @@ export const ar: TranslationResources = {
     noReplyYet: "انتظر إجابة السلسلة أولاً.",
     parentUnavailable: "لم تعد المحادثة الرئيسية متاحة.",
   },
+  sidebarSessions: {
+    actions: "إجراءات {{title}}",
+    archive: "أرشفة الجلسة",
+    open: "فتح {{title}} في {{meta}}",
+  },
   sessionPins: {
     title: "الجلسات المثبتة",
     pin: "تثبيت الجلسة",
@@ -340,6 +345,7 @@ export const ar: TranslationResources = {
       groupByStatus: "تجميع حسب الحالة",
       groupInOneList: "عرض المحادثات في قائمة واحدة",
       showAllSessions: "إظهار كل الجلسات",
+      groupAsSessions: "عرض المحادثات كجلسات",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
       thinkingGroupLabel: "التفكير",
@@ -1696,6 +1702,8 @@ export const ar: TranslationResources = {
   },
   sidebar: {
     reviewActions: "إجراءات مراجعة {{title}}",
+    needsInputSessions: "بحاجة إلى إدخال ({{count}})",
+    sessionActions: "إجراءات الجلسة {{title}}",
     reviewSessions: "مراجعة ({{count}})",
     openTabs_one: "علامة تبويب مفتوحة: {{count}}",
     openTabs: "{{count}} علامات تبويب مفتوحة",
@@ -1820,6 +1828,7 @@ export const ar: TranslationResources = {
         project: "المشروع",
         status: "الحالة",
         list: "قائمة واحدة",
+        sessions: "الجلسات",
         labels: "التسميات",
       },
       titleSource: {
@@ -2955,6 +2964,12 @@ export const ar: TranslationResources = {
         section: "حالة القراءة",
         label: "تعليم المحادثات كمقروءة عند فتحها",
         description: "عند الإيقاف، تبقى المحادثة غير مقروءة حتى تعلّمها كمقروءة أو ترسل إليها رسالة",
+      },
+      sortTabsByActivity: {
+        section: "علامات التبويب",
+        label: "ترتيب علامات التبويب حسب النشاط الأخير",
+        description:
+          "عند التشغيل، تنتقل المحادثة ذات النشاط الأحدث إلى بداية صف علامات التبويب. عند الإيقاف، تبقى علامات التبويب حيث وضعتها",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

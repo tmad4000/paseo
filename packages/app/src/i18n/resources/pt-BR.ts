@@ -133,6 +133,11 @@ export const ptBR: TranslationResources = {
     noReplyYet: "Aguarde primeiro a resposta da conversa paralela.",
     parentUnavailable: "A conversa principal não está mais disponível.",
   },
+  sidebarSessions: {
+    actions: "Ações para {{title}}",
+    archive: "Arquivar sessão",
+    open: "Abrir {{title}} em {{meta}}",
+  },
   sessionPins: {
     title: "Sessões fixadas",
     pin: "Fixar sessão",
@@ -344,6 +349,7 @@ export const ptBR: TranslationResources = {
       groupByStatus: "Agrupar por status",
       groupInOneList: "Mostrar chats em uma única lista",
       showAllSessions: "Mostrar todas as sessões",
+      groupAsSessions: "Mostrar chats como sessões",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "trocar modelo mudar modelo definir modelo selecionar modelo",
       thinkingGroupLabel: "Raciocínio",
@@ -1732,6 +1738,8 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Ações de revisão para {{title}}",
+    needsInputSessions: "Precisa de intervenção ({{count}})",
+    sessionActions: "Ações da sessão {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} aba aberta",
     openTabs: "{{count}} abas abertas",
@@ -1856,6 +1864,7 @@ export const ptBR: TranslationResources = {
         project: "Projeto",
         status: "Status",
         list: "Lista única",
+        sessions: "Sessões",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -3003,6 +3012,12 @@ export const ptBR: TranslationResources = {
         label: "Marcar chats como lidos ao abrir",
         description:
           "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
+      },
+      sortTabsByActivity: {
+        section: "Abas",
+        label: "Ordenar abas por atividade recente",
+        description:
+          "Quando ativado, o chat com a atividade mais recente vai para o início da fileira de abas. Quando desativado, as abas ficam onde você as colocou",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

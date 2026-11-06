@@ -302,6 +302,33 @@ describe("workspace review identities", () => {
       ),
     ).toEqual(["ready", "stale-running"]);
   });
+  it("names every session needing input, including blocked children, and removes resolved requests", () => {
+    const needsInput = createWorkspaceReviewSelector<ReviewAgent>("needs_input");
+    const blocked = reviewAgent("blocked-child", {
+      parentAgentId: "root",
+      requiresAttention: false,
+      attentionReason: "permission",
+      turn: { phase: "open", turnId: "t", startedAt: null, cancellationRequestId: null },
+    });
+    const agents = [
+      reviewAgent("root"),
+      blocked,
+      reviewAgent("manual", { labels: { "paseo.manual-needs-input": "true" } }),
+      reviewAgent("archived", { attentionReason: "permission", archivedAt: new Date() }),
+      reviewAgent("other", { attentionReason: "permission", workspaceId: "ws-2" }),
+      reviewAgent("failed", { status: "error" }),
+    ];
+    const directory = new Map(agents.map((entry) => [entry.id, entry]));
+    expect(needsInput(directory, "ws-1").map((entry) => entry.id)).toEqual([
+      "blocked-child",
+      "manual",
+    ]);
+    const resolved = new Map(directory);
+    resolved.set(blocked.id, { ...blocked, attentionReason: null });
+    expect(needsInput(resolved, "ws-1").map((entry) => entry.id)).toEqual(["manual"]);
+    expect(needsInput(directory, "ws-2").map((entry) => entry.id)).toEqual(["other"]);
+    expect(needsInput(undefined, "ws-1")).toEqual([]);
+  });
   it("orders by completed assistant replies with unknown times last and deterministic ties", () => {
     const clock = (lastAssistantMessageAt: string) => ({
       lastAssistantMessageAt,

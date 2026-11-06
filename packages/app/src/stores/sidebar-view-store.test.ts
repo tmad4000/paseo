@@ -340,3 +340,10 @@ describe("Mine filter preference", () => {
     expect(migrated.filterScope).toBe("names");
   });
 });
+
+it("keeps sessions mode across a migration", () => {
+  expect(migrateSidebarViewState({ groupMode: "sessions" }).groupMode).toBe("sessions");
+  useSidebarViewStore.getState().setGroupMode("sessions");
+  expect(useSidebarViewStore.getState().groupMode).toBe("sessions");
+  useSidebarViewStore.getState().setGroupMode("project");
+});

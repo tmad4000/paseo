@@ -7,13 +7,19 @@ import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
 /**
- * How the sidebar arranges unpinned workspaces: under project headers, under status headers, or
- * as one flat list in the chosen sort order (Codex's "In one list"), where each row still carries
- * its project icon, status badge and project name.
+ * How the sidebar arranges what sits below the pinned section: workspaces under project headers,
+ * under status headers, or as one flat list in the chosen sort order (Codex's "In one list"),
+ * where each row still carries its project icon, status badge and project name; or, in
+ * `sessions`, one flat list of the chats themselves rather than their workspaces.
  */
-export type SidebarGroupMode = "project" | "status" | "list";
+export type SidebarGroupMode = "project" | "status" | "list" | "sessions";
 
-export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = ["project", "status", "list"];
+export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = [
+  "project",
+  "status",
+  "list",
+  "sessions",
+];
 
 /**
  * What the sidebar find field searches: names only (projects, workspaces, tab titles), or names
@@ -109,7 +115,7 @@ interface SidebarViewPersistedState {
   mineOnly?: boolean;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "sessions", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
@@ -177,7 +183,9 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
 
   return {
     groupMode:
-      state.groupMode === "status" || state.groupMode === "list" ? state.groupMode : "project",
+      state.groupMode === "status" || state.groupMode === "list" || state.groupMode === "sessions"
+        ? state.groupMode
+        : "project",
     sortMode: state.sortMode ?? "recent",
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],

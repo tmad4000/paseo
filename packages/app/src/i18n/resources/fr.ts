@@ -131,6 +131,11 @@ export const fr: TranslationResources = {
     noReplyYet: "Attendez d'abord la réponse du fil.",
     parentUnavailable: "Le fil principal n'est plus disponible.",
   },
+  sidebarSessions: {
+    actions: "Actions pour {{title}}",
+    archive: "Archiver la session",
+    open: "Ouvrir {{title}} dans {{meta}}",
+  },
   sessionPins: {
     title: "Sessions épinglées",
     pin: "Épingler la session",
@@ -343,6 +348,7 @@ export const fr: TranslationResources = {
       groupByStatus: "Grouper par statut",
       groupInOneList: "Afficher les chats en une seule liste",
       showAllSessions: "Afficher toutes les sessions",
+      groupAsSessions: "Afficher les chats en sessions",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -1739,6 +1745,8 @@ export const fr: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Actions de révision pour {{title}}",
+    needsInputSessions: "Intervention requise ({{count}})",
+    sessionActions: "Actions de session pour {{title}}",
     reviewSessions: "À examiner ({{count}})",
     openTabs_one: "{{count}} onglet ouvert",
     openTabs: "{{count}} onglets ouverts",
@@ -1863,6 +1871,7 @@ export const fr: TranslationResources = {
         project: "Projet",
         status: "Statut",
         list: "Une seule liste",
+        sessions: "Sessions",
         labels: "Libellés",
       },
       titleSource: {
@@ -3025,6 +3034,12 @@ export const fr: TranslationResources = {
         label: "Marquer les discussions comme lues à l'ouverture",
         description:
           "Désactivé, une discussion reste non lue jusqu'à ce que vous la marquiez comme lue ou lui envoyiez un message",
+      },
+      sortTabsByActivity: {
+        section: "Onglets",
+        label: "Trier les onglets par activité récente",
+        description:
+          "Activé, le chat le plus récemment actif passe en tête de la rangée d’onglets. Désactivé, les onglets restent là où vous les avez placés",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",
