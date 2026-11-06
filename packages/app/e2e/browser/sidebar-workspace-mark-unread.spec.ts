@@ -710,6 +710,8 @@ test("needs input expands to exact sessions in project and status grouping and k
   await expectSelectedAgent(page, sibling.id);
   const pending = await subject.client.fetchAgent({ agentId: sibling.id });
   expect(pending?.agent.pendingPermissions).toHaveLength(1);
+  await expect(siblingRow).toContainText("Needs input");
+  await expect(siblingRow).not.toContainText("(manual)");
 });
 
 test("compact needs input expands beyond three sessions and opens the chosen tab", async ({

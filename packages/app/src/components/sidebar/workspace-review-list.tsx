@@ -140,7 +140,7 @@ function AttentionRow({
   const review = getReviewStatus(agent.labels);
   const unread = agent.requiresAttention === true;
   const labels = [
-    kind === "needs-input" ? t("manualStatus.needs_input") : null,
+    kind === "needs-input" ? t("subthreads.state.needsInput") : null,
     review ? t(`manualStatus.${review}`) : null,
     unread ? t("subthreads.state.unread") : null,
   ]
