@@ -1,3 +1,4 @@
+import { countNeedsYouNow } from "@getpaseo/protocol/agent-state-bucket";
 import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
 import { StreamReturnButton } from "@/companion-stream/stream-return";
@@ -371,6 +372,13 @@ function useAgentPanelDescriptor(
       };
     }),
   );
+  // A blocked ask or open question in this chat puts its tab in Needs input.
+  const needsYouCount = useSessionStore((state) => {
+    const session = state.sessions[context.serverId];
+    const agent =
+      session?.agents?.get(target.agentId) ?? session?.agentDetails?.get(target.agentId);
+    return countNeedsYouNow(agent?.companionEntries);
+  });
   const provider = descriptorState.provider;
   const label = resolveWorkspaceAgentTabLabel(descriptorState.title);
   const icon = getProviderIcon(provider, context.serverId);
@@ -392,6 +400,7 @@ function useAgentPanelDescriptor(
           requiresAttention: descriptorState.requiresAttention,
           attentionReason: descriptorState.attentionReason,
           labels: descriptorState.labels,
+          needsYouCount,
         })
       : null,
   };

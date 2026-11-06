@@ -1914,6 +1914,16 @@ export const es: TranslationResources = {
       description: "Cambia o borra los filtros de la barra lateral para ver espacios de trabajo.",
       clear: "Borrar filtros",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "Anclados",
     },

@@ -44,7 +44,12 @@ import {
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
 import { useCommandCenterActions } from "./provider";
-import { buildGroupingContributions, buildMineFilterContribution } from "./root-contributions";
+import {
+  buildGroupingContributions,
+  buildMineFilterContribution,
+  buildNeedsYouSectionContribution,
+} from "./root-contributions";
+import { useNeedsYouSectionStore } from "@/companion-stream/needs-you-section-store";
 
 const ThemedPlus = withUnistyles(Plus, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
@@ -165,6 +170,8 @@ export function CommandCenterRootActions() {
   const setGroupMode = useSidebarViewStore((state) => state.setGroupMode);
   const mineOnly = useSidebarViewStore((state) => state.mineOnly);
   const setMineOnly = useSidebarViewStore((state) => state.setMineOnly);
+  const needsYouSection = useNeedsYouSectionStore((state) => state.enabled);
+  const setNeedsYouSection = useNeedsYouSectionStore((state) => state.setEnabled);
   const isCompact = useIsCompactFormFactor();
   const toggleMobileAgentList = usePanelStore((state) => state.toggleMobileAgentList);
   const toggleDesktopAgentList = usePanelStore((state) => state.toggleDesktopAgentList);
@@ -449,6 +456,15 @@ export function CommandCenterRootActions() {
         icon: UserRoundIcon,
         setMineOnly,
       }),
+      buildNeedsYouSectionContribution({
+        enabled: needsYouSection,
+        labels: {
+          section: t("shell.commandCenter.actions"),
+          show: t("sidebar.needsYou.showSection"),
+          hide: t("sidebar.needsYou.hideSection"),
+        },
+        setEnabled: setNeedsYouSection,
+      }),
     );
 
     return availableActions;
@@ -457,6 +473,8 @@ export function CommandCenterRootActions() {
     homeRoute,
     keyboardActionDispatcher,
     mineOnly,
+    needsYouSection,
+    setNeedsYouSection,
     openAddProject,
     openImportSession,
     overrides,

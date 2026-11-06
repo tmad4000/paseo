@@ -86,6 +86,10 @@ it with what they need ("Needs your go-ahead to deploy to production").
   asks stay out until they update. `list_stream_asks` also takes `states` and `compact`
   (small triage rows, default page 25).
 
+The same predicate drives two sidebar signals: a chat with Needs you items waiting now is in
+**Needs input** (Status grouping, tab and workspace state), and One list and Project grouping
+pin a **Needs you · N** section with the first few items above the chats.
+
 ## Views and compatibility
 
 `stream.list.request.view` selects activity/tasks/questions/saved/needs_you.

@@ -1,6 +1,7 @@
 import { MANUAL_NEEDS_INPUT_LABEL, REVIEW_STATUS_LABEL } from "./agent-labels.js";
 import { describe, expect, it } from "vitest";
 import {
+  countNeedsYouNow,
   deriveAgentStateBucket,
   getAgentStatusPriority,
   getWorkspaceStateBucketPriority,
@@ -136,5 +137,44 @@ describe("manual status markers", () => {
     expect(deriveAgentStateBucket({ status: "idle", labels, requiresAttention: true })).toBe(
       "attention",
     );
+  });
+});
+
+describe("Needs you items put a chat in needs_input", () => {
+  const blockedAsk = {
+    id: "ask:deploy",
+    kind: "question" as const,
+    status: "open" as const,
+    timestamp: "t",
+    text: "Deploy",
+    truncated: false,
+    ask: {
+      state: "blocked" as const,
+      remaining: "Needs your go-ahead",
+      evidence: "",
+      revision: 1,
+      provenance: "explicit" as const,
+    },
+  };
+
+  it("counts blocked asks and open questions waiting now, not Later or finished work", () => {
+    expect(
+      countNeedsYouNow([
+        blockedAsk,
+        { ...blockedAsk, id: "ask:later", deferredAt: "2026-11-03" },
+        { ...blockedAsk, id: "ask:moving", ask: { ...blockedAsk.ask, state: "in_progress" } },
+        { ...blockedAsk, id: "question:q", ask: undefined },
+      ]),
+    ).toBe(2);
+    expect(countNeedsYouNow(undefined)).toBe(0);
+  });
+
+  it("puts an idle or running chat with a Needs you item in needs_input, at permission priority", () => {
+    for (const status of ["idle", "running"] as const) {
+      expect(deriveAgentStateBucket({ status, needsYouCount: 1 })).toBe("needs_input");
+      expect(getAgentStatusPriority({ status, needsYouCount: 1 })).toBe(0);
+    }
+    expect(deriveAgentStateBucket({ status: "idle", needsYouCount: 0 })).toBe("done");
+    expect(deriveAgentStateBucket({ status: "error", needsYouCount: 1 })).toBe("needs_input");
   });
 });

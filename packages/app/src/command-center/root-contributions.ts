@@ -58,6 +58,44 @@ export function buildGroupingContributions(
   }));
 }
 
+export interface NeedsYouSectionCommandCenterSource {
+  enabled: boolean;
+  labels: { section: string; show: string; hide: string };
+  icon?: CommandCenterIcon;
+  setEnabled(enabled: boolean): void;
+}
+
+/** Show or hide the sidebar's pinned Needs you section; one id, title says what it will do. */
+export function buildNeedsYouSectionContribution(
+  source: NeedsYouSectionCommandCenterSource,
+): CommandCenterContribution {
+  const next = !source.enabled;
+  return {
+    id: "sidebar-needs-you-section",
+    group: "actions",
+    groupRank: 0,
+    rank: 8,
+    keywords: [
+      "needs you",
+      "needs input",
+      "blocked",
+      "inbox",
+      "sidebar",
+      "section",
+      "show",
+      "hide",
+    ],
+    visibility: "query",
+    run: () => source.setEnabled(next),
+    presentation: {
+      kind: "action",
+      title: next ? source.labels.show : source.labels.hide,
+      sectionTitle: source.labels.section,
+      icon: source.icon,
+    },
+  };
+}
+
 export interface MineFilterCommandCenterSource {
   mineOnly: boolean;
   labels: { section: string; showMine: string; showAll: string };

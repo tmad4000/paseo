@@ -1903,6 +1903,16 @@ export const ptBR: TranslationResources = {
       description: "Altere ou limpe os filtros da barra lateral para ver espaços de trabalho.",
       clear: "Limpar filtros",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "Fixados",
     },

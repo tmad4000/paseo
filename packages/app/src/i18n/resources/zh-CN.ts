@@ -1850,6 +1850,16 @@ export const zhCN: TranslationResources = {
       description: "更改或清除侧边栏筛选以查看工作区。",
       clear: "清除筛选",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "已置顶",
     },

@@ -7,6 +7,7 @@ import type {
   WorkspaceDescriptorPayload,
 } from "./messages.js";
 import {
+  countNeedsYouNow,
   deriveAgentStateBucket,
   getWorkspaceStateBucketPriority,
   type WorkspaceStateBucket,
@@ -379,8 +380,10 @@ export class WorkspaceDirectory {
       }
       const isWorkspaceRoot = workspaceAgent.id === agent.id;
       const review = getReviewStatus(agent.labels);
+      const needsYouCount = countNeedsYouNow(agent.companionEntries);
       const hasManualAttention =
         agent.labels[MANUAL_NEEDS_INPUT_LABEL] === "true" ||
+        needsYouCount > 0 ||
         (review !== null && review !== "approved");
       if (!isWorkspaceRoot && agent.status !== "running" && !hasManualAttention) {
         continue;
@@ -393,6 +396,7 @@ export class WorkspaceDirectory {
               requiresAttention: agent.requiresAttention,
               labels: agent.labels,
               attentionReason: agent.attentionReason ?? null,
+              needsYouCount,
             })
           : "running";
 
@@ -543,6 +547,7 @@ export class WorkspaceDirectory {
           requiresAttention: agent.requiresAttention,
           labels: agent.labels,
           attentionReason: agent.attentionReason ?? null,
+          needsYouCount: countNeedsYouNow(agent.companionEntries),
         });
         return derived === winningBucket;
       })

@@ -1889,6 +1889,16 @@ export const ru: TranslationResources = {
         "Измените или очистите фильтры боковой панели, чтобы увидеть рабочие пространства.",
       clear: "Очистить фильтры",
     },
+    needsYou: {
+      title: "Needs you · {{count}}",
+      more: "{{count}} more in Needs you",
+      blocked: "Blocked",
+      question: "Question",
+      permission: "Permission",
+      menuItem: "Needs you section",
+      showSection: "Show Needs you in sidebar",
+      hideSection: "Hide Needs you in sidebar",
+    },
     pinned: {
       title: "Закреплённые",
     },
