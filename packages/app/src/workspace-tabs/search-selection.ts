@@ -98,9 +98,13 @@ export function useWorkspaceTabSearchSelection(input: {
   const singlePane = input.isCompact || !supportsDesktopPaneSplits();
   const { workspaceKey, isCompact, checkout, enabled, fallbackPaneId } = input;
   const clearSelection = useCallback(() => setSelection(null), []);
+  const presentedPaneId = resolveSearchPresentedPane({ ...input, selection, singlePane });
   useEffect(() => {
-    if (!enabled || !singlePane) clearSelection();
-  }, [clearSelection, enabled, singlePane]);
+    // A main-pane detour must discard the override, not merely hide it until the
+    // original main tab becomes current again.
+    const invalidated = selection !== null && presentedPaneId !== selection.paneId;
+    if (!enabled || !singlePane || invalidated) clearSelection();
+  }, [clearSelection, enabled, singlePane, selection, presentedPaneId]);
   const onSelect = useCallback(
     (tabId: string) => {
       setSelection(
@@ -118,6 +122,6 @@ export function useWorkspaceTabSearchSelection(input: {
   );
   return {
     onSelect,
-    presentedPaneId: resolveSearchPresentedPane({ ...input, selection, singlePane }),
+    presentedPaneId,
   };
 }
