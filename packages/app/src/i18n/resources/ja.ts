@@ -1261,6 +1261,9 @@ export const ja: TranslationResources = {
         splitDown: "下にペインを分割",
         splitRightWithSession: "セッションを右に分割表示…",
         splitDownWithSession: "セッションを下に分割表示…",
+        dropSessionOtherHost:
+          "ここにドロップできるのはこのホストのセッションだけです。複数のホストを並べるにはビューを使ってください。",
+        dropSessionNoSession: "このワークスペースには開くセッションがありません。",
         changes: "変更",
         files: "ファイル",
         pullRequest: "プルリクエスト",
@@ -1957,6 +1960,14 @@ export const ja: TranslationResources = {
       status: {
         serviceRunning: "サービス {{name}} 実行中",
         serviceUnhealthy: "サービス {{name}} 異常",
+        indicator: {
+          loading: "起動中",
+          running: "実行中：エージェントが動作しています",
+          needs_input: "対応が必要：エージェントが許可または回答を待っています",
+          attention: "完了：未読の新しい出力があります",
+          failed: "エラー：エージェントがエラーで停止しました",
+          done: "アイドル：新着なし",
+        },
         creating: "作成中...",
       },
       checks: {
@@ -1970,6 +1981,7 @@ export const ja: TranslationResources = {
       actions: {
         markAsRead: "既読にする",
         markAsReadNamed: "{{name}} を既読にする",
+        markAsReadHint: "既読にする：このワークスペースの完了/エラー表示を消します",
         menu: "ワークスペースアクション",
         newWorkspace: "新しいワークスペース",
         showMore: "さらに表示",

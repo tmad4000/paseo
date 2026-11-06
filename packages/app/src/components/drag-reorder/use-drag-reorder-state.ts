@@ -1,5 +1,6 @@
 import { useCallback, useReducer } from "react";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { consumeReorderDropClaim } from "./drop-claim";
 import { dragStateInitial, dragStateReducer } from "./drag-reducer";
 import { reorderItemsOnDragEnd } from "./reorder-items";
 
@@ -33,6 +34,7 @@ export function useDragReorderState<T>({
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       if (disabled) return;
+      consumeReorderDropClaim();
       dispatch({ type: "start", id: String(event.active.id), data });
       onDragBegin?.();
     },
@@ -48,7 +50,8 @@ export function useDragReorderState<T>({
       const { active, over } = event;
       const items = state.dragItems ?? data;
       dispatch({ type: "clear" });
-      if (disabled) return;
+      // The row was dragged out and dropped elsewhere: leave the list as it was.
+      if (consumeReorderDropClaim() || disabled) return;
 
       const reordered = reorderItemsOnDragEnd({
         items,

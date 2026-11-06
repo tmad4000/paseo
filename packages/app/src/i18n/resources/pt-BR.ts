@@ -1265,6 +1265,9 @@ export const ptBR: TranslationResources = {
         splitDown: "Dividir painel abaixo",
         splitRightWithSession: "Dividir à direita com sessão…",
         splitDownWithSession: "Dividir para baixo com sessão…",
+        dropSessionOtherHost:
+          "Somente sessões deste host podem ser soltas aqui. Use uma visualização para misturar hosts.",
+        dropSessionNoSession: "Esse espaço de trabalho não tem sessão para abrir.",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",
@@ -1975,6 +1978,14 @@ export const ptBR: TranslationResources = {
       status: {
         serviceRunning: "Serviço {{name}} em execução",
         serviceUnhealthy: "Serviço {{name}} com falha",
+        indicator: {
+          loading: "Iniciando",
+          running: "Trabalhando: um agente está em execução",
+          needs_input: "Precisa de você: um agente aguarda permissão ou resposta",
+          attention: "Concluído: há saída nova não lida",
+          failed: "Erro: um agente parou com um erro",
+          done: "Ocioso: nada novo",
+        },
         creating: "Criando...",
       },
       checks: {
@@ -1988,6 +1999,8 @@ export const ptBR: TranslationResources = {
       actions: {
         markAsRead: "Marcar como lido",
         markAsReadNamed: "Marcar {{name}} como lido",
+        markAsReadHint:
+          "Marcar como lido: limpa o indicador de concluído/erro deste espaço de trabalho",
         menu: "Ações do workspace",
         newWorkspace: "Novo workspace",
         showMore: "Mostrar mais",

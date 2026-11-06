@@ -208,6 +208,7 @@ import {
   type SplitWithSessionPosition,
   type SplitWithSessionValue,
 } from "@/workspace-tabs/split-with-session";
+import { useSidebarDropHost } from "@/workspace-tabs/use-sidebar-drop-host";
 import { ViewSessionPicker, type ViewSessionPickerRequest } from "@/views/view-session-picker";
 import type { ViewTabInput } from "@/stores/views-store";
 import {
@@ -4409,6 +4410,15 @@ function WorkspaceScreenContent({
     content
   );
   const rendersDesktopSplitContent = !isMobile && desktopSplitContent !== null;
+  useSidebarDropHost({
+    routeFocused: isRouteFocused,
+    rendersSplits: rendersDesktopSplitContent,
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    workspaceKey: persistenceKey,
+    uiTabs,
+    navigateToTabId,
+  });
 
   const workspacePanelContent = (
     <WorkspacePanelContent

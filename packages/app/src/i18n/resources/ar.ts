@@ -1250,6 +1250,8 @@ export const ar: TranslationResources = {
         splitDown: "تقسيم الجزء لأسفل",
         splitRightWithSession: "تقسيم لليمين مع جلسة…",
         splitDownWithSession: "تقسيم للأسفل مع جلسة…",
+        dropSessionOtherHost: "يمكن إفلات جلسات هذا المضيف فقط هنا. استخدم عرضًا لدمج المضيفين.",
+        dropSessionNoSession: "لا توجد جلسة لفتحها في مساحة العمل هذه.",
         changes: "التغييرات",
         files: "الملفات",
         pullRequest: "طلب السحب",
@@ -1939,6 +1941,14 @@ export const ar: TranslationResources = {
       status: {
         serviceRunning: "الخدمة {{name}} قيد التشغيل",
         serviceUnhealthy: "الخدمة {{name}} غير سليمة",
+        indicator: {
+          loading: "قيد البدء",
+          running: "يعمل: وكيل قيد التشغيل",
+          needs_input: "بحاجة إليك: وكيل ينتظر إذنًا أو إجابة",
+          attention: "انتهى: مخرجات جديدة لم تقرأها",
+          failed: "خطأ: توقف وكيل بسبب خطأ",
+          done: "خامل: لا جديد",
+        },
         creating: "جارٍ الإنشاء...",
       },
       checks: {
@@ -1952,6 +1962,7 @@ export const ar: TranslationResources = {
       actions: {
         markAsRead: "تعليم كمقروء",
         markAsReadNamed: "تعليم {{name}} كمقروء",
+        markAsReadHint: "تعليم كمقروء: يزيل مؤشر الانتهاء/الخطأ لمساحة العمل هذه",
         menu: "إجراءات Workspace",
         newWorkspace: "مساحة عمل جديدة",
         showMore: "عرض المزيد",

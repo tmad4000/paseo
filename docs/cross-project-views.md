@@ -86,9 +86,8 @@ existing workspaces stay as they are: effectively a View pinned to one project.
 | Inactive panes dimmed (Views only)                                                                                                                                                          | `components/split-container.tsx` (`dimInactivePane`)                              |
 | Header shows the focused pane's project and branch                                                                                                                                          | `views/view-screen-header.tsx`                                                    |
 
-Dropped from the plan: dragging a session from the sidebar. The sidebar lists workspaces,
-not sessions, so there is nothing session-shaped to drag; "Open in View" on tab menus and the
-picker cover it.
+Dragging from the sidebar was left out of Views; it landed later for normal workspaces, see
+[Sidebar drag to split](#sidebar-drag-to-split-2026-11-03).
 
 Gotchas:
 
@@ -124,3 +123,33 @@ Views stay for what a workspace cannot do: sessions from **different hosts** in 
 named, saved arrangements. Proposed simplifications, not done here: collapse the sidebar Views
 header into the "Stream" row until a View exists, and offer "Open in View" only for cross-host
 sessions.
+
+## Sidebar drag to split (2026-11-03)
+
+On desktop/web, a sidebar row dropped on the workspace on screen does what **Split right / down
+with session…** does, with the same foreign-session rules above.
+
+- Sources: Pinned sessions rows and the session rows the sidebar filter nests under a workspace
+  drop that session; a workspace row drops its most recently active unarchived session.
+- Targets: a pane's edge zones split it (the zones of the in-workspace tab drag); its tab strip or
+  center opens the session as a tab in that pane. A session that already has a tab here is moved.
+- Same host only; a drop from another host shows a toast. Views are where hosts mix.
+
+How it fits beside the sidebar's own reorder drag:
+
+- The press is followed with window pointer listeners, not dnd-kit: dnd-kit only tracks drags
+  inside one `DndContext`, and the sidebar list and the split container each own one. Mouse only;
+  touch keeps the long-press reorder.
+- Nothing happens until the pointer is over a pane of the focused workspace, so clicks and reorders
+  inside the sidebar are untouched. From then on the drag is a cross drop, and it claims the
+  in-flight reorder (`components/drag-reorder/drop-claim.ts`) so the list does not also move the row.
+- Panes and tab strips are found with `elementFromPoint` through `dataSet` attributes that
+  `split-container.tsx` sets (`data-sidebar-drop-pane`, `-workspace`, `-tabs`). Only the focused
+  workspace registers as the drop host, so a View or a hidden workspace never receives a drop.
+
+| Piece                                                    | Where                                        |
+| -------------------------------------------------------- | -------------------------------------------- |
+| Zone, last-active session and drop-plan decisions; state | `workspace-tabs/sidebar-session-drop.ts`     |
+| Pointer tracking, ghost, hit test (web; native no-op)    | `workspace-tabs/sidebar-drag-source.web.tsx` |
+| Drop host: runs the plan with the split/tab actions      | `workspace-tabs/use-sidebar-drop-host.ts`    |
+| Pane tagging and drop previews                           | `components/split-container.tsx`             |

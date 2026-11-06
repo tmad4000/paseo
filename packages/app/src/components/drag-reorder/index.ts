@@ -11,3 +11,4 @@ export {
   type DragReorderHandlers,
   type DragReorderState,
 } from "./use-drag-reorder-state";
+export { claimActiveReorderDrop } from "./drop-claim";
