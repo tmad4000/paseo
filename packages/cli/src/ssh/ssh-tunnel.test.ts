@@ -9,12 +9,21 @@ const sinkPath = path.join(sinkDir, "remote.log");
 
 // Stand in for `ssh -W`: `tee` records what reached the "remote" side, echoes it back,
 // and exits on stdin EOF, like ssh does when the forwarded connection finishes.
+// With `stallAfterReady`, the stand-in answers the first round trip and then stalls before
+// reading anything else, like a slow link: later bytes sit in its stdin pipe meanwhile.
+const remote = vi.hoisted(() => ({ stallAfterReady: false }));
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   return {
     ...actual,
     spawn: (_command: string, _args: string[], options: Parameters<typeof actual.spawn>[2]) =>
-      actual.spawn("tee", [sinkPath], options),
+      remote.stallAfterReady
+        ? actual.spawn(
+            "sh",
+            ["-c", 'head -c 6 | tee "$0"; sleep 0.4; cat >> "$0"', sinkPath],
+            options,
+          )
+        : actual.spawn("tee", [sinkPath], options),
   };
 });
 
@@ -24,6 +33,7 @@ const target = { host: "build-box", daemonPort: 7777 };
 const sockets: Socket[] = [];
 
 afterEach(() => {
+  remote.stallAfterReady = false;
   for (const socket of sockets.splice(0)) socket.destroy();
 });
 
@@ -62,6 +72,19 @@ describe.skipIf(process.platform === "win32")("ssh tunnel close", () => {
     await tunnel.closeGracefully(5000);
 
     expect(Date.now() - startedAt).toBeLessThan(5000);
+    await connection.closed;
+    expect(readFileSync(sinkPath, "utf8")).toBe("ready;last-frame");
+  });
+
+  it("keeps the last frame when ssh is still forwarding as the client closes", async () => {
+    remote.stallAfterReady = true;
+    const tunnel = await createSshTunnel(target);
+    const connection = await openForwardedConnection(tunnel.endpoint);
+
+    // "last-frame" waits in ssh's stdin while the client closes. Killing ssh as soon as
+    // the local socket closes would drop it.
+    connection.socket.end("last-frame");
+    await tunnel.closeGracefully(5000);
     await connection.closed;
     expect(readFileSync(sinkPath, "utf8")).toBe("ready;last-frame");
   });

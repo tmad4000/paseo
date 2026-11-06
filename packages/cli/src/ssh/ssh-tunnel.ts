@@ -51,21 +51,24 @@ export function createSshTunnel(target: SshTransportTarget): Promise<SshTunnel> 
   }
 
   async function closeGracefully(graceMs = SSH_TUNNEL_CLOSE_GRACE_MS): Promise<void> {
-    const pending = socket;
-    if (pending && !pending.destroyed && child && !child.killed) {
+    // Wait for ssh itself to exit, not just for the local socket to close: bytes the client
+    // wrote last have been handed to ssh's stdin by then but may not have crossed yet, and
+    // ssh exits on its own once stdin reaches EOF and everything is forwarded.
+    const running = child;
+    if (running && running.exitCode === null && running.signalCode === null) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      let onClose: (() => void) | undefined;
+      let onExit: (() => void) | undefined;
       await Promise.race([
         new Promise<void>((resolve) => {
-          onClose = resolve;
-          pending.once("close", onClose);
+          onExit = resolve;
+          running.once("exit", onExit);
         }),
         new Promise<void>((resolve) => {
           timer = setTimeout(resolve, graceMs);
         }),
       ]);
       clearTimeout(timer);
-      if (onClose) pending.off("close", onClose);
+      if (onExit) running.off("exit", onExit);
     }
     close();
   }
@@ -92,8 +95,17 @@ export function createSshTunnel(target: SshTransportTarget): Promise<SshTunnel> 
         acceptedSocket.destroy(failure ? new Error(failure) : undefined);
       });
       acceptedSocket.on("error", () => undefined);
+      // When the local side closes, let ssh drain what it was already given: the pipe ends
+      // its stdin, and ssh exits after forwarding the rest. Kill it only if it lingers.
+      const spawned = child;
       acceptedSocket.on("close", () => {
-        if (child && !child.killed) child.kill();
+        if (spawned.exitCode !== null || spawned.signalCode !== null) return;
+        spawned.stdin.end();
+        const lingerTimer = setTimeout(() => {
+          if (spawned.exitCode === null && spawned.signalCode === null) spawned.kill();
+        }, SSH_TUNNEL_CLOSE_GRACE_MS);
+        lingerTimer.unref?.();
+        spawned.once("exit", () => clearTimeout(lingerTimer));
       });
       acceptedSocket.pipe(child.stdin);
       child.stdout.pipe(acceptedSocket);
