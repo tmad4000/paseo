@@ -1193,6 +1193,7 @@ export const ko: TranslationResources = {
         agent: "에이전트",
         workspace: "워크스페이스",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "탭 전환 ({{count}}개 열림)",
         title: "탭 전환",

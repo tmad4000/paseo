@@ -1202,6 +1202,7 @@ export const fr: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Changer d'onglet ({{count}}ouvert)",
         title: "Changer d'onglet",

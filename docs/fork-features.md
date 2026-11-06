@@ -52,6 +52,19 @@ latest user message; a dormant Claude/Codex sibling reports its true first promp
 [workspace describe](workspace-describe.md). Source prepared on `feat/workspace-describe`; reaches
 installs through the next staged build.
 
+## Workspace tab search
+
+`workspace-tab-search`: **Search workspace tabs** in the desktop header and Command Center, or the
+compact active-tab dropdown, finds real titles/subtitles across every persisted pane, including
+hidden Explorer and covered splits. Selection reveals the existing tab in place; cancellation
+preserves drafts. Empty query keeps pane/tab order; filtering never changes adjacent-tab cycling.
+Electron defaults to Cmd/Ctrl+Shift+O, leaving browser bookmarks, New agent and saved overrides intact.
+Source prepared on `feat/workspace-tab-search`; not installed. Contract and verification boundaries:
+[workspace tab search](workspace-tab-search.md). Unit coverage: `workspace-tabs/model.test.ts`,
+`keyboard/keyboard-shortcuts.test.ts`, `desktop/browser/shortcuts.test.ts`,
+`command-center/workspace-contributions.test.ts`; UI coverage: `workspace-tab-search.spec.ts`.
+Native devices and installed Electron remain release acceptance checks.
+
 ## Feature register
 
 | ID                           | Behavior to preserve / quick acceptance check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

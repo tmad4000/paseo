@@ -1179,6 +1179,7 @@ export const zhCN: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "切换标签（已打开 {{count}} 个）",
         title: "切换标签",

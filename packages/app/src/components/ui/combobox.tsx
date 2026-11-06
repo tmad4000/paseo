@@ -1,4 +1,7 @@
 import {
+  createContext,
+  useContext,
+  useId,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -43,10 +46,9 @@ import {
   size as floatingSize,
   useFloating,
 } from "@floating-ui/react-native";
-import { getNextActiveIndex } from "./combobox-keyboard";
+import { getNextActiveIndex, resolveComboboxActiveIndex } from "./combobox-keyboard";
 import {
   buildVisibleComboboxOptions,
-  getComboboxFallbackIndex,
   orderVisibleComboboxOptions,
   shouldShowCustomComboboxOption,
 } from "./combobox-options";
@@ -91,6 +93,10 @@ export interface ComboboxProps {
   }) => ReactElement;
   onSearchQueryChange?: (query: string) => void;
   searchable?: boolean;
+  /** Keep the highlighted result stable while its live metadata changes. */
+  preserveActiveOption?: boolean;
+  /** Focus compact search when invoked with a hardware keyboard. */
+  autoFocusSearch?: boolean;
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -178,6 +184,10 @@ function ComboboxSheetBackground({ style }: BottomSheetBackgroundProps) {
   return <Animated.View pointerEvents="none" style={combinedStyle} />;
 }
 
+const SearchAccessibilityContext = createContext<{ listId: string; activeId?: string } | null>(
+  null,
+);
+
 export interface SearchInputProps {
   placeholder: string;
   onChangeText: (text: string) => void;
@@ -197,6 +207,7 @@ export function SearchInput({
 }: SearchInputProps): ReactElement {
   const { theme } = useUnistyles();
   const inputRef = useRef<EditingTextInputHandle>(null);
+  const searchAccessibility = useContext(SearchAccessibilityContext);
 
   useEffect(() => {
     if (autoFocus && IS_WEB && inputRef.current) {
@@ -213,6 +224,16 @@ export function SearchInput({
       <Search size={16} color={theme.colors.foregroundMuted} />
       <AdaptiveTextInput
         ref={inputRef}
+        accessibilityLabel={placeholder}
+        {...(isWeb && searchAccessibility
+          ? {
+              role: "combobox" as const,
+              "aria-autocomplete": "list" as const,
+              "aria-expanded": true,
+              "aria-controls": searchAccessibility.listId,
+              "aria-activedescendant": searchAccessibility.activeId,
+            }
+          : {})}
         // @ts-expect-error - outlineStyle is web-only
         style={[styles.searchInput, IS_WEB && { outlineStyle: "none" }]}
         placeholder={placeholder}
@@ -345,11 +366,17 @@ interface OptionRowProps {
 }
 
 function OptionRow({ option, selected, active, onSelect, renderOption }: OptionRowProps) {
+  const searchAccessibility = useContext(SearchAccessibilityContext);
+  const ref = useRef<View>(null);
+  useEffect(() => {
+    if (isWeb && active && searchAccessibility) {
+      (ref.current as unknown as HTMLElement | null)?.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [active, searchAccessibility]);
   const handlePress = useCallback(() => onSelect(option.id), [onSelect, option.id]);
-  if (renderOption) {
-    return <View>{renderOption({ option, selected, active, onPress: handlePress })}</View>;
-  }
-  return (
+  const row = renderOption ? (
+    renderOption({ option, selected, active, onPress: handlePress })
+  ) : (
     <ComboboxItem
       label={option.label}
       description={option.description}
@@ -358,6 +385,26 @@ function OptionRow({ option, selected, active, onSelect, renderOption }: OptionR
       active={active}
       onPress={handlePress}
     />
+  );
+  if (!searchAccessibility) return renderOption ? <View>{row}</View> : row;
+  return (
+    <View
+      ref={ref}
+      nativeID={
+        searchAccessibility
+          ? `${searchAccessibility.listId}-${encodeURIComponent(option.id)}`
+          : undefined
+      }
+      {...(searchAccessibility
+        ? {
+            role: "option" as const,
+            "aria-selected": selected,
+            accessibilityLabel: [option.label, option.description].filter(Boolean).join(", "),
+          }
+        : {})}
+    >
+      {row}
+    </View>
   );
 }
 
@@ -377,24 +424,28 @@ function OptionsList({
   emptyText,
   onSelect,
   renderOption,
-}: OptionsListProps): ReactElement {
+}: OptionsListProps): ReactNode {
+  const searchAccessibility = useContext(SearchAccessibilityContext);
   if (options.length === 0) {
     return <ComboboxEmpty>{emptyText}</ComboboxEmpty>;
   }
-  return (
-    <>
-      {options.map((opt, index) => (
-        <OptionRow
-          key={opt.id}
-          option={opt}
-          selected={opt.id === value}
-          active={index === activeIndex}
-          onSelect={onSelect}
-          renderOption={renderOption}
-        />
-      ))}
-    </>
-  );
+  const rows = options.map((opt, index) => (
+    <OptionRow
+      key={opt.id}
+      option={opt}
+      selected={opt.id === value}
+      active={index === activeIndex}
+      onSelect={onSelect}
+      renderOption={renderOption}
+    />
+  ));
+  if (isWeb && searchAccessibility)
+    return (
+      <div id={searchAccessibility.listId} role="listbox">
+        {rows}
+      </div>
+    );
+  return rows;
 }
 
 interface DesktopPositionInput {
@@ -603,19 +654,28 @@ function useActiveIndexSync(
   normalizedSearch: string,
   value: string,
   setActiveIndex: React.Dispatch<React.SetStateAction<number>>,
+  preserveActiveOption: boolean | undefined,
+  activeOption: React.MutableRefObject<{ id: string | undefined; search: string }>,
 ) {
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      activeOption.current = { id: undefined, search: "" };
+      return;
+    }
     if (!IS_WEB && isMobile) return;
-    setActiveIndex(
-      resolveInitialActiveIndex(
-        orderedVisibleOptions,
-        effectiveOptionsPosition,
-        normalizedSearch,
-        value,
-      ),
-    );
+    const nextIndex = resolveComboboxActiveIndex({
+      options: orderedVisibleOptions,
+      selectedId: value,
+      search: normalizedSearch,
+      position: effectiveOptionsPosition,
+      previous: activeOption.current,
+      preserve: preserveActiveOption,
+    });
+    activeOption.current = { id: orderedVisibleOptions[nextIndex]?.id, search: normalizedSearch };
+    setActiveIndex(nextIndex);
   }, [
+    preserveActiveOption,
+    activeOption,
     effectiveOptionsPosition,
     isMobile,
     isOpen,
@@ -887,7 +947,10 @@ function dispatchDesktopKey(
     return true;
   }
   if (key === "Enter") {
-    if (input.orderedVisibleOptions.length === 0) return false;
+    if (input.orderedVisibleOptions.length === 0) {
+      event?.preventDefault();
+      return true;
+    }
     event?.preventDefault();
     handleDesktopEnterKey(input);
     return true;
@@ -898,22 +961,6 @@ function dispatchDesktopKey(
     return true;
   }
   return false;
-}
-
-function resolveInitialActiveIndex(
-  orderedVisibleOptions: ComboboxOption[],
-  effectiveOptionsPosition: "below-search" | "above-search",
-  normalizedSearch: string,
-  value: string,
-): number {
-  if (orderedVisibleOptions.length === 0) return -1;
-  const fallbackIndex = getComboboxFallbackIndex(
-    orderedVisibleOptions.length,
-    effectiveOptionsPosition,
-  );
-  if (normalizedSearch) return fallbackIndex;
-  const selectedIndex = orderedVisibleOptions.findIndex((opt) => opt.id === value);
-  return selectedIndex >= 0 ? selectedIndex : fallbackIndex;
 }
 
 type BottomSheetVisibility = ReturnType<typeof useIsolatedBottomSheetVisibility>;
@@ -945,12 +992,55 @@ interface MobileBodyProps {
   activeIndex: number;
   emptyText: string;
   handleSelect: (id: string) => void;
+  handleDesktopKey: (key: DesktopKey, event?: KeyboardEvent) => boolean;
+  autoFocusSearch: boolean;
   renderOption: RenderOptionFn | undefined;
   children: ReactNode;
   safeAreaBottom: number;
 }
 
+function MobileComboboxFrame({
+  children,
+  style,
+  handleKey,
+  searchAccessibility,
+}: {
+  children: ReactNode;
+  style: StyleProp<ViewStyle>;
+  handleKey: (key: DesktopKey, event?: KeyboardEvent) => boolean;
+  searchAccessibility: React.ContextType<typeof SearchAccessibilityContext>;
+}) {
+  const layer = useOverlayLayer("floating");
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        event.target instanceof Element &&
+        event.target.closest('[data-combobox-action="true"]')
+      )
+        return "target" as const;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
+        return "target" as const;
+      return isDesktopKey(event.key) ? handleKey(event.key, event) : ("target" as const);
+    },
+    [handleKey],
+  );
+  const scopeRef = useWebOverlayRegistration({
+    active: isWeb && Boolean(searchAccessibility),
+    layer,
+    onKeyDown,
+  });
+  return (
+    <View ref={scopeRef} style={style}>
+      <SearchAccessibilityContext.Provider value={searchAccessibility}>
+        {children}
+      </SearchAccessibilityContext.Provider>
+    </View>
+  );
+}
+
 function MobileComboboxBody(props: MobileBodyProps): ReactElement {
+  const searchAccessibility = useContext(SearchAccessibilityContext);
   const renderBackdrop = useCallback(
     (backdropProps: React.ComponentProps<typeof BottomSheetBackdrop>) => (
       <BottomSheetBackdrop
@@ -1002,7 +1092,11 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
       keyboardBlurBehavior="none"
       presentation={props.presentation}
     >
-      <View style={frameStyle}>
+      <MobileComboboxFrame
+        style={frameStyle}
+        handleKey={props.handleDesktopKey}
+        searchAccessibility={searchAccessibility}
+      >
         {props.header ? (
           <SheetHeaderView header={props.header} onClose={props.onClose} />
         ) : (
@@ -1018,7 +1112,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
                 placeholder={props.searchPlaceholder}
                 onChangeText={props.setSearchQueryWithCallback}
                 onSubmitEditing={props.handleSubmitSearch}
-                autoFocus={false}
+                autoFocus={props.autoFocusSearch}
                 useBottomSheetInput
                 resetKey={props.searchResetKey}
               />
@@ -1041,7 +1135,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
           </BottomSheetScrollView>
         )}
         {props.footer ? <View style={styles.footer}>{props.footer}</View> : null}
-      </View>
+      </MobileComboboxFrame>
     </IsolatedBottomSheetModal>
   );
 }
@@ -1176,6 +1270,7 @@ function DesktopComboboxOptionsBody(props: {
 }
 
 function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
+  const searchAccessibility = useContext(SearchAccessibilityContext);
   const handleDesktopKey = props.handleDesktopKey;
   const handleWebOverlayKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -1188,10 +1283,12 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
         event.target.closest('[data-combobox-action="true"]')
       )
         return "target" as const;
-      if (!isDesktopKey(event.key)) return false;
+      if (searchAccessibility && (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
+        return "target" as const;
+      if (!isDesktopKey(event.key)) return searchAccessibility ? ("target" as const) : false;
       return handleDesktopKey(event.key, event);
     },
-    [handleDesktopKey],
+    [handleDesktopKey, searchAccessibility],
   );
   const setWebOverlayScope = useWebOverlayRegistration({
     active: isWeb && props.isOpen,
@@ -1285,6 +1382,22 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
   );
 }
 
+function useSearchAccessibility(
+  enabled: boolean | undefined,
+  listId: string,
+  options: ComboboxOption[],
+  activeIndex: number,
+) {
+  const activeId = options[activeIndex]?.id;
+  return useMemo(
+    () =>
+      enabled
+        ? { listId, activeId: activeId ? `${listId}-${encodeURIComponent(activeId)}` : undefined }
+        : null,
+    [enabled, listId, activeId],
+  );
+}
+
 export function Combobox({
   options,
   value,
@@ -1292,6 +1405,8 @@ export function Combobox({
   renderOption,
   onSearchQueryChange,
   searchable = true,
+  preserveActiveOption,
+  autoFocusSearch,
   placeholder,
   searchPlaceholder,
   emptyText,
@@ -1342,6 +1457,11 @@ export function Combobox({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResetKey, bumpSearchResetKey] = useReducer((key: number) => key + 1, 0);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const activeOption = useRef<{ id: string | undefined; search: string }>({
+    id: undefined,
+    search: "",
+  });
+  const listId = useId();
   const desktopOptionsScrollRef = useRef<ScrollView>(null);
   const [desktopContentWidth, setDesktopContentWidth] = useState<number | null>(null);
 
@@ -1514,6 +1634,8 @@ export function Combobox({
     normalizedSearch,
     value,
     setActiveIndex,
+    preserveActiveOption,
+    activeOption,
   );
 
   const handleSelect = useCallback(
@@ -1537,7 +1659,16 @@ export function Combobox({
           isMobile,
           orderedVisibleOptions,
           activeIndex,
-          setActiveIndex,
+          setActiveIndex: (next) => {
+            setActiveIndex((current) => {
+              const index = typeof next === "function" ? next(current) : next;
+              activeOption.current = {
+                id: orderedVisibleOptions[index]?.id,
+                search: normalizedSearch,
+              };
+              return index;
+            });
+          },
           handleSelect,
           handleClose,
         },
@@ -1545,7 +1676,15 @@ export function Combobox({
         event,
       );
     },
-    [activeIndex, handleClose, handleSelect, isMobile, isOpen, orderedVisibleOptions],
+    [
+      activeIndex,
+      handleClose,
+      handleSelect,
+      isMobile,
+      isOpen,
+      orderedVisibleOptions,
+      normalizedSearch,
+    ],
   );
 
   useDismissKeyboardOnOpen(isOpen, isMobile);
@@ -1585,78 +1724,90 @@ export function Combobox({
   const effectiveSearchPlaceholder = searchPlaceholder ?? resolvedPlaceholder;
   const hasChildren = Boolean(children);
 
+  const searchAccessibility = useSearchAccessibility(
+    preserveActiveOption,
+    listId,
+    orderedVisibleOptions,
+    activeIndex,
+  );
   if (isMobile) {
     return (
-      <MobileComboboxBody
-        bottomSheetRef={bottomSheetRef}
-        snapPoints={snapPoints}
-        handleSheetChange={handleSheetChange}
-        handleSheetDismiss={handleSheetDismiss}
-        handleIndicatorStyle={handleIndicatorStyle}
-        titleColor={titleColor}
-        title={resolvedTitle}
-        header={header}
-        onClose={handleClose}
-        stickyHeader={stickyHeader}
-        footer={footer}
-        searchable={searchable}
-        hasChildren={hasChildren}
-        mobileChildrenScrollEnabled={mobileChildrenScrollEnabled}
-        mobileChildrenContentContainerStyle={mobileChildrenContentContainerStyle}
-        presentation={presentation}
-        searchResetKey={searchResetKey}
-        searchPlaceholder={effectiveSearchPlaceholder}
-        searchQuery={searchQuery}
-        setSearchQueryWithCallback={setSearchQueryWithCallback}
-        handleSubmitSearch={handleSubmitSearch}
-        orderedVisibleOptions={orderedVisibleOptions}
-        value={value}
-        activeIndex={activeIndex}
-        emptyText={resolvedEmptyText}
-        handleSelect={handleSelect}
-        renderOption={renderOption}
-        safeAreaBottom={safeAreaInsets.bottom}
-      >
-        {children}
-      </MobileComboboxBody>
+      <SearchAccessibilityContext.Provider value={searchAccessibility}>
+        <MobileComboboxBody
+          bottomSheetRef={bottomSheetRef}
+          snapPoints={snapPoints}
+          handleSheetChange={handleSheetChange}
+          handleSheetDismiss={handleSheetDismiss}
+          handleIndicatorStyle={handleIndicatorStyle}
+          titleColor={titleColor}
+          title={resolvedTitle}
+          header={header}
+          onClose={handleClose}
+          stickyHeader={stickyHeader}
+          footer={footer}
+          searchable={searchable}
+          hasChildren={hasChildren}
+          mobileChildrenScrollEnabled={mobileChildrenScrollEnabled}
+          mobileChildrenContentContainerStyle={mobileChildrenContentContainerStyle}
+          presentation={presentation}
+          searchResetKey={searchResetKey}
+          searchPlaceholder={effectiveSearchPlaceholder}
+          searchQuery={searchQuery}
+          setSearchQueryWithCallback={setSearchQueryWithCallback}
+          handleSubmitSearch={handleSubmitSearch}
+          orderedVisibleOptions={orderedVisibleOptions}
+          value={value}
+          activeIndex={activeIndex}
+          emptyText={resolvedEmptyText}
+          handleSelect={handleSelect}
+          handleDesktopKey={handleDesktopKey}
+          autoFocusSearch={Boolean(autoFocusSearch)}
+          renderOption={renderOption}
+          safeAreaBottom={safeAreaInsets.bottom}
+        >
+          {children}
+        </MobileComboboxBody>
+      </SearchAccessibilityContext.Provider>
     );
   }
 
   if (!isOpen) return null;
 
   return (
-    <DesktopComboboxBody
-      overlayLayer={floatingLayer}
-      isOpen={isOpen}
-      handleClose={handleClose}
-      handleDesktopKey={handleDesktopKey}
-      refs={refs}
-      shouldUseDesktopFade={shouldUseDesktopFade}
-      desktopFrameStyle={desktopFrameStyle}
-      handleDesktopContentLayout={handleDesktopContentLayout}
-      header={header}
-      stickyHeader={stickyHeader}
-      footer={footer}
-      searchable={searchable}
-      searchPlaceholder={effectiveSearchPlaceholder}
-      searchQuery={searchQuery}
-      setSearchQueryWithCallback={setSearchQueryWithCallback}
-      handleSubmitSearch={handleSubmitSearch}
-      effectiveOptionsPosition={effectiveOptionsPosition}
-      desktopOptionsScrollRef={desktopOptionsScrollRef}
-      desktopAboveSearchContentContainerStyle={desktopAboveSearchContentContainerStyle}
-      handleDesktopOptionsContentSizeChange={handleDesktopOptionsContentSizeChange}
-      orderedVisibleOptions={orderedVisibleOptions}
-      value={value}
-      activeIndex={activeIndex}
-      emptyText={resolvedEmptyText}
-      handleSelect={handleSelect}
-      renderOption={renderOption}
-      hasChildren={hasChildren}
-      childrenScrollEnabled={desktopChildrenScrollEnabled}
-    >
-      {children}
-    </DesktopComboboxBody>
+    <SearchAccessibilityContext.Provider value={searchAccessibility}>
+      <DesktopComboboxBody
+        overlayLayer={floatingLayer}
+        isOpen={isOpen}
+        handleClose={handleClose}
+        handleDesktopKey={handleDesktopKey}
+        refs={refs}
+        shouldUseDesktopFade={shouldUseDesktopFade}
+        desktopFrameStyle={desktopFrameStyle}
+        handleDesktopContentLayout={handleDesktopContentLayout}
+        header={header}
+        stickyHeader={stickyHeader}
+        footer={footer}
+        searchable={searchable}
+        searchPlaceholder={effectiveSearchPlaceholder}
+        searchQuery={searchQuery}
+        setSearchQueryWithCallback={setSearchQueryWithCallback}
+        handleSubmitSearch={handleSubmitSearch}
+        effectiveOptionsPosition={effectiveOptionsPosition}
+        desktopOptionsScrollRef={desktopOptionsScrollRef}
+        desktopAboveSearchContentContainerStyle={desktopAboveSearchContentContainerStyle}
+        handleDesktopOptionsContentSizeChange={handleDesktopOptionsContentSizeChange}
+        orderedVisibleOptions={orderedVisibleOptions}
+        value={value}
+        activeIndex={activeIndex}
+        emptyText={resolvedEmptyText}
+        handleSelect={handleSelect}
+        renderOption={renderOption}
+        hasChildren={hasChildren}
+        childrenScrollEnabled={desktopChildrenScrollEnabled}
+      >
+        {children}
+      </DesktopComboboxBody>
+    </SearchAccessibilityContext.Provider>
   );
 }
 

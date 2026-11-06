@@ -1203,6 +1203,7 @@ export const ptBR: TranslationResources = {
         agent: "Agente",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Alternar abas ({{count}} abertas)",
         title: "Alternar aba",

@@ -1199,6 +1199,7 @@ export const ru: TranslationResources = {
         agent: "Агент",
         workspace: "Рабочее пространство",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Переключить вкладки (открыто: {{count}})",
         title: "Переключить вкладку",

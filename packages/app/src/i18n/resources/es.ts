@@ -1205,6 +1205,7 @@ export const es: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Cambiar pestañas ({{count}}abierto)",
         title: "Cambiar pestaña",

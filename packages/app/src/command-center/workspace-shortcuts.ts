@@ -14,6 +14,8 @@ export function resolveWorkspaceCommandCenterShortcuts({
   platform,
 }: ResolveWorkspaceCommandCenterShortcutsInput): WorkspaceCommandCenterShortcuts {
   return {
+    searchTabs:
+      resolveShortcutKeysForAction("workspace-tab-search", overrides, platform) ?? undefined,
     newAgent:
       resolveShortcutKeysForAction("workspace-tab-target-agent", overrides, platform) ?? undefined,
     newTerminal:

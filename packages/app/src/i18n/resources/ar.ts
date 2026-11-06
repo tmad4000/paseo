@@ -1188,6 +1188,7 @@ export const ar: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "تبديل علامات التبويب (فتح{{count}})",
         title: "علامة التبويب التبديل",

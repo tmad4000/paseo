@@ -193,6 +193,7 @@ interface WorkspaceTabOptionRowProps {
   unread?: boolean;
   onPress: () => void;
   trailingAccessory?: ReactNode;
+  showSubtitle?: boolean;
 }
 
 export function WorkspaceTabOptionRow({
@@ -202,6 +203,7 @@ export function WorkspaceTabOptionRow({
   unread = false,
   onPress,
   trailingAccessory,
+  showSubtitle = false,
 }: WorkspaceTabOptionRowProps): ReactElement {
   const { t } = useTranslation();
   const isOptionActive = useCallback(
@@ -216,6 +218,7 @@ export function WorkspaceTabOptionRow({
     ],
     [isOptionActive],
   );
+  const accessibilityState = useMemo(() => ({ selected }), [selected]);
   const optionRowStyle = useMemo(
     () => [styles.optionRow, active && styles.optionRowActive],
     [active],
@@ -226,7 +229,10 @@ export function WorkspaceTabOptionRow({
         onPress={onPress}
         style={pressableStyle}
         accessibilityRole="button"
-        accessibilityLabel={presentation.label}
+        accessibilityLabel={
+          showSubtitle ? `${presentation.label}, ${presentation.subtitle}` : presentation.label
+        }
+        accessibilityState={accessibilityState}
         accessibilityHint={
           unread ? t("workspace.tabs.newActivity", { defaultValue: "New activity" }) : undefined
         }
@@ -243,11 +249,16 @@ export function WorkspaceTabOptionRow({
                 />
               </View>
               <View style={styles.optionContent}>
-                <Text numberOfLines={1} style={styles.optionLabel}>
+                <Text numberOfLines={showSubtitle ? 2 : 1} style={styles.optionLabel}>
                   {presentation.titleState === "loading"
                     ? t("workspace.tabs.loading")
                     : presentation.label}
                 </Text>
+                {showSubtitle && presentation.subtitle ? (
+                  <Text numberOfLines={2} style={styles.optionSubtitle}>
+                    {presentation.subtitle}
+                  </Text>
+                ) : null}
               </View>
             </>
           );
@@ -322,7 +333,7 @@ const styles = StyleSheet.create((theme) => ({
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 36,
+    minHeight: 44,
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[1],
     paddingVertical: theme.spacing[1],
@@ -351,6 +362,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     flexShrink: 1,
   },
+  optionSubtitle: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
   optionLabel: {
     fontSize: theme.fontSize.base,
     color: theme.colors.foreground,

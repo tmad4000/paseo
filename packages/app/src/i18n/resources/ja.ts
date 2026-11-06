@@ -1198,6 +1198,7 @@ export const ja: TranslationResources = {
         agent: "エージェント",
         workspace: "ワークスペース",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "タブを切り替え（{{count}}件開いています）",
         title: "タブを切り替え",

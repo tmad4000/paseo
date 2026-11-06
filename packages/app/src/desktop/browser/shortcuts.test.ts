@@ -320,3 +320,18 @@ describe("parseBrowserShortcutInput", () => {
     expect(parseBrowserShortcutInput(payload)).toBeNull();
   });
 });
+
+it("forwards workspace tab search from an Electron guest without reserving browser web bookmarks", () => {
+  for (const isMac of [true, false]) {
+    const bindings = buildEffectiveBindings({});
+    const desktop = buildBrowserKeyboardPolicy({ bindings, isMac, isDesktop: true });
+    expect(
+      desktop.prefixes.some(
+        (prefix) =>
+          prefix.code === "KeyO" && prefix.shift && (isMac ? prefix.meta : prefix.control),
+      ),
+    ).toBe(true);
+    const web = buildBrowserKeyboardPolicy({ bindings, isMac, isDesktop: false });
+    expect(web.prefixes.some((prefix) => prefix.code === "KeyO" && prefix.shift)).toBe(false);
+  }
+});

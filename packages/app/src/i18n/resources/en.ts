@@ -1188,6 +1188,18 @@ export const en = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: {
+        action: "Search workspace tabs",
+        title: "Workspace tabs",
+        placeholder: "Search tabs…",
+        empty: "No matching tabs",
+        pane: "Pane {{number}}",
+        explorer: "Explorer",
+        hidden: "Hidden",
+        current: "Current",
+        results_one: "{{count}} tab",
+        results: "{{count}} tabs",
+      },
       switcher: {
         trigger: "Switch tabs ({{count}} open)",
         title: "Switch tab",
