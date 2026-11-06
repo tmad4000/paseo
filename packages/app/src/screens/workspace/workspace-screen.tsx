@@ -71,6 +71,7 @@ import {
   openPreferredWorkspaceTarget,
   openWorkspaceTargetBeside,
 } from "@/workspace-tabs/open-beside";
+import { useWorkspaceTabSearchSelection } from "@/workspace-tabs/search-selection";
 import { openWorkspacePullRequest } from "@/workspace-tabs/open-supporting-view";
 import { type ExplorerCheckoutContext } from "@/stores/explorer-checkout-context";
 import { traceInstant } from "@/performance/native-trace";
@@ -345,12 +346,6 @@ function useSyncWorkspaceActiveBrowser(input: {
 
 function getSearchWorkspaceName(workspace: WorkspaceDescriptor | null | undefined): string {
   return workspace?.name ?? "";
-}
-
-function explorerViewForSearchKind(kind: "files" | "changes_tree" | "pull_request") {
-  if (kind === "files") return "files";
-  if (kind === "pull_request") return "pr";
-  return "changes";
 }
 
 interface MobileWorkspaceTabSwitcherProps {
@@ -1795,6 +1790,14 @@ function WorkspaceScreenContent({
   const explorerSidebarPaneId = useWorkspaceLayoutStore((state) =>
     persistenceKey ? selectExplorerSidebarPaneId(state, persistenceKey) : null,
   );
+  const searchSelection = useWorkspaceTabSearchSelection({
+    workspaceKey: persistenceKey,
+    layout: workspaceLayout,
+    isCompact: isMobile,
+    checkout: activeExplorerCheckout,
+    enabled: isRouteFocused,
+    fallbackPaneId: unfocusedPaneId,
+  });
   const lastMainPaneRef = useLastMainPane({
     workspaceKey: persistenceKey,
     layout: workspaceLayout,
@@ -1852,7 +1855,6 @@ function WorkspaceScreenContent({
   );
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
-  const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const unpinWorkspaceAgent = useWorkspaceLayoutStore((state) => state.unpinAgent);
@@ -1913,9 +1915,9 @@ function WorkspaceScreenContent({
       deriveWorkspacePaneState({
         layout: workspaceLayout,
         tabs: uiTabs,
-        paneId: workspaceLayout?.focusedPaneId ?? unfocusedPaneId,
+        paneId: searchSelection.presentedPaneId,
       }),
-    [uiTabs, workspaceLayout, unfocusedPaneId],
+    [uiTabs, workspaceLayout, searchSelection.presentedPaneId],
   );
   const viewedTimelineSync = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.viewedTimelineSync ?? null,
@@ -1929,6 +1931,7 @@ function WorkspaceScreenContent({
     tabs: uiTabs,
     routeFocused: isRouteFocused,
     focusedPaneOnly: syncFocusedPaneOnly,
+    presentedPaneId: searchSelection.presentedPaneId,
   });
   useEffect(() => {
     for (const agentId of visibleAgentIds) {
@@ -2140,15 +2143,7 @@ function WorkspaceScreenContent({
       ),
     [normalizedWorkspaceId, uiTabs],
   );
-  const navigateToTabId = useCallback(
-    function navigateToTabId(tabId: string) {
-      if (!tabId || !persistenceKey) {
-        return;
-      }
-      focusWorkspaceTab(persistenceKey, tabId);
-    },
-    [focusWorkspaceTab, persistenceKey],
-  );
+  const navigateToTabId = searchSelection.onSelect;
   const selectTabInPane = useCallback(
     (paneId: string, tabId: string) => {
       if (persistenceKey) {
@@ -2502,26 +2497,7 @@ function WorkspaceScreenContent({
     openUrl: handleOpenUrlInBrowserTab,
   });
 
-  const handleSelectSwitcherTab = useCallback(
-    (key: string) => {
-      const tab = uiTabs.find((candidate) => candidate.tabId === key);
-      if (!tab) return;
-      if (isMobile || !supportsDesktopPaneSplits()) {
-        const kind = tab.target.kind;
-        if (kind === "files" || kind === "changes_tree" || kind === "pull_request") {
-          openExplorerSidebarView({
-            isCompact: isMobile,
-            workspaceKey: persistenceKey,
-            checkout: activeExplorerCheckout,
-            view: explorerViewForSearchKind(kind),
-          });
-          return;
-        }
-      }
-      navigateToTabId(key);
-    },
-    [activeExplorerCheckout, isMobile, navigateToTabId, persistenceKey, uiTabs],
-  );
+  const handleSelectSwitcherTab = searchSelection.onSelect;
 
   // The new pane opens empty and the user picks what goes in it from the launcher.
   // Seeding a draft here guessed for them, and guessed "new agent" every time.

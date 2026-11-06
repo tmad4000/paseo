@@ -390,6 +390,7 @@ function OptionRow({ option, selected, active, onSelect, renderOption }: OptionR
   return (
     <View
       ref={ref}
+      dataSet={COMBOBOX_ACTION_DATASET}
       nativeID={
         searchAccessibility
           ? `${searchAccessibility.listId}-${encodeURIComponent(option.id)}`

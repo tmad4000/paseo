@@ -18,7 +18,10 @@ to find. Mount descriptors only while the picker is open; do not mount panel con
 providers to populate search. Filtering stays local. Pane context distinguishes duplicate titles.
 
 Selection reveals the existing tab in its own pane through normal workspace focus. Explorer uses
-its existing dock/compact overlay contract. Covered panes use the shared
+its existing dock/compact overlay contract for Files, Changes and pull requests. Compact search
+presents ordinary content already stored in Explorer through the single-pane renderer, while
+keeping the saved main-pane focus and tab placement. Returning to main navigation or leaving compact
+presentation clears that transient selection. Covered panes use the shared
 [maximized-pane reveal](expo-router.md#maximized-panes). Do not reopen a result after its tab closes.
 On web, apply the jump after the picker returns invocation focus, so an old composer's focus handler
 cannot pull focus back to the previous pane.
@@ -26,6 +29,7 @@ cannot pull focus back to the previous pane.
 The shared Combobox owns arrows, Enter, Escape, focus trapping and return. Search opts into stable
 result identity and search/list accessibility semantics. Live metadata changes retain the highlighted
 tab by ID; a changed query chooses a new match. Current-tab selection remains separate from keyboard
+highlight. A focused result button owns Enter/Space; arrows from the search field use the list
 highlight. Compact touch opens for browsing without forcing the software keyboard.
 
 Source checks cover all tab kinds, hidden-pane inclusion, default/custom shortcut ownership and

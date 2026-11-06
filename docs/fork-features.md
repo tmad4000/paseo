@@ -56,7 +56,9 @@ installs through the next staged build.
 
 `workspace-tab-search`: **Search workspace tabs** in the desktop header and Command Center, or the
 compact active-tab dropdown, finds real titles/subtitles across every persisted pane, including
-hidden Explorer and covered splits. Selection reveals the existing tab in place; cancellation
+hidden Explorer and covered splits. Compact selection also reveals Explorer-hosted agents and
+terminals without moving them or changing saved main focus; focused result buttons own Enter.
+Selection reveals the existing tab in place; cancellation
 preserves drafts. Empty query keeps pane/tab order; filtering never changes adjacent-tab cycling.
 Electron defaults to Cmd/Ctrl+Shift+O, leaving browser bookmarks, New agent and saved overrides intact.
 Source prepared on `feat/workspace-tab-search`; not installed. Contract and verification boundaries:
