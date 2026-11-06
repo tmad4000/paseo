@@ -1240,6 +1240,8 @@ export const zhCN: TranslationResources = {
         splitDown: "向下拆分窗格",
         splitRightWithSession: "向右拆分并放入会话…",
         splitDownWithSession: "向下拆分并放入会话…",
+        dropSessionOtherHost: "这里只能放入此主机的会话。要混合多个主机，请使用视图。",
+        dropSessionNoSession: "该工作区没有可打开的会话。",
         changes: "更改",
         files: "文件",
         pullRequest: "拉取请求",
@@ -1920,6 +1922,14 @@ export const zhCN: TranslationResources = {
       status: {
         serviceRunning: "服务 {{name}} 运行中",
         serviceUnhealthy: "服务 {{name}} 异常",
+        indicator: {
+          loading: "正在启动",
+          running: "运行中：有代理正在运行",
+          needs_input: "需要你处理：代理正在等待授权或回复",
+          attention: "已完成：有未读的新输出",
+          failed: "错误：代理因错误停止",
+          done: "空闲：没有新内容",
+        },
         creating: "正在创建...",
       },
       checks: {
@@ -1933,6 +1943,7 @@ export const zhCN: TranslationResources = {
       actions: {
         markAsRead: "标记为已读",
         markAsReadNamed: "将 {{name}} 标记为已读",
+        markAsReadHint: "标记为已读：清除此工作区的完成/错误提示",
         menu: "Workspace 操作",
         newWorkspace: "新建 workspace",
         showMore: "显示更多",

@@ -1267,6 +1267,9 @@ export const es: TranslationResources = {
         splitDown: "Dividir panel hacia abajo",
         splitRightWithSession: "Dividir a la derecha con sesión…",
         splitDownWithSession: "Dividir hacia abajo con sesión…",
+        dropSessionOtherHost:
+          "Aquí solo se pueden soltar sesiones de este host. Usa una vista para combinar hosts.",
+        dropSessionNoSession: "Ese espacio de trabajo no tiene ninguna sesión para abrir.",
         changes: "Cambios",
         files: "Archivos",
         pullRequest: "Solicitud de extracción",
@@ -1986,6 +1989,14 @@ export const es: TranslationResources = {
       status: {
         serviceRunning: "Servicio {{name}} en ejecución",
         serviceUnhealthy: "Servicio {{name}} con fallos",
+        indicator: {
+          loading: "Iniciando",
+          running: "Trabajando: un agente está en ejecución",
+          needs_input: "Te necesita: un agente espera un permiso o una respuesta",
+          attention: "Terminado: hay resultados nuevos sin leer",
+          failed: "Error: un agente se detuvo con un error",
+          done: "Inactivo: nada nuevo",
+        },
         creating: "Creando...",
       },
       checks: {
@@ -1999,6 +2010,8 @@ export const es: TranslationResources = {
       actions: {
         markAsRead: "Marcar como leído",
         markAsReadNamed: "Marcar {{name}} como leído",
+        markAsReadHint:
+          "Marcar como leído: borra el indicador de terminado/error de este espacio de trabajo",
         menu: "AccionesWorkspace",
         newWorkspace: "Nuevo espacio de trabajo",
         showMore: "Mostrar más",

@@ -266,6 +266,13 @@ test("by default a chat stays unread until its sidebar or tab check marks it rea
     );
     // Like the row's kebab, the check is a labelled control inside the row's own button on web.
     await expect(check).toHaveAttribute("aria-label", "Mark main as read");
+    // A bare check says nothing on its own; hovering it explains what pressing it does.
+    await check.hover();
+    await expect(
+      page.getByText("Mark as read: clears this workspace's finished/error indicator", {
+        exact: true,
+      }),
+    ).toBeVisible();
     await page.screenshot({ path: "test-results/explicit-read-sidebar-check.png" });
     await check.click();
     await expectStatus(page, subject.workspaceId, "done");

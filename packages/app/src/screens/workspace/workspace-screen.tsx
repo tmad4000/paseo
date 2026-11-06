@@ -22,7 +22,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown, Search } from "lucide-react-native";
+import { Button } from "@/components/ui/button";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -205,6 +206,7 @@ import {
   type SplitWithSessionPosition,
   type SplitWithSessionValue,
 } from "@/workspace-tabs/split-with-session";
+import { useSidebarDropHost } from "@/workspace-tabs/use-sidebar-drop-host";
 import { ViewSessionPicker, type ViewSessionPickerRequest } from "@/views/view-session-picker";
 import type { ViewTabInput } from "@/stores/views-store";
 import {
@@ -743,6 +745,10 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
     Keyboard.dismiss();
     setIsOpen(true);
   }, []);
+  const currentAgentId = activeTab?.target.kind === "agent" ? activeTab.target.agentId : null;
+  const handleFindCurrentChat = useCallback(() => {
+    if (currentAgentId) onFindInChat(currentAgentId);
+  }, [currentAgentId, onFindInChat]);
 
   const renderTabOption = useCallback(
     ({
@@ -836,6 +842,19 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           </>
         )}
       </Pressable>
+
+      {currentAgentId ? (
+        <Button
+          testID="workspace-current-chat-find"
+          variant="ghost"
+          size="md"
+          leftIcon={Search}
+          accessibilityLabel={t("workspace.tabs.menu.findInChat")}
+          onPress={handleFindCurrentChat}
+        >
+          {t("paneFind.title")}
+        </Button>
+      ) : null}
 
       <Combobox
         options={tabSwitcherOptions}
@@ -4387,6 +4406,15 @@ function WorkspaceScreenContent({
     content
   );
   const rendersDesktopSplitContent = !isMobile && desktopSplitContent !== null;
+  useSidebarDropHost({
+    routeFocused: isRouteFocused,
+    rendersSplits: rendersDesktopSplitContent,
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    workspaceKey: persistenceKey,
+    uiTabs,
+    navigateToTabId,
+  });
 
   const workspacePanelContent = (
     <WorkspacePanelContent
@@ -4636,11 +4664,15 @@ const styles = StyleSheet.create((theme) => ({
   },
   newTabTooltipShortcut: {},
   mobileTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.surface0,
     borderBottomWidth: theme.borderWidth[1],
     borderBottomColor: theme.colors.border,
   },
   switcherTrigger: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],

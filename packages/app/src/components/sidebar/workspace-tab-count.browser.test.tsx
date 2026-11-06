@@ -70,9 +70,9 @@ async function openAgent(agentId: string, key = workspaceKey) {
 test("shows and updates the multi-tab indicator without counting another workspace", async () => {
   expect(container.textContent).toBe("");
   await openAgent("first");
-  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
   await openAgent("other", "tab-count-host:other");
-  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
+  // A lone tab is the default state, so it isn't counted.
+  expect(container.textContent).toBe("");
   const second = await openAgent("second");
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
   expect(container.querySelector('[data-testid="sidebar-workspace-tab-count"]')?.textContent).toBe(
@@ -88,7 +88,7 @@ test("shows and updates the multi-tab indicator without counting another workspa
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
 });
 
-test("shows one tab when only one remains and excludes new-tab placeholders", async () => {
+test("hides the badge for a single tab and excludes new-tab placeholders", async () => {
   await openAgent("first");
   let placeholder: string | null = null;
   await act(async () => {
@@ -97,11 +97,13 @@ test("shows one tab when only one remains and excludes new-tab placeholders", as
       .openTab({ workspaceKey, intent: "new", target: { kind: "new_tab" } });
   });
   expect(placeholder).not.toBeNull();
-  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
+  expect(container.querySelector('[data-testid="sidebar-workspace-tab-count"]')).toBeNull();
   const second = await openAgent("second");
   await expect.element(page.getByLabelText("2 open tabs")).toBeVisible();
   await act(async () => useWorkspaceLayoutStore.getState().closeTab(workspaceKey, second));
-  await expect.element(page.getByLabelText("1 open tab")).toBeVisible();
+  await expect
+    .poll(() => container.querySelector('[data-testid="sidebar-workspace-tab-count"]'))
+    .toBeNull();
 });
 
 test("counts split tabs and excludes the hidden Explorer pane", async () => {
