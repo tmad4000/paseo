@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.10.0-beta.24 - 2026-11-05
+
+### Added
+
+- Hover a pane's New Tab (+) button to split right or down in one click ([#147](https://github.com/tmad4000/paseo/pull/147))
+- Group the sidebar by Sessions to see each conversation directly ([#166](https://github.com/tmad4000/paseo/pull/166))
+- Filter to sessions you created with Mine ([#164](https://github.com/tmad4000/paseo/pull/164))
+- Restart an agent and manage its queued messages from its tab menu ([#161](https://github.com/tmad4000/paseo/pull/161))
+- Delegated work stays visible with live child status and links back to the originating chat ([#148](https://github.com/tmad4000/paseo/pull/148))
+- Blocked tracked asks appear in Needs you ([#169](https://github.com/tmad4000/paseo/pull/169))
+
+### Improved
+
+- Tabs keep their opened or dragged order by default; Settings → Chat → Tabs offers recent-activity sorting ([#174](https://github.com/tmad4000/paseo/pull/174))
+- Command Center workspace results show their latest activity ([#163](https://github.com/tmad4000/paseo/pull/163))
+
+### Fixed
+
+- Desktop and web voice play GPT Realtime audio and recover from blocked playback ([#160](https://github.com/tmad4000/paseo/pull/160))
+- History refresh failures retain diagnostics for troubleshooting ([#141](https://github.com/tmad4000/paseo/pull/141))
+- SSH connections forward their last frame before the tunnel closes ([#175](https://github.com/tmad4000/paseo/pull/175))
+- Build validation uses supported Ubuntu runners, local relay E2E tests, and diagnostics events within retention ([#175](https://github.com/tmad4000/paseo/pull/175))
+
 ## 0.10.0-beta.23 - 2026-11-02
 
 ### Added

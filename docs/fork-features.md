@@ -10,6 +10,14 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Stable workspace tab order — pspin-8eb
+
+`stable-tab-order`: desktop and web tabs retain opened or dragged order by default. Settings →
+Chat → Tabs offers **Sort tabs by recent activity** for the activity-sorted behavior. The saved
+choice survives reloads. Verify that new agent activity preserves order and focus by default,
+and that enabling the option sorts tabs by activity. Source: [#174](https://github.com/tmad4000/paseo/pull/174).
+Installed acceptance is recorded separately from source integration.
+
 ## Command Center workspace activity — pspin-787.8
 
 `cmdk-workspace-last-active`: workspace subtitles include the sidebar last-active instant in
