@@ -114,6 +114,7 @@ export function ProjectStatusIndicator({
   statusBucket,
   backdrop,
   loading = false,
+  seen = false,
   testID,
 }: {
   iconDataUri: string | null;
@@ -123,6 +124,8 @@ export function ProjectStatusIndicator({
   /** The row's current background, so the status badge can knock out of it. */
   backdrop: SidebarSurfaceBackdrop;
   loading?: boolean;
+  /** Unread, but looked at on this device: the dot becomes a hollow ring. */
+  seen?: boolean;
   testID?: string;
 }) {
   const placeholderInitial = projectIconPlaceholderLabelFromDisplayName(displayName)
@@ -155,6 +158,7 @@ export function ProjectStatusIndicator({
             content={badgeContent}
             statusBucket={badgeBucket}
             backdrop={backdrop}
+            seen={seen}
           />
         )}
       </View>
@@ -170,12 +174,15 @@ export function SessionStatusIndicator({
   children,
   statusBucket,
   backdrop,
+  seen = false,
   testID,
 }: {
   /** The provider glyph the badge annotates. */
   children: ReactNode;
   statusBucket: SidebarStateBucket;
   backdrop: SidebarSurfaceBackdrop;
+  /** Unread, but looked at on this device: the dot becomes a hollow ring. */
+  seen?: boolean;
   testID?: string;
 }) {
   const badgeContent = getProjectStatusBadgeContent(statusBucket);
@@ -191,6 +198,7 @@ export function SessionStatusIndicator({
             content={badgeContent}
             statusBucket={statusBucket}
             backdrop={backdrop}
+            seen={seen}
           />
         )}
       </View>
@@ -202,10 +210,12 @@ function ProjectStatusBadge({
   content,
   statusBucket,
   backdrop,
+  seen,
 }: {
   content: ProjectStatusBadgeContent;
   statusBucket: SidebarStateBucket;
   backdrop: SidebarSurfaceBackdrop;
+  seen: boolean;
 }) {
   // Running skips the shell. The ring is wider than the 12pt shell and carries its own knockout,
   // so nesting it inside would clip it against the very thing that was meant to separate it from
@@ -232,7 +242,7 @@ function ProjectStatusBadge({
       {content.kind === "alert" ? (
         <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
       ) : (
-        <ProjectStatusDot bucket={content.bucket} />
+        <ProjectStatusDot bucket={content.bucket} seen={seen} />
       )}
     </View>
   );
@@ -251,9 +261,27 @@ function getStatusBadgeBackdropStyle(backdrop: SidebarSurfaceBackdrop): ViewStyl
   }
 }
 
-function ProjectStatusDot({ bucket }: { bucket: ProjectStatusBadgeDotBucket }) {
+function ProjectStatusDot({
+  bucket,
+  seen,
+}: {
+  bucket: ProjectStatusBadgeDotBucket;
+  seen: boolean;
+}) {
+  // Seen-not-read draws the same colour as a hollow ring, like the tab strip's icon badge.
+  if (seen && bucket !== "running") {
+    return (
+      <View
+        testID="project-status-dot"
+        dataSet={SEEN_DATA_SET}
+        style={bucket === "failed" ? styles.statusRingFailed : styles.statusRingAttention}
+      />
+    );
+  }
   return <View testID="project-status-dot" style={getStatusDotColorStyle(bucket)} />;
 }
+
+const SEEN_DATA_SET = { readState: "seen" } as const;
 
 function ProjectIcon({
   iconDataUri,
@@ -302,6 +330,15 @@ const styles = StyleSheet.create((theme) => {
       height: STATUS_INDICATOR_FILLED_DOT_SIZE,
       borderRadius: theme.borderRadius.full,
       backgroundColor: getStatusDotColor({ theme, bucket }) ?? undefined,
+    }) as const;
+
+  const statusRing = (bucket: ProjectStatusBadgeDotBucket) =>
+    ({
+      width: STATUS_INDICATOR_FILLED_DOT_SIZE,
+      height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+      borderRadius: theme.borderRadius.full,
+      borderWidth: 1.5,
+      borderColor: getStatusDotColor({ theme, bucket }) ?? undefined,
     }) as const;
 
   return {
@@ -357,5 +394,7 @@ const styles = StyleSheet.create((theme) => {
     statusDotRunning: statusDot("running"),
     statusDotFailed: statusDot("failed"),
     statusDotAttention: statusDot("attention"),
+    statusRingFailed: statusRing("failed"),
+    statusRingAttention: statusRing("attention"),
   };
 });

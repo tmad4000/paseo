@@ -1178,6 +1178,7 @@ export const en = {
       loading: "Loading...",
       modified: "Unsaved changes",
       newActivity: "New activity",
+      seenNotRead: "Seen, not read",
       loadingAgentTitle: "Loading agent title",
       fallback: {
         newAgent: "New agent",

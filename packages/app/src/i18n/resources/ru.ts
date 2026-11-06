@@ -1189,6 +1189,7 @@ export const ru: TranslationResources = {
       loading: "Загрузка...",
       modified: "Несохранённые изменения",
       newActivity: "Новая активность",
+      seenNotRead: "Просмотрено, не прочитано",
       loadingAgentTitle: "Загрузка названия агента",
       fallback: {
         newAgent: "Новый агент",

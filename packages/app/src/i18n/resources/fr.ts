@@ -1192,6 +1192,7 @@ export const fr: TranslationResources = {
       loading: "Chargement...",
       modified: "Modifications non enregistrées",
       newActivity: "Nouvelle activité",
+      seenNotRead: "Vu, non lu",
       loadingAgentTitle: "Titre d'agent de chargement",
       fallback: {
         newAgent: "Nouvel agent",

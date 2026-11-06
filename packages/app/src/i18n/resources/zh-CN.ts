@@ -1169,6 +1169,7 @@ export const zhCN: TranslationResources = {
       loading: "正在加载...",
       modified: "未保存的更改",
       newActivity: "新活动",
+      seenNotRead: "已查看，未读",
       loadingAgentTitle: "正在加载 Agent 标题",
       fallback: {
         newAgent: "新建 Agent",

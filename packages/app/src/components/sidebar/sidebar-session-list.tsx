@@ -33,6 +33,7 @@ import type { Theme } from "@/styles/theme";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import { SessionStatusIndicator } from "./project-leading-visual";
+import { useAgentSeenNotRead } from "@/workspace/use-agent-seen";
 import { getSidebarRowBackdrop } from "./sidebar-row-backdrop";
 import { sidebarSessionMeta, type SidebarSessionRow } from "./sidebar-sessions";
 import { WorkspaceTimestamp } from "./workspace-trailing";
@@ -169,6 +170,7 @@ const SessionRow = memo(function SessionRow({
     [row.agentId, row.serverId, t],
   );
   const testBase = `sidebar-session-${row.serverId}-${row.agentId}`;
+  const seenNotRead = useAgentSeenNotRead(row.serverId, row.agentId);
   const menuItems = (
     <>
       {readAction.canMarkRead ? (
@@ -217,7 +219,11 @@ const SessionRow = memo(function SessionRow({
           style={rowStyle}
           testID={testBase}
         >
-          <SessionStatusIndicator statusBucket={row.statusBucket} backdrop={backdrop}>
+          <SessionStatusIndicator
+            statusBucket={row.statusBucket}
+            backdrop={backdrop}
+            seen={seenNotRead}
+          >
             <ThemedProviderGlyph
               provider={row.provider}
               serverId={row.serverId}

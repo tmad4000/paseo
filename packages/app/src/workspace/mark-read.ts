@@ -3,6 +3,7 @@ import { i18n } from "@/i18n/i18next";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useAgentReadMarksStore } from "@/stores/agent-read-marks-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
+import { agentSeenClock } from "@/screens/workspace/workspace-tab-activity";
 
 type SessionStoreSnapshot = ReturnType<typeof useSessionStore.getState>;
 
@@ -17,6 +18,25 @@ export function readAgentActivityAt(
     state.sessions[serverId]?.agents?.get(agentId)?.lastActivityAt;
   const timestamp = date?.getTime() ?? 0;
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+/**
+ * The clock a seen mark is measured against (see `agentSeenClock`): last activity, or the host's
+ * readable-attention stamp when that is later.
+ */
+export function readAgentSeenClock(
+  state: SessionStoreSnapshot,
+  serverId: string,
+  agentId: string,
+): number {
+  const agent = state.sessions[serverId]?.agents?.get(agentId);
+  const attentionAt = hasClearableAgentAttention(agent)
+    ? (agent?.attentionTimestamp?.getTime() ?? 0)
+    : 0;
+  return agentSeenClock(
+    readAgentActivityAt(state, serverId, agentId),
+    Number.isFinite(attentionAt) ? attentionAt : 0,
+  );
 }
 
 /**
