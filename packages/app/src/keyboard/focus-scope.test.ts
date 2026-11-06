@@ -77,4 +77,13 @@ describe("resolveKeyboardFocusScope", () => {
     });
     expect(scope).toBe("editable");
   });
+
+  it("treats a control that owns its keys as editable so global shortcuts skip it", () => {
+    const target = new FakeElement({ tagName: "button", selectors: ["[data-keyboard-owner]"] });
+    const scope = resolveKeyboardFocusScope({
+      target: target as unknown as EventTarget,
+      commandCenterOpen: false,
+    });
+    expect(scope).toBe("editable");
+  });
 });

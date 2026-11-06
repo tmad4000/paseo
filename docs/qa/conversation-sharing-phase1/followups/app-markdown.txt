@@ -1,0 +1,9 @@
+
+ RUN  v4.1.7 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  23:34:21
+   Duration  117ms (transform 18ms, setup 0ms, import 33ms, tests 17ms, environment 0ms)
+

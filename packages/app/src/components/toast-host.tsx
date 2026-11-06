@@ -1,5 +1,6 @@
 import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import { resolveAppVersion } from "@/utils/app-version";
+import { isConnectionErrorMessage, toDisplayErrorMessage } from "@/utils/error-messages";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -27,12 +28,20 @@ import {
 
 export type ToastVariant = "default" | "info" | "success" | "warning" | "error";
 
+/** One follow-up the toast offers, e.g. undoing what it reports. Pressing it dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+  testID?: string;
+}
+
 export interface ToastShowOptions {
   icon?: ReactNode;
   variant?: ToastVariant;
   durationMs?: number | null;
   nativeAndroid?: boolean;
   testID?: string;
+  action?: ToastAction;
 }
 
 export interface ToastState {
@@ -43,6 +52,7 @@ export interface ToastState {
   variant: ToastVariant;
   durationMs: number | null;
   testID?: string;
+  action?: ToastAction;
 }
 
 export interface ToastApi {
@@ -54,6 +64,8 @@ export interface ToastApi {
 type ToastViewportPlacement = "app-shell" | "panel";
 
 const DEFAULT_DURATION_MS = 2200;
+// Long enough to read the message and reach the button.
+const DEFAULT_ACTION_DURATION_MS = 5000;
 const TOAST_MAX_WIDTH = 480;
 const toastEntering = FadeIn.duration(140);
 const toastExiting = FadeOut.duration(140);
@@ -66,6 +78,29 @@ const successIcon = (theme: Theme) => ({ color: theme.colors.primary });
 const warningIcon = (theme: Theme) => ({ color: theme.colors.palette.amber[500] });
 const errorIcon = (theme: Theme) => ({ color: theme.colors.destructive });
 
+// A dropped connection is expected on flaky networks: say so plainly, as a
+// warning. The caller records the raw transport text as a diagnostic first.
+function presentToast(
+  rawContent: ReactNode,
+  rawMessage: string | null,
+  requestedVariant: ToastVariant,
+): { content: ReactNode; nativeMessage: string | null; variant: ToastVariant } {
+  if (
+    rawMessage === null ||
+    requestedVariant !== "error" ||
+    !isConnectionErrorMessage(rawMessage)
+  ) {
+    return { content: rawContent, nativeMessage: rawMessage, variant: requestedVariant };
+  }
+  const message = toDisplayErrorMessage(rawMessage);
+  return { content: message, nativeMessage: message, variant: "warning" };
+}
+
+function resolveToastDuration(options: ToastShowOptions | undefined): number | null {
+  if (options?.durationMs !== undefined) return options.durationMs;
+  return options?.action ? DEFAULT_ACTION_DURATION_MS : DEFAULT_DURATION_MS;
+}
+
 export function useToastHost(): {
   api: ToastApi;
   toast: ToastState | null;
@@ -75,24 +110,31 @@ export function useToastHost(): {
   const [toast, setToast] = useState<ToastState | null>(null);
   const idRef = useRef(0);
 
-  const show = useCallback((content: ReactNode, options?: ToastShowOptions) => {
-    const nativeMessage = typeof content === "string" ? content.trim() : null;
-    if (!content || nativeMessage === "") {
+  const show = useCallback((rawContent: ReactNode, options?: ToastShowOptions) => {
+    const rawMessage = typeof rawContent === "string" ? rawContent.trim() : null;
+    if (!rawContent || rawMessage === "") {
       return;
     }
 
-    const variant = options?.variant ?? "default";
+    const requestedVariant = options?.variant ?? "default";
     // Every error or warning the person sees is also a diagnostic the host can read later.
-    if (nativeMessage && (variant === "error" || variant === "warning")) {
+    if (rawMessage && (requestedVariant === "error" || requestedVariant === "warning")) {
       recordClientDiagnostic({
         source: "toast",
-        severity: variant,
-        message: nativeMessage,
+        severity: requestedVariant,
+        message: rawMessage,
         appVersion: resolveAppVersion(),
       });
     }
-    const durationMs = options?.durationMs === undefined ? DEFAULT_DURATION_MS : options.durationMs;
-    const nativeAndroid = options?.nativeAndroid ?? false;
+    const { content, nativeMessage, variant } = presentToast(
+      rawContent,
+      rawMessage,
+      requestedVariant,
+    );
+    const action = options?.action;
+    const durationMs = resolveToastDuration(options);
+    // A native Android toast cannot hold a button.
+    const nativeAndroid = (options?.nativeAndroid ?? false) && !action;
 
     if (Platform.OS === "android" && nativeAndroid && nativeMessage) {
       const duration =
@@ -110,6 +152,7 @@ export function useToastHost(): {
       variant,
       durationMs,
       testID: options?.testID,
+      action,
     });
   }, []);
 
@@ -214,7 +257,12 @@ export function ToastViewport({
             testID={toast.testID ?? "app-toast"}
             accessibilityRole="alert"
           >
-            <ToastCard toast={toast} onHoverIn={pauseDismiss} onHoverOut={resumeDismiss} />
+            <ToastCard
+              toast={toast}
+              onHoverIn={pauseDismiss}
+              onHoverOut={resumeDismiss}
+              onDismiss={onDismiss}
+            />
           </Animated.View>
         ) : null}
       </View>
@@ -232,10 +280,12 @@ function ToastCard({
   toast,
   onHoverIn,
   onHoverOut,
+  onDismiss,
 }: {
   toast: ToastState;
   onHoverIn: () => void;
   onHoverOut: () => void;
+  onDismiss: () => void;
 }) {
   let defaultIcon: ReactNode = null;
   if (toast.variant === "info") {
@@ -271,8 +321,32 @@ function ToastCard({
           {toast.content}
         </View>
       )}
+      {toast.action ? <ToastActionButton action={toast.action} onDismiss={onDismiss} /> : null}
     </Pressable>
   );
+}
+
+function ToastActionButton({ action, onDismiss }: { action: ToastAction; onDismiss: () => void }) {
+  const { onPress } = action;
+  const handlePress = useCallback(() => {
+    onDismiss();
+    onPress();
+  }, [onDismiss, onPress]);
+  return (
+    <Pressable
+      testID={action.testID ?? "app-toast-action"}
+      accessibilityRole="button"
+      accessibilityLabel={action.label}
+      onPress={handlePress}
+      style={actionStyle}
+    >
+      <Text style={styles.actionLabel}>{action.label}</Text>
+    </Pressable>
+  );
+}
+
+function actionStyle({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) {
+  return [styles.action, hovered || pressed ? styles.actionActive : null];
 }
 
 const animatedStyles = NativeStyleSheet.create({
@@ -329,5 +403,20 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  action: {
+    flexShrink: 0,
+    marginLeft: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  actionActive: {
+    backgroundColor: theme.colors.surface2,
+  },
+  actionLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

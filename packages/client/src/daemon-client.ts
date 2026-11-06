@@ -45,6 +45,7 @@ import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outb
 import type {
   AgentStreamEventPayload,
   AgentSnapshotPayload,
+  WorkspaceDescription,
   ProjectPlacementPayload,
   AgentPermissionResolvedMessage,
   CreateAgentRequestMessage,
@@ -2085,12 +2086,20 @@ export class DaemonClient {
     }
   }
 
-  async clearAgentAttention(agentId: string | string[]): Promise<void> {
+  /**
+   * Pass `read` when a user read the chat: the host then keeps permission attention and anything
+   * raised after `read.seenAttentionAt`. Without it the clear is unconditional.
+   */
+  async clearAgentAttention(
+    agentId: string | string[],
+    options?: { read?: { seenAttentionAt?: string } },
+  ): Promise<void> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
       type: "clear_agent_attention",
       agentId,
       requestId,
+      ...(options?.read ? { read: options.read } : {}),
     });
     await this.sendRequest({
       requestId,
@@ -3120,6 +3129,19 @@ export class DaemonClient {
     );
   }
 
+  /** Pauses (or resumes) the queue at an item while it is being edited. Requires `queueEditHold`. */
+  async holdQueuedAgentMessageForEdit(input: {
+    agentId: string;
+    itemId: string;
+    held: boolean;
+  }): Promise<AgentQueueSnapshot> {
+    return this.requireAgentQueuePayload(
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.edit_hold.response">({
+        message: { type: "agent.queue.edit_hold.request", ...input },
+      }),
+    );
+  }
+
   async reorderQueuedAgentMessages(
     agentId: string,
     itemIds: string[],
@@ -3129,6 +3151,45 @@ export class DaemonClient {
         message: { type: "agent.queue.reorder.request", agentId, itemIds },
       }),
     );
+  }
+
+  /** Sends the queue head now if the agent is free. Requires `queueDrain`. */
+  async drainAgentQueue(agentId: string): Promise<AgentQueueSnapshot> {
+    return this.requireAgentQueuePayload(
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.drain.response">({
+        message: { type: "agent.queue.drain.request", agentId },
+        timeout: 120_000,
+      }),
+    );
+  }
+
+  /** Removes every queued item not already being submitted. Requires `queueDrain`. */
+  async clearAgentQueue(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.queue.clear.response">> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.clear.response">(
+      {
+        message: { type: "agent.queue.clear.request", agentId },
+      },
+    );
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  /**
+   * Restart agent: restarts the provider process, resumes the same session and
+   * delivers the queue in order. Requires `agentRestart`.
+   */
+  async restartAgent(
+    agentId: string,
+  ): Promise<CorrelatedResponsePayload<"agent.restart.response">> {
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"agent.restart.response">({
+      message: { type: "agent.restart.request", agentId },
+      // Resuming a provider session and submitting the queue head can take a while.
+      timeout: 180_000,
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
   }
 
   /** Host-side delivery state for one agent. Requires `deliveryInspect`. */
@@ -3501,6 +3562,26 @@ export class DaemonClient {
     return { title: payload.title };
   }
 
+  /** Derived summary of every chat in a workspace. Hosts advertise features.workspaceDescribe. */
+  async describeWorkspace(
+    workspaceId: string,
+    options?: { excludeAgentId?: string; requestId?: string },
+  ): Promise<WorkspaceDescription> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "workspace.describe.request",
+        workspaceId,
+        ...(options?.excludeAgentId ? { excludeAgentId: options.excludeAgentId } : {}),
+      },
+      responseType: "workspace.describe.response",
+    });
+    if (!payload.description) {
+      throw new Error(payload.error ?? "describeWorkspace rejected");
+    }
+    return payload.description;
+  }
+
   async setWorkspacePinned(
     workspaceId: string,
     pinned: boolean,
@@ -3700,7 +3781,11 @@ export class DaemonClient {
     return { seq: payload.seq, epoch: payload.epoch };
   }
 
-  async searchSessions(input: { query: string; workspaceIds: string[] }) {
+  async searchSessions(input: {
+    query: string;
+    workspaceIds: string[];
+    routingProvider?: "codex" | "jev" | "openai-decisions";
+  }) {
     const payload = await this.sendNamespacedCorrelatedSessionRequest<"session.search.response">({
       message: { type: "session.search.request", ...input },
       timeout: 50000,

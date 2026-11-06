@@ -27,7 +27,7 @@ export function parseShareRedaction(include = "", noScrub = ""): RedactionProfil
     else throw new Error(`Unknown inclusion: ${value}`);
   }
   for (const value of noScrub.split(",").filter(Boolean)) {
-    if (value !== "secrets" && value !== "paths" && value !== "contacts")
+    if (value !== "secrets" && value !== "hosts" && value !== "paths" && value !== "contacts")
       throw new Error(`Unknown scrubber: ${value}`);
     profile.scrub[value] = false;
   }
@@ -38,6 +38,7 @@ const schema: OutputSchema<ShareRecordPayload> = {
   columns: [
     { header: "ID", field: "id" },
     { header: "TITLE", field: "title" },
+    { header: "HOST", field: (share) => share.published?.kind ?? "local-listener" },
     { header: "EXPIRES", field: "expiresAt" },
     { header: "REVOKED", field: "revokedAt" },
     { header: "VIEWS", field: "viewCount" },
@@ -75,7 +76,7 @@ export function createShareCommand(): Command {
       .argument("<agent>")
       .option("--expires <duration>", "never, 24h, 7d or 30d", "7d")
       .option("--include <items>", "tool-calls,reasoning,errors")
-      .option("--no-scrub <items>", "secrets,paths,contacts")
+      .option("--no-scrub <items>", "secrets,hosts,paths,contacts")
       .option("--title <title>"),
   ).action(
     withOutput<Awaited<ReturnType<ShareClient["createShareLink"]>>, [string]>(
@@ -105,7 +106,8 @@ export function createShareCommand(): Command {
             schema: {
               idField: "url" as const,
               columns: [{ header: "URL", field: "url" as const }],
-              renderHuman: () => result.url,
+              renderHuman: () =>
+                `${result.url}\nHost: ${result.share.published?.kind ?? "local-listener"}`,
             },
           };
         }),

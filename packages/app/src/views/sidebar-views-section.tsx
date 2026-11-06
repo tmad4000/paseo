@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
-import { router, usePathname, type Href } from "expo-router";
-import { LayoutPanelLeft, Plus, ListFilter } from "lucide-react-native";
+import { router, usePathname, useGlobalSearchParams, type Href } from "expo-router";
+import { LayoutPanelLeft, Plus, ListFilter, CircleHelp } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -10,7 +10,9 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildViewRoute } from "@/utils/host-routes";
 
 const ThemedPlus = withUnistyles(Plus);
-const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const mutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+});
 
 /** Sidebar list of cross-workspace Views, above the projects. */
 export function SidebarViewsSection() {
@@ -32,18 +34,8 @@ export function SidebarViewsSection() {
     router.push(buildViewRoute(viewId) as Href);
   }, []);
 
-  const openStream = useCallback(() => router.navigate("/stream" as Href), []);
-
   return (
     <View style={styles.section} testID="sidebar-views-section">
-      <SidebarHeaderRow
-        variant="compact"
-        icon={ListFilter}
-        label={t("globalStream.title")}
-        isActive={pathname === "/stream"}
-        onPress={openStream}
-        testID="sidebar-global-stream"
-      />
       <View style={styles.header}>
         <Text style={styles.title}>{t("views.sidebar.title")}</Text>
         <Pressable
@@ -64,6 +56,41 @@ export function SidebarViewsSection() {
           isActive={pathname === buildViewRoute(view.id)}
         />
       ))}
+    </View>
+  );
+}
+
+/** Global attention navigation belongs to persistent sidebar chrome, not project results. */
+export function SidebarStreamNavigation({ onBeforeNavigate }: { onBeforeNavigate?: () => void }) {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const { view: streamView } = useGlobalSearchParams<{ view?: string }>();
+  const openNeedsYou = useCallback(() => {
+    onBeforeNavigate?.();
+    router.navigate("/stream?view=needs_you" as Href);
+  }, [onBeforeNavigate]);
+  const openStream = useCallback(() => {
+    onBeforeNavigate?.();
+    router.navigate("/stream" as Href);
+  }, [onBeforeNavigate]);
+  return (
+    <View testID="sidebar-stream-navigation">
+      <SidebarHeaderRow
+        variant="compact"
+        icon={CircleHelp}
+        label={t("globalStream.needsYou")}
+        isActive={pathname === "/stream" && streamView === "needs_you"}
+        onPress={openNeedsYou}
+        testID="sidebar-needs-you"
+      />
+      <SidebarHeaderRow
+        variant="compact"
+        icon={ListFilter}
+        label={t("globalStream.title")}
+        isActive={pathname === "/stream" && streamView !== "needs_you"}
+        onPress={openStream}
+        testID="sidebar-global-stream"
+      />
     </View>
   );
 }

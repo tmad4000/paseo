@@ -63,15 +63,15 @@ for (const width of [390, 1440]) {
       await page.getByTestId("agent-view-artifacts").click();
       await expect(
         page
-          .getByTestId("companion-stream")
+          .getByTestId("local-stream-workflow")
           .getByText(/^Turn ended · /)
           .first(),
       ).toBeVisible();
       await page.getByTestId("agent-view-chat").click();
-      const pin = page.getByRole("button", { name: "Pin to stream", exact: true });
+      const pin = page.getByRole("button", { name: "Save to Stream", exact: true });
       await expect(pin.last()).toBeVisible();
       await pin.last().click();
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect(page.getByText("Saved to Stream", { exact: true })).toBeVisible();
       const fullPins = await session.client.listGlobalStream({
         agentId: session.agentId,
@@ -82,11 +82,11 @@ for (const width of [390, 1440]) {
       ).toEqual([response]);
 
       await pin.last().click();
-      await page.getByText("Pin excerpt…", { exact: true }).click();
+      await page.getByText("Save excerpt…", { exact: true }).click();
       const excerpt = page.getByTestId("message-pin-excerpt-body");
       await excerpt.getByTestId("message-pin-excerpt-input").fill("Keep this exact line.");
       rejectNextPin = true;
-      await excerpt.getByRole("button", { name: "Pin to stream", exact: true }).click();
+      await excerpt.getByRole("button", { name: "Save to Stream", exact: true }).click();
       await expect(excerpt.getByRole("alert")).toHaveText("Pin save failed. Please retry.");
       await expect(excerpt.getByTestId("message-pin-excerpt-input")).toHaveValue(
         "Keep this exact line.",
@@ -95,7 +95,7 @@ for (const width of [390, 1440]) {
         path: testInfo.outputPath(`pin-retry-${width}.png`),
         fullPage: true,
       });
-      await excerpt.getByRole("button", { name: "Pin to stream", exact: true }).click();
+      await excerpt.getByRole("button", { name: "Save to Stream", exact: true }).click();
       await expect(excerpt).toHaveCount(0);
       expect(pinIds[1]).toBe(pinIds[2]);
 
@@ -104,7 +104,7 @@ for (const width of [390, 1440]) {
         .getByTestId("assistant-message")
         .filter({ hasText: "Another useful detail." })
         .click({ button: "right" });
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect
         .poll(
           async () =>
@@ -112,7 +112,7 @@ for (const width of [390, 1440]) {
               .rows.length,
         )
         .toBe(3);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       const selectedItem = page
         .getByTestId("assistant-message")
@@ -135,7 +135,7 @@ for (const width of [390, 1440]) {
         throw new Error("Expected selectable excerpt");
       });
       await page.mouse.click(selectionPoint.x, selectionPoint.y, { button: "right" });
-      await page.getByText("Pin selected text to Stream", { exact: true }).click();
+      await page.getByText("Save selected text to Stream", { exact: true }).click();
       await expect
         .poll(async () => {
           const pins = await session.client.listGlobalStream({
@@ -151,7 +151,7 @@ for (const width of [390, 1440]) {
           );
         })
         .toBe(true);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       // User-message pinning uses the same acknowledged path.
       await page
@@ -159,7 +159,7 @@ for (const width of [390, 1440]) {
         .getByText("Return a completed reply for pinning.", { exact: true })
         .hover();
       await pin.first().click();
-      await page.getByText("Pin message to Stream", { exact: true }).click();
+      await page.getByText("Save message to Stream", { exact: true }).click();
       await expect
         .poll(
           async () =>
@@ -167,20 +167,17 @@ for (const width of [390, 1440]) {
               .rows.length,
         )
         .toBe(5);
-      await expect(page.getByText("Pin message to Stream", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       // The default Activity view includes completed outcomes and newly saved pins.
       await page.getByTestId("agent-view-artifacts").click();
-      const feed = page.getByTestId("companion-stream");
+      const feed = page.getByTestId("local-stream-workflow");
       await expect(feed.getByText("Keep this exact line.", { exact: true })).toBeVisible();
       await expect(feed.getByText("Another useful detail.", { exact: true })).toBeVisible();
-      await feed.getByRole("button", { name: "Checklist", exact: true }).click();
-      await expect(
-        feed.getByText(
-          "Checklist contains requests your agent explicitly tracks. Captured replies and pins are in Activity.",
-        ),
-      ).toBeVisible();
-      await feed.getByRole("button", { name: "Show activity", exact: true }).click();
+      await feed.getByRole("button", { name: "Tasks", exact: true }).click();
+      await expect(feed.getByText("No items match this view.", { exact: true })).toBeVisible();
+      await expect(feed.getByText("Keep this exact line.", { exact: true })).toHaveCount(0);
+      await feed.getByRole("button", { name: "Activity", exact: true }).click();
       await page.screenshot({
         path: testInfo.outputPath(`stream-activity-${width}.png`),
         fullPage: true,
@@ -188,11 +185,13 @@ for (const width of [390, 1440]) {
       await page.reload();
       await page.getByTestId("agent-view-artifacts").click();
       await page
-        .getByTestId("companion-stream")
-        .getByRole("button", { name: "Pinned", exact: true })
+        .getByTestId("local-stream-workflow")
+        .getByRole("button", { name: "Saved", exact: true })
         .click();
       await expect(
-        page.getByTestId("companion-stream").getByText("Keep this exact line.", { exact: true }),
+        page
+          .getByTestId("local-stream-workflow")
+          .getByText("Keep this exact line.", { exact: true }),
       ).toBeVisible();
     } finally {
       await session.cleanup();
@@ -240,32 +239,59 @@ for (const width of [390, 1440]) {
         action: "add_pin",
         text: "Remember the launch context",
       });
+      const firstRows = page.getByTestId(`global-stream-row-${first.id}`);
+      const secondRows = page.getByTestId(`global-stream-row-${second.id}`);
       await resetSeededPageState(page);
       await page.setViewportSize({ width, height: 900 });
       await gotoAppShell(page);
       await page.goto("/stream");
-      await expect(page.getByText("Choose the launch name", { exact: true })).toBeVisible();
-      await expect(page.getByText("Choose the release channel", { exact: true })).toBeVisible();
+      await expect(firstRows.getByText("Choose the launch name", { exact: true })).toBeVisible();
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("global-stream-all.png"), fullPage: true });
-      await page.getByRole("button", { name: "Needs a reply", exact: true }).click();
-      await page
-        .getByTestId(`global-stream-row-${first.id}`)
-        .getByRole("button", { name: "Done", exact: true })
-        .click();
-      await expect(page.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
-      await expect(page.getByText("Choose the release channel", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Pinned", exact: true }).click();
-      await expect(page.getByText("Remember the launch context", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Unpin", exact: true }).click();
-      await expect(page.getByText("Remember the launch context", { exact: true })).toHaveCount(0);
+      await page.getByTestId("global-stream").getByTestId("stream-needs-you").click();
+      await page.screenshot({ path: testInfo.outputPath("needs-you-now.png"), fullPage: true });
+      // Done lives under More in the triage row.
+      await firstRows.getByTestId("companion-entry-more").click();
+      await page.getByRole("menuitem", { name: "Done", exact: true }).click();
+      await expect(firstRows.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
+      // Later sets it aside without a status change; the pinned switch finds it again.
+      await secondRows.getByRole("button", { name: "Later", exact: true }).click();
+      await expect(secondRows.getByText("Choose the release channel", { exact: true })).toHaveCount(
+        0,
+      );
+      await page.getByTestId("stream-show-later").click();
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("needs-you-later.png"), fullPage: true });
+      await secondRows.getByRole("button", { name: "Bring back", exact: true }).click();
+      await page.getByTestId("stream-show-now").click();
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Saved", exact: true }).click();
+      await expect(
+        firstRows.getByText("Remember the launch context", { exact: true }),
+      ).toBeVisible();
+      await firstRows.getByRole("button", { name: "Unpin", exact: true }).click();
+      await expect(firstRows.getByText("Remember the launch context", { exact: true })).toHaveCount(
+        0,
+      );
       await client.updateStreamEntry({
         agentId: first.id,
         action: "add_pin",
         text: "A concurrently removed note",
       });
       await page.getByRole("button", { name: "Refresh", exact: true }).click();
-      await expect(page.getByText("A concurrently removed note", { exact: true })).toBeVisible();
-      const pins = await client.listGlobalStream({ filter: "pinned" });
+      await expect(
+        firstRows.getByText("A concurrently removed note", { exact: true }),
+      ).toBeVisible();
+      const pins = await client.listGlobalStream({ agentId: first.id, filter: "pinned" });
       const removed = pins.rows.find(
         (row) => row.item.kind === "entry" && row.item.entry.text === "A concurrently removed note",
       );
@@ -275,16 +301,20 @@ for (const width of [390, 1440]) {
         action: "remove_pin",
         entryId: removed.item.entry.id,
       });
-      await page.getByRole("button", { name: "Unpin", exact: true }).click();
-      await expect(page.getByText("Pinned item no longer exists", { exact: true })).toBeVisible();
+      await firstRows.getByRole("button", { name: "Unpin", exact: true }).click();
+      await expect(
+        firstRows.getByText("Pinned item no longer exists", { exact: true }),
+      ).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("global-stream-rejected-write.png"),
         fullPage: true,
       });
-      await page.getByRole("button", { name: "All", exact: true }).click();
+      await page.getByRole("button", { name: "Activity", exact: true }).click();
       await page.getByTestId("global-stream-search").fill("release channel");
-      await expect(page.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
-      await expect(page.getByText("Choose the release channel", { exact: true })).toBeVisible();
+      await expect(firstRows.getByText("Choose the launch name", { exact: true })).toHaveCount(0);
+      await expect(
+        secondRows.getByText("Choose the release channel", { exact: true }),
+      ).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("global-stream-search.png"),
         fullPage: true,
@@ -294,6 +324,10 @@ for (const width of [390, 1440]) {
         .getByRole("button", { name: /Stream beta/ })
         .click();
       await expect(page).toHaveURL(new RegExp(`/workspace/${workspace.id}`));
+      // The chat opened from the Stream offers the way back, search intact.
+      await page.getByTestId("stream-return").first().click();
+      await expect(page).toHaveURL(/\/stream/);
+      await expect(page.getByTestId("global-stream-search")).toHaveValue("release channel");
     } finally {
       await client.removeProject(workspace.projectId);
       await client.close();
@@ -302,7 +336,7 @@ for (const width of [390, 1440]) {
   });
 }
 
-test("durable checklist pages, evidence and reopen survive reconnect", async ({
+test("durable tasks page current work first, and evidence and reopen survive reconnect", async ({
   page,
 }, testInfo) => {
   test.setTimeout(180_000);
@@ -340,8 +374,8 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       .getByRole("button", { name: /Durable checklist/ })
       .click();
     await page.getByTestId("agent-view-artifacts").click();
-    const feed = page.getByTestId("companion-stream");
-    await feed.getByRole("button", { name: "Checklist", exact: true }).click();
+    const feed = page.getByTestId("local-stream-workflow");
+    await feed.getByRole("button", { name: "Tasks", exact: true }).click();
     await feed.getByRole("button", { name: "Show unresolved only", exact: true }).click();
     await expect(feed.getByText("Deliver request 0", { exact: true })).toBeVisible();
     const blocked = feed.getByTestId("companion-entry-ask:ask-0");
@@ -352,15 +386,24 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
     await expect(
       blocked.getByText("Remaining: Waiting for acceptance", { exact: true }),
     ).toBeVisible();
-    await expect(feed.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
+    await expect(blocked.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
     await page.screenshot({
       path: testInfo.outputPath("durable-checklist-phone.png"),
       fullPage: true,
     });
-    await feed.getByRole("button", { name: "Show completed too" }).click();
+    await feed.getByRole("button", { name: "Show completed too", exact: true }).click();
+    // Tasks includes completed history, with current work first; pagination still loads every record.
+    await expect(feed.getByTestId("stream-loaded-count")).toHaveText(
+      "50 items loaded · more available",
+    );
+    await expect(feed.getByTestId(`global-stream-row-${agent.id}`).first()).toContainText(
+      "Deliver request 0",
+    );
     await expect(feed.getByRole("button", { name: "Load more" })).toBeVisible();
     await feed.getByRole("button", { name: "Load more" }).click();
     await expect(feed.getByRole("button", { name: "Load more" })).toHaveCount(0);
+    // A complete list needs no count; it only shows while more is available.
+    await expect(feed.getByTestId("stream-loaded-count")).toHaveCount(0);
     const completed = feed.getByTestId("companion-entry-ask:ask-1");
     // FlatList may mount then evict a row while correcting estimated heights.
     // Move incrementally until the row mounts, then center it synchronously in
@@ -369,7 +412,17 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
       await feed.evaluate((element) => {
         const target = element.querySelector('[data-testid="companion-entry-ask:ask-1"]');
         if (target) target.scrollIntoView({ block: "center", behavior: "instant" });
-        else element.scrollBy({ top: element.clientHeight * 0.5 });
+        else {
+          for (const candidate of element.querySelectorAll<HTMLElement>("div")) {
+            if (
+              candidate.scrollHeight > candidate.clientHeight &&
+              ["auto", "scroll"].includes(getComputedStyle(candidate).overflowY)
+            ) {
+              candidate.scrollBy({ top: candidate.clientHeight * 0.5 });
+              break;
+            }
+          }
+        }
       });
       await expect(completed).toBeInViewport({ timeout: 1_000 });
     }).toPass({ timeout: 30_000, intervals: [500] });
@@ -382,11 +435,11 @@ test("durable checklist pages, evidence and reopen survive reconnect", async ({
     await page.reload();
     await page.getByTestId("agent-view-artifacts").click();
     await page
-      .getByTestId("companion-stream")
-      .getByRole("button", { name: "Checklist", exact: true })
+      .getByTestId("local-stream-workflow")
+      .getByRole("button", { name: "Tasks", exact: true })
       .click();
     await page
-      .getByTestId("companion-stream")
+      .getByTestId("local-stream-workflow")
       .getByRole("button", { name: "Show unresolved only", exact: true })
       .click();
     await expect(page.getByTestId("companion-entry-ask:ask-1")).toBeVisible();
@@ -430,7 +483,7 @@ test("per-chat Stream on an older host shows the chat's recent entries instead o
       text: "Which host runs this chat?",
     });
     await resetSeededPageState(page);
-    await overrideServerInfoFeatures(page, { durableStream: false });
+    await overrideServerInfoFeatures(page, { durableStream: false, streamWorkflow: false });
     await gotoAppShell(page);
     await page.goto("/stream");
     await page

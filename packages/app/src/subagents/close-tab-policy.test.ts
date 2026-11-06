@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveCloseAgentTabPolicy } from "./close-tab-policy";
+import { threadLabels } from "@/threads/model";
 
 describe("resolveCloseAgentTabPolicy", () => {
   it("archives root agents when their tab closes", () => {
@@ -12,6 +13,16 @@ describe("resolveCloseAgentTabPolicy", () => {
     expect(resolveCloseAgentTabPolicy({ parentAgentId: "parent-agent" })).toEqual({
       kind: "layout-only",
     });
+  });
+
+  it("keeps a thread when its tab closes: the reply's chip reopens it", () => {
+    expect(
+      resolveCloseAgentTabPolicy({
+        parentAgentId: null,
+        workspaceId: "home",
+        labels: threadLabels({ parentAgentId: "parent", anchor: "msg-1" }),
+      }),
+    ).toEqual({ kind: "layout-only" });
   });
 
   it("preserves the existing archive fallback when the agent is missing", () => {

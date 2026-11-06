@@ -12,7 +12,7 @@ import {
   startGitCommandTrace,
   submitGitCommandTrace,
 } from "./git-command-trace.js";
-import { spawnProcess } from "./spawn.js";
+import { retryOnSpawnDescriptorPressure, spawnProcess } from "./spawn.js";
 import {
   GitProcessScheduler,
   type GitProcessPriority,
@@ -264,7 +264,9 @@ function runGitCommandWithProvenance(
   options: GitCommandOptions,
   provenance?: string,
 ): Promise<GitCommandResult> {
-  return executeGitCommand(args, options, (output) => output.toString("utf8"), provenance);
+  return retryOnSpawnDescriptorPressure(() =>
+    executeGitCommand(args, options, (output) => output.toString("utf8"), provenance),
+  );
 }
 
 /** Binary stdout preserves cat-file byte framing before text decoding. */
@@ -272,7 +274,7 @@ export function runGitCommandBytes(
   args: string[],
   options: GitCommandOptions,
 ): Promise<GitCommandResult<Buffer>> {
-  return executeGitCommand(args, options, (output) => output);
+  return retryOnSpawnDescriptorPressure(() => executeGitCommand(args, options, (output) => output));
 }
 
 function executeGitCommand<Output>(

@@ -1,3 +1,7 @@
+import {
+  WorkspaceNeedsInputList,
+  WorkspaceReviewList,
+} from "@/components/sidebar/workspace-review-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -91,9 +95,11 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
+import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
@@ -123,6 +129,7 @@ import {
   SidebarFilterResultsTail,
   SidebarWorkspaceTabMatches,
 } from "@/components/sidebar/sidebar-filter-results";
+import { useSidebarWorkspaceMatchTarget } from "@/components/sidebar/sidebar-filter-context";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
@@ -698,14 +705,21 @@ function WorkspaceRowRightGroup({
         <Text style={styles.workspaceCreatingText}>{t("sidebar.workspace.status.creating")}</Text>
       ) : null}
       {renderSlot ? (
-        <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
+        <SidebarWorkspaceTrailingActionSlot
+          reserveWidth={reserveSlotWidth}
+          wide={Boolean(onMarkAsRead)}
+        >
           <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
             <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}
             scrimBackdrop={showScrim ? backdrop : undefined}
+            wide={Boolean(onMarkAsRead)}
           >
+            {onMarkAsRead ? (
+              <SidebarWorkspaceMarkReadButton workspace={workspace} onMarkAsRead={onMarkAsRead} />
+            ) : null}
             {onArchive ? (
               <SidebarWorkspaceMenu
                 {...kebab.menuProps}
@@ -727,6 +741,7 @@ function WorkspaceRowRightGroup({
                 onTogglePin={onTogglePin}
                 openInFileManagerPath={workspacePath}
                 lastActiveAt={workspaceLastActiveAt(workspace)}
+                startedAt={workspace.startedAt}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>
@@ -1441,13 +1456,18 @@ function WorkspaceRowItem({
   isDragging = false,
   dragHandleProps,
 }: WorkspaceRowItemProps) {
+  const target = useSidebarWorkspaceMatchTarget(workspace.workspaceKey);
   const handlePress = useCallback(() => {
     if (!workspace.serverId) {
       return;
     }
     onWorkspacePress?.();
-    navigateToWorkspace({ serverId: workspace.serverId, workspaceId: workspace.workspaceId });
-  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
+    navigateToWorkspace({
+      serverId: workspace.serverId,
+      workspaceId: workspace.workspaceId,
+      target,
+    });
+  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId, target]);
 
   return (
     <>
@@ -1473,6 +1493,16 @@ function WorkspaceRowItem({
         drag={drag ?? noop}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
+      />
+      <WorkspaceReviewList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       {/* Tab-title matches from the sidebar filter; renders nothing when there are none. */}
       <SidebarWorkspaceTabMatches
@@ -2001,10 +2031,13 @@ export function SidebarWorkspaceList({
   // Only the label filter can get here. The project filter resolves against the projects it can
   // see and falls back to "all projects" when nothing matches, so it either keeps at least one
   // project or is not applied at all — it can narrow this list but never empty it.
+  // Sessions grouping filters chats, not workspaces, so its rows decide whether anything matched.
+  const { sessionRows } = useSidebarModel();
+  const sessionsMode = groupMode === "sessions";
   const sidebarFilterEmpty =
     (hasActiveLabelFilter || hasActiveSearchFilter) &&
     hasProjectsBeforeFilter &&
-    projects.length === 0;
+    (sessionsMode ? sessionRows.length === 0 : projects.length === 0);
 
   // Project mode is the one that keeps its project headers; every other grouping mode is a flat
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
@@ -2025,6 +2058,7 @@ export function SidebarWorkspaceList({
         listHeaderComponent={listHeaderComponent}
         sidebarFilterEmpty={sidebarFilterEmpty}
         searchActive={hasActiveSearchFilter}
+        sessionRows={sessionsMode ? sessionRows : undefined}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
       />
@@ -2079,6 +2113,7 @@ function SidebarGroupedModeList({
   listHeaderComponent,
   sidebarFilterEmpty,
   searchActive,
+  sessionRows,
   parentGestureRef,
   dragGestureHostActive,
 }: {
@@ -2095,6 +2130,7 @@ function SidebarGroupedModeList({
   listHeaderComponent?: ReactElement | null;
   sidebarFilterEmpty: boolean;
   searchActive: boolean;
+  sessionRows?: readonly SidebarSessionRow[];
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }) {
@@ -2123,6 +2159,7 @@ function SidebarGroupedModeList({
       listHeaderComponent={listHeaderComponent}
       sidebarFilterEmpty={sidebarFilterEmpty}
       searchActive={searchActive}
+      sessionRows={sessionRows}
       parentGestureRef={parentGestureRef}
       dragGestureHostActive={dragGestureHostActive}
     />

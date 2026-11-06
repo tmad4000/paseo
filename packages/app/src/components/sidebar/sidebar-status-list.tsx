@@ -27,6 +27,7 @@ import {
   SidebarFilterResultsTail,
   SidebarWorkspaceTabMatches,
 } from "@/components/sidebar/sidebar-filter-results";
+import { useSidebarWorkspaceMatchTarget } from "@/components/sidebar/sidebar-filter-context";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -75,6 +76,7 @@ import {
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { PinnedSectionHeader } from "@/components/sidebar/pinned-section-header";
@@ -84,6 +86,9 @@ import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pi
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
+import { WorkspaceNeedsInputList } from "./workspace-review-list";
+import { SidebarSessionList } from "@/components/sidebar/sidebar-session-list";
+import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
 
 // Themed icon wrappers
 const foregroundMutedColorMapping = (theme: Theme) => ({
@@ -131,6 +136,11 @@ interface StatusWorkspaceListProps {
   /** Swaps the group list for the label filter's empty state. Never the header above it. */
   sidebarFilterEmpty?: boolean;
   searchActive?: boolean;
+  /**
+   * Sessions grouping: these chat rows replace the workspace groups below the pinned section.
+   * Absent in every workspace grouping mode.
+   */
+  sessionRows?: readonly SidebarSessionRow[];
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }
@@ -149,6 +159,7 @@ export function SidebarStatusWorkspaceList({
   listHeaderComponent,
   sidebarFilterEmpty = false,
   searchActive = false,
+  sessionRows,
   parentGestureRef,
   dragGestureHostActive,
 }: StatusWorkspaceListProps) {
@@ -236,7 +247,10 @@ export function SidebarStatusWorkspaceList({
         </View>
       ) : null}
       {listHeaderComponent}
-      {sidebarFilterEmpty ? null : (
+      {!sidebarFilterEmpty && sessionRows ? (
+        <SidebarSessionList rows={sessionRows} onNavigate={onWorkspacePress} />
+      ) : null}
+      {sidebarFilterEmpty || sessionRows ? null : (
         <StatusGroupList
           groups={groups}
           collapsedWorkspaceGroupKeys={
@@ -539,6 +553,7 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
   dragHandleProps?: DraggableListDragHandleProps;
 }) {
   const activeWorkspaceSelection = useActiveWorkspaceSelection();
+  const target = useSidebarWorkspaceMatchTarget(workspace.workspaceKey);
   const selected =
     activeWorkspaceSelection?.serverId === workspace.serverId &&
     activeWorkspaceSelection?.workspaceId === workspace.workspaceId;
@@ -546,8 +561,12 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
   const handlePress = useCallback(() => {
     if (!workspace.serverId) return;
     onWorkspacePress?.();
-    navigateToWorkspace({ serverId: workspace.serverId, workspaceId: workspace.workspaceId });
-  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
+    navigateToWorkspace({
+      serverId: workspace.serverId,
+      workspaceId: workspace.workspaceId,
+      target,
+    });
+  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId, target]);
 
   return (
     <>
@@ -567,6 +586,11 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
         drag={drag}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       <SidebarWorkspaceTabMatches
         workspaceKey={workspace.workspaceKey}
@@ -999,14 +1023,21 @@ function StatusWorkspaceActionSlot({
 }) {
   const kebab = useOpenKebabMenuVisibility(showKebab);
   return (
-    <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
+    <SidebarWorkspaceTrailingActionSlot
+      reserveWidth={reserveSlotWidth}
+      wide={Boolean(onMarkAsRead)}
+    >
       <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
         <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
       </SidebarWorkspaceTrailingActionBase>
       <SidebarWorkspaceTrailingActionOverlay
         visible={kebab.showKebab}
         scrimBackdrop={showScrim ? backdrop : undefined}
+        wide={Boolean(onMarkAsRead)}
       >
+        {onMarkAsRead ? (
+          <SidebarWorkspaceMarkReadButton workspace={workspace} onMarkAsRead={onMarkAsRead} />
+        ) : null}
         {kebab.showKebab && onArchive ? (
           <SidebarWorkspaceMenu
             {...kebab.menuProps}
@@ -1027,6 +1058,7 @@ function StatusWorkspaceActionSlot({
             isPinned={isPinned}
             onTogglePin={onTogglePin}
             lastActiveAt={workspaceLastActiveAt(workspace)}
+            startedAt={workspace.startedAt}
           />
         ) : null}
       </SidebarWorkspaceTrailingActionOverlay>

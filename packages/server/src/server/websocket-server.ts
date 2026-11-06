@@ -1960,6 +1960,7 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(agentHistorySearch): added in v0.3.0, remove gate after 2027-02-07.
         agentHistorySearch: true,
         sessionSearch: true,
+        sessionDecisionRouting: true,
         // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
         sessionTextSearch: true,
         conversationMessageActivity: true,
@@ -1995,8 +1996,24 @@ export class VoiceAssistantWebSocketServer {
         durableStream: true,
         // COMPAT(streamTags): fork feature; remove gate after 2027-04-24.
         streamTags: true,
+        // COMPAT(streamAnswers): fork feature; remove gate after 2027-04-26.
+        streamAnswers: true,
+        // COMPAT(streamOpenAsks): fork feature; remove gate after 2027-04-29.
+        streamOpenAsks: true,
+        // COMPAT(streamDefer): fork feature; remove gate after 2027-05-01.
+        streamDefer: true,
+        // COMPAT(streamBlockedAsks): fork feature; remove gate after 2027-05-03.
+        streamBlockedAsks: true,
+        // COMPAT(streamWorkflow): added 2026-10-27; remove gate after 2027-04-27.
+        streamWorkflow: true,
         queueEdit: this.agentQueueService !== null,
         queueSendNow: this.agentQueueService !== null,
+        // COMPAT(agentRestart): fork feature. Remove gate after 2027-05-01.
+        agentRestart: true,
+        // COMPAT(queueDrain): fork feature. Remove gate after 2027-05-01.
+        queueDrain: this.agentQueueService !== null,
+        // COMPAT(queueEditHold): added 2026-10-27; remove gate after 2027-04-27.
+        queueEditHold: this.agentQueueService !== null,
         steerOnly: true,
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: true,
@@ -2055,6 +2072,8 @@ export class VoiceAssistantWebSocketServer {
         canonicalSubmittedPrompts: true,
         // COMPAT(voiceVerbalMute): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         voiceVerbalMute: true,
+        // COMPAT(workspaceDescribe): fork feature, added in fork v0.10.0-beta.21, remove gate after 2027-04-28.
+        workspaceDescribe: true,
         // Advertised only with a resolvable OpenAI credential; clients fall back to Paseo voice otherwise.
         openaiRealtimeVoice: realtimeAvailable(),
         // COMPAT(voiceConcurrentInput): fork feature, added in fork v0.10.0-beta.1, remove gate after 2027-03-29.

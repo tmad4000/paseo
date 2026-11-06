@@ -25,6 +25,8 @@ const StoredQueuedMessageSchema = z.object({
   text: z.string(),
   origin: z.literal("voice").optional(),
   voiceOwner: z.string().optional(),
+  /** UserMessageSender recorded on the delivered turn. Absent on items queued before it existed. */
+  sender: z.string().optional(),
   attachments: z.array(AgentAttachmentWireSchema).optional(),
   composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
   images: z.array(StoredQueuedImageSchema).optional(),

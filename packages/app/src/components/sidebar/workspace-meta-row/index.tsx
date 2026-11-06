@@ -66,6 +66,7 @@ export function WorkspaceMetaRow({
   hostBadge,
   prHint,
   serviceSummary,
+  delegatedBy = null,
   labels = EMPTY_LABELS,
 }: {
   currentBranch: string | null;
@@ -73,6 +74,7 @@ export function WorkspaceMetaRow({
   hostBadge: HostBadgeModel | null;
   prHint: PrHint | null;
   serviceSummary: WorkspaceServiceSummary | null;
+  delegatedBy?: string | null;
   labels?: readonly WorkspaceLabelDefinition[];
 }) {
   const { rowItems, checksDisplay } = useSidebarMetaPreferences();
@@ -82,6 +84,7 @@ export function WorkspaceMetaRow({
     hasHostBadge: hostBadge !== null,
     prHint,
     serviceSummary,
+    delegatedBy,
     labels,
     visible: rowItems,
     checksDisplay,
@@ -129,7 +132,20 @@ function MetaItemNode({
   if (item.kind === "labels") {
     return <LabelsItem labels={item.labels} leading={leading} />;
   }
+  if (item.kind === "delegatedBy") {
+    return <DelegatedByItem name={item.name} />;
+  }
   return <ServiceItem summary={item.summary} />;
+}
+
+/** "delegated by <parent>": plain muted text, so it never competes with the row's own state. */
+function DelegatedByItem({ name }: { name: string }) {
+  const { t } = useTranslation();
+  return (
+    <Text style={styles.identityText} numberOfLines={1} testID="sidebar-workspace-delegated-by">
+      {t("subagents.delegatedBy", { name })}
+    </Text>
+  );
 }
 
 function IdentityItem({ kind, name }: { kind: "branch" | "project"; name: string }) {

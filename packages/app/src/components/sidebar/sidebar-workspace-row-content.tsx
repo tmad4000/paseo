@@ -1,8 +1,9 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
-import { Text, View, type ViewStyle } from "react-native";
+import { Text, View, type BlurEvent, type FocusEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
+import { isWeb } from "@/constants/platform";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
   WorkspaceMetaRow,
@@ -27,8 +28,11 @@ import {
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
-import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
+import { SCRIM_WIDTH, TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
+import { WorkspaceTabCount } from "./workspace-tab-count";
+import { useSessionStore } from "@/stores/session-store";
+import { formatDelegatorName } from "@/utils/agent-ownership";
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const needsInputColorMapping = (theme: Theme) => ({
@@ -37,9 +41,36 @@ const needsInputColorMapping = (theme: Theme) => ({
 });
 
 const ThemedCircleAlert = withUnistyles(CircleAlert);
+// Room for the mark-as-read check (18pt) on the scrim's solid end, beside the kebab.
+const WIDE_SCRIM_WIDTH = SCRIM_WIDTH + 18;
 const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedFolderGit2 = withUnistyles(FolderGit2);
+
+export interface SidebarRowRevealHandlers {
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  onFocus?: (event: FocusEvent) => void;
+  onBlur?: (event: BlurEvent) => void;
+}
+
+/** The DOM focus event react-native-web delivers; these handlers are only attached on web. */
+interface DomFocusEvent {
+  target: { matches?: (selector: string) => boolean } | null;
+  currentTarget: { contains?: (node: unknown) => boolean } | null;
+  relatedTarget?: unknown;
+}
+
+function isKeyboardFocusEvent(event: FocusEvent): boolean {
+  const { target } = event as unknown as DomFocusEvent;
+  return target?.matches?.(":focus-visible") === true;
+}
+
+/** Focus moving between the row's own controls keeps them revealed. */
+function isFocusLeavingRow(event: BlurEvent): boolean {
+  const { currentTarget, relatedTarget } = event as unknown as DomFocusEvent;
+  return !(relatedTarget && currentTarget?.contains?.(relatedTarget));
+}
 
 export function SidebarWorkspaceRowFrame({
   workspace,
@@ -52,10 +83,11 @@ export function SidebarWorkspaceRowFrame({
     isHovered: boolean;
     contextMenuOpen: boolean;
     onContextMenuOpenChange: (open: boolean) => void;
-    hoverHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
+    hoverHandlers: SidebarRowRevealHandlers;
   }) => ReactNode;
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isKeyboardFocusWithin, setIsKeyboardFocusWithin] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const handlePointerEnter = useCallback(() => {
     if (!contextMenuOpen) setIsHovered(true);
@@ -65,9 +97,21 @@ export function SidebarWorkspaceRowFrame({
     setContextMenuOpen(open);
     if (open) setIsHovered(false);
   }, []);
-  const hoverHandlers = useMemo(
-    () => ({ onPointerEnter: handlePointerEnter, onPointerLeave: handlePointerLeave }),
-    [handlePointerEnter, handlePointerLeave],
+  // Keyboard focus inside the row reveals its trailing actions the way hover does, so the
+  // mark-as-read check and the kebab can be reached with Tab. Mouse focus from a click does not.
+  const handleFocus = useCallback((event: FocusEvent) => {
+    if (isKeyboardFocusEvent(event)) setIsKeyboardFocusWithin(true);
+  }, []);
+  const handleBlur = useCallback((event: BlurEvent) => {
+    if (isFocusLeavingRow(event)) setIsKeyboardFocusWithin(false);
+  }, []);
+  const hoverHandlers = useMemo<SidebarRowRevealHandlers>(
+    () => ({
+      onPointerEnter: handlePointerEnter,
+      onPointerLeave: handlePointerLeave,
+      ...(isWeb ? { onFocus: handleFocus, onBlur: handleBlur } : {}),
+    }),
+    [handleBlur, handleFocus, handlePointerEnter, handlePointerLeave],
   );
 
   return (
@@ -78,7 +122,7 @@ export function SidebarWorkspaceRowFrame({
       disabled={contextMenuOpen}
     >
       {children({
-        isHovered: isHovered && !contextMenuOpen && !isDragging,
+        isHovered: (isHovered || isKeyboardFocusWithin) && !contextMenuOpen && !isDragging,
         contextMenuOpen,
         onContextMenuOpenChange: handleContextMenuOpenChange,
         hoverHandlers,
@@ -126,6 +170,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
+  const delegatedBy = useDelegatorName(workspace.serverId, workspace.delegatedByAgentId ?? null);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -161,7 +206,10 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             <Text style={workspaceBranchTextStyle} numberOfLines={1}>
               {workspaceLabel}
             </Text>
-            <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View>
+            <View style={sidebarWorkspaceRowStyles.rowRight}>
+              <WorkspaceTabCount workspaceKey={workspace.workspaceKey} />
+              {children}
+            </View>
           </View>
           <WorkspaceMetaRow
             currentBranch={workspace.currentBranch}
@@ -169,6 +217,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             hostBadge={hostBadge ?? null}
             prHint={workspace.prHint}
             serviceSummary={serviceSummary}
+            delegatedBy={delegatedBy}
             labels={labels}
           />
         </View>
@@ -181,6 +230,14 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     </View>
   );
 });
+
+/** The delegating agent's title from this host's directory, or its short id. */
+function useDelegatorName(serverId: string, delegatorId: string | null): string | null {
+  const delegatorTitle = useSessionStore((state) =>
+    delegatorId ? (state.sessions[serverId]?.agents.get(delegatorId)?.title ?? null) : null,
+  );
+  return delegatorId ? formatDelegatorName({ delegatorId, delegatorTitle }) : null;
+}
 
 function WorkspaceStatusIndicator({
   bucket,
@@ -328,10 +385,21 @@ export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
     alignItems: "flex-end",
     justifyContent: "flex-start",
   },
+  trailingActionSlotReservedWide: {
+    position: "relative",
+    // Touch-sized check (32) beside the kebab.
+    minWidth: 48,
+    minHeight: 20,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
   trailingActionOverlay: {
     position: "absolute",
     top: 0,
     right: 0,
+    flexDirection: "row",
+    alignItems: "center",
   },
 }));
 
@@ -401,22 +469,21 @@ export function resolveTrailingActionVisibility({
 
 export function SidebarWorkspaceTrailingActionSlot({
   reserveWidth,
+  wide = false,
   children,
 }: {
   reserveWidth: boolean;
+  /** Reserve room for the mark-as-read check beside the kebab. */
+  wide?: boolean;
   children: ReactNode;
 }) {
-  return (
-    <View
-      style={
-        reserveWidth
-          ? sidebarWorkspaceRowStyles.trailingActionSlotReserved
-          : sidebarWorkspaceRowStyles.trailingActionSlot
-      }
-    >
-      {children}
-    </View>
-  );
+  let style = sidebarWorkspaceRowStyles.trailingActionSlot;
+  if (reserveWidth) {
+    style = wide
+      ? sidebarWorkspaceRowStyles.trailingActionSlotReservedWide
+      : sidebarWorkspaceRowStyles.trailingActionSlotReserved;
+  }
+  return <View style={style}>{children}</View>;
 }
 
 export function SidebarWorkspaceTrailingActionBase({
@@ -437,18 +504,25 @@ export function SidebarWorkspaceTrailingActionBase({
 export function SidebarWorkspaceTrailingActionOverlay({
   visible,
   scrimBackdrop,
+  wide = false,
   children,
 }: {
   visible: boolean;
   /** Fade the row into the kebab when something (the diff stat) is still rendered behind it. */
   scrimBackdrop?: SidebarSurfaceBackdrop;
+  /** The mark-as-read check sits beside the kebab, so the scrim covers both. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   if (!visible || !children) return null;
   return (
     <>
       {scrimBackdrop ? (
-        <TrailingActionScrim backdrop={scrimBackdrop} testID="sidebar-workspace-trailing-scrim" />
+        <TrailingActionScrim
+          backdrop={scrimBackdrop}
+          width={wide ? WIDE_SCRIM_WIDTH : undefined}
+          testID="sidebar-workspace-trailing-scrim"
+        />
       ) : null}
       <View style={sidebarWorkspaceRowStyles.trailingActionOverlay}>{children}</View>
     </>

@@ -8,11 +8,13 @@ export interface GroupingCommandCenterSource {
     groupByProject: string;
     groupByStatus: string;
     groupInOneList: string;
+    groupAsSessions: string;
   };
   icons: {
     project?: CommandCenterIcon;
     status?: CommandCenterIcon;
     list?: CommandCenterIcon;
+    sessions?: CommandCenterIcon;
   };
   setGroupMode(mode: SidebarGroupMode): void;
 }
@@ -21,6 +23,7 @@ const GROUPING_TITLE_KEYS: Record<SidebarGroupMode, keyof GroupingCommandCenterS
   project: "groupByProject",
   status: "groupByStatus",
   list: "groupInOneList",
+  sessions: "groupAsSessions",
 };
 
 // Shared words find every grouping entry; each entry's own words find only it, so typing "list"
@@ -30,6 +33,7 @@ const GROUPING_KEYWORDS: Record<SidebarGroupMode, readonly string[]> = {
   project: ["project", "projects"],
   status: ["status", "state"],
   list: ["list", "one list", "flat", "ungrouped", "recent", "activity"],
+  sessions: ["sessions", "session", "chats", "conversations", "agents"],
 };
 
 // One entry per mode you are not in, so none of them can ever read as a no-op. Each keeps an id
@@ -52,4 +56,36 @@ export function buildGroupingContributions(
       icon: source.icons[target],
     },
   }));
+}
+
+export interface MineFilterCommandCenterSource {
+  mineOnly: boolean;
+  labels: { section: string; showMine: string; showAll: string };
+  icon?: CommandCenterIcon;
+  setMineOnly(mineOnly: boolean): void;
+}
+
+/**
+ * The sidebar Mine chip as a command. One entry that names what it will do from here, so it never
+ * reads as a no-op, under one id so its place in the list does not jump when it flips.
+ */
+export function buildMineFilterContribution(
+  source: MineFilterCommandCenterSource,
+): CommandCenterContribution {
+  const next = !source.mineOnly;
+  return {
+    id: "sidebar-mine-filter",
+    group: "actions",
+    groupRank: 0,
+    rank: 8,
+    keywords: ["mine", "my", "own", "sessions", "chats", "delegated", "filter", "all", "sidebar"],
+    visibility: "query",
+    run: () => source.setMineOnly(next),
+    presentation: {
+      kind: "action",
+      title: next ? source.labels.showMine : source.labels.showAll,
+      sectionTitle: source.labels.section,
+      icon: source.icon,
+    },
+  };
 }

@@ -102,10 +102,10 @@ import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
 import { installAppUpdateOnQuit } from "./features/auto-updater.js";
 import {
-  buildAgentDeepLinkRoute,
-  parseAgentDeepLink,
-  type AgentDeepLinkTarget,
-} from "@getpaseo/protocol/agent-deep-link";
+  buildAppDeepLinkRoute,
+  parseAppDeepLink,
+  type AppDeepLinkTarget,
+} from "@getpaseo/protocol/app-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
@@ -363,7 +363,7 @@ let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
 // webContents id, so deep-linked windows (second-instance launches, the
 // in-app "Open in new window" action) land on the right project without
 // racing a global.
-let desktopWindowOwner: DesktopWindowOwner<AgentDeepLinkTarget>;
+let desktopWindowOwner: DesktopWindowOwner<AppDeepLinkTarget>;
 
 if (PASEO_DEBUG) {
   log.info("[open-project] argv:", process.argv);
@@ -793,7 +793,7 @@ async function createWindow(
   return mainWindow;
 }
 
-function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLinkTarget> {
+function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AppDeepLinkTarget> {
   return {
     webContentsId: win.webContents.id,
     isDestroyed: () => win.isDestroyed(),
@@ -806,7 +806,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
   };
 }
 
-desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
+desktopWindowOwner = createDesktopWindowOwner<AppDeepLinkTarget>({
   async create(input) {
     const win = await createWindow({
       initialRoute: input.initialRoute,
@@ -822,7 +822,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
     if (!win) return null;
     return ownedDesktopWindow(win);
   },
-  agentRoute: buildAgentDeepLinkRoute,
+  agentRoute: buildAppDeepLinkRoute,
   deliverAgent: (webContentsId, target) =>
     agentNavigationInbox.deliverOrQueue(webContentsId, target),
 });
@@ -832,7 +832,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
 // ---------------------------------------------------------------------------
 
 function receiveAgentDeepLink(input: string): void {
-  const target = parseAgentDeepLink(input);
+  const target = parseAppDeepLink(input);
   if (!target) {
     return;
   }
@@ -979,8 +979,27 @@ async function bootstrap(): Promise<void> {
       options && typeof options === "object" && "pendingOpenProjectPath" in options
         ? (options as { pendingOpenProjectPath?: unknown }).pendingOpenProjectPath
         : null;
+    // "Open in new window" on an agent tab passes a structured target; the route
+    // is built here so the renderer cannot hand the window an arbitrary URL.
+    const agent =
+      options && typeof options === "object" && "agent" in options
+        ? (options as { agent?: unknown }).agent
+        : null;
+    const agentTarget =
+      agent &&
+      typeof agent === "object" &&
+      typeof (agent as { serverId?: unknown }).serverId === "string" &&
+      typeof (agent as { agentId?: unknown }).agentId === "string" &&
+      (agent as { serverId: string }).serverId.trim() &&
+      (agent as { agentId: string }).agentId.trim()
+        ? {
+            serverId: (agent as { serverId: string }).serverId.trim(),
+            agentId: (agent as { agentId: string }).agentId.trim(),
+          }
+        : null;
     await desktopWindowOwner.openAdditional({
       pendingProjectPath: typeof pendingPath === "string" ? pendingPath : null,
+      initialRoute: agentTarget ? buildAppDeepLinkRoute(agentTarget) : null,
     });
   });
 
@@ -988,7 +1007,7 @@ async function bootstrap(): Promise<void> {
   const initialAgentNavigation = pendingAgentNavigation;
   pendingAgentNavigation = null;
   await desktopWindowOwner.openPrimary({
-    initialRoute: initialAgentNavigation ? buildAgentDeepLinkRoute(initialAgentNavigation) : null,
+    initialRoute: initialAgentNavigation ? buildAppDeepLinkRoute(initialAgentNavigation) : null,
     pendingProjectPath: pendingOpenProjectPath,
   });
   pendingOpenProjectPath = null;

@@ -305,7 +305,9 @@ for (const width of [390, 1440]) {
       await page.reload();
       await expect(pin).toHaveAccessibleName("Unpin session");
       await page.getByTestId("agent-view-artifacts").filter({ visible: true }).click();
-      await expect(page.getByTestId("companion-stream").filter({ visible: true })).toBeVisible();
+      await expect(
+        page.getByTestId("local-stream-workflow").filter({ visible: true }),
+      ).toBeVisible();
       if (width === 390) await openMobileAgentSidebar(page);
       const favorites = page.getByTestId("sidebar-pinned-sessions").filter({ visible: true });
       await expect(favorites.getByRole("button")).toHaveCount(1);
@@ -317,7 +319,9 @@ for (const width of [390, 1440]) {
       });
       await favorites.getByRole("button").click();
       await expect(pin).toBeInViewport();
-      await expect(page.getByTestId("companion-stream").filter({ visible: true })).toBeVisible();
+      await expect(
+        page.getByTestId("local-stream-workflow").filter({ visible: true }),
+      ).toBeVisible();
       await expect(pin).toHaveAccessibleName("Unpin session");
       await pin.click();
       await expect(pin).toHaveAccessibleName("Pin session");

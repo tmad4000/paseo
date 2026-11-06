@@ -3,6 +3,10 @@ import { openAgentRoute } from "../support/helpers/mock-agent";
 import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import {
+  closeSidebarDisplayPreferences,
+  selectSidebarStatusGrouping,
+} from "../support/helpers/sidebar";
 
 // The sidebar's one field (docs/sidebar-filter.md, "One field"): typing finds chats live, Enter
 // starts a new chat with the text through Quick launch, a pasted session id opens that chat, and
@@ -38,6 +42,49 @@ test.describe("Find or start", () => {
   test.afterAll(async () => {
     await workspace?.cleanup();
   });
+
+  for (const grouping of ["project", "status"] as const) {
+    test(`a ${grouping} workspace search result selects its unique matching chat tab`, async ({
+      page,
+    }) => {
+      await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: target.id });
+      await waitForSidebarHydration(page);
+      if (grouping === "status") {
+        await selectSidebarStatusGrouping(page);
+        await closeSidebarDisplayPreferences(page);
+      }
+      // Keep the matching tab open, but leave another tab selected. The workspace row must
+      // carry the match rather than fall back to its usual attention/recency choice.
+      await page.getByTestId(`workspace-tab-agent_${home.id}`).filter({ visible: true }).click();
+      await expect(
+        page.getByTestId(`workspace-tab-agent_${home.id}`).filter({ visible: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("textbox", { name: "Message agent..." })).toBeEditable();
+      const field = page.getByTestId("sidebar-title-project-filter");
+      await field.click();
+      await field.fill("Relay reconnect");
+      await expect(field).toHaveValue("Relay reconnect");
+      await expect(
+        page.getByTestId(`sidebar-filter-tab-match-${getServerId()}-${target.id}`),
+      ).toBeVisible();
+      await page
+        .getByTestId(`sidebar-workspace-row-${getServerId()}:${workspace.workspaceId}`)
+        .click();
+      const targetTab = page
+        .getByTestId(`workspace-tab-agent_${target.id}`)
+        .filter({ visible: true });
+      await expect(targetTab).toHaveCount(1);
+      await expect(targetTab).toHaveAttribute("aria-selected", "true");
+      await expect(
+        page.getByTestId(`workspace-tab-agent_${home.id}`).filter({ visible: true }),
+      ).toHaveAttribute("aria-selected", "false");
+      // The indented title result has the same direct-navigation contract.
+      await page.getByTestId(`workspace-tab-agent_${home.id}`).filter({ visible: true }).click();
+      await page.getByTestId(`sidebar-filter-tab-match-${getServerId()}-${target.id}`).click();
+      await expect(targetTab).toHaveAttribute("aria-selected", "true");
+      await expect(targetTab).toHaveCount(1);
+    });
+  }
 
   test("Enter starts a new chat with the text; nothing is created until Quick launch starts it", async ({
     page,

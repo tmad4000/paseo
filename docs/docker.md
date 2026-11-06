@@ -195,6 +195,11 @@ See [SECURITY.md](../SECURITY.md) for the daemon trust model.
 docker build -f docker/base/Dockerfile -t paseo:local .
 ```
 
+The source-pack stage gives Node compiler workers an 8 GiB heap ceiling because
+Metro transforms the generated WebSocket validator while packing the server.
+Allow enough build-machine memory for that worker and the remaining build tools.
+This build setting does not carry into the final daemon image.
+
 To assert the source tree version while building:
 
 ```bash

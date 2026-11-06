@@ -1,0 +1,24 @@
+
+> paseo@0.10.0-beta.18 lint
+> oxlint
+
+
+  x eslint(max-nested-callbacks): Too many nested callbacks (4). Maximum allowed is 3.
+    ,-[packages/server/src/server/session-decision-routing.test.ts:56:53]
+ 55 |           new Promise((_resolve, reject) => {
+ 56 |             init?.signal?.addEventListener("abort", () => reject(new Error("deadline")), {
+    :                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 57 |               once: true,
+    `----
+  help: Reduce nesting with promises or refactoring your code.
+
+Found 0 warnings and 1 error.
+Finished in 63.3s on 4701 files with 177 rules using 10 threads.
+
+After correcting the timeout-test callback nesting:
+
+> paseo@0.10.0-beta.18 lint
+> oxlint packages/server/src/server/session-decision-routing.ts packages/server/src/server/session-decision-routing.test.ts
+
+Found 0 warnings and 0 errors.
+Finished in 77ms on 2 files with 177 rules using 10 threads.

@@ -7,13 +7,19 @@ import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
 /**
- * How the sidebar arranges unpinned workspaces: under project headers, under status headers, or
- * as one flat list in the chosen sort order (Codex's "In one list"), where each row still carries
- * its project icon, status badge and project name.
+ * How the sidebar arranges what sits below the pinned section: workspaces under project headers,
+ * under status headers, or as one flat list in the chosen sort order (Codex's "In one list"),
+ * where each row still carries its project icon, status badge and project name; or, in
+ * `sessions`, one flat list of the chats themselves rather than their workspaces.
  */
-export type SidebarGroupMode = "project" | "status" | "list";
+export type SidebarGroupMode = "project" | "status" | "list" | "sessions";
 
-export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = ["project", "status", "list"];
+export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = [
+  "project",
+  "status",
+  "list",
+  "sessions",
+];
 
 /**
  * What the sidebar find field searches: names only (projects, workspaces, tab titles), or names
@@ -23,7 +29,7 @@ export type SidebarFilterScope = "names" | "messages";
 
 const SIDEBAR_VIEW_STORAGE_KEY = "sidebar-view";
 const LEGACY_SIDEBAR_GROUP_MODE_STORAGE_KEY = "sidebar-group-mode";
-const SIDEBAR_VIEW_STORE_VERSION = 7;
+const SIDEBAR_VIEW_STORE_VERSION = 8;
 
 /**
  * The key standing for "this workspace carries no labels at all".
@@ -77,6 +83,13 @@ interface SidebarViewStoreState {
   projectFilters: string[];
   labelFilter: SidebarLabelFilter;
   filterScope: SidebarFilterScope;
+  /**
+   * Show only workspaces a person started or talked to; delegated and scheduled ones hide.
+   * Workspaces that need input stay visible. See docs/sidebar-filter.md#mine.
+   */
+  mineOnly: boolean;
+  setMineOnly: (mineOnly: boolean) => void;
+  toggleMineOnly: () => void;
   setFilterScope: (scope: SidebarFilterScope) => void;
   setSortMode: (mode: SidebarSortMode) => void;
   setGroupMode: (mode: SidebarGroupMode) => void;
@@ -98,21 +111,24 @@ interface SidebarViewPersistedState {
   labelFilter: SidebarLabelFilter;
   /** Absent in state written before the scope control existed; the store default applies. */
   filterScope?: SidebarFilterScope;
+  /** Absent before v8 and whenever it is off; the store default (off) applies. */
+  mineOnly?: boolean;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "sessions", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
 const SidebarViewPersistedStateSchema = z.strictObject({
   groupMode: PersistedSidebarGroupModeSchema.optional(),
-  sortMode: z.enum(["manual", "recent", "user", "assistant", "title"]).optional(),
+  sortMode: z.enum(["manual", "recent", "user", "assistant", "started", "title"]).optional(),
   hostFilters: z.array(z.string()).optional(),
   hostFilter: z.string().nullable().optional(),
   projectFilters: z.array(z.string()).optional(),
   groupModeByServerId: z.record(z.string(), PersistedSidebarGroupModeSchema).optional(),
   labelFilter: SidebarLabelFilterSchema.optional(),
   filterScope: z.enum(["names", "messages"]).optional(),
+  mineOnly: z.boolean().optional(),
 });
 
 type SidebarViewStorageState = z.infer<typeof SidebarViewPersistedStateSchema>;
@@ -167,13 +183,17 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
 
   return {
     groupMode:
-      state.groupMode === "status" || state.groupMode === "list" ? state.groupMode : "project",
+      state.groupMode === "status" || state.groupMode === "list" || state.groupMode === "sessions"
+        ? state.groupMode
+        : "project",
     sortMode: state.sortMode ?? "recent",
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],
     labelFilter: state.labelFilter
       ? normalizeSidebarLabelFilter(state.labelFilter)
       : emptyLabelFilter(),
+    ...(state.filterScope ? { filterScope: state.filterScope } : {}),
+    ...(state.mineOnly ? { mineOnly: true } : {}),
   };
 }
 
@@ -212,6 +232,9 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       labelFilter: emptyLabelFilter(),
       // Per device, like the rest of this store. Messages are on unless turned off here.
       filterScope: "messages",
+      mineOnly: false,
+      setMineOnly: (mineOnly) => set({ mineOnly }),
+      toggleMineOnly: () => set((state) => ({ mineOnly: !state.mineOnly })),
       setFilterScope: (scope) => set({ filterScope: scope }),
       setGroupMode: (mode) => set({ groupMode: mode }),
       setSortMode: (mode) => set({ sortMode: mode }),
@@ -266,6 +289,7 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
         projectFilters: state.projectFilters,
         labelFilter: state.labelFilter,
         filterScope: state.filterScope,
+        mineOnly: state.mineOnly,
       }),
       migrate: migrateSidebarViewState,
     },

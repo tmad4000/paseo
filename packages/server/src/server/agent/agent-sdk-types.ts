@@ -6,6 +6,7 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { UserMessageSender } from "@getpaseo/protocol/user-message-sender";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
@@ -216,6 +217,8 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /** Who sent this turn's prompt; recorded on the user_message timeline item. */
+  sender?: UserMessageSender;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {
@@ -404,7 +407,14 @@ export interface PluginTimelineItem {
 }
 
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      /** UserMessageSender; see @getpaseo/protocol/user-message-sender. */
+      sender?: string;
+    }
   | { type: "assistant_message"; text: string; messageId?: string }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

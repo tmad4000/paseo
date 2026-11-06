@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-10-27T05:04:57.917Z",
+  "kind": "synthetic eight-candidate live OpenAI fallback smoke; Jev unconfigured",
+  "results": [
+    {
+      "query": "Fix the offline indicator after the relay reconnects",
+      "expected": "Paseo relay reconnect and offline indicator",
+      "selected": "Paseo relay reconnect and offline indicator",
+      "correct": true,
+      "routing": {
+        "provider": "openai-decisions",
+        "elapsedMs": 375,
+        "fallback": true
+      }
+    },
+    {
+      "query": "Continue improving voice note dictation in Ideaflow",
+      "expected": "Ideaflow note capture and dictation",
+      "selected": "Ideaflow note capture and dictation",
+      "correct": true,
+      "routing": {
+        "provider": "openai-decisions",
+        "elapsedMs": 319,
+        "fallback": true
+      }
+    },
+    {
+      "query": "Add a fast Jev option to the chat router",
+      "expected": "Paseo chat routing with Jev",
+      "selected": "Paseo chat routing with Jev",
+      "correct": true,
+      "routing": {
+        "provider": "openai-decisions",
+        "elapsedMs": 190,
+        "fallback": true
+      }
+    },
+    {
+      "query": "Schedule my meeting for Friday",
+      "expected": "Calendar event scheduling",
+      "selected": "Calendar event scheduling",
+      "correct": true,
+      "routing": {
+        "provider": "openai-decisions",
+        "elapsedMs": 298,
+        "fallback": true
+      }
+    },
+    {
+      "query": "My Mac is low on disk space",
+      "expected": "Mac disk storage cleanup",
+      "selected": "Mac disk storage cleanup",
+      "correct": true,
+      "routing": {
+        "provider": "openai-decisions",
+        "elapsedMs": 357,
+        "fallback": true
+      }
+    }
+  ]
+}

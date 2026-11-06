@@ -1,5 +1,6 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
+import { resolveAppVersion } from "@/utils/app-version";
 import { useRef, ReactNode, useCallback, useEffect } from "react";
-import { Buffer } from "buffer";
 import { AppState } from "react-native";
 import { observeOpenWorkspaceAgentIds } from "@/stores/workspace-layout-store";
 import { observeViewAgentIds } from "@/stores/views-store";
@@ -30,7 +31,7 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { getHostRuntimeStore, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useVoiceAudioEngineOptional, useVoiceRuntimeOptional } from "@/contexts/voice-context";
-import type { AudioPlaybackSource } from "@/voice/audio-engine-types";
+import { buildAudioPlaybackSource, type BufferedAudioChunk } from "@/voice/buffered-audio-source";
 import {
   selectAgentTimelineState,
   useSessionStore,
@@ -79,43 +80,6 @@ export type {
 } from "@/stores/session-store";
 
 type AudioOutputPayload = Extract<SessionOutboundMessage, { type: "audio_output" }>["payload"];
-
-interface BufferedAudioChunk {
-  chunkIndex: number;
-  audio: string;
-  format: string;
-  id: string;
-}
-
-function decodeBase64Chunk(base64: string): Uint8Array {
-  return Buffer.from(base64, "base64");
-}
-
-function buildAudioPlaybackSource(chunks: BufferedAudioChunk[]): AudioPlaybackSource {
-  const decodedChunks = chunks.map((chunk) => decodeBase64Chunk(chunk.audio));
-  const totalSize = decodedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const output = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const chunk of decodedChunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  const format = chunks[0]?.format ?? "pcm";
-  let mimeType: string;
-  if (format === "pcm") mimeType = "audio/pcm;rate=24000;bits=16";
-  else if (format === "mp3") mimeType = "audio/mpeg";
-  else mimeType = `audio/${format}`;
-
-  const bytes = output.slice();
-  return {
-    size: bytes.byteLength,
-    type: mimeType,
-    async arrayBuffer() {
-      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    },
-  };
-}
 
 const findLatestAssistantMessageText = (items: StreamItem[]): string | null => {
   for (let i = items.length - 1; i >= 0; i -= 1) {
@@ -510,7 +474,19 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       },
       fetchLatestTail: (agentId) =>
         getHostRuntimeStore().fetchAgentTimeline(serverId, agentId, planTimelineTailFetch()),
-      reportError: (error) => {
+      reportError: (error, agentIds) => {
+        for (const agentId of agentIds?.length ? agentIds : [undefined]) {
+          recordClientDiagnostic({
+            source: "rpc",
+            severity: "error",
+            operation: "agent.timeline.sync",
+            phase: "history-refresh",
+            message: error instanceof Error ? error.message : String(error),
+            serverId,
+            agentId,
+            appVersion: resolveAppVersion(),
+          });
+        }
         console.warn("[Session] viewed timeline synchronization failed", { serverId, error });
       },
       schedule: (task, delayMs) => {

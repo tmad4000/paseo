@@ -66,6 +66,11 @@ export function resolveKeyboardFocusScope(input: {
 
   if (
     candidates.some((element) => {
+      // A control that handles its own keys, e.g. a sortable drag handle that lifts
+      // on Space and cancels on Escape, must not have them taken by global shortcuts.
+      if (element.closest("[data-keyboard-owner]")) {
+        return true;
+      }
       const editable = element as HTMLElement;
       if (editable.isContentEditable) {
         return true;

@@ -63,6 +63,11 @@ const CODEX_INJECTED_PREFIXES = [
   "<permissions instructions>",
 ];
 
+// Claude sessions often open with large tool-free context; 256 KiB reaches the first prompt.
+const FIRST_USER_MESSAGE_HEAD_BYTES = 256 * 1024;
+const FIRST_USER_MESSAGE_CACHE_CHARS = 2000;
+const FIRST_USER_MESSAGE_CACHE_ENTRIES = 2000;
+
 const ROLLOUT_THREAD_ID =
   /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 
@@ -77,6 +82,7 @@ export class PersistedConversationReader {
     now: () => number;
   };
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly firstUserCache = new Map<string, string>();
   private cachedChars = 0;
   private codexIndex: { builtAt: number; home: string; paths: Map<string, string> } | null = null;
 
@@ -112,22 +118,77 @@ export class PersistedConversationReader {
     return messages;
   }
 
-  private async readUncached(source: PersistedConversationSource) {
+  /**
+   * The first thing the user said, read from the head of the transcript (describe_workspace).
+   * `read` only sees the tail window, so on a long conversation its oldest message is not the
+   * first one. A transcript's opening never changes, so this is cached per session id.
+   */
+  async readFirstUserMessage(source: PersistedConversationSource): Promise<string | null> {
     const sessionId = source.persistence?.sessionId;
-    if (!sessionId) return [];
+    if (!sessionId) return null;
+    const key = `${source.agentId}\u0000${sessionId}`;
+    if (this.firstUserCache.has(key)) return this.firstUserCache.get(key) ?? null;
+    let first: string | null = null;
+    try {
+      const transcript = await this.resolveTranscript(source);
+      if (transcript) {
+        first = findFirstUserText(await this.readHead(transcript.path), transcript.parse);
+      }
+    } catch {
+      first = null;
+    }
+    // Only remember a hit: a transcript that is still being created may gain its first line soon.
+    if (first !== null) {
+      this.firstUserCache.set(key, first);
+      if (this.firstUserCache.size > FIRST_USER_MESSAGE_CACHE_ENTRIES) {
+        const oldest = this.firstUserCache.keys().next().value;
+        if (oldest !== undefined) this.firstUserCache.delete(oldest);
+      }
+    }
+    return first;
+  }
+
+  private async resolveTranscript(source: PersistedConversationSource): Promise<{
+    path: string;
+    parse: (record: unknown) => SessionTextSearchMessage | null;
+  } | null> {
+    const sessionId = source.persistence?.sessionId;
+    if (!sessionId) return null;
     const provider = source.persistence?.provider ?? source.provider;
     if (provider === "claude") {
       const path = join(
         claudeProjectDirSync(source.cwd, { configDir: this.options.claudeConfigDir() }),
         `${sessionId}.jsonl`,
       );
-      return this.parseLines(await this.readTail(path), parseClaudeLine);
+      return { path, parse: parseClaudeLine };
     }
     if (provider === "codex") {
       const path = await this.findCodexRollout(sessionId);
-      return path ? this.parseLines(await this.readTail(path), parseCodexLine) : [];
+      return path ? { path, parse: parseCodexLine } : null;
     }
-    return [];
+    return null;
+  }
+
+  private async readUncached(source: PersistedConversationSource) {
+    const transcript = await this.resolveTranscript(source);
+    if (!transcript) return [];
+    return this.parseLines(await this.readTail(transcript.path), transcript.parse);
+  }
+
+  private async readHead(path: string): Promise<string[]> {
+    const handle = await open(path, "r");
+    try {
+      const { size } = await handle.stat();
+      const length = Math.min(size, FIRST_USER_MESSAGE_HEAD_BYTES);
+      const buffer = Buffer.alloc(length);
+      await handle.read(buffer, 0, length, 0);
+      const lines = buffer.toString("utf8").split(/\r?\n/);
+      // A head that stops mid-file stops mid-line; drop the fragment.
+      if (length < size) lines.pop();
+      return lines;
+    } finally {
+      await handle.close();
+    }
   }
 
   private async readTail(path: string): Promise<string[]> {
@@ -197,6 +258,27 @@ export class PersistedConversationReader {
       this.cachedChars -= entry.chars;
     }
   }
+}
+
+/** First non-empty user message in transcript order (parseLines keeps the tail, not the head). */
+function findFirstUserText(
+  lines: readonly string[],
+  parse: (record: unknown) => SessionTextSearchMessage | null,
+): string | null {
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const message = parse(record);
+    if (message?.role === "user" && message.text.trim()) {
+      return message.text.slice(0, FIRST_USER_MESSAGE_CACHE_CHARS);
+    }
+  }
+  return null;
 }
 
 /** Walks `depth` directory levels (YYYY/MM/DD) and indexes `rollout-*-<threadId>.jsonl`. */

@@ -50,6 +50,7 @@ import {
 import type { SidebarSortMode } from "@/components/sidebar/sidebar-filter-sort";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFilterScopeMenu } from "@/components/sidebar/sidebar-filter-scope-menu";
+import { SidebarMineChip } from "@/components/sidebar/sidebar-mine-chip";
 import { useSidebarFilterRequestFocus } from "@/components/sidebar/sidebar-filter-request";
 import { useStartChatFromFilterQuery } from "@/components/sidebar/use-start-chat-from-filter-query";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
@@ -86,7 +87,7 @@ import { openHostOverview } from "@/navigation/settings-navigation";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
-import { SidebarViewsSection } from "@/views/sidebar-views-section";
+import { SidebarStreamNavigation, SidebarViewsSection } from "@/views/sidebar-views-section";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -594,9 +595,16 @@ function MobileSidebar({
     >
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
-        <SidebarNavRows style={styles.sidebarHeaderGroup} onBeforeNavigate={closeSidebar} />
+        <View style={styles.sidebarHeaderGroup}>
+          <SidebarStreamNavigation onBeforeNavigate={closeSidebar} />
+          <SidebarNavRows onBeforeNavigate={closeSidebar} />
+        </View>
         <SidebarSearchControls />
-        <WindowChromeSafeArea placement="inline" style={styles.mobileCloseButtonRow}>
+        <WindowChromeSafeArea
+          placement="inline"
+          style={styles.mobileCloseButtonRow}
+          pointerEvents="box-none"
+        >
           <Pressable
             style={styles.mobileCloseButton}
             onPress={closeSidebar}
@@ -798,7 +806,10 @@ function DesktopSidebar({
           ) : (
             <TitlebarDragRegion />
           )}
-          <SidebarNavRows style={sidebarHeaderGroupStyle} />
+          <View style={sidebarHeaderGroupStyle}>
+            <SidebarStreamNavigation />
+            <SidebarNavRows />
+          </View>
         </View>
         <SidebarSearchControls />
 
@@ -878,6 +889,7 @@ const SIDEBAR_SORT_MODES: readonly SidebarSortMode[] = [
   "recent",
   "user",
   "assistant",
+  "started",
   "manual",
   "title",
 ];
@@ -981,6 +993,7 @@ function SidebarSearchControls() {
               <IconTooltipContent label={t("sidebar.routing.sendToChat")} />
             </TooltipContent>
           </Tooltip>
+          <SidebarMineChip />
           <SidebarFilterScopeMenu />
           <SidebarSortMenu
             sortMode={sortMode}

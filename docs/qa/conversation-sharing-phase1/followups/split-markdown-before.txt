@@ -1,0 +1,38 @@
+
+ RUN  v4.1.7 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+
+ ❯ packages/app/src/utils/__tests__/split-markdown-blocks.test.ts (18 tests | 1 failed) 8ms
+     × recognizes every destination the renderer accepts, including escaped spaces 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/app/src/utils/__tests__/split-markdown-blocks.test.ts > splitMarkdownBlocks > recognizes every destination the renderer accepts, including escaped spaces
+AssertionError: expected [ 'See [docs].', …(1) ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+-   "See [docs].
+-
+- [docs]: docs\\ folder/readme",
++   "See [docs].",
++   "[docs]: docs\\ folder/readme",
+  ]
+
+ ❯ packages/app/src/utils/__tests__/split-markdown-blocks.test.ts:102:80
+    100|
+    101|   it("recognizes every destination the renderer accepts, including esc…
+    102|     expect(splitMarkdownBlocks("See [docs].\n\n[docs]: docs\\ folder/r…
+       |                                                                                ^
+    103|       "See [docs].\n\n[docs]: docs\\ folder/readme",
+    104|     ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (18)
+   Start at  23:51:20
+   Duration  151ms (transform 25ms, setup 0ms, import 64ms, tests 8ms, environment 0ms)
+

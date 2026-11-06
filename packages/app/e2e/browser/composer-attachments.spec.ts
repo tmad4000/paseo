@@ -67,6 +67,13 @@ function waitForQueuedEditResponse(page: Page): Promise<void> {
   });
 }
 
+type RunningMockAgent = Awaited<ReturnType<typeof startRunningMockAgent>>;
+
+async function queuedTexts(agent: RunningMockAgent): Promise<string[]> {
+  const queue = await agent.client.listQueuedAgentMessages(agent.agentId);
+  return queue.items.map((item) => item.text);
+}
+
 function waitForTwoAnimationFrames(): Promise<void> {
   return new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -288,6 +295,175 @@ test.describe("Composer attachments", () => {
         "Second queued text",
       ]);
       expect(after.items[0]?.images).toEqual(before.items[0]?.images);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("dragging a queued message reorders the host queue", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-reorder-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while queued messages are rearranged.",
+    });
+    try {
+      for (const text of ["First queued", "Second queued", "Third queued"]) {
+        await fillComposerDraft(page, text);
+        await sendDraftToQueue(page);
+        await expectComposerDraft(page, "");
+      }
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["First queued", "Second queued", "Third queued"]);
+      const before = await agent.client.listQueuedAgentMessages(agent.agentId);
+      const [first, second, third] = before.items;
+
+      // Mouse: drag the second message's handle above the first.
+      const handle = page.getByTestId(`queued-message-drag-${second!.id}`);
+      const target = page.getByTestId(`queued-message-${first!.id}`);
+      const from = (await handle.boundingBox())!;
+      const to = (await target.boundingBox())!;
+      const x = from.x + from.width / 2;
+      await page.mouse.move(x, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(x, from.y + from.height / 2 - 7);
+      await page.mouse.move(x, to.y + 4, { steps: 8 });
+      await page.mouse.up();
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["Second queued", "First queued", "Third queued"]);
+
+      // Keyboard: the last message sits below the scrolled list; focus brings its handle into view.
+      await page.getByTestId(`queued-message-drag-${third!.id}`).focus();
+      // dnd-kit's screen-reader announcements mark each step, so keys are not sent before it measures.
+      const announcement = (text: string) =>
+        page.locator("[id^=DndLiveRegion]").filter({ hasText: text });
+      await page.keyboard.press("Space");
+      await expect(announcement(`${third!.id} was moved over droppable area`)).toHaveCount(1);
+      await page.keyboard.press("ArrowUp");
+      await expect(announcement(`was moved over droppable area ${first!.id}`)).toHaveCount(1);
+      await page.keyboard.press("Space");
+      await expect
+        .poll(() => queuedTexts(agent))
+        .toEqual(["Second queued", "Third queued", "First queued"]);
+
+      const after = await agent.client.listQueuedAgentMessages(agent.agentId);
+      expect(new Set(after.items.map((item) => item.id))).toEqual(
+        new Set(before.items.map((item) => item.id)),
+      );
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("the queue waits while a queued message is being edited", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-hold-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running until the test stops this turn.",
+    });
+    try {
+      await fillComposerDraft(page, "Held while editing");
+      await sendDraftToQueue(page);
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Held while editing"]);
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("Held while editing, then revised");
+
+      // The turn ends mid-edit. Without the hold this is where the queue drains.
+      await agent.client.cancelAgent(agent.agentId);
+      await expectAgentIdle(page);
+      await page.waitForTimeout(1_500);
+      expect(await queuedTexts(agent)).toEqual(["Held while editing"]);
+      await expect(queuedEditor).toHaveValue("Held while editing, then revised");
+
+      await page.getByRole("button", { name: "Save queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expect.poll(() => queuedTexts(agent)).toEqual([]);
+      await expect(page.getByText("This message is no longer queued.")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("a queued message that leaves mid-edit keeps the edit and can be queued anew", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-detached-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while another device takes the queued message.",
+    });
+    try {
+      await fillComposerDraft(page, "Taken elsewhere");
+      await sendDraftToQueue(page);
+      await fillComposerDraft(page, "Composer text stays put");
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Taken elsewhere"]);
+      const [queued] = (await agent.client.listQueuedAgentMessages(agent.agentId)).items;
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("My careful rewrite");
+
+      await agent.client.removeQueuedAgentMessage(agent.agentId, queued!.id);
+      await expect(page.getByTestId("queued-message-detached-notice")).toBeVisible();
+      await expect(queuedEditor).toHaveValue("My careful rewrite");
+      await expect(page.getByText("This message is no longer queued.")).toHaveCount(0);
+
+      // Blur, the old save-on-leave trigger, must not drop or error the detached edit.
+      await page.getByTestId("composer-queue-toggle").click({ position: { x: 4, y: 4 } });
+      await page.getByTestId("composer-queue-toggle").click({ position: { x: 4, y: 4 } });
+      await expect(queuedEditor).toHaveValue("My careful rewrite");
+
+      // A reload (or switching chats) remounts the track; the edit must come back.
+      await page.waitForTimeout(500);
+      await page.reload();
+      await expectComposerVisible(page);
+      await expect(page.getByTestId("queued-message-detached-notice")).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Edit queued message" })).toHaveValue(
+        "My careful rewrite",
+      );
+
+      await page.getByRole("button", { name: "Queue as new message" }).click();
+      await expect(page.getByTestId("queued-message-detached-notice")).toHaveCount(0);
+      await expect.poll(() => queuedTexts(agent)).toEqual(["My careful rewrite"]);
+      await expectComposerDraft(page, "Composer text stays put");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("saving an emptied queued message removes it", async ({ page }) => {
+    test.setTimeout(120_000);
+    const agent = await startRunningMockAgent(page, {
+      prefix: "attach-queue-edit-empty-",
+      model: "thirty-minute-stream",
+      prompt: "Stay running while a disposable queued message is emptied.",
+    });
+    try {
+      await fillComposerDraft(page, "Delete me by clearing");
+      await sendDraftToQueue(page);
+      await fillComposerDraft(page, "Keep me queued");
+      await sendDraftToQueue(page);
+      await expect
+        .poll(async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items.length)
+        .toBe(2);
+
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
+      await queuedEditor.fill("");
+      const editingRow = page
+        .locator('[data-testid^="queued-message-"]')
+        .filter({ has: queuedEditor });
+      await editingRow.getByRole("button", { name: "Remove queued message" }).click();
+      await expect(queuedEditor).toHaveCount(0);
+      await expect(page.getByText("A queued message cannot be empty.")).toHaveCount(0);
+
+      await expect.poll(() => queuedTexts(agent)).toEqual(["Keep me queued"]);
     } finally {
       await agent.cleanup();
     }

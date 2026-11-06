@@ -60,6 +60,7 @@ defined there, and a separate module would import them in a cycle.
 | `agent.queue.enqueue.request`         | in        | Append an item                                 |
 | `agent.queue.remove.request`          | in        | Cancel one item                                |
 | `agent.queue.edit.request`            | in        | Edit an item's text without moving it          |
+| `agent.queue.edit_hold.request`       | in        | Pause draining at an item while it is edited   |
 | `agent.queue.send_now.request`        | in        | Send stored item with strict steering          |
 | `agent.queue.reorder.request`         | in        | Reorder by explicit id list                    |
 | `agent.queue.list.request`            | in        | Read the queue for one agent                   |
@@ -187,6 +188,41 @@ long messages; the queue and multiline editor scroll within bounded heights.
 Save, Done, leaving the input, collapsing the queue, or leaving the workspace attempts to save
 changed text. The existing draft store retains the local text and host baseline until the host
 confirms the edit. A stale or failed edit stays recoverable; Done does not discard it.
+
+### Reordering
+
+Each acknowledged row in the expanded queue has a grip. Dragging it sends
+`agent.queue.reorder.request` with the full id list in the new order. The composer moves the row
+locally first, then applies the host's snapshot; if the host refuses, the composer reads the queue
+back so the list returns to the host's order. Rows still waiting in the outbox and detached edits
+have no grip, since the host does not know them; the host ignores unknown ids and keeps unmentioned
+items at the end. A drain only ever removes the item it claimed, by id, so moving rows while the head
+is being sent cannot send anything twice.
+
+On web the grip is the dnd-kit keyboard handle and carries `data-keyboard-owner`, which makes the
+global shortcut resolver treat it as an editable scope. Without that, Space would toggle voice mute
+and Escape would interrupt the agent instead of lifting or cancelling the drag.
+
+### Editing while the queue drains
+
+An open editor holds its message: the composer sends `agent.queue.edit_hold.request` with
+`held: true` when editing starts, refreshes it every 20 s, and releases it when the edit is saved,
+abandoned, or the row unmounts (after its save-on-leave request is in flight). While any device
+holds the head item, the daemon does not drain it, so later messages also wait and order is kept.
+A hold that stops being refreshed expires after 60 s, so a device that vanishes mid-edit stalls the
+queue at most that long. Holds live in daemon memory only. Holding an item that is already being
+sent fails. Send now ignores holds: it is an explicit request to send.
+
+If the message still leaves the queue mid-edit (Send now from another device, a removal elsewhere,
+a host without `queueEditHold`, or a drain that claimed it first), the editor stays open with the
+draft and says the message left the queue. **Queue as new message** queues the edited text as a new
+message without touching the composer's own draft; **Discard edit** drops it. Such an edit stays
+visible when the queue is collapsed, and a `:detached` marker in the draft store brings it back after
+switching chats or reloading. Save no longer reports "This message is no longer queued."
+
+Clearing all the text of a message with no attachments turns Save into Remove: Save or Done then
+removes the item through the normal Remove path. Leaving the input or the screen with empty text
+keeps the empty draft open instead, so a stray tap cannot delete a message.
 
 Remove is available for host-accepted rows and rows waiting to sync. While removal is unconfirmed,
 the row shows pending or failure feedback and cannot be edited or sent now. Tap Remove to retry a
@@ -352,13 +388,21 @@ awaits hydration first (`send-outbox-store/index.test.ts` covers the connect-tim
 `agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
 affordance; adding one is a separate change.
 
-A message that is claimed for delivery while its editor is open disappears from the queue and
-cannot be edited afterward.
+A message claimed for delivery just before its editor's hold arrives is still sent with its old
+text. The edit survives as a detached draft (see
+[Editing while the queue drains](#editing-while-the-queue-drains)), but the agent has already
+received the original.
 
 Nothing drains on daemon startup. Queues persist across a restart, but a leftover item waits for the
 next running → idle edge or the next enqueue rather than resuming the agent at boot. Auto-starting
 agents when the daemon comes up is a bigger behavior change than mirroring, and it belongs in its
 own decision.
+
+That wait can be forever: an already-idle agent never produces the edge, and a head whose receipt
+was left `pending` by a dying daemon is never retried. The explicit recovery is **Restart agent**
+(tab menu, `paseo agent restart`, MCP `restart_agent`), which settles the stalled head against the
+timeline and drains in order; `paseo queue drain` / `drain_queue` deliver an idle agent's queue
+without a restart. See [agent-tab-control.md](agent-tab-control.md#the-stuck-queue-and-what-restart-does-about-it).
 
 With delivery receipts, send-now claims the stored item in place and removes it only
 after confirmed dispatch. A failed or unsupported steer leaves it at its original

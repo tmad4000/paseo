@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { Check, Pin } from "lucide-react-native";
+import { BookmarkPlus, Check } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
@@ -25,7 +25,7 @@ import { appendStreamTags } from "@getpaseo/protocol/stream-tags";
 import { useStreamTagSuggestions } from "./stream-tag-scope";
 import { TagField } from "./tag-field";
 
-const ThemedPin = withUnistyles(Pin);
+const ThemedBookmark = withUnistyles(BookmarkPlus);
 const ThemedCheck = withUnistyles(Check);
 const iconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -157,7 +157,7 @@ export const MessagePinControl = memo(function MessagePinControl({
             {saved ? (
               <ThemedCheck size={16} uniProps={iconColor} />
             ) : (
-              <ThemedPin size={16} uniProps={iconColor} />
+              <ThemedBookmark size={16} uniProps={iconColor} />
             )}
           </DropdownMenuTrigger>
           <DropdownMenuContent>{menuItems}</DropdownMenuContent>

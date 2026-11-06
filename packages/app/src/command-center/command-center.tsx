@@ -1,3 +1,6 @@
+import { useSidebarWorkspaceEntries } from "@/hooks/use-sidebar-workspace-entries";
+import { useSidebarWorkspacesList } from "@/hooks/use-sidebar-workspaces-list";
+import { workspaceLastActiveAt } from "@/components/sidebar/workspace-trailing";
 import {
   FlatList,
   Modal,
@@ -74,6 +77,7 @@ import {
   buildContributionSections,
   filterAndRankBuiltInResults,
   joinSubtitleParts,
+  workspaceSubtitle,
   moveActiveResultId,
   PINNED_SECTION_BAND,
   preserveActiveResultId,
@@ -90,6 +94,7 @@ import { useWorkspaceFileSearch } from "./workspace-file-search";
 import { buildMessageSearchSection } from "./message-search-section";
 import { getCommandCenterIcon } from "./icon";
 import { openSidebarMessageSearch } from "@/components/sidebar/sidebar-filter-request";
+import { agentDelegatorId, formatDelegatorName } from "@/utils/agent-ownership";
 
 const MessageSearchIcon = getCommandCenterIcon(MessageSquare);
 
@@ -174,6 +179,8 @@ function useBuiltInRows(open: boolean): {
   const { agents } = useAggregatedAgents({ demand: open });
   const { projects } = useProjects({ enabled: open });
   const showHost = useHosts().length > 1;
+  const { workspacePlacements } = useSidebarWorkspacesList({ enabled: open, hostFilters: [] });
+  const workspaceEntries = useSidebarWorkspaceEntries(workspacePlacements, open);
 
   return useMemo(() => {
     if (!open) return { workspaces: [], agents: [] };
@@ -182,15 +189,16 @@ function useBuiltInRows(open: boolean): {
       for (const host of project.hosts) {
         for (const workspace of host.workspaces) {
           if (workspace.archivingAt) continue;
+          const entry = workspaceEntries.get(`${host.serverId}:${workspace.id}`);
+          const lastActiveAt = entry ? workspaceLastActiveAt(entry) : null;
           allWorkspaces.push({
             kind: "workspace",
             id: `workspace:${host.serverId}:${workspace.id}`,
             title: workspace.title ?? workspace.name,
-            subtitle: joinSubtitleParts([
-              showHost ? host.serverName : null,
-              project.projectName,
-              workspace.currentBranch,
-            ]),
+            subtitle: workspaceSubtitle(
+              [showHost ? host.serverName : null, project.projectName, workspace.currentBranch],
+              lastActiveAt,
+            ),
             changeRequestNumber: workspace.changeRequestNumber,
             run: () => {
               clearCommandCenterFocusRestoreElement();
@@ -204,11 +212,15 @@ function useBuiltInRows(open: boolean): {
     const workspaceTitleByKey = new Map(
       allWorkspaces.map((workspace) => [workspace.id.slice("workspace:".length), workspace.title]),
     );
+    const agentTitleByKey = new Map(
+      agents.map((agent) => [`${agent.serverId}:${agent.id}`, agent.title]),
+    );
     const agentRows = agents
       .map<CommandCenterAgentResult>((agent) => {
         const workspaceTitle = agent.workspaceId
           ? workspaceTitleByKey.get(`${agent.serverId}:${agent.workspaceId}`)
           : undefined;
+        const delegatorId = agentDelegatorId(agent);
         return {
           kind: "agent",
           id: `agent:${agent.serverId}:${agent.id}`,
@@ -218,6 +230,14 @@ function useBuiltInRows(open: boolean): {
             showHost ? agent.serverLabel : null,
             workspaceTitle ?? shortenPath(agent.cwd),
             formatTimeAgo(agent.lastActivityAt),
+            delegatorId
+              ? t("subagents.delegatedBy", {
+                  name: formatDelegatorName({
+                    delegatorId,
+                    delegatorTitle: agentTitleByKey.get(`${agent.serverId}:${delegatorId}`),
+                  }),
+                })
+              : null,
           ]),
           run: () => {
             clearCommandCenterFocusRestoreElement();
@@ -227,7 +247,7 @@ function useBuiltInRows(open: boolean): {
       })
       .sort((left, right) => sortAgents(left.agent, right.agent));
     return { workspaces: allWorkspaces, agents: agentRows };
-  }, [agents, open, projects, showHost, t]);
+  }, [agents, open, projects, showHost, t, workspaceEntries]);
 }
 
 function workspaceResultKey(result: CommandCenterWorkspaceResult): string {

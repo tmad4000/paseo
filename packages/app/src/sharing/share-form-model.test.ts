@@ -30,6 +30,21 @@ const createClient = () => ({
   })),
 });
 describe("share preview form", () => {
+  it("hides hosts by default and sends an explicit host toggle through preview and create", async () => {
+    const client = createClient();
+    const model = openShareForm(client, "agent");
+    await model.start();
+    expect(model.getState().profile.scrub.hosts).toBe(true);
+    model.setScrub("hosts", false);
+    await vi.waitFor(() => expect(model.getState().preview.status).toBe("loaded"));
+    expect(client.previewShareLink).toHaveBeenLastCalledWith("agent", {
+      ...DEFAULT_REDACTION,
+      scrub: { ...DEFAULT_REDACTION.scrub, hosts: false },
+    });
+    await model.create();
+    expect(client.createShareLink.mock.calls[0]![0].redaction?.scrub.hosts).toBe(false);
+    model.close();
+  });
   it("keeps the server preview verbatim and creates with default redaction, seven-day expiry and preview digest", async () => {
     const client = createClient();
     const model = openShareForm(client, "agent");

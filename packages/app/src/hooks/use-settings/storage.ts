@@ -70,6 +70,8 @@ export interface AppSettings {
   pluginThemeId: string | null;
   language: AppLanguage;
   sendBehavior: SendBehavior;
+  sessionRoutingProvider: "codex" | "jev" | "openai-decisions";
+  liveRoutingSuggestions: boolean;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
   useLegacyTerminalRenderer: boolean;
@@ -88,6 +90,13 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
+  /** Opening, leaving or focusing a chat marks it read. Fork default off: read is explicit. */
+  markReadOnOpen: boolean;
+  /**
+   * Reorder a pane's tab row so the most recently active chat sits first. Fork default off:
+   * tabs keep the order they were opened or dragged into.
+   */
+  sortTabsByActivity: boolean;
   vimKeybindings: boolean;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
@@ -125,6 +134,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   language: "system",
   // The fork's Steer uses strict steering on the wire. It never falls back to interruption.
   sendBehavior: "steer",
+  sessionRoutingProvider: "openai-decisions",
+  liveRoutingSuggestions: false,
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,
@@ -142,6 +153,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   toolCallDetailLevel: "overview",
   chatOutlineEnabled: true,
+  markReadOnOpen: false,
+  sortTabsByActivity: false,
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
@@ -200,6 +213,8 @@ const StoredAppSettingsSchema = z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
+    sessionRoutingProvider: z.enum(["codex", "jev", "openai-decisions"]).catch("openai-decisions"),
+    liveRoutingSuggestions: z.boolean().catch(false),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
       MIN_TERMINAL_SCROLLBACK_LINES,
@@ -237,6 +252,8 @@ const StoredAppSettingsSchema = z
     // COMPAT(compactToolCalls): migrated in v0.1.105, remove after 2027-01-12.
     compactToolCalls: z.boolean().optional().catch(undefined),
     chatOutlineEnabled: z.boolean().catch(true),
+    markReadOnOpen: z.boolean().catch(false),
+    sortTabsByActivity: z.boolean().catch(false),
     vimKeybindings: z.boolean().catch(false),
     openInSidePane: z
       .object({

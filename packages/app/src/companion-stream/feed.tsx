@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { ArtifactCard, ArtifactFeed } from "@/artifacts/feed";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SearchField } from "@/components/ui/search-field";
@@ -17,8 +19,10 @@ import { useGlobalStream } from "./use-global-stream";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
+import { StreamWorkflowFeed } from "./global-screen";
 import { StreamNoteComposer } from "./note-composer";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { useApplyStreamFocus } from "./use-stream-focus";
 
 export { EntryCard } from "./entry-card";
 
@@ -41,7 +45,37 @@ const NO_NOTICES: readonly string[] = [];
 type ViewTab = "checklist" | "stream" | "pinned";
 type StreamFilter = "all" | "question" | "feature_request" | "permission" | "outcome" | "q_and_a";
 
-export function CompanionFeed({
+export function CompanionFeed(props: CompanionFeedProps) {
+  const supportsWorkflow = useSessionStore(
+    (state) => state.sessions[props.serverId]?.serverInfo?.features?.streamWorkflow === true,
+  );
+  const scope = useMemo(
+    () => ({ serverId: props.serverId, agentId: props.agentId }),
+    [props.serverId, props.agentId],
+  );
+  const localContext = useMemo(
+    () => ({
+      ...scope,
+      cwd: props.cwd,
+      artifactsSupported: props.artifactsSupported,
+      onOpenWorkspaceFile: props.onOpenWorkspaceFile,
+      onReturnToChat: props.onReturnToChat,
+      onReplyInChat: props.onReplyInChat,
+    }),
+    [
+      scope,
+      props.cwd,
+      props.artifactsSupported,
+      props.onOpenWorkspaceFile,
+      props.onReturnToChat,
+      props.onReplyInChat,
+    ],
+  );
+  if (supportsWorkflow) return <StreamWorkflowFeed scope={scope} localContext={localContext} />;
+  return <LegacyCompanionFeed {...props} />;
+}
+
+function LegacyCompanionFeed({
   serverId,
   agentId,
   cwd,
@@ -81,7 +115,21 @@ export function CompanionFeed({
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The search field is uncontrolled; a new key shows a search set from outside it.
+  const [searchKey, setSearchKey] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
+  const focusScope = useMemo(() => ({ serverId, agentId }), [serverId, agentId]);
+  // Chat's floating pane opens an ask's card: the Checklist, searched down to it.
+  useApplyStreamFocus(focusScope, (focus) => {
+    setViewTab("checklist");
+    setOnlyOpen(false);
+    setFilter("all");
+    setTags([]);
+    // Older hosts without durableStream list snapshot entries unsearched; the Checklist still
+    // shows the ask among the chat's others.
+    setSearch(focus.query);
+    setSearchKey((value) => value + 1);
+  });
 
   const pendingFilter = onlyOpen ? "pending" : "all";
   const query = useGlobalStream({
@@ -190,6 +238,19 @@ export function CompanionFeed({
     },
     [save, agentId],
   );
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  const handleShowInChat = useCallback(
+    (target: ChatJumpTarget) => openChatAt(serverId, agentId, target),
+    [openChatAt, serverId, agentId],
+  );
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  const handleReplyInChat = useCallback(
+    (entry: CompanionEntry) => {
+      requestReplyQuote(serverId, agentId, entry.text);
+      onReplyInChat();
+    },
+    [requestReplyQuote, serverId, agentId, onReplyInChat],
+  );
   const handlePinArtifact = useCallback(
     (artifact: { path: string }) => {
       void artifactPins.current.save(serverId, agentId, artifact.path, save).catch(() => undefined);
@@ -213,7 +274,8 @@ export function CompanionFeed({
           entry={item.entry}
           serverId={serverId}
           onReturnToChat={onReturnToChat}
-          onReplyInChat={onReplyInChat}
+          onReplyInChat={handleReplyInChat}
+          onShowInChat={handleShowInChat}
           onUpdateStatus={handleUpdateStatus}
           onRemovePin={handleRemovePin}
           onTagPress={query.supportsTags ? tagFilter.add : undefined}
@@ -226,7 +288,8 @@ export function CompanionFeed({
       openArtifact,
       handlePinArtifact,
       onReturnToChat,
-      onReplyInChat,
+      handleReplyInChat,
+      handleShowInChat,
       handleUpdateStatus,
       handleRemovePin,
       saving,
@@ -287,6 +350,7 @@ export function CompanionFeed({
 
         {supportsDurableStream ? (
           <SearchField
+            key={searchKey}
             value={search}
             onChangeText={setSearch}
             placeholder={t("agentPanel.stream.search")}
@@ -397,6 +461,7 @@ export function CompanionFeed({
       tagFilter.toggle,
       tagFilter.setPinned,
       tagFilter.error,
+      searchKey,
     ],
   );
 

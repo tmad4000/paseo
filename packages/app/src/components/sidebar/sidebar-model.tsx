@@ -32,6 +32,7 @@ import { buildSidebarProjection } from "./sidebar-projection";
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
 import { filterWorkspacesByLabels, type SidebarWorkspaceGroup } from "./sidebar-labels";
 import { filterWorkspacesByProjects, resolveActiveProjectFilters } from "./sidebar-project-filter";
+import { filterWorkspacesByMine } from "./sidebar-mine-filter";
 import {
   filterAndSortSidebarProjects,
   normalizeSidebarQuery,
@@ -54,6 +55,7 @@ import {
   type SidebarMessageSearchScope,
 } from "./sidebar-filter-context";
 import { useSidebarFilterRequestStore } from "./sidebar-filter-request";
+import { buildSidebarSessionRows, type SidebarSessionRow } from "./sidebar-sessions";
 import { pickUniqueSessionIdMatch, type SessionTarget } from "./find-or-start";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
@@ -82,7 +84,13 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   olderMessageSortHosts: readonly string[];
   setSortMode: (mode: SidebarSortMode) => void;
   groupMode: SidebarGroupMode;
+  /** The Mine filter is on: delegated and scheduled workspaces are hidden. */
+  mineOnly: boolean;
+  /** Workspaces the Mine filter is hiding right now, within the project and label filters. */
+  mineHiddenCount: number;
   workspaceGroups: SidebarWorkspaceGroup[];
+  /** Sessions mode's rows: every visible top-level chat in the chosen sort. Empty in other modes. */
+  sessionRows: readonly SidebarSessionRow[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
   /** View keys of pinned and Default projects, which lead `projects` in every sort mode. */
@@ -95,6 +103,36 @@ interface SidebarModel extends SidebarWorkspacesListResult {
 const SidebarModelContext = createContext<SidebarModel | null>(null);
 
 const NO_AGENT_MAPS: ReadonlyArray<ReadonlyMap<string, Agent> | undefined> = [];
+const NO_SESSION_ROWS: readonly SidebarSessionRow[] = [];
+
+/**
+ * Sessions mode's rows. Reads the agent directories only while that mode is on, so the other
+ * modes pay nothing for it.
+ */
+function useSidebarSessionRows(input: {
+  enabled: boolean;
+  serverIds: readonly string[];
+  workspaces: readonly SidebarWorkspaceEntry[];
+  normalizedQuery: string;
+  sortMode: SidebarSortMode;
+}): readonly SidebarSessionRow[] {
+  const { enabled, serverIds, workspaces, normalizedQuery, sortMode } = input;
+  const agentMaps = useStoreWithEqualityFn(
+    useSessionStore,
+    (state) =>
+      enabled ? serverIds.map((serverId) => state.sessions[serverId]?.agents) : NO_AGENT_MAPS,
+    shallow,
+  );
+  return useMemo(() => {
+    if (!enabled) return NO_SESSION_ROWS;
+    return buildSidebarSessionRows({
+      hosts: serverIds.map((serverId, index) => ({ serverId, agents: agentMaps[index] })),
+      workspaces,
+      query: normalizedQuery,
+      sortMode,
+    });
+  }, [agentMaps, enabled, normalizedQuery, serverIds, sortMode, workspaces]);
+}
 
 /**
  * Tab-title matches for the live filter. The agent directory is only read while a query is
@@ -164,6 +202,7 @@ export function SidebarModelProvider({
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
+  const mineOnly = useSidebarViewStore((state) => state.mineOnly);
   const [searchQuery, setSearchQuery] = useState("");
   const filterScope = useSidebarViewStore((state) => state.filterScope);
   // "Search messages for …" from the command center lands here; the find field mirrors it.
@@ -217,6 +256,7 @@ export function SidebarModelProvider({
   const needsWorkspaceEntries =
     groupMode !== "project" ||
     hasActiveLabelFilter ||
+    mineOnly ||
     Boolean(normalizedQuery) ||
     sortMode !== "manual";
   const workspaceEntriesByKey = useSidebarWorkspaceEntries(
@@ -225,14 +265,15 @@ export function SidebarModelProvider({
   );
   const tabMatches = useSidebarTabMatches(list.serverIds, normalizedQuery);
   const tabMatchedWorkspaceKeys = useMemo(() => new Set(tabMatches.keys()), [tabMatches]);
-  // Project and label filters, before the text query: what the query's tiers may search.
-  const scopedWorkspaces = useMemo(() => {
+  // Project, label and Mine filters, before the text query: what the query's tiers may search.
+  const { workspaces: scopedWorkspaces, hiddenCount: mineHiddenCount } = useMemo(() => {
     const byProject = filterWorkspacesByProjects({
       workspaces: [...workspaceEntriesByKey.values()],
       projectFilters: resolvedProjectFilters,
     });
-    return filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
-  }, [labelFilter, resolvedProjectFilters, workspaceEntriesByKey]);
+    const byLabel = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
+    return filterWorkspacesByMine({ workspaces: byLabel, mineOnly });
+  }, [labelFilter, mineOnly, resolvedProjectFilters, workspaceEntriesByKey]);
   const filteredWorkspaceEntriesByKey = useMemo(() => {
     const filtered = scopedWorkspaces.filter((workspace) =>
       workspaceMatchesSidebarFilter(workspace, normalizedQuery, tabMatchedWorkspaceKeys),
@@ -252,22 +293,43 @@ export function SidebarModelProvider({
     messageSearchScopeRef.current = next;
     return next;
   }, [normalizedQuery, scopedWorkspaces]);
+  // Sessions mode filters chats by their own titles, so it starts from the scoped workspaces
+  // rather than the ones the text query kept. Manual order follows the arranged projects.
+  const sessionWorkspaces = useMemo(() => {
+    if (groupMode !== "sessions") return scopedWorkspaces;
+    if (sortMode !== "manual") return scopedWorkspaces;
+    const byKey = new Map(scopedWorkspaces.map((workspace) => [workspace.workspaceKey, workspace]));
+    return list.projects.flatMap((project) =>
+      project.workspaces.flatMap((workspace) => {
+        const entry = byKey.get(workspace.workspaceKey);
+        return entry ? [entry] : [];
+      }),
+    );
+  }, [groupMode, list.projects, scopedWorkspaces, sortMode]);
+  const sessionRows = useSidebarSessionRows({
+    enabled: groupMode === "sessions",
+    serverIds: list.serverIds,
+    workspaces: sessionWorkspaces,
+    normalizedQuery,
+    sortMode,
+  });
   const visibleWorkspaceKeys = useMemo(
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
   );
   const uniqueSession = useUniqueSessionIdMatch(tabMatches, visibleWorkspaceKeys, normalizedQuery);
-  // The two filters prune differently on purpose. The project filter is a membership test on the
+  // The filters prune differently on purpose. The project filter is a membership test on the
   // project itself, so a project you filtered TO survives even with no workspaces — it still owns
-  // a header row you can create your first workspace under. The label filter can only ask about
-  // workspaces, so a project it empties has nothing left to show.
+  // a header row you can create your first workspace under. The label and Mine filters can only
+  // ask about workspaces, so a project they empty has nothing left to show.
   const filteredProjects = useMemo(() => {
     let projects = list.projects;
     if (hasActiveProjectFilter) {
       const included = new Set(resolvedProjectFilters);
       projects = projects.filter((project) => included.has(project.viewKey));
     }
-    if (hasActiveLabelFilter || normalizedQuery) {
+    const workspaceFilterActive = hasActiveLabelFilter || mineOnly;
+    if (workspaceFilterActive || normalizedQuery) {
       projects = projects.flatMap((project) => {
         const workspaces = project.workspaces.filter((workspace) =>
           visibleWorkspaceKeys.has(workspace.workspaceKey),
@@ -277,7 +339,7 @@ export function SidebarModelProvider({
           .toLocaleLowerCase()
           .includes(normalizedQuery);
         return workspaces.length > 0 ||
-          (!hasActiveLabelFilter && normalizedQuery && projectNameMatches)
+          (!workspaceFilterActive && normalizedQuery && projectNameMatches)
           ? [{ ...project, workspaces }]
           : [];
       });
@@ -292,6 +354,7 @@ export function SidebarModelProvider({
   }, [
     hasActiveLabelFilter,
     hasActiveProjectFilter,
+    mineOnly,
     normalizedQuery,
     sortMode,
     filteredWorkspaceEntriesByKey,
@@ -355,7 +418,10 @@ export function SidebarModelProvider({
       olderMessageSortHosts: olderSortHosts,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
+      mineOnly,
+      mineHiddenCount,
       workspaceGroups: projection.workspaceGroups,
+      sessionRows,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
       pinnedProjectViewKeys: pinOrdered.pinnedViewKeys,
@@ -372,10 +438,13 @@ export function SidebarModelProvider({
       setSortMode,
       olderSortHosts,
       groupMode,
+      mineOnly,
+      mineHiddenCount,
       list,
       orderedProjects,
       pinOrdered.pinnedViewKeys,
       projection,
+      sessionRows,
       toggleProjectCollapsed,
       filteredWorkspaceEntriesByKey,
     ],

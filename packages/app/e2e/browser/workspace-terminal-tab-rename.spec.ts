@@ -1,3 +1,7 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { buildHostWorkspaceOpenRoute, encodeFilePathForPathSegment } from "@/utils/host-routes";
+import { getServerId } from "../support/helpers/server-id";
 import { test, expect, type Page } from "../support/fixtures";
 import { clickNewTerminal, gotoWorkspace } from "../support/helpers/launcher";
 import { renameModalInput, renameModalSubmit, renameModalError } from "../support/helpers/rename";
@@ -162,4 +166,72 @@ test.describe("Workspace terminal tab rename", () => {
       await cleanupTerminal(workspace, terminalId);
     }
   });
+});
+
+test("top-bar links reopen terminal and file targets and handle clipboard errors", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(120_000);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const workspace = await seedWorkspace({ repoPrefix: "workspace-tab-links-" });
+  let terminalId: string | null = null;
+  try {
+    await gotoWorkspace(page, workspace.workspaceId);
+    await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+    await expect(page.getByTestId("workspace-header-copy-workspace-link")).toBeVisible();
+    await expect(page.getByTestId("workspace-header-copy-tab-link")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await clickNewTerminal(page);
+    terminalId = await waitForCreatedTerminalId(workspace);
+    await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+    await page.getByTestId("workspace-header-copy-tab-link").click();
+    const terminalLink = new URL(
+      buildHostWorkspaceOpenRoute(getServerId(), workspace.workspaceId, `terminal:${terminalId}`),
+      page.url(),
+    ).href;
+    await expect.poll(() => readClipboard(page)).toBe(terminalLink);
+    await page.goto("/settings");
+    await page.goto(terminalLink);
+    await page.waitForURL((url) => !url.searchParams.has("open"));
+    await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+    await page.getByTestId("workspace-header-rename-tab").click();
+    await expect(
+      renameModalInput(page, `workspace-tab-rename-modal-terminal-${terminalId}`),
+    ).toBeVisible();
+    await page.getByTestId(`workspace-tab-rename-modal-terminal-${terminalId}-cancel`).click();
+    const path = "a file #日本.txt";
+    await writeFile(join(workspace.repoPath, path), "Linked file contents");
+    const fileLink = new URL(
+      buildHostWorkspaceOpenRoute(
+        getServerId(),
+        workspace.workspaceId,
+        `file:${encodeFilePathForPathSegment(path)}`,
+      ),
+      page.url(),
+    ).href;
+    await page.goto(fileLink);
+    await page.waitForURL((url) => !url.searchParams.has("open"));
+    await expect(page.getByText("Linked file contents", { exact: true })).toBeVisible();
+    await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+    await page.getByTestId("workspace-header-copy-tab-link").click();
+    await expect.poll(() => readClipboard(page)).toBe(fileLink);
+    await page.goto("/settings");
+    await page.goto(fileLink);
+    await expect(page.getByText("Linked file contents", { exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: () => Promise.reject(new Error("Clipboard unavailable")),
+      });
+      document.execCommand = () => {
+        throw new Error("Clipboard unavailable");
+      };
+    });
+    await page.getByTestId("workspace-header-menu-trigger").filter({ visible: true }).click();
+    await page.getByTestId("workspace-header-copy-workspace-link").click();
+    await expect(page.getByText("Copy failed", { exact: true })).toBeVisible();
+  } finally {
+    await cleanupTerminal(workspace, terminalId);
+  }
 });

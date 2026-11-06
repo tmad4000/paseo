@@ -24,7 +24,7 @@ export interface RecentWorkspaceLabels {
 /**
  * One focus visit: a workspace, and the agent session focused in it when there was
  * one. Sessions and workspaces share this single most-recent-first list; workspace
- * recency is derived from it, so the Ctrl+Tab switcher, Cmd+K and the Recent menu
+ * recency is derived from it, so the Ctrl+Alt+Tab switcher, Cmd+K and the Recent menu
  * cannot disagree.
  */
 export interface RecentVisit extends RecentWorkspace {
@@ -77,7 +77,7 @@ export function touchRecentVisit(
 
 /**
  * Over the cap, drop the oldest visit whose workspace also has a newer one, so many
- * sessions in one workspace cannot push other workspaces out of Ctrl+Tab and Cmd+K.
+ * sessions in one workspace cannot push other workspaces out of Ctrl+Alt+Tab and Cmd+K.
  * Only when every visit is its workspace's latest does the oldest go.
  */
 function trimRecentVisits(visits: RecentVisit[], maxLength: number): RecentVisit[] {

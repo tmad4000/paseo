@@ -1,3 +1,5 @@
+import { useFirstMessage } from "@/first-message/reader";
+import { useWorkspaceLinks } from "./use-workspace-links";
 import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
@@ -46,6 +48,7 @@ import { SplitContainer } from "@/components/split-container";
 import { RetainedPanel } from "@/components/retained-panel";
 import { WorkspaceActions } from "@/git/workspace-actions";
 import { WorkspaceOpenInEditorButton } from "@/workspace/open-in-editor/button";
+import { useAgentTabControlMenuEntries } from "@/screens/workspace/use-agent-tab-control-menu-entries";
 import { WorkspaceScriptsButton } from "@/screens/workspace/workspace-scripts-button";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useNavigateToImportedAgent } from "@/hooks/use-import-session";
@@ -150,6 +153,8 @@ import {
   sortTabsByActivity,
   type TabActivityState,
 } from "@/screens/workspace/workspace-tab-activity";
+import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
+import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import {
   resolveWorkspaceExplorerToggleOwner,
   WorkspaceExplorerToggle,
@@ -611,7 +616,17 @@ function MobileWorkspaceTabOption({
     [t],
   );
   const menuTestIDBase = `workspace-tab-menu-${tab.tabId}`;
-  const menuEntries = buildWorkspaceTabMenuEntries({
+  const readAction = useAgentReadAction({
+    serverId: tab.scope?.serverId ?? normalizedServerId,
+    agentId: tab.target.kind === "agent" ? tab.target.agentId : null,
+    unread,
+  });
+  const agentControlEntries = useAgentTabControlMenuEntries({
+    tab,
+    serverId: normalizedServerId,
+    menuTestIDBase,
+  });
+  const baseMenuEntries = buildWorkspaceTabMenuEntries({
     surface: "mobile",
     tab,
     index: tabIndex,
@@ -631,6 +646,13 @@ function MobileWorkspaceTabOption({
     onFindInChat,
     labels: tabMenuLabels,
   });
+  const menuEntries = useMemo(
+    () =>
+      agentControlEntries.length === 0
+        ? baseMenuEntries
+        : [...agentControlEntries, ...baseMenuEntries],
+    [agentControlEntries, baseMenuEntries],
+  );
 
   const fallbackLabels = useMemo(
     () => ({
@@ -653,9 +675,10 @@ function MobileWorkspaceTabOption({
         menuTestIDBase={menuTestIDBase}
         presentationLabel={fallbackLabel}
         menuEntries={menuEntries}
+        onMarkRead={readAction.canMarkRead ? readAction.markRead : undefined}
       />
     ),
-    [menuTestIDBase, fallbackLabel, menuEntries],
+    [menuTestIDBase, fallbackLabel, menuEntries, readAction.canMarkRead, readAction.markRead],
   );
 
   const renderPresentation = useCallback(
@@ -1054,6 +1077,9 @@ interface WorkspaceHeaderTitleBarProps extends WorkspaceHeaderTabActions {
 }
 
 function WorkspaceHeaderTitleBar({
+  canCopyTabLink,
+  onCopyTabLink,
+  onCopyWorkspaceLink,
   sharingAgentId,
   renameTabKind,
   onRenameCurrentTab,
@@ -1085,9 +1111,11 @@ function WorkspaceHeaderTitleBar({
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
   const sharing = useConversationSharing(normalizedServerId, sharingAgentId);
+  const firstMessage = useFirstMessage(normalizedServerId, sharingAgentId);
   return (
     <View style={styles.headerTitleContainer}>
       {sharing.sheet}
+      {firstMessage.sheet}
       {isLoading ? (
         <View style={styles.headerTitleTextGroup}>
           <View style={styles.headerTitleSkeleton} />
@@ -1106,9 +1134,13 @@ function WorkspaceHeaderTitleBar({
       <View style={styles.compactHeaderMenuCluster}>
         {isMobile ? (
           <WorkspaceHeaderMenuMobile
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             normalizedServerId={normalizedServerId}
             currentBranchName={currentBranchName}
@@ -1128,9 +1160,13 @@ function WorkspaceHeaderTitleBar({
           />
         ) : (
           <WorkspaceHeaderMenuDesktop
+            canCopyTabLink={canCopyTabLink}
+            onCopyTabLink={onCopyTabLink}
+            onCopyWorkspaceLink={onCopyWorkspaceLink}
             renameTabKind={renameTabKind}
             sharingAvailability={sharing.availability}
             onShareConversation={sharing.open}
+            onShowFirstMessage={firstMessage.open}
             onRenameCurrentTab={onRenameCurrentTab}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -2234,12 +2270,19 @@ function WorkspaceScreenContent({
       ).map(({ tab }) => tab),
     [activityByAgentId, tabs],
   );
+  const tabReadPolicy = useTabReadPolicy(allActivityTabs, normalizedServerId);
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
-      reconcileTabActivity(previous, allActivityTabs, activityByAgentId, viewedTabIds),
+      reconcileTabActivity(
+        previous,
+        allActivityTabs,
+        activityByAgentId,
+        viewedTabIds,
+        tabReadPolicy,
+      ),
     );
-  }, [activityByAgentId, allActivityTabs, viewedTabIds]);
+  }, [activityByAgentId, allActivityTabs, tabReadPolicy, viewedTabIds]);
   const unreadTabIds = useMemo(
     () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
     [tabActivity],
@@ -3738,6 +3781,11 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
+  const { canCopyTabLink, onCopyTabLink, onCopyWorkspaceLink } = useWorkspaceLinks(
+    normalizedServerId,
+    normalizedWorkspaceId,
+    activeTabDescriptor,
+  );
   const renameTabKind = getHeaderRenameTabKind(activeTabDescriptor);
   const handleRenameCurrentTab = useCallback(() => {
     if (activeTabDescriptor) handleRenameTab(activeTabDescriptor);
@@ -4184,6 +4232,9 @@ function WorkspaceScreenContent({
               <NavigationForwardButton />
               <RecentSessionsButton />
               <WorkspaceHeaderTitleBar
+                canCopyTabLink={canCopyTabLink}
+                onCopyTabLink={onCopyTabLink}
+                onCopyWorkspaceLink={onCopyWorkspaceLink}
                 renameTabKind={renameTabKind}
                 sharingAgentId={
                   activeTabDescriptor?.target.kind === "agent"
@@ -4224,6 +4275,9 @@ function WorkspaceScreenContent({
         />
       ) : null,
     [
+      canCopyTabLink,
+      onCopyTabLink,
+      onCopyWorkspaceLink,
       activeTabDescriptor,
       renameTabKind,
       handleRenameCurrentTab,

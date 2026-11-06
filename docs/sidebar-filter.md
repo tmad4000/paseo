@@ -98,6 +98,11 @@ matches render under the workspace row (provider icon, title, matched text empha
 time with "+N more". A tab named exactly like its workspace is not repeated under it. Clicking a
 nested row opens that tab.
 
+When exactly one chat tab matches within a workspace, clicking the workspace row also reveals
+that chat's existing tab and pane. It does not choose a different chat based on attention or
+recency. This applies to project and status grouping. With multiple matching chats, the indented
+rows let the person choose; a workspace-only match keeps normal workspace navigation.
+
 Tab titles come from the agent directory the client already holds (`session.agents` per host),
 so this tier never touches the network. Only tabs a workspace can show count: unarchived, titled,
 and a workspace root or explicitly auto-opened. Child agents live inside their parent's tab.
@@ -120,6 +125,28 @@ also matches tabs by id prefix, so pasting `9b8394eb` or a full id shows that se
 same rule (`protocol/src/search/session-id.ts`) answers Cmd+K, the field's Open row (exactly one
 match), and Find with AI, where the daemon returns the id match directly instead of asking the
 ranking model.
+
+## Mine
+
+The **Mine** chip in the filter row, beside the scope and sort triggers, shows only workspaces a
+person started or talked to. One tap turns it on or off, and Cmd+K offers the same toggle as **Show
+only my sessions** / **Show all sessions**. While it is on, the chip shows how many workspaces it
+is hiding, so a quiet sidebar never looks like missing work. The choice is per device
+(`mineOnly` in `sidebar-view`).
+
+A workspace is mine when any of its top-level chats was created by `human` or has a human turn
+(`lastHumanMessageAt`); see [who sent it](agent-lifecycle.md#who-sent-it). A workspace that needs
+input stays visible whoever started it, and a workspace with no chat yet counts as mine. The filter
+narrows after the project and label filters and before the text query, in every group mode, and a
+project it empties disappears like one the label filter empties.
+
+Rows and Cmd+K agent rows whose chat was delegated by another agent (parent label, or a recorded
+`agent:<id>` creator for detached handoffs) end their meta line with a muted **delegated by
+\<parent title\>**, or the parent's short id when this client has not loaded it. It has no display
+toggle.
+
+Model: `packages/app/src/components/sidebar/sidebar-mine-filter.ts` and
+`packages/app/src/utils/agent-ownership.ts`.
 
 ## In messages
 

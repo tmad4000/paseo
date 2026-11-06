@@ -7,6 +7,7 @@ import {
 import os from "node:os";
 import { type SharingSessionOptions } from "./sharing/share-service.js";
 import { createCodexSessionSearchGeneration } from "./agent/providers/codex/session-search-generation.js";
+import { rankWithDecisionFallback } from "./session-decision-routing.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import {
   searchExistingSessions,
@@ -15,10 +16,12 @@ import {
 } from "./session-search.js";
 import { searchSessionText, type SessionTextSearchCandidate } from "./session-text-search.js";
 import { getSharedPersistedConversationReader } from "./session-text-history.js";
+import { describeWorkspace } from "./agent/workspace-describe.js";
 import type { StructuredTextGeneration } from "./session/checkout/git-metadata-generator.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
+import { agentSender, HUMAN_SENDER } from "@getpaseo/protocol/user-message-sender";
 import { relative } from "node:path";
 import { isAbsolute } from "node:path";
 import { CreationService } from "./creation/index.js";
@@ -133,6 +136,7 @@ import {
   updateAgentCommand,
   updateCompanionEntryCommand,
 } from "./agent/lifecycle-command.js";
+import { restartAgentCommand } from "./agent/restart-agent.js";
 import { buildStoredAgentPayload, toAgentPayload } from "./agent/agent-projections.js";
 import {
   appendTimelineItemIfAgentKnown,
@@ -304,6 +308,11 @@ type ProviderSubagentManagerEvent = Extract<
 const LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"]);
 const MIN_VERSION_ALL_PROVIDERS = "0.1.45";
 const MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY = "0.1.105";
+/** An unparseable time yields an invalid Date, which bounds the read to nothing rather than everything. */
+function parseReadSeenAt(read: { seenAttentionAt?: string }): Date | undefined {
+  return read.seenAttentionAt === undefined ? undefined : new Date(read.seenAttentionAt);
+}
+
 function errorToFriendlyMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -685,9 +694,11 @@ const AGENT_QUEUE_RESPONSE_TYPES = {
   "agent.queue.enqueue.request": "agent.queue.enqueue.response",
   "agent.queue.remove.request": "agent.queue.remove.response",
   "agent.queue.edit.request": "agent.queue.edit.response",
+  "agent.queue.edit_hold.request": "agent.queue.edit_hold.response",
   "agent.queue.send_now.request": "agent.queue.send_now.response",
   "agent.queue.list.request": "agent.queue.list.response",
   "agent.queue.reorder.request": "agent.queue.reorder.response",
+  "agent.queue.drain.request": "agent.queue.drain.response",
 } as const;
 
 function resolveWorkspaceLabelService(
@@ -1275,6 +1286,7 @@ export class Session {
               text,
               origin: "voice",
               voiceOwner: options.voiceOwner,
+              sender: HUMAN_SENDER,
             });
           },
           reportDiagnostic: (input) =>
@@ -2710,9 +2722,11 @@ export class Session {
       case "agent.queue.enqueue.request":
       case "agent.queue.remove.request":
       case "agent.queue.edit.request":
+      case "agent.queue.edit_hold.request":
       case "agent.queue.send_now.request":
       case "agent.queue.list.request":
       case "agent.queue.reorder.request":
+      case "agent.queue.drain.request":
         return this.handleAgentQueueRequest(msg);
       case "agent.queue.get_item_images.request":
         return this.handleAgentQueueGetItemImagesRequest(msg);
@@ -2724,6 +2738,18 @@ export class Session {
         return this.handleClientDiagnosticsReportRequest(msg);
       case "client.diagnostics.list.request":
         return this.handleClientDiagnosticsListRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  /** Restart agent and queue clear: the one-click recovery for a stuck agent. */
+  private dispatchAgentRecoveryMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.queue.clear.request":
+        return this.handleAgentQueueClearRequest(msg);
+      case "agent.restart.request":
+        return this.handleAgentRestartRequest(msg);
       default:
         return undefined;
     }
@@ -2964,7 +2990,7 @@ export class Session {
       case "agent_permission_response":
         return this.handleAgentPermissionResponse(msg.agentId, msg.requestId, msg.response);
       case "clear_agent_attention":
-        return this.handleClearAgentAttention(msg.agentId, msg.requestId);
+        return this.handleClearAgentAttention(msg.agentId, msg.requestId, msg.read);
       default:
         return undefined;
     }
@@ -3124,6 +3150,8 @@ export class Session {
         return this.handleProjectRemoveRequest(msg);
       case "workspace.title.set.request":
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
+      case "workspace.describe.request":
+        return this.handleWorkspaceDescribeRequest(msg);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
       case "project.pin.set.request":
@@ -3199,7 +3227,11 @@ export class Session {
 
   /** Fork-added client-directed messages: UI tab commands and the agent queue. */
   private dispatchForkMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    return this.dispatchUiCommandMessage(msg) ?? this.dispatchAgentQueueMessage(msg);
+    return (
+      this.dispatchUiCommandMessage(msg) ??
+      this.dispatchAgentQueueMessage(msg) ??
+      this.dispatchAgentRecoveryMessage(msg)
+    );
   }
 
   private dispatchUiCommandMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -4114,6 +4146,46 @@ export class Session {
     }
   }
 
+  private async handleWorkspaceDescribeRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.describe.request" }>,
+  ): Promise<void> {
+    const { workspaceId, requestId } = msg;
+    try {
+      const description = await describeWorkspace(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          listRegisteredProviderIds: () => this.providerSnapshotManager.listRegisteredProviderIds(),
+          workspaceRegistry: this.workspaceRegistry,
+          conversationReader: getSharedPersistedConversationReader(),
+          logger: this.sessionLogger,
+        },
+        {
+          workspaceId,
+          ...(msg.excludeAgentId ? { excludeAgentId: msg.excludeAgentId } : {}),
+        },
+      );
+      this.emit({
+        type: "workspace.describe.response",
+        payload: { requestId, workspaceId, description, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.warn(
+        { err: error, workspaceId, requestId },
+        "session: workspace.describe.request failed",
+      );
+      this.emit({
+        type: "workspace.describe.response",
+        payload: {
+          requestId,
+          workspaceId,
+          description: null,
+          error: getErrorMessageOr(error, "Failed to describe workspace"),
+        },
+      });
+    }
+  }
+
   private async handleWorkspaceTitleSetRequest(
     workspaceId: string,
     title: string | null,
@@ -4736,6 +4808,7 @@ export class Session {
         },
         {
           kind: "session",
+          createdBy: msg.callerAgentId ? agentSender(msg.callerAgentId) : HUMAN_SENDER,
           onAgentReady: async (agent) => {
             createdAgentId = agent.id;
             await onAgentReady?.(await this.buildAgentPayload(agent));
@@ -5389,6 +5462,7 @@ export class Session {
             agentId,
             itemId: msg.itemId,
             text: msg.text,
+            sender: HUMAN_SENDER,
             images: msg.images,
             attachments: msg.attachments,
             composerAttachments: msg.composerAttachments,
@@ -5404,12 +5478,106 @@ export class Session {
         return service.remove(agentId, msg.itemId);
       case "agent.queue.edit.request":
         return service.edit(agentId, msg.itemId, msg.expectedText, msg.text);
+      case "agent.queue.edit_hold.request":
+        return service.setEditHold(agentId, msg.itemId, this.clientId, msg.held);
       case "agent.queue.send_now.request":
         return service.sendNow(agentId, msg.itemId);
       case "agent.queue.reorder.request":
         return service.reorder(agentId, msg.itemIds);
       case "agent.queue.list.request":
         return service.list(agentId);
+      case "agent.queue.drain.request":
+        return service.drainNow(agentId);
+    }
+  }
+
+  private async handleAgentQueueClearRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.queue.clear.request" }>,
+  ): Promise<void> {
+    const fail = (agentId: string, error: string) =>
+      this.emit({
+        type: "agent.queue.clear.response",
+        payload: { requestId: msg.requestId, agentId, queue: null, error },
+      });
+    const service = this.agentQueueService;
+    if (!service) return fail(msg.agentId, "This daemon does not support queued agent messages.");
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) return fail(msg.agentId, resolved.error);
+    try {
+      const result = await service.clear(resolved.agentId);
+      this.emit({
+        type: "agent.queue.clear.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: resolved.agentId,
+          queue: result.queue,
+          removed: result.removed,
+          kept: result.kept,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.warn({ err: error, agentId: resolved.agentId }, "Queue clear failed");
+      fail(resolved.agentId, errorToFriendlyMessage(error));
+    }
+  }
+
+  private async handleAgentRestartRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.restart.request" }>,
+  ): Promise<void> {
+    const fail = (agentId: string, error: string) =>
+      this.emit({
+        type: "agent.restart.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mode: null,
+          timelineSize: null,
+          queuedBefore: null,
+          queuedAfter: null,
+          recoveredHead: null,
+          queue: null,
+          error,
+        },
+      });
+    const resolved = await this.resolveAgentIdentifier(msg.agentId);
+    if (!resolved.ok) return fail(msg.agentId, resolved.error);
+    const agentId = resolved.agentId;
+    try {
+      const result = await restartAgentCommand(
+        {
+          agentManager: this.agentManager,
+          agentQueueService: this.agentQueueService,
+          loadAgent: (id) =>
+            ensureAgentLoaded(id, {
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              broadcastTimeline: true,
+              logger: this.sessionLogger,
+            }),
+          logger: this.sessionLogger,
+        },
+        agentId,
+      );
+      const live = this.agentManager.getAgent(agentId);
+      if (live) await this.agentUpdates.forwardLiveAgent(live);
+      this.emit({
+        type: "agent.restart.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mode: result.mode,
+          timelineSize: result.timelineSize,
+          queuedBefore: result.queue?.before ?? null,
+          queuedAfter: result.queue?.after ?? null,
+          recoveredHead: result.queue?.recoveredHead ?? null,
+          queue: result.queue?.snapshot ?? null,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, agentId }, "Failed to restart agent");
+      fail(agentId, errorToFriendlyMessage(error));
     }
   }
 
@@ -5555,6 +5723,7 @@ export class Session {
   private async handleClearAgentAttention(
     agentId: string | string[],
     requestId?: string,
+    read?: { seenAttentionAt?: string },
   ): Promise<void> {
     const agentIds = Array.isArray(agentId) ? agentId : [agentId];
 
@@ -5568,7 +5737,8 @@ export class Session {
           }),
         ),
       );
-      await Promise.all(agentIds.map((id) => this.agentManager.clearAgentAttention(id)));
+      const options = read ? { read: { seenAttentionAt: parseReadSeenAt(read) } } : undefined;
+      await Promise.all(agentIds.map((id) => this.agentManager.clearAgentAttention(id, options)));
       if (requestId) {
         const agents = (
           await Promise.all(
@@ -8498,6 +8668,7 @@ export class Session {
     this.sessionSearchActive?.abort();
     const active = new AbortController();
     this.sessionSearchActive = active;
+    const searchStarted = performance.now();
     const signal = AbortSignal.any([
       active.signal,
       this.sessionSearchAbort.signal,
@@ -8556,29 +8727,50 @@ export class Session {
         });
         signal.throwIfAborted();
       }
+      let routing: Awaited<ReturnType<typeof rankWithDecisionFallback>>["routing"] | undefined;
       const result = await searchExistingSessions({
         query: msg.query,
         workspaceIds: msg.workspaceIds,
         candidates,
+        candidateLimit: msg.routingProvider && msg.routingProvider !== "codex" ? 40 : 100,
         readContext: async (agentId) => {
           signal.throwIfAborted();
           return this.agentManager.readSessionSearchText(agentId, msg.query);
         },
-        generate: ({ cwd, prompt, schema }) =>
-          this.sessionSearchGeneration.generate({
-            cwd,
-            prompt,
-            schema,
-            schemaName: "SessionSearchRanking",
-            agentTitle: "Conversation matcher",
+        generate: async ({ cwd, prompt, schema, query, candidates: rankedCandidates }) => {
+          const ranked = await rankWithDecisionFallback({
+            provider: msg.routingProvider ?? "codex",
+            query,
+            candidates: rankedCandidates,
             signal,
-          }),
+            fallback: () =>
+              this.sessionSearchGeneration.generate({
+                cwd,
+                prompt,
+                schema,
+                schemaName: "SessionSearchRanking",
+                agentTitle: "Conversation matcher",
+                signal,
+              }),
+          });
+          routing = ranked.routing;
+          return ranked.ranking;
+        },
       });
       signal.throwIfAborted();
       this.emitForSource(
         {
           type: "session.search.response",
-          payload: { requestId: msg.requestId, ...result, error: null },
+          payload: {
+            requestId: msg.requestId,
+            ...result,
+            error: null,
+            ...(routing
+              ? {
+                  routing: { ...routing, elapsedMs: Math.round(performance.now() - searchStarted) },
+                }
+              : {}),
+          },
         },
         source,
       );
@@ -9039,6 +9231,7 @@ export class Session {
           agentId,
           messageId: msg.messageId,
           text: msg.text,
+          sender: HUMAN_SENDER,
           ...(msg.images ? { images: msg.images } : {}),
           ...(msg.attachments ? { attachments: msg.attachments } : {}),
         });
@@ -9066,6 +9259,7 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           clearPendingPermissions: true,
+          runOptions: { sender: HUMAN_SENDER },
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {

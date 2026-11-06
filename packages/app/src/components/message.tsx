@@ -1,4 +1,5 @@
 import { MessagePinControl } from "@/companion-stream/message-pin-control";
+import { useMessageReply } from "@/components/reply/composer-quote";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -45,6 +46,7 @@ import {
   Scissors,
   MicVocal,
   FileSymlink,
+  Reply,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -62,7 +64,12 @@ import Animated, {
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { MarkdownRenderer, type MarkdownStyles } from "@/components/markdown/renderer";
-import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
+import type {
+  TaskActivity,
+  TimelinePosition,
+  TodoEntry,
+  UserMessageImageAttachment,
+} from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
@@ -132,7 +139,9 @@ interface UserMessageProps {
   attachments?: AgentAttachment[];
   timestamp: number;
   onPin?: MessagePinHandler;
-  onQAndA?: (text: string, messageId?: string) => void;
+  onQAndA?: (text: string, messageId?: string, timelineCursor?: TimelinePosition) => void;
+  /** The message's timeline position, so a tracked question can be answered and jumped to. */
+  timelineCursor?: TimelinePosition;
   capabilities?: AgentCapabilityFlags;
   client?: DaemonClient | null;
   isFirstInGroup?: boolean;
@@ -545,6 +554,7 @@ export const UserMessage = memo(function UserMessage({
   timestamp,
   onPin,
   onQAndA,
+  timelineCursor,
   capabilities,
   client,
   isFirstInGroup = true,
@@ -586,8 +596,8 @@ export const UserMessage = memo(function UserMessage({
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const getMessageContent = useCallback(() => message, [message]);
   const handleQAndA = useCallback(
-    () => onQAndA?.(message, messageId),
-    [onQAndA, message, messageId],
+    () => onQAndA?.(message, messageId, timelineCursor),
+    [onQAndA, message, messageId, timelineCursor],
   );
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
@@ -695,6 +705,10 @@ export const UserMessage = memo(function UserMessage({
                 onRewind={handleRewind}
               />
             ) : null}
+            <TurnReplyButton
+              getContent={getMessageContent}
+              containerStyle={userMessageStylesheet.copyButton}
+            />
             {onPin ? (
               <MessagePinControl
                 getContent={getMessageContent}
@@ -730,6 +744,8 @@ interface AssistantTurnFooterProps {
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
   onPin?: MessagePinHandler;
+  /** Extra turn actions after Fork, such as Reply in thread. */
+  children?: ReactNode;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -778,6 +794,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   durationMs,
   onFork,
   onPin,
+  children,
 }: AssistantTurnFooterProps) {
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
@@ -827,6 +844,10 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         getContent={getContent}
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
+      <TurnReplyButton
+        getContent={getContent}
+        containerStyle={assistantTurnFooterStylesheet.copyButton}
+      />
       {onPin ? (
         <MessagePinControl
           getContent={getContent}
@@ -835,6 +856,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         />
       ) : null}
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
+      {children}
       {primaryLabel ? (
         <Pressable
           onPress={handlePress}
@@ -1204,6 +1226,40 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
           ? turnCopyButtonStylesheet.iconHoveredColor.color
           : turnCopyButtonStylesheet.iconColor.color;
         return <HelpCircle size={16} color={iconColor} />;
+      }}
+    </Pressable>
+  );
+});
+
+/** Reply: quotes the message into this chat's composer. Hidden where the chat has no composer. */
+export const TurnReplyButton = memo(function TurnReplyButton({
+  getContent,
+  containerStyle,
+}: {
+  getContent: () => string;
+  containerStyle?: StyleProp<ViewStyle>;
+}) {
+  const { t } = useTranslation();
+  const reply = useMessageReply();
+  const pressableStyle = useMemo(
+    () => [turnCopyButtonStylesheet.container, containerStyle],
+    [containerStyle],
+  );
+  const handleReply = useCallback(() => reply?.(getContent()), [getContent, reply]);
+  if (!reply) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      style={pressableStyle}
+      onPress={handleReply}
+      accessibilityLabel={t("message.actions.reply")}
+      testID="message-reply-button"
+    >
+      {({ hovered }) => {
+        const iconColor = hovered
+          ? turnCopyButtonStylesheet.iconHoveredColor.color
+          : turnCopyButtonStylesheet.iconColor.color;
+        return <Reply size={16} color={iconColor} />;
       }}
     </Pressable>
   );

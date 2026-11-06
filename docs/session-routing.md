@@ -5,7 +5,7 @@ titles, and message text) with deliberate intelligent Find and Send prompt actio
 host/session and switches to Send with the persisted send draft (the field's text fills it only
 when it is empty). The destination
 chat owns all replies; sending to an existing chat does not navigate away or create a session. Press Mod+Enter in the
-filter field or choose **Find with AI** to submit intelligent matching; typing alone keeps the ordinary filter,
+filter field or choose **Find with AI** to submit intelligent matching; typing alone keeps the ordinary filter unless the opt-in live routing experiment below is enabled,
 and Enter starts a new chat (see [One field](sidebar-filter.md#one-field-2026-10-11)). Entering Send
 from the field (➤, or Send on a matched tab row) carries the field's text into an empty send draft;
 a saved draft is never overwritten. **Send to best match** under the field is Route to best match
@@ -35,6 +35,51 @@ In Find results, Open chat navigates and Use this chat selects without sending. 
 the Queue here, Steer here, or Interrupt here action delivers the current saved prompt to that chat. Choose an existing chat opens the manual
 picker when matching returns no results. Routing requires a host advertising `sessionSearch`;
 delivery also requires `agentMessageQueue`. Update an older host when prompted.
+
+## Decision routing experiment (pspin-ng3)
+
+Settings → General → Sending has **Chat routing** and **Live routing suggestions**.
+OpenAI Decisions is the default for this trial, per Jacob's October 27 selection. Saved provider
+choices are preserved. Jev remains available for later TypeSafe setup and uses OpenAI Decisions
+as fallback. Current LLM can also be selected directly. If the configured decision
+services fail, time out, return invalid options, or lack credentials, the existing Codex matcher
+is the final fallback. A valid no-match answer is respected, not retried against another model.
+Cancellation/disconnection never triggers fallback. Every decision attempt has a 1.8-second budget;
+the existing overall 45-second search deadline still applies.
+
+Live suggestions default off. When enabled with a decision provider, the Find field submits after
+450 ms without edits and at least three characters, including dictated text. It stays search-only:
+no automatic selection, delivery, navigation, or new chat. Switching to Send cancels the timer.
+Existing query/scope/host/draft ownership checks reject stale responses; changing the routing
+provider also invalidates an in-flight lookup. Ordinary lexical filtering remains immediate.
+
+Decision calls use at most 40 shortlisted chats, compact project/title/two-excerpt descriptions,
+and a fixed set of chat options plus **none**. Returned option IDs and probability distributions
+are validated, then mapped to the original scoped chat records. Evidence is explicitly the chat's
+original title, not a fabricated quotation. Coverage shows the actual shortlisted count. The
+provider and host-measured lookup time appear with results, including a fallback label. Exact
+session-ID matches still bypass inference entirely.
+
+Decision probabilities have not been calibrated against this application's auto-send threshold.
+For this experiment, **Route to best match** presents decision-model candidates for explicit
+selection even when a probability is high. The unchanged Codex fallback still obeys the existing
+threshold/margin gate. Calibrate on labeled routing examples before enabling decision auto-send.
+
+Credentials are host-only: `TYPESAFE_API_KEY` or `PASEO_ROUTING_JEV_API_KEY_FILE` for Jev;
+`OPENAI_API_KEY` or `PASEO_ROUTING_OPENAI_API_KEY_FILE` for OpenAI Decisions. File variables take
+precedence. Never put API keys in client settings. These calls use API billing; the Current LLM
+path retains the existing ChatGPT sign-in. The experiment neither changes coding-session models
+nor edits authentication/configuration. Jev is pinned to `jev-1.13.0` (September release), OpenAI
+to `gpt-6-luna`; direct HTTP uses existing fetch support without dependency upgrades.
+
+A host advertises `sessionDecisionRouting`. Older clients keep their existing behavior; older
+hosts support Current LLM/manual choice and explain that decision routing needs an update.
+All new request/response/capability fields are optional.
+
+Official contracts: [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice),
+[TypeSafe API](https://docs.typesafe.ai/api/system-one),
+[OpenAI Decisions](https://developers.openai.com/api/docs/guides/decisions).
+Source verification and live-test limits: [QA receipt](qa/decision-routing.md).
 
 ## Route to best match
 

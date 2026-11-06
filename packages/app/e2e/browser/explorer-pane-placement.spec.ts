@@ -151,9 +151,12 @@ test.describe("explorer pane tab placement", () => {
 
     await test.step("close the draft; the agent is the main pane's only tab", async () => {
       await closeSeededDraftInMainPane(page);
-      await expect(mainTabRow(page).first().locator('[data-testid^="workspace-tab-"]')).toHaveCount(
-        1,
-      );
+      // Tab chips carry aria-selected; their dots and read/close controls share the prefix.
+      await expect(
+        mainTabRow(page)
+          .first()
+          .locator('[data-testid^="workspace-tab-"][role="button"][aria-selected]'),
+      ).toHaveCount(1);
       await testInfo.attach("before-drag", {
         body: await page.screenshot(),
         contentType: "image/png",

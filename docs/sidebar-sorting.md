@@ -1,13 +1,15 @@
 # Sidebar conversation sorting
 
-The sidebar offers Latest conversation activity (the default), Your last message, AI’s last reply, Manual order,
-and Title A–Z. The chosen mode persists on this device. Select Manual order to arrange rows by dragging.
+The sidebar offers Latest conversation activity (the default), Your last message, AI’s last reply,
+Date started, Manual order, and Title A–Z. The chosen mode persists on this device. Select Manual order to arrange rows by dragging.
 Pinned rows retain their saved order. Message sorts order unpinned rows within project/status
 groups and order project groups by their newest eligible conversation. Ties retain stored
 order, so renaming a tied row does not move it.
 
 Latest conversation activity uses the newer of the last accepted user message and the last completed
-assistant reply. Your last message uses only accepted user messages; AI’s last reply uses only
+assistant reply. Your last message uses only accepted user messages a person sent; prompts other
+agents inject, schedules and heartbeats advance Latest conversation activity but not Your last
+message ([who sent it](agent-lifecycle.md#who-sent-it)). AI’s last reply uses only
 completed assistant replies. Queue submission is not delivery:
 the user clock advances when the host accepts the actual prompt. Streaming tokens, tool output,
 settings, and title changes do not advance either clock. System-injected notifications are excluded.
@@ -26,6 +28,62 @@ creation time when its assistant clock is unknown. A known original timestamp wi
 when it predates an imported conversation's creation time. Reopening, refreshing undated history,
 or reconnecting does not synthesize new activity.
 
+## Date started
+
+Date started orders rows by when each session was kicked off, newest first: the creation time of
+the workspace's earliest root agent, using the same archived/child exclusions as workspace
+activity. New messages never move a row under this sort. Project groups order by their newest
+kickoff. Rows with no known start date keep stored order at the bottom. While this sort is active,
+the row's compact timestamp shows the start date instead of last activity, so the column reads in
+list order. The workspace ... and right-click menus always show the exact **Started** date and
+time beneath **Last active**. The value is computed in the client from agent `createdAt`, so it
+works against every host version.
+
+## Sessions grouping
+
+Sessions grouping lists chats instead of workspaces below the pinned section: every unarchived
+top-level chat in the workspaces the host, project and label filters leave, across hosts, in one
+headerless list. Subagent chats stay under their parent, and pinned sessions stay in their own
+section, so neither repeats here. Each row's clock is that chat's own, with the same role clocks,
+fallbacks and Date started rules as workspace rows; ties fall back to a stable host and agent key.
+Manual order follows the arranged project and workspace order, then each workspace's chats oldest
+first, because chats have no arrangement of their own. Title A–Z sorts by chat title.
+
+The find field matches chat titles only, so a project name alone does not keep its chats. The
+In messages tier and find-or-start are unchanged. A row opens its chat in its home workspace and
+does not mark it read; the row's check and menu do that, as review rows do. Keyboard workspace
+shortcuts number only the pinned workspaces in this mode.
+
+## Sessions needing input
+
+Workspace rows expose **Needs input (N)** with up to three exact session titles and an
+expansion control for the rest. Collapse is saved per host and workspace on this device.
+The preview appears in project, status and one-list grouping, including pinned workspaces.
+Search keeps its title-match rows instead of the preview.
+
+Permission requests and manual Needs input markers both count, including blocked child
+sessions that normally live under their parent. Selecting a row opens that exact session;
+it does not approve a permission or clear its Needs input marker. Resolved requests leave
+the preview as the host directory updates. Review previews keep their separate collapse state.
+
+## Reviewing sessions
+
+Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;
+new tabs are inserted by the opening action and you can drag them. Completing a turn does not
+move a tab under your pointer.
+
+Each workspace has an inline Review preview naming up to three sessions with unread completions
+or pending review markers. Expand for the rest or collapse the preview; collapse is saved on this
+device. Each row opens that exact session. Search retains its existing title-match rows instead
+of also showing the preview. A finished session remains discoverable when another session makes
+the workspace's overall status Working.
+
+Review rows use **AI’s last reply, newest first**, independently of workspace sorting. Only dated,
+completed assistant replies establish that order; unknown historical times stay last. Reading,
+renaming and changing a review label do not invent a completion timestamp. The top tabs keep their
+arrangement. [The end-to-end review proposal](design/review-flow.html) compares additional queue
+sorts and an optional review view within the existing sidebar; those controls remain proposals.
+
 ## Pinned projects
 
 Pinned projects lead the project list in every sort mode, above a divider, the way pinned rows
@@ -37,6 +95,15 @@ host's project record (`~/.paseo/projects/projects.json`), so the phone and desk
 actions hide on hosts that do not advertise `projectPinning`. Making a grouped project the
 default applies it on each of its hosts; the host Workspaces settings page sets one host only.
 
+The New workspace and Quick launch project pickers use the same order and pins: **Pinned** rows
+first, then **Projects** (headers only while the search field is empty and both groups have
+rows). The pin button on a picker row pins or unpins without selecting it; the Default shows its
+house marker instead. Pin controls name the project for keyboard/voice access, show their action
+on hover or keyboard focus, and retain a thumb-sized target on compact/native layouts. Enter,
+Space and pointer activation toggle only the pin, without choosing the project or closing the
+picker; Escape still dismisses it. Pins only reorder the picker; they do not change its initial
+project selection. See [Quick launch](quick-launch.md#destination) for its default destination.
+
 ## Host compatibility
 
 The message sorts work against every host. A host that predates `conversationMessageActivity` sends
@@ -46,3 +113,6 @@ by approximate times"). Until a host's server info arrives, the saved sort appli
 clocks and the menu shows no notice for it. The saved preference is never rewritten,
 and the menu's checkmark and trigger label name it. This keeps a client that updates before its host
 from losing the activity order it already had.
+
+A host that sends role clocks but no `lastHumanMessageAt` cannot tell a person from an agent. There
+Your last message uses the user clock for human-created chats and creation time for delegated ones.

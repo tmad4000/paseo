@@ -205,6 +205,33 @@ describe("deriveBottomAnchorBlockedReason", () => {
 });
 
 describe("bottom anchor controller driver", () => {
+  it("preserves the reading position on send until the user explicitly jumps to bottom", () => {
+    const harness = createDriverHarness({ isNearBottom: false });
+    harness.context.measurementState.offsetY = 240;
+    harness.driver.detachByUser();
+
+    harness.driver.requestLocalAnchor({ agentId: "agent-1", reason: "message-sent" });
+    harness.driver.handleContentSizeChange({ previousContentHeight: 1200, contentHeight: 1500 });
+    harness.scheduler.flushAll();
+
+    expect(harness.scrollAttempts).toEqual([]);
+    expect(harness.context.measurementState.offsetY).toBe(240);
+    expect(harness.driver.getSnapshot().mode).toBe("detached");
+
+    harness.driver.requestLocalAnchor({ agentId: "agent-1", reason: "jump-to-bottom" });
+    harness.scheduler.flushAll();
+    expect(harness.scrollAttempts).toEqual([true]);
+    expect(harness.driver.getSnapshot().mode).toBe("sticky-bottom");
+  });
+
+  it("keeps following on send when already anchored at bottom", () => {
+    const harness = createDriverHarness();
+    harness.driver.requestLocalAnchor({ agentId: "agent-1", reason: "message-sent" });
+    harness.scheduler.flushAll();
+    expect(harness.scrollAttempts).toEqual([false]);
+    expect(harness.driver.getSnapshot().mode).toBe("sticky-bottom");
+  });
+
   it("keeps initial-entry pending until authoritative history and current geometry exist", () => {
     const harness = createDriverHarness({
       authoritativeReady: false,

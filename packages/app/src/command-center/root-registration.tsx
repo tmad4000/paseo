@@ -12,9 +12,11 @@ import {
   Import,
   Keyboard,
   List,
+  MessagesSquare,
   PanelLeft,
   Plus,
   Settings,
+  UserRound,
   Zap,
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
@@ -42,7 +44,7 @@ import {
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
 import { useCommandCenterActions } from "./provider";
-import { buildGroupingContributions } from "./root-contributions";
+import { buildGroupingContributions, buildMineFilterContribution } from "./root-contributions";
 
 const ThemedPlus = withUnistyles(Plus, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolderPlus = withUnistyles(FolderPlus, (theme) => ({
@@ -67,11 +69,17 @@ const ThemedZap = withUnistyles(Zap, (theme) => ({ color: theme.colors.foregroun
 const ThemedHome = withUnistyles(Home, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedImport = withUnistyles(Import, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedFolder = withUnistyles(Folder, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedMessagesSquare = withUnistyles(MessagesSquare, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
 const ThemedList = withUnistyles(List, (theme) => ({ color: theme.colors.foregroundMuted }));
 const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedPanelLeft = withUnistyles(PanelLeft, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedUserRound = withUnistyles(UserRound, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 
@@ -123,12 +131,20 @@ function ListIcon({ size }: CommandCenterIconProps) {
   return <ThemedList size={size} strokeWidth={2.2} />;
 }
 
+function MessagesSquareIcon({ size }: CommandCenterIconProps) {
+  return <ThemedMessagesSquare size={size} strokeWidth={2.2} />;
+}
+
 function CircleDashedIcon({ size }: CommandCenterIconProps) {
   return <ThemedCircleDashed size={size} strokeWidth={2.2} />;
 }
 
 function PanelLeftIcon({ size }: CommandCenterIconProps) {
   return <ThemedPanelLeft size={size} strokeWidth={2.2} />;
+}
+
+function UserRoundIcon({ size }: CommandCenterIconProps) {
+  return <ThemedUserRound size={size} strokeWidth={2.2} />;
 }
 
 export function CommandCenterRootActions() {
@@ -147,6 +163,8 @@ export function CommandCenterRootActions() {
   // each time host filters are reconciled.
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const setGroupMode = useSidebarViewStore((state) => state.setGroupMode);
+  const mineOnly = useSidebarViewStore((state) => state.mineOnly);
+  const setMineOnly = useSidebarViewStore((state) => state.setMineOnly);
   const isCompact = useIsCompactFormFactor();
   const toggleMobileAgentList = usePanelStore((state) => state.toggleMobileAgentList);
   const toggleDesktopAgentList = usePanelStore((state) => state.toggleDesktopAgentList);
@@ -157,6 +175,26 @@ export function CommandCenterRootActions() {
   );
   const actions = useMemo<CommandCenterContribution[]>(() => {
     const availableActions: CommandCenterContribution[] = [
+      {
+        id: "needs-you",
+        group: "actions",
+        groupRank: 0,
+        rank: -1,
+        keywords: ["needs", "you", "input", "decision", "approval", "action", "stream"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          router.navigate("/stream?view=needs_you" as Href);
+        },
+        presentation: {
+          kind: "action",
+          title: t("globalStream.needsYou"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: CircleDashedIcon,
+          shortcutKeys:
+            resolveShortcutKeysForAction("needs-you", overrides, shortcutPlatform) ?? undefined,
+        },
+      },
       {
         id: "add-project",
         group: "actions",
@@ -391,9 +429,25 @@ export function CommandCenterRootActions() {
           groupByProject: t("shell.commandCenter.groupByProject"),
           groupByStatus: t("shell.commandCenter.groupByStatus"),
           groupInOneList: t("shell.commandCenter.groupInOneList"),
+          groupAsSessions: t("shell.commandCenter.groupAsSessions"),
         },
-        icons: { project: FolderIcon, status: CircleDashedIcon, list: ListIcon },
+        icons: {
+          project: FolderIcon,
+          status: CircleDashedIcon,
+          list: ListIcon,
+          sessions: MessagesSquareIcon,
+        },
         setGroupMode,
+      }),
+      buildMineFilterContribution({
+        mineOnly,
+        labels: {
+          section: t("shell.commandCenter.actions"),
+          showMine: t("sidebar.filterSidebar.mine.showMine"),
+          showAll: t("shell.commandCenter.showAllSessions"),
+        },
+        icon: UserRoundIcon,
+        setMineOnly,
       }),
     );
 
@@ -402,12 +456,14 @@ export function CommandCenterRootActions() {
     groupMode,
     homeRoute,
     keyboardActionDispatcher,
+    mineOnly,
     openAddProject,
     openImportSession,
     overrides,
     schedulesRoute,
     sessionsRoute,
     setGroupMode,
+    setMineOnly,
     setShortcutsDialogOpen,
     settingsRoute,
     shortcutPlatform,

@@ -49,6 +49,8 @@ export interface SeedDaemonClient {
     expectedText: string;
     text: string;
   }): Promise<AgentQueueSnapshot>;
+  removeQueuedAgentMessage(agentId: string, itemId: string): Promise<AgentQueueSnapshot>;
+  cancelAgent(agentId: string): Promise<void>;
   connect(): Promise<void>;
   close(): Promise<void>;
   addProject(cwd: string): Promise<{
@@ -67,6 +69,7 @@ export interface SeedDaemonClient {
   }>;
   setWorkspacePinned(workspaceId: string, pinned: boolean): Promise<{ pinnedAt: string | null }>;
   clearWorkspaceAttention(workspaceId: string): Promise<void>;
+  markWorkspaceUnread(workspaceId: string): Promise<void>;
   setWorkspaceLabel(input: {
     workspaceId: string;
     label: { name: string; color: "red" };
@@ -145,6 +148,7 @@ export interface SeedDaemonClient {
         currentModeId: string | null;
         status: string;
         title?: string | null;
+        labels?: Record<string, string>;
       };
     }>;
   }>;

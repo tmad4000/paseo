@@ -1,0 +1,17 @@
+✔ gated checks are statically named jobs with real job-level gating (1.538667ms)
+✔ change gating allows superseded workflow runs to cancel (0.237834ms)
+✔ focused contracts stay inside existing required checks (0.193ms)
+✔ server builds exclude test utilities at every domain depth (0.098084ms)
+✔ PR routing declares stable behavior ownership (0.684792ms)
+✔ cross-package invariants live in the suite that owns them (11.33075ms)
+✔ browser and desktop tests have exclusive, directory-owned suites (24.956458ms)
+✔ packaging runs on main without allocating pull-request runners (0.185417ms)
+✔ desktop packaging smokes main pushes and only the pull requests that touch packaging (0.26875ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.0375

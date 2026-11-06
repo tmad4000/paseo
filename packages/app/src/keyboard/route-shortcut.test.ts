@@ -454,3 +454,12 @@ describe("routeKeyboardShortcut — unknown actions", () => {
     ).toEqual<ShortcutAction>({ kind: "none" });
   });
 });
+
+it("opens the global Needs you queue without targeting or changing an agent", () => {
+  expect(
+    routeKeyboardShortcut({ action: "stream.needs-you.open", payload: null }, makeCtx()),
+  ).toEqual({
+    kind: "router-push",
+    route: "/stream?view=needs_you",
+  });
+});

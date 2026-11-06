@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { connectToDaemon } from "../../utils/client.js";
 import type { CommandOptions, ListResult, OutputSchema, CommandError } from "../../output/index.js";
 import { collectMultiple } from "../../utils/command-options.js";
@@ -33,6 +34,10 @@ export interface AgentListItem {
   status: string;
   cwd: string;
   created: string;
+  /** JSON only: the workspace (tab group) this agent belongs to. */
+  workspaceId: string | null;
+  /** JSON only: from the paseo.parent-agent-id label; null for workspace roots. */
+  parentAgentId: string | null;
 }
 
 /** Helper to get relative time string */
@@ -88,7 +93,7 @@ export const agentLsSchema: OutputSchema<AgentListItem> = {
 };
 
 /** Transform agent snapshot to AgentListItem */
-function toListItem(agent: AgentSnapshotPayload): AgentListItem {
+export function toListItem(agent: AgentSnapshotPayload): AgentListItem {
   const model = normalizeModelId(agent.runtimeInfo?.model) ?? normalizeModelId(agent.model);
   return {
     id: agent.id,
@@ -99,6 +104,8 @@ function toListItem(agent: AgentSnapshotPayload): AgentListItem {
     status: agent.status,
     cwd: shortenPath(agent.cwd),
     created: relativeTime(agent.createdAt),
+    workspaceId: agent.workspaceId ?? null,
+    parentAgentId: agent.labels[PARENT_AGENT_ID_LABEL] ?? null,
   };
 }
 

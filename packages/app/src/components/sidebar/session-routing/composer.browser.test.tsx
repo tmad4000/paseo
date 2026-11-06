@@ -13,9 +13,20 @@ import { AgentQueueDestinationChangedError } from "@getpaseo/client/internal/dae
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
 import { SessionRoutingComposer, type FindFieldActions } from "./composer";
+import { SendingSection } from "@/screens/settings/general/sending-section";
 import { useRoutingBridge } from "../find-or-start";
 import { searchExistingSessions } from "../../../../../server/src/server/session-search";
 void i18n;
+// Static visual fixtures retain the real controls without a native animation scheduler.
+vi.mock("react-native-reanimated", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-native-reanimated")>();
+  return {
+    ...actual,
+    useAnimatedStyle: (factory: () => object) => factory(),
+    useDerivedValue: (factory: () => unknown) => ({ value: factory() }),
+    withTiming: (value: unknown) => value,
+  };
+});
 vi.mock("expo-router", () => ({
   router: {},
   useRouter: () => ({}),
@@ -24,12 +35,15 @@ vi.mock("expo-router", () => ({
 }));
 vi.mock("react-native-unistyles", async () => {
   const { darkTheme } = await import("@/styles/theme");
+  const { createElement } = await import("react");
   return {
     StyleSheet: {
       create: <T,>(styles: T | ((theme: Theme) => T)): T =>
         typeof styles === "function" ? Reflect.apply(styles, undefined, [darkTheme]) : styles,
     },
-    withUnistyles: <T,>(component: T) => component,
+    withUnistyles:
+      (component: React.ComponentType<object>, map?: (theme: Theme) => object) => (props: object) =>
+        createElement(component, { ...map?.(darkTheme), ...props }),
     useUnistyles: () => ({ theme: darkTheme, rt: {}, breakpoint: undefined }),
     UnistylesRuntime: { themeName: "dark", setTheme: () => {} },
   };
@@ -40,6 +54,9 @@ const fixture = vi.hoisted(() => ({
   serverIds: ["host"],
   directory: true,
   routingSupported: true as boolean | null,
+  routingProvider: "codex" as "codex" | "jev" | "openai-decisions",
+  liveRouting: false,
+  updateSettings: vi.fn(),
   query: "Where were we working on offline?",
   changeQuery: (_query: string) => {},
   search: vi.fn(),
@@ -52,6 +69,16 @@ const fixture = vi.hoisted(() => ({
     projectName: "Paseo",
     name: "paseo",
   },
+}));
+vi.mock("@/hooks/use-settings", () => ({
+  useAppSettings: () => ({
+    settings: {
+      sendBehavior: "queue",
+      sessionRoutingProvider: fixture.routingProvider,
+      liveRoutingSuggestions: fixture.liveRouting,
+    },
+    updateSettings: fixture.updateSettings,
+  }),
 }));
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
@@ -126,7 +153,13 @@ vi.mock("@/stores/session-store", async () => {
             ],
           ]),
           workspaces: new Map([["workspace", { projectId: "project" }]]),
-          serverInfo: { features: { sessionSearch: true, agentMessageQueue: true } },
+          serverInfo: {
+            features: {
+              sessionSearch: true,
+              sessionDecisionRouting: true,
+              agentMessageQueue: true,
+            },
+          },
         },
       },
       applyAgentQueueSnapshot: vi.fn(),
@@ -199,6 +232,9 @@ beforeEach(async () => {
   fixture.serverIds = ["host"];
   fixture.directory = true;
   fixture.routingSupported = true;
+  fixture.routingProvider = "codex";
+  fixture.liveRouting = false;
+  fixture.updateSettings.mockReset();
   queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   fixture.query = "Where were we working on offline?";
   fixture.search.mockResolvedValue({ results: [result], searchedCount: 1, totalCount: 1 });
@@ -291,6 +327,97 @@ function type(input: HTMLInputElement | HTMLTextAreaElement, text: string) {
     input.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
   });
 }
+test("decision routing shows the actual provider and requires an explicit destination", async () => {
+  fixture.routingProvider = "jev";
+  fixture.search.mockResolvedValue({
+    results: [result],
+    searchedCount: 1,
+    totalCount: 1,
+    routing: { provider: "openai-decisions", fallback: true, elapsedMs: 128 },
+  });
+  const view = await mount();
+  act(() => view.getByTestId("routing-send-mode").click());
+  type(view.getByTestId<HTMLTextAreaElement>("routing-send-draft"), "continue the offline work");
+  act(() => view.getByTestId("routing-route-best").click());
+  await waitFor(() => expect(fixture.search).toHaveBeenCalledOnce());
+  expect(fixture.search.mock.calls[0][0]).toMatchObject({ routingProvider: "jev" });
+  await waitFor(() => expect(view.getByRole("button", { name: "Queue here" })).toBeTruthy());
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+  expect(view.getByText(/OpenAI Decisions · 128 ms · fallback/)).toBeTruthy();
+  await page.screenshot({
+    element: container,
+    path: "../../../../.vitest-screenshots/decision-routing-results.png",
+  });
+});
+
+test("routing settings expose the provider experiment at desktop and phone widths", async () => {
+  fixture.routingProvider = "jev";
+  const renderSettings = async () => act(async () => root?.render(<SendingSection />));
+  await renderSettings();
+  const view = within(container);
+  expect(view.getByRole("button", { name: "Chat routing: Jev" })).toBeTruthy();
+  act(() => view.getByRole("switch").click());
+  expect(fixture.updateSettings).toHaveBeenCalledWith({ liveRoutingSuggestions: true });
+  container.style.width = "680px";
+  await page.viewport(900, 700);
+  await page.screenshot({
+    element: container,
+    path: "../../../../.vitest-screenshots/decision-routing-settings-desktop.png",
+  });
+  container.style.width = "320px";
+  await page.viewport(390, 800);
+  await page.screenshot({
+    element: container,
+    path: "../../../../.vitest-screenshots/decision-routing-settings-phone.png",
+  });
+});
+
+test("live suggestions debounce edits and never enqueue", async () => {
+  fixture.routingProvider = "jev";
+  fixture.liveRouting = true;
+  fixture.search.mockResolvedValue({
+    results: [result],
+    searchedCount: 1,
+    totalCount: 1,
+    routing: { provider: "jev", fallback: false, elapsedMs: 88 },
+  });
+  const view = await mount();
+  const field = view.getByRole<HTMLInputElement>("textbox", { name: "Find query" });
+  type(field, "offline");
+  type(field, "offline indicator");
+  expect(fixture.search).not.toHaveBeenCalled();
+  await waitFor(() => expect(fixture.search).toHaveBeenCalledOnce());
+  expect(fixture.search.mock.calls[0][0]).toMatchObject({
+    query: "offline indicator",
+    routingProvider: "jev",
+  });
+  await waitFor(() => expect(view.getByText("Relay reconnect investigation")).toBeTruthy());
+  expect(fixture.enqueue).not.toHaveBeenCalled();
+});
+
+test("older hosts keep manual selection and explain the unavailable decision option", async () => {
+  fixture.routingProvider = "jev";
+  const { useSessionStore } = await import("@/stores/session-store");
+  const session = useSessionStore.getState().sessions.host!;
+  const saved = session.serverInfo;
+  useSessionStore.setState({
+    sessions: {
+      host: {
+        ...session,
+        serverInfo: { ...saved!, features: { ...saved!.features, sessionDecisionRouting: false } },
+      },
+    },
+  });
+  try {
+    const view = await mount();
+    act(() => submitControl(view).click());
+    await waitFor(() => expect(view.getByText(/Update this host to use Jev/)).toBeTruthy());
+    expect(fixture.search).not.toHaveBeenCalled();
+    expect(fixture.enqueue).not.toHaveBeenCalled();
+  } finally {
+    useSessionStore.setState({ sessions: { host: session } });
+  }
+});
 test("Find and Open never deliver; Use restores independent draft and explicit send waits for acknowledgement", async () => {
   useDraftStore
     .getState()

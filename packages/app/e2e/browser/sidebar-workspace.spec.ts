@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
+import { enableReadOnOpen } from "../support/helpers/read-on-open";
 import {
   closeMobileAgentSidebar,
   expectMobileAgentSidebarHidden,
@@ -416,6 +417,9 @@ test.describe("Sidebar workspace list", () => {
       await workspace.client.waitForFinish(workspace.agentId, 20_000);
       await workspace.client.clearWorkspaceAttention(workspace.workspaceId);
       expect(workspace.client.getLastServerInfoMessage()?.features?.workspaceMarkUnread).toBe(true);
+      // "Until it is opened again" is the read-on-open setting; the explicit default is covered
+      // in sidebar-workspace-mark-unread.spec.ts.
+      await enableReadOnOpen(page);
       await gotoAppShell(page);
 
       const row = await waitForSidebarWorkspace(page, workspace.workspaceId);

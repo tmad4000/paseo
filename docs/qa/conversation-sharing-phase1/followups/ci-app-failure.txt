@@ -1,0 +1,32 @@
+Excerpt: initial CI run 40166484941, app-tests job 121088525596
+2026-10-25T05:49:02.1883721Z ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+2026-10-25T05:49:02.1884047Z 
+2026-10-25T05:49:02.1886738Z  FAIL   unit  src/utils/__tests__/split-markdown-blocks.test.ts > splitMarkdownBlocks > recognizes every destination the renderer accepts, including escaped spaces
+2026-10-25T05:49:02.1895599Z AssertionError: expected [ 'See [docs].', …(1) ] to deeply equal [ Array(1) ]
+2026-10-25T05:49:02.1896116Z 
+2026-10-25T05:49:02.1896544Z - Expected
+2026-10-25T05:49:02.1896888Z + Received
+2026-10-25T05:49:02.1897025Z 
+2026-10-25T05:49:02.1897126Z   [
+2026-10-25T05:49:02.1897385Z -   "See [docs].
+2026-10-25T05:49:02.1897635Z -
+2026-10-25T05:49:02.1897957Z - [docs]: docs\\ folder/readme",
+2026-10-25T05:49:02.1898288Z +   "See [docs].",
+2026-10-25T05:49:02.1898656Z +   "[docs]: docs\\ folder/readme",
+2026-10-25T05:49:02.1898956Z   ]
+2026-10-25T05:49:02.1899067Z 
+2026-10-25T05:49:02.1899797Z  ❯ src/utils/__tests__/split-markdown-blocks.test.ts:102:80
+2026-10-25T05:49:02.1925845Z     100|
+2026-10-25T05:49:02.1926801Z     101|   it("recognizes every destination the renderer accepts, including esc…
+2026-10-25T05:49:02.1928136Z     102|     expect(splitMarkdownBlocks("See [docs].\n\n[docs]: docs\\ folder/r…
+2026-10-25T05:49:02.1929464Z        |                                                                                ^
+2026-10-25T05:49:02.1930542Z     103|       "See [docs].\n\n[docs]: docs\\ folder/readme",
+2026-10-25T05:49:02.1931313Z     104|     ]);
+2026-10-25T05:49:02.1931588Z 
+2026-10-25T05:49:02.1932491Z ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+2026-10-25T05:49:02.1932893Z 
+2026-10-25T05:49:02.1933124Z 
+2026-10-25T05:49:02.1967409Z  Test Files  1 failed | 686 passed (687)
+2026-10-25T05:49:02.2004844Z       Tests  1 failed | 6105 passed (6106)
+2026-10-25T05:49:02.2005572Z    Start at  05:44:44
+2026-10-25T05:49:02.2013207Z    Duration  257.26s (transform 47.97s, setup 6.66s, import 266.68s, tests 80.09s, environment 20.21s)

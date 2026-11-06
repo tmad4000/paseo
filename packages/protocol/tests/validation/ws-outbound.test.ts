@@ -261,6 +261,123 @@ const SourceSchema = z.object({
     });
   });
 
+  it.each([undefined, true, false])("accepts old and new sharing host fields (%s)", (hosts) => {
+    const snapshot = {
+      v: 1,
+      title: "Share",
+      owner: { name: "Owner" },
+      agent: { provider: "mock" },
+      createdAt: "2026-10-24T12:00:00Z",
+      messages: [],
+      redactionSummary: {
+        hiddenToolCalls: 0,
+        hiddenReasoning: 0,
+        secretsMasked: 0,
+        pathsCollapsed: 0,
+        contactsMasked: 0,
+        messagesExcluded: 0,
+        ...(hosts === undefined ? {} : { hostsMasked: 2 }),
+      },
+    };
+    const share = {
+      id: "shr_test",
+      agentId: "agent",
+      mode: "snapshot",
+      title: "Share",
+      redaction: {
+        include: { toolCalls: false, reasoning: false, errors: false },
+        scrub: {
+          secrets: true,
+          paths: true,
+          contacts: true,
+          ...(hosts === undefined ? {} : { hosts }),
+        },
+        excludedMessageIds: [],
+        extraPatterns: [],
+      },
+      createdAt: snapshot.createdAt,
+      expiresAt: null,
+      revokedAt: null,
+      viewCount: 0,
+      lastViewedAt: null,
+    };
+    const envelope = (type: string, payload: unknown) => ({
+      type: "session",
+      message: { type, payload },
+    });
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse(
+        envelope("share.link.preview.response", { snapshot }),
+      ).success,
+    ).toBe(true);
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse(
+        envelope("share.link.list.response", { shares: [share] }),
+      ).success,
+    ).toBe(true);
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse(
+        envelope("share.link.preview.response", {
+          snapshot: {
+            ...snapshot,
+            redactionSummary: { ...snapshot.redactionSummary, hostsMasked: "2" },
+          },
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse(
+        envelope("share.link.list.response", {
+          shares: [
+            {
+              ...share,
+              redaction: {
+                ...share.redaction,
+                scrub: { ...share.redaction.scrub, hosts: "false" },
+              },
+            },
+          ],
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("accepts the widened earlier omission reason without another feature gate", () => {
+    const result = GeneratedWSOutboundMessageSchema.safeParse({
+      type: "session",
+      message: {
+        type: "share.link.preview.response",
+        payload: {
+          snapshot: {
+            v: 1,
+            title: "Share",
+            owner: { name: "Owner" },
+            agent: { provider: "mock" },
+            createdAt: "2026-10-24T12:00:00Z",
+            messages: [
+              {
+                kind: "omitted",
+                id: "share_earlier",
+                at: "2026-10-24T12:00:00Z",
+                reason: "earlier",
+                count: 4500,
+              },
+            ],
+            redactionSummary: {
+              hiddenToolCalls: 0,
+              hiddenReasoning: 0,
+              secretsMasked: 0,
+              pathsCollapsed: 0,
+              contactsMasked: 0,
+              messagesExcluded: 0,
+            },
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("emits runtime imports with .js extensions", async () => {
     const generated = await readFile(generatedWSOutboundPath, "utf8");
     expect(generated).toContain('from "../../validation/ws-outbound-schema-metadata.js"');

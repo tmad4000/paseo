@@ -126,7 +126,7 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
   await page.getByRole("button", { name: "Fork chat from here" }).last().click();
   await page.getByRole("menuitem", { name: "Fork in a new tab", exact: true }).click();
   await expect(
-    page.getByRole("alert").filter({ hasText: "Transport not connected" }),
+    page.getByRole("alert").filter({ hasText: "Can't reach your host right now" }),
   ).toBeVisible();
   await expectReconnectingToastGone(page, { timeout: 100 });
   await expectReconnectingToastVisible(page);
@@ -393,10 +393,9 @@ test.describe("Viewed agent timelines", () => {
         exact: true,
       });
       await expect(previousMessage).toBeVisible();
-      await expect(page.getByRole("button", { name: "First viewed chat" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      await expect(
+        page.getByRole("button", { name: "First viewed chat", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
       await gate.drop();
       await gate.waitForBlockedConnection();
       await expectReconnectingToastVisible(page);

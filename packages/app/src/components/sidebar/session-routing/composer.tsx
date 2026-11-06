@@ -15,6 +15,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { v4 as uuid } from "uuid";
 import { Button } from "@/components/ui/button";
+import { useAppSettings } from "@/hooks/use-settings";
 import { Shortcut } from "@/components/ui/shortcut";
 import {
   sessionRouteKey,
@@ -74,12 +75,14 @@ interface MatchResponse {
   notice: string;
   /** True when any selected host failed or its directory was unavailable. */
   incomplete: boolean;
+  requiresChoice: boolean;
 }
 interface ActiveMatch {
   requestId: string;
   mode: RoutingState["mode"];
   scope: string | null;
   hosts: string;
+  routingProvider: string;
   query: string;
   draft: string;
   draftVersion: number;
@@ -107,6 +110,8 @@ export function SessionRoutingComposer({
   children: (actions: FindFieldActions) => ReactNode;
 }) {
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const routingProvider = settings.sessionRoutingProvider;
   const {
     searchQuery,
     setSearchQuery,
@@ -142,8 +147,8 @@ export function SessionRoutingComposer({
   const activeMatch = useRef<ActiveMatch | null>(null);
   const submitting = useRef<string | null>(null);
   const hostMembership = JSON.stringify([...serverIds].sort());
-  const latest = useRef({ state, serverIds, hostMembership, searchQuery });
-  latest.current = { state, serverIds, hostMembership, searchQuery };
+  const latest = useRef({ state, serverIds, hostMembership, searchQuery, routingProvider });
+  latest.current = { state, serverIds, hostMembership, searchQuery, routingProvider };
   const dispatch = useCallback(
     (action: RoutingAction) => {
       latest.current.state = routingReducer(latest.current.state, action);
@@ -156,6 +161,7 @@ export function SessionRoutingComposer({
     if (
       current.state.mode !== context.mode ||
       current.state.scope !== context.scope ||
+      current.routingProvider !== context.routingProvider ||
       current.hostMembership !== context.hosts
     )
       return false;
@@ -246,9 +252,14 @@ export function SessionRoutingComposer({
             throw new Error(t("sidebar.routing.offline"));
           if (!session.serverInfo.features?.sessionSearch)
             throw new Error(t("sidebar.routing.updateHost"));
+          if (routingProvider !== "codex" && !session.serverInfo.features.sessionDecisionRouting)
+            throw new Error(
+              "Update this host to use Jev or OpenAI Decisions. Current LLM and manual selection remain available.",
+            );
           const payload = await client.searchSessions({
             query,
             workspaceIds,
+            ...(routingProvider !== "codex" ? { routingProvider } : {}),
           });
           const recipients: Recipient[] = [];
           for (const result of payload.results) {
@@ -263,7 +274,12 @@ export function SessionRoutingComposer({
               hostLabel: hosts.find((host) => host.serverId === serverId)?.label ?? serverId,
             });
           }
-          return { recipients, searched: payload.searchedCount, total: payload.totalCount };
+          return {
+            recipients,
+            searched: payload.searchedCount,
+            total: payload.totalCount,
+            routing: payload.routing,
+          };
         }),
       );
       const recipients: Recipient[] = [];
@@ -272,6 +288,8 @@ export function SessionRoutingComposer({
         : [t("sidebar.routing.directoryUnavailable")];
       let searched = 0,
         total = 0;
+      let requiresChoice = false;
+      const providerNotices: string[] = [];
       for (const response of responses) {
         if (response.status === "rejected") {
           failures.push(
@@ -284,9 +302,23 @@ export function SessionRoutingComposer({
         recipients.push(...response.value.recipients);
         searched += response.value.searched;
         total += response.value.total;
+        if (response.value.routing) {
+          const route = response.value.routing;
+          const label = {
+            jev: "Jev",
+            "openai-decisions": "OpenAI Decisions",
+            codex: "Current LLM",
+          }[route.provider];
+          providerNotices.push(
+            `${label} · ${route.elapsedMs} ms${route.fallback ? " · fallback" : ""}`,
+          );
+          requiresChoice ||= route.provider !== "codex";
+        }
       }
       recipients.sort((a, b) => b.confidence - a.confidence);
       const notices = failures.map((message) => message.slice(0, 240));
+      notices.push(...providerNotices);
+      if (requiresChoice) notices.push("Decision preview: choose a chat to send.");
       notices.push(
         t(searched < total ? "sidebar.routing.searchLimit" : "sidebar.routing.searchCoverage", {
           searched,
@@ -297,6 +329,7 @@ export function SessionRoutingComposer({
         recipients,
         notice: notices.join(" "),
         incomplete: failures.length > 0,
+        requiresChoice,
       };
     },
   });
@@ -618,6 +651,7 @@ export function SessionRoutingComposer({
       mode,
       scope: submitted.scope,
       hosts: current.hostMembership,
+      routingProvider: current.routingProvider,
       query: current.searchQuery,
       draft: submitted.sendDraft,
       draftVersion: submitted.draftVersion,
@@ -677,6 +711,32 @@ export function SessionRoutingComposer({
     }
   }, [match, send, t, dispatch, matchesContext, cancelMatch, continueNewConversation]);
 
+  const liveFind = useRef(submit);
+  liveFind.current = submit;
+  useEffect(() => {
+    if (
+      !settings.liveRoutingSuggestions ||
+      routingProvider === "codex" ||
+      state.mode !== "find" ||
+      !state.draftReady ||
+      searchQuery.trim().length < 3
+    )
+      return;
+    const timer = setTimeout(() => {
+      // Read current ownership: the user may have entered Send during the debounce.
+      if (latest.current.state.mode === "find") void liveFind.current();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [
+    settings.liveRoutingSuggestions,
+    routingProvider,
+    searchQuery,
+    state.mode,
+    state.draftReady,
+    state.scope,
+    hostMembership,
+  ]);
+
   // The explicit route verb: one action chaining search → select → deliver.
   // It queues only, auto-selects solely under the documented threshold+margin
   // gate, and otherwise falls back to the ordinary candidate list with the
@@ -694,6 +754,7 @@ export function SessionRoutingComposer({
       mode: "send",
       scope: submitted.scope,
       hosts: current.hostMembership,
+      routingProvider: current.routingProvider,
       query: current.searchQuery,
       draft: text,
       draftVersion: submitted.draftVersion,
@@ -728,7 +789,9 @@ export function SessionRoutingComposer({
       );
       // Never auto-select from partial coverage: a failed host could hide the
       // real destination, so an incomplete search always asks.
-      const best = result.incomplete ? null : selectRouteBestMatch(inScope);
+      // Decision probabilities are not calibrated to the legacy matcher's auto-send thresholds.
+      const best =
+        result.incomplete || result.requiresChoice ? null : selectRouteBestMatch(inScope);
       if (!best) {
         dispatch({
           type: "matched",

@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { AgentArtifactSchema } from "./agent-artifact.js";
-import { CompanionEntrySchema, TrackedAskInputSchema } from "./companion-stream.js";
+import {
+  CompanionEntrySchema,
+  TimelineAnchorSchema,
+  TrackedAskInputSchema,
+  StreamInputRequestSchema,
+  NeedsYouGroupSchema,
+} from "./companion-stream.js";
+
+export const StreamViewSchema = z.enum(["activity", "tasks", "questions", "saved", "needs_you"]);
+export type StreamView = z.infer<typeof StreamViewSchema>;
 
 export const StreamFilterSchema = z.enum(["all", "pending", "pinned"]);
 export const StreamRowSchema = z.object({
@@ -11,6 +20,7 @@ export const StreamRowSchema = z.object({
   workspaceId: z.string().optional(),
   archived: z.boolean(),
   timestamp: z.string(),
+  taskId: z.string().optional(),
   item: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("entry"), entry: CompanionEntrySchema }),
     z.object({ kind: z.literal("artifact"), artifact: AgentArtifactSchema }),
@@ -22,12 +32,27 @@ export const StreamListRequestSchema = z.object({
   filter: StreamFilterSchema.optional(),
   agentId: z.string().optional(),
   asksOnly: z.boolean().optional(),
+  // COMPAT(streamWorkflow): only sent to hosts advertising features.streamWorkflow.
+  view: StreamViewSchema.optional(),
+  relatedAgentId: z.string().max(200).optional(),
+  relatedServerId: z.string().max(200).optional(),
   search: z.string().max(1000).optional(),
   includeArchived: z.boolean().optional(),
   cursor: z.string().max(10000).optional(),
   limit: z.number().int().min(1).max(100).optional(),
+  // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+  /** Only questions the user asked: tracked asks that expect an answer and tracked Q&A. */
+  userQuestionsOnly: z.boolean().optional(),
   // COMPAT(streamTags): only sent to hosts advertising features.streamTags. Entries must carry all.
   tags: z.array(z.string().max(100)).max(20).optional(),
+  // COMPAT(streamBlockedAsks): only sent to hosts advertising features.streamBlockedAsks.
+  /** needs_you only: one group (blocked asks, questions or permissions). */
+  group: NeedsYouGroupSchema.optional(),
+  /** Tracked asks in these states only. */
+  askStates: z
+    .array(z.enum(["open", "in_progress", "blocked", "done"]))
+    .max(4)
+    .optional(),
 });
 export const StreamTagCountSchema = z.object({ tag: z.string(), count: z.number().int() });
 export const StreamListResponseSchema = z.object({
@@ -55,13 +80,28 @@ export const StreamUpdateRequestSchema = z.object({
     "add_q_and_a",
     "add_question",
     "set_ask",
+    // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+    "set_reply",
+    "mark_reply_seen",
+    // COMPAT(streamDefer): only sent to hosts advertising features.streamDefer.
+    "set_deferred",
   ]),
   status: z.enum(["open", "reviewed", "done"]).optional(),
   text: z.string().max(4000).optional(),
   ask: TrackedAskInputSchema.optional(),
+  inputRequest: StreamInputRequestSchema.optional(),
   expectedRevision: z.number().int().min(0).optional(),
   answerText: z.string().max(4000).optional(),
   sourceId: z.string().optional(),
+  // COMPAT(streamAnswers): only sent to hosts advertising features.streamAnswers.
+  /** add_q_and_a: the question's timeline position, so the host can attach its answer. */
+  questionAnchor: TimelineAnchorSchema.optional(),
+  /** set_reply: the reply revision last read (0 for none). mark_reply_seen: the revision seen. */
+  replyRevision: z.number().int().min(0).optional(),
+  /** set_reply: the conversation that answered, when it is not the owning one. */
+  answeredByAgentId: z.string().max(200).optional(),
+  /** set_deferred: true sets the entry aside for later, false brings it back. */
+  deferred: z.boolean().optional(),
 });
 export const StreamUpdateResponseSchema = z.object({
   type: z.literal("stream.entry.update.response"),

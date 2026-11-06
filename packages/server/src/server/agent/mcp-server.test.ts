@@ -3165,6 +3165,7 @@ describe("create_agent MCP tool", () => {
           source: "voice",
         },
         workspaceId: "wks_voice",
+        createdBy: "agent:voice-agent",
       },
     );
     await rm(baseDir, { recursive: true, force: true });
@@ -3309,6 +3310,7 @@ describe("create_agent MCP tool", () => {
           source: "handoff",
         },
         workspaceId: "wks_parent",
+        createdBy: "agent:parent-agent",
       },
     );
   });
@@ -3369,6 +3371,7 @@ describe("create_agent MCP tool", () => {
           [PARENT_AGENT_ID_LABEL]: "parent-agent",
         },
         workspaceId: "wks_parent",
+        createdBy: "agent:parent-agent",
       },
     );
   });
@@ -4285,6 +4288,69 @@ describe("set_review_status MCP tool", () => {
       labels: { "paseo.review-status": null, "paseo.review-note": null },
     });
     expect(response.structuredContent).toEqual({ agentId: "agent-1", reviewStatus: null });
+  });
+});
+
+describe("set_stream_answer MCP tool", () => {
+  const logger = createTestLogger();
+
+  async function answerTool(callerAgentId: string) {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId,
+      logger,
+    });
+    return { tool: registeredTool(server, "set_stream_answer"), spies };
+  }
+
+  it("answers a tracked ask on the caller's own conversation", async () => {
+    const { tool, spies } = await answerTool("agent-1");
+    const response = await tool.handler({ askId: "port", answer: "7420", replyRevision: 0 });
+    expect(spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      entryId: "ask:port",
+      action: "set_reply",
+      text: "7420",
+      replyRevision: 0,
+      sourceId: undefined,
+      answeredByAgentId: undefined,
+    });
+    expect(response.structuredContent).toEqual({
+      agentId: "agent-1",
+      entryId: "ask:port",
+      accepted: true,
+    });
+  });
+
+  it("records the delegated chat that answered a question on its parent", async () => {
+    const { tool, spies } = await answerTool("child-1");
+    await tool.handler({
+      agentId: "parent-1",
+      entryId: "qa:e1:4",
+      answer: "Postgres",
+      replyRevision: 1,
+      sourceMessageId: "m9",
+    });
+    expect(spies.agentManager.updateCompanionEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "parent-1",
+        entryId: "qa:e1:4",
+        sourceId: "msg:m9",
+        answeredByAgentId: "child-1",
+      }),
+    );
+  });
+
+  it("requires exactly one target", async () => {
+    const { tool, spies } = await answerTool("agent-1");
+    await expect(tool.handler({ answer: "x", replyRevision: 0 })).rejects.toThrow("exactly one");
+    await expect(
+      tool.handler({ askId: "a", entryId: "qa:b", answer: "x", replyRevision: 0 }),
+    ).rejects.toThrow("exactly one");
+    expect(spies.agentManager.updateCompanionEntry).not.toHaveBeenCalled();
   });
 });
 
@@ -5743,6 +5809,7 @@ describe("agent snapshot MCP serialization", () => {
         {
           id: "agent-compact",
           shortId: "agent-c",
+          createdBy: "human",
           title: null,
           provider: "codex",
           model: "gpt-5.4",
@@ -6119,6 +6186,7 @@ describe("agent snapshot MCP serialization", () => {
     expect(item).toEqual({
       id: "stored-archived-compact",
       shortId: "stored-",
+      createdBy: "human",
       title: "Stored agent",
       provider: "claude",
       model: "claude-sonnet-4-20250514",

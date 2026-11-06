@@ -1,4 +1,7 @@
-import { restoreCompanionEntries } from "./companion-stream.js";
+import { getParentAgentIdFromLabels, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { resolveAgentCreatedBy } from "@getpaseo/protocol/user-message-sender";
+import { seedLegacyHumanActivity } from "./message-activity.js";
+import { restoreCompanionEntries, selectSnapshotCompanionEntries } from "./companion-stream.js";
 import type {
   AgentListItemPayload,
   AgentSnapshotPayload,
@@ -84,6 +87,7 @@ export function toStoredAgentRecord(
     lastActivityAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt ? agent.lastUserMessageAt.toISOString() : null,
     ...(agent.messageActivity ? { messageActivity: agent.messageActivity } : {}),
+    ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
     title: options?.title ?? null,
     labels: agent.labels,
     lastStatus: agent.lifecycle,
@@ -129,6 +133,10 @@ export function toAgentPayload(
     updatedAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt ? agent.lastUserMessageAt.toISOString() : null,
     ...(agent.messageActivity ? { messageActivity: agent.messageActivity } : {}),
+    createdBy: resolveAgentCreatedBy({
+      createdBy: agent.createdBy,
+      parentAgentId: getParentAgentIdFromLabels(agent.labels),
+    }),
     status: agent.lifecycle,
     activeTurn: agent.activeTurnId
       ? {
@@ -145,7 +153,7 @@ export function toAgentPayload(
     title: options?.title ?? null,
     labels: agent.labels,
     artifacts: agent.artifacts ?? [],
-    companionEntries: (agent.companionEntries ?? []).slice(-50),
+    companionEntries: selectSnapshotCompanionEntries(agent.companionEntries ?? []),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -221,6 +229,10 @@ export function buildStoredAgentPayload(
   const createdAt = new Date(record.createdAt);
   const updatedAt = new Date(resolveStoredAgentUpdatedAt(record));
   const lastUserMessageAt = record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null;
+  const createdBy = resolveAgentCreatedBy({
+    createdBy: record.createdBy,
+    parentAgentId: getParentAgentIdFromLabels(record.labels),
+  });
 
   const runtimeInfo = buildStoredRuntimeInfo(record);
   const providerAvailable = isStoredAgentProviderAvailable(record, validProviders);
@@ -243,7 +255,10 @@ export function buildStoredAgentPayload(
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
     lastUserMessageAt: lastUserMessageAt ? lastUserMessageAt.toISOString() : null,
-    ...(record.messageActivity ? { messageActivity: record.messageActivity } : {}),
+    ...(record.messageActivity
+      ? { messageActivity: seedLegacyHumanActivity(record.messageActivity, createdBy) }
+      : {}),
+    createdBy,
     status: record.lastStatus,
     capabilities: defaultCapabilities,
     currentModeId: record.lastModeId ?? null,
@@ -257,7 +272,7 @@ export function buildStoredAgentPayload(
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],
-    companionEntries: restoreCompanionEntries(record).slice(-50),
+    companionEntries: selectSnapshotCompanionEntries(restoreCompanionEntries(record)),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }
@@ -277,12 +292,17 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
     updatedAt: agent.updatedAt,
     lastUserMessageAt: agent.lastUserMessageAt,
     ...(agent.messageActivity ? { messageActivity: agent.messageActivity } : {}),
+    ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
     archivedAt: agent.archivedAt ?? null,
     requiresAttention: agent.requiresAttention ?? false,
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp ?? null,
     labels: agent.labels,
     ...(agent.providerUnavailable ? { providerUnavailable: true } : {}),
+    ...(agent.workspaceId ? { workspaceId: agent.workspaceId } : {}),
+    ...(agent.labels[PARENT_AGENT_ID_LABEL]
+      ? { parentAgentId: agent.labels[PARENT_AGENT_ID_LABEL] }
+      : {}),
   };
 }
 

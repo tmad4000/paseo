@@ -1,0 +1,28 @@
+name = "paseo-share"
+# account_id is supplied by CLOUDFLARE_ACCOUNT_ID; never commit an account ID.
+# account_id = "<CLOUDFLARE_ACCOUNT_ID>"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[observability]
+enabled = false
+
+[[kv_namespaces]]
+binding = "SHARES"
+id = "<SHARES_KV_NAMESPACE_ID>"
+
+[[ratelimits]]
+name = "GUEST_LIMIT"
+namespace_id = "13001"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "UNKNOWN_LIMIT"
+namespace_id = "13002"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "ADMIN_LIMIT"
+namespace_id = "13003"
+simple = { limit = 30, period = 60 }

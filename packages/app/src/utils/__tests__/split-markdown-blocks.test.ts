@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createMarkdownParser } from "../markdown-parser";
 import { splitMarkdownBlocks } from "../split-markdown-blocks";
 
 describe("splitMarkdownBlocks", () => {
@@ -98,12 +99,25 @@ describe("splitMarkdownBlocks", () => {
     ]);
   });
 
-  it("recognizes every destination the renderer accepts, including escaped spaces", () => {
-    expect(splitMarkdownBlocks("See [docs].\n\n[docs]: docs\\ folder/readme")).toEqual([
-      "See [docs].\n\n[docs]: docs\\ folder/readme",
-    ]);
+  it("keeps an escaped-space destination as literal paragraphs under markdown-it 14", () => {
+    const source = "See [docs].\n\n[docs]: docs\\ folder/readme";
+    const parser = createMarkdownParser({ linkify: false });
+    // A backslash cannot escape a space in an unbracketed reference destination.
+    expect(parser.render(source)).toBe("<p>See [docs].</p>\n<p>[docs]: docs\\ folder/readme</p>\n");
+    expect(splitMarkdownBlocks(source)).toEqual(["See [docs].", "[docs]: docs\\ folder/readme"]);
+    expect(
+      splitMarkdownBlocks(source)
+        .map((block) => parser.render(block))
+        .join(""),
+    ).toBe(parser.render(source));
+  });
+
+  it("folds renderer-accepted destinations containing spaces or percent escapes", () => {
     expect(splitMarkdownBlocks("See [docs].\n\n[docs]: <docs folder/readme> 'Title'")).toEqual([
       "See [docs].\n\n[docs]: <docs folder/readme> 'Title'",
+    ]);
+    expect(splitMarkdownBlocks("See [docs].\n\n[docs]: docs%20folder/readme")).toEqual([
+      "See [docs].\n\n[docs]: docs%20folder/readme",
     ]);
   });
 

@@ -1,9 +1,18 @@
-import { useCallback, useMemo, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import type { StreamFilter } from "@getpaseo/protocol/global-stream";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/ui/search-field";
@@ -19,33 +28,128 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
-import { EntryCard } from "./feed";
+import { useAgentViewStore } from "@/stores/agent-view-store";
+import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
+import { buildReplyQuote } from "@/components/reply/composer-quote";
+import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
 import { useStreamTagFilter } from "./use-stream-tag-filter";
+import { useApplyStreamFocus } from "./use-stream-focus";
+import { streamCardSource, hasUnseenReply } from "./card-source";
+import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
+import { WorkflowArtifact } from "./workflow-artifact";
+import { WorkflowComposer } from "./workflow-composer";
+import { parseWorkflowView, type WorkflowView } from "./workflow-view";
+import { useStreamReturnStore, type StreamPlace } from "./stream-return";
+import { useToast } from "@/contexts/toast-context";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { splitLater } from "./needs-you-later";
+import { DelegatedChatsList } from "./delegated-chats";
+import type { DelegationTarget } from "./delegation-pulse";
+import { useDelegatedChildren } from "./use-delegation-pulse";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
-
+const KEEP_VISIBLE_CONTENT = { minIndexForVisible: 0 };
 const rowKey = (row: GlobalStreamRow) => JSON.stringify([row.serverId, row.id]);
 
 export function GlobalStreamScreen() {
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  const navigateView = useCallback((next: WorkflowView) => router.setParams({ view: next }), []);
+  return <StreamWorkflowFeed initialView={parseWorkflowView(view)} onViewChange={navigateView} />;
+}
+
+export interface WorkflowScope {
+  serverId: string;
+  agentId: string;
+}
+export interface WorkflowLocalContext extends WorkflowScope {
+  cwd: string;
+  artifactsSupported: boolean;
+  onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  onReturnToChat: () => void;
+  onReplyInChat: () => void;
+}
+
+function openDelegatedChat(target: DelegationTarget) {
+  navigateToAgent({ serverId: target.serverId, agentId: target.agentId });
+}
+
+/**
+ * This chat's delegated work that no ask tracks, above its Activity and Tasks: the delegating
+ * chat keeps sight of every child it started, live, with a link over to each one.
+ */
+function ScopedDelegatedChats({ scope }: { scope: WorkflowScope }) {
+  const items = useDelegatedChildren(scope.serverId, scope.agentId, true);
+  return <DelegatedChatsList items={items} onOpen={openDelegatedChat} first showHint />;
+}
+
+/** Global and local views query the same canonical rows. Scope never owns another task store. */
+export function StreamWorkflowFeed({
+  initialView = "activity",
+  scope,
+  onViewChange,
+  localContext,
+}: {
+  onViewChange?: (view: WorkflowView) => void;
+  initialView?: WorkflowView;
+  scope?: WorkflowScope;
+  localContext?: WorkflowLocalContext;
+}) {
   const { t } = useTranslation();
   const focused = useIsFocused();
+  const panelActive = useRetainedPanelActive();
   const hosts = useHosts();
   const [host, setHost] = useState(ALL_HOSTS_OPTION_ID);
-  const [filter, setFilter] = useState<StreamFilter>("all");
+  const [view, setView] = useState<WorkflowView>(initialView);
+  const [local, setLocal] = useState(Boolean(scope));
   const [search, setSearch] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  // The search field is uncontrolled; a new key shows a search set from outside it.
+  const [searchKey, setSearchKey] = useState(0);
+  const [includeArchived, setIncludeArchived] = useState(true);
+  const [unresolvedOnly, setUnresolvedOnly] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [showLater, setShowLater] = useState(false);
+  // Navigation into Needs you updates the existing screen, without resetting search or drafts.
+  useEffect(() => setView(initialView), [initialView]);
+  // Back on the Stream, the chat it opened no longer offers the way back here. Coming back
+  // through it restores the place it was opened from: side, search, host and scroll.
+  const listRef = useRef<FlatList<GlobalStreamRow>>(null);
+  const scrollOffset = useRef(0);
+  const pendingScroll = useRef<number | null>(null);
+  useRestoreStreamPlace(!scope && focused, (place) => {
+    setView(place.view);
+    setShowLater(place.showLater);
+    setHost(place.host);
+    setSearch(place.search);
+    setSearchKey((value) => value + 1);
+    pendingScroll.current = place.scrollOffset;
+  });
+  const trackScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffset.current = event.nativeEvent.contentOffset.y;
+  }, []);
+  // Chat's floating pane opens an ask's card: this chat's Tasks, searched down to it.
+  useApplyStreamFocus(scope, (focus) => {
+    setView("tasks");
+    setLocal(true);
+    setUnresolvedOnly(false);
+    setTags([]);
+    setSearch(focus.query);
+    setSearchKey((value) => value + 1);
+  });
+  const localScope = local ? scope : undefined;
   const query = useGlobalStream({
     serverId: host === ALL_HOSTS_OPTION_ID ? null : host,
-    filter,
+    view,
+    filter: view === "tasks" && unresolvedOnly ? "pending" : "all",
+    relatedAgentId: localScope?.agentId,
+    relatedServerId: localScope?.serverId,
     search: useDebouncedValue(search, 250),
     tags,
     includeArchived,
-    enabled: focused,
+    enabled: focused && panelActive,
   });
   const tagFilter = useStreamTagFilter(query, setTags);
   const tagPress = query.supportsTags ? tagFilter.add : undefined;
@@ -64,34 +168,152 @@ export function GlobalStreamScreen() {
   const loadMore = useCallback(() => {
     void fetchNextPage();
   }, [fetchNextPage]);
+  const toggleUnresolved = useCallback(() => setUnresolvedOnly((value) => !value), []);
   const toggleArchived = useCallback(() => setIncludeArchived((value) => !value), []);
+  const toggleScope = useCallback(() => setLocal((value) => !value), []);
+  const showNow = useCallback(() => setShowLater(false), []);
+  const showLaterRows = useCallback(() => setShowLater(true), []);
+  const { rows: queryRows } = query;
+  const { data, nowCount, laterCount } = useMemo(
+    () => splitLater(queryRows, view, showLater),
+    [view, queryRows, showLater],
+  );
+  // Counts cover loaded pages only. An empty side with more pages keeps loading until it finds
+  // an item or runs out, so "Later · 0" never hides deferred items on a later page.
+  const searchingSide = view === "needs_you" && data.length === 0 && hasNextPage;
+  useEffect(() => {
+    if (searchingSide && !isFetchingNextPage && !isFetching) void fetchNextPage();
+  }, [searchingSide, isFetchingNextPage, isFetching, fetchNextPage]);
+  useEffect(() => {
+    if (pendingScroll.current === null || !data.length) return;
+    const offset = pendingScroll.current;
+    pendingScroll.current = null;
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset, animated: false }));
+  }, [data.length]);
+  const placeRef = useRef<Omit<StreamPlace, "scrollOffset">>({
+    view,
+    showLater,
+    search,
+    host,
+  });
+  placeRef.current = { view, showLater, search, host };
+  const setStreamReturn = useStreamReturnStore((state) => state.setTarget);
+  // A chat opened from a global Stream card remembers where the list was.
+  const rememberReturn = useMemo(
+    () =>
+      scope
+        ? undefined
+        : (serverId: string, agentId: string) =>
+            setStreamReturn({
+              serverId,
+              agentId,
+              place: { ...placeRef.current, scrollOffset: scrollOffset.current },
+            }),
+    [scope, setStreamReturn],
+  );
+  const chooseView = useCallback(
+    (next: WorkflowView) => {
+      setView(next);
+      onViewChange?.(next);
+    },
+    [onViewChange],
+  );
+  const showNeedsYou = useCallback(() => chooseView("needs_you"), [chooseView]);
+  const needsYouSelected = useMemo(() => ({ selected: view === "needs_you" }), [view]);
+  const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
+  const triage = view === "needs_you";
   const renderItem = useCallback(
     ({ item }: { item: GlobalStreamRow }) => (
-      <GlobalStreamCard row={item} onSaved={refresh} onTagPress={tagPress} />
+      <GlobalStreamCard
+        row={item}
+        onSaved={refresh}
+        onTagPress={tagPress}
+        localContext={localContext}
+        onRememberReturn={rememberReturn}
+        triage={triage}
+      />
     ),
-    [refresh, tagPress],
+    [refresh, tagPress, localContext, rememberReturn, triage],
   );
   const tabs = useMemo(
     () => [
-      { value: "all" as const, label: t("globalStream.all") },
-      { value: "pending" as const, label: t("globalStream.pending") },
-      { value: "pinned" as const, label: t("globalStream.pinned") },
+      { value: "activity" as const, label: t("globalStream.activity") },
+      { value: "tasks" as const, label: t("globalStream.tasks") },
+      { value: "questions" as const, label: t("globalStream.questions") },
+      { value: "saved" as const, label: t("globalStream.saved") },
     ],
     [t],
   );
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <Text style={styles.description}>{t("globalStream.description")}</Text>
-        <SearchField
-          value={search}
-          onChangeText={setSearch}
-          placeholder={t("globalStream.search")}
-          clearAccessibilityLabel={t("globalStream.clearSearch")}
-          testID="global-stream-search"
-        />
-        <SegmentedControl value={filter} onValueChange={setFilter} options={tabs} />
-        {query.supportsTags ? (
+        <View style={styles.controls}>
+          <Button
+            size="sm"
+            variant={view === "needs_you" ? "secondary" : "ghost"}
+            onPress={showNeedsYou}
+            accessibilityState={needsYouSelected}
+            testID="stream-needs-you"
+          >
+            {t("globalStream.needsYou")}
+          </Button>
+          <SegmentedControl
+            value={view}
+            onValueChange={chooseView}
+            options={tabs}
+            size="sm"
+            textWrap
+            testID="stream-workflow-views"
+          />
+          {scope ? (
+            <Button size="sm" variant="ghost" onPress={toggleScope} testID="stream-scope">
+              {t(local ? "globalStream.thisChat" : "globalStream.allSessions")}
+            </Button>
+          ) : null}
+        </View>
+        <View style={styles.controls}>
+          <View style={styles.search}>
+            <SearchField
+              key={searchKey}
+              value={search}
+              onChangeText={setSearch}
+              placeholder={t("globalStream.search")}
+              clearAccessibilityLabel={t("globalStream.clearSearch")}
+              testID="global-stream-search"
+            />
+          </View>
+          <HostFilter
+            hosts={hosts}
+            selectedHost={host}
+            onSelectHost={setHost}
+            triggerTestID="global-stream-host"
+          />
+          {view === "tasks" ? (
+            <Button
+              size="sm"
+              variant={unresolvedOnly ? "secondary" : "ghost"}
+              onPress={toggleUnresolved}
+            >
+              {t(
+                unresolvedOnly
+                  ? "agentPanel.stream.showCompleted"
+                  : "agentPanel.stream.showUnresolved",
+              )}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant={includeArchived ? "secondary" : "ghost"}
+            onPress={toggleArchived}
+          >
+            {t("globalStream.archived")}
+          </Button>
+          <Button size="sm" variant="ghost" onPress={refresh} disabled={isFetching}>
+            {t("globalStream.refresh")}
+          </Button>
+        </View>
+        {/* Tags organise saved knowledge; in Needs you they only show once one is in use. */}
+        {query.supportsTags && (view !== "needs_you" || tags.length > 0) ? (
           <TagCloud
             counts={query.tagCounts}
             pinned={query.pinnedTags}
@@ -101,20 +323,24 @@ export function GlobalStreamScreen() {
             error={tagFilter.error}
           />
         ) : null}
-        <View style={styles.controls}>
-          <HostFilter
-            hosts={hosts}
-            selectedHost={host}
-            onSelectHost={setHost}
-            triggerTestID="global-stream-host"
+        {scope && local && (view === "activity" || view === "tasks") ? (
+          <ScopedDelegatedChats scope={scope} />
+        ) : null}
+        {scope ? (
+          <WorkflowComposer
+            scope={scope}
+            view={view}
+            visible={local}
+            onSaved={refresh}
+            supportsTags={query.supportsTags}
+            knownTags={knownTags}
           />
-          <Button variant={includeArchived ? "secondary" : "ghost"} onPress={toggleArchived}>
-            {t("globalStream.archived")}
-          </Button>
-          <Button variant="ghost" onPress={refresh} disabled={isFetching}>
-            {t("globalStream.refresh")}
-          </Button>
-        </View>
+        ) : null}
+        {hasNextPage ? (
+          <Text style={styles.description} testID="stream-loaded-count">
+            {t("globalStream.partialCount", { count: query.rows.length })}
+          </Text>
+        ) : null}
         {notices.map((notice) => (
           <Text key={notice} style={styles.notice} accessibilityRole="alert">
             {notice}
@@ -124,35 +350,48 @@ export function GlobalStreamScreen() {
     ),
     [
       t,
+      view,
+      showNeedsYou,
+      chooseView,
+      needsYouSelected,
+      knownTags,
+      scope,
+      toggleScope,
+      local,
       search,
-      filter,
       tabs,
-      hosts,
-      host,
-      includeArchived,
-      toggleArchived,
-      refresh,
-      isFetching,
-      notices,
       tags,
       query.supportsTags,
       query.tagCounts,
       query.pinnedTags,
+      query.rows.length,
       tagFilter.toggle,
       tagFilter.setPinned,
       tagFilter.error,
+      searchKey,
+      hosts,
+      host,
+      includeArchived,
+      toggleArchived,
+      unresolvedOnly,
+      toggleUnresolved,
+      refresh,
+      isFetching,
+      hasNextPage,
+      notices,
     ],
   );
+  const triageEmpty = triageEmptyKey(triage && !notices.length, searchingSide, showLater);
   const empty = useMemo(
-    () =>
-      isLoading ? (
-        <ThemedSpinner />
-      ) : (
-        <Text style={styles.empty}>
-          {t(notices.length ? "globalStream.incomplete" : "globalStream.empty")}
-        </Text>
-      ),
-    [isLoading, notices.length, t],
+    () => (
+      <FeedEmpty
+        loading={isLoading}
+        triageKey={triageEmpty}
+        incomplete={notices.length > 0}
+        view={view}
+      />
+    ),
+    [isLoading, triageEmpty, notices.length, view],
   );
   const footer = useMemo(
     () =>
@@ -164,10 +403,28 @@ export function GlobalStreamScreen() {
     [hasNextPage, loadMore, isFetchingNextPage, t],
   );
   return (
-    <View style={styles.root} testID="global-stream">
-      <MenuHeader title={t("globalStream.title")} />
+    <View style={styles.root} testID={scope ? "local-stream-workflow" : "global-stream"}>
+      {!scope ? (
+        <MenuHeader
+          title={t(view === "needs_you" ? "globalStream.needsYou" : "globalStream.title")}
+        />
+      ) : null}
+      {triage ? (
+        <NowLaterSwitch
+          nowCount={nowCount}
+          laterCount={laterCount}
+          partial={hasNextPage}
+          showingLater={showLater}
+          onShowNow={showNow}
+          onShowLater={showLaterRows}
+        />
+      ) : null}
       <FlatList
-        data={query.rows}
+        ref={listRef}
+        onScroll={trackScroll}
+        scrollEventThrottle={100}
+        data={data}
+        maintainVisibleContentPosition={KEEP_VISIBLE_CONTENT}
         keyExtractor={rowKey}
         renderItem={renderItem}
         contentContainerStyle={styles.feed}
@@ -182,29 +439,211 @@ export function GlobalStreamScreen() {
   );
 }
 
+/** On focus, drop the way-back chip and apply a place the way back asked to restore. */
+function useRestoreStreamPlace(active: boolean, apply: (place: StreamPlace) => void) {
+  const clear = useStreamReturnStore((state) => state.clear);
+  const takeRestore = useStreamReturnStore((state) => state.takeRestore);
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    if (!active) return;
+    clear();
+    const place = takeRestore();
+    if (place) applyRef.current(place);
+  }, [active, clear, takeRestore]);
+}
+
+/** What an empty Needs you side says: still looking through pages, or nothing there. */
+function triageEmptyKey(triage: boolean, searching: boolean, showLater: boolean): string | null {
+  if (!triage) return null;
+  if (searching) return showLater ? "globalStream.lookingForLater" : "globalStream.lookingForNow";
+  return showLater ? "globalStream.nothingLater" : "globalStream.nothingNow";
+}
+
+function FeedEmpty({
+  loading,
+  triageKey,
+  incomplete,
+  view,
+}: {
+  loading: boolean;
+  triageKey: string | null;
+  incomplete: boolean;
+  view: WorkflowView;
+}) {
+  const { t } = useTranslation();
+  if (loading) return <ThemedSpinner />;
+  if (triageKey)
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.empty}>{t(triageKey)}</Text>
+      </View>
+    );
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.empty}>
+        {t(incomplete ? "globalStream.incomplete" : "globalStream.empty")}
+      </Text>
+      {/* What each view holds is explained where there is room for it: the empty list. */}
+      <Text style={styles.description}>
+        {t(
+          view === "needs_you"
+            ? "globalStream.needsYouDescription"
+            : "globalStream.scopeDescription",
+        )}
+      </Text>
+    </View>
+  );
+}
+
+/** Needs you: what is waiting now, or what was set aside for later. Pinned above the list. */
+function NowLaterSwitch({
+  nowCount,
+  laterCount,
+  partial,
+  showingLater,
+  onShowNow,
+  onShowLater,
+}: {
+  nowCount: number;
+  laterCount: number;
+  /** More pages exist, so the counts are of loaded items: shown as "N+". */
+  partial: boolean;
+  showingLater: boolean;
+  onShowNow: () => void;
+  onShowLater: () => void;
+}) {
+  const { t } = useTranslation();
+  const size = useIsCompactFormFactor() ? "md" : "sm";
+  const nowState = useMemo(() => ({ selected: !showingLater }), [showingLater]);
+  const laterState = useMemo(() => ({ selected: showingLater }), [showingLater]);
+  return (
+    <View style={styles.nowLater} testID="stream-now-later">
+      <Button
+        size={size}
+        variant={showingLater ? "ghost" : "secondary"}
+        onPress={onShowNow}
+        accessibilityState={nowState}
+        testID="stream-show-now"
+      >
+        {t(partial ? "globalStream.nowPartial" : "globalStream.now", { count: nowCount })}
+      </Button>
+      <Button
+        size={size}
+        variant={showingLater ? "secondary" : "ghost"}
+        onPress={onShowLater}
+        accessibilityState={laterState}
+        testID="stream-show-later"
+      >
+        {t(partial ? "globalStream.laterPartial" : "globalStream.later", { count: laterCount })}
+      </Button>
+    </View>
+  );
+}
+
 export function GlobalStreamCard({
   row,
   onSaved,
   onTagPress,
+  localContext,
+  onRememberReturn,
+  triage = false,
 }: {
   row: GlobalStreamRow;
   onSaved: () => void;
   onTagPress?: (tag: string) => void;
+  localContext?: WorkflowLocalContext;
+  /** Records where the list was, so the chat this card opens offers the way back to it. */
+  onRememberReturn?: (serverId: string, agentId: string) => void;
+  /** Shown in Needs you: the triage row and Undo after Later. */
+  triage?: boolean;
 }) {
   const { t } = useTranslation();
+  const {
+    entry,
+    copiedTask,
+    serverId: sourceServerId,
+    agentId: sourceAgentId,
+    workspaceId: sourceWorkspaceId,
+  } = streamCardSource(row);
+  const localSource = localContextForSource(localContext, sourceServerId, sourceAgentId);
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
   const supportsWrites = useSessionStore(
     (state) => state.sessions[row.serverId]?.serverInfo?.features?.globalStream === true,
   );
+  const supportsAnswers = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.streamAnswers === true,
+  );
+  const supportsDefer = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.streamDefer === true,
+  );
+  // Without the daemon queue a plain send would interrupt a busy agent; reply in Chat instead.
+  const supportsQueuedReply = useSessionStore(
+    (state) => state.sessions[row.serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const rememberReturn = useCallback(
+    (serverId: string, agentId: string) => onRememberReturn?.(serverId, agentId),
+    [onRememberReturn],
+  );
   const openChat = useCallback(() => {
-    navigateToAgent({ serverId: row.serverId, agentId: row.agentId, workspaceId: row.workspaceId });
-  }, [row.serverId, row.agentId, row.workspaceId]);
+    if (localSource) {
+      localSource.onReturnToChat();
+      return;
+    }
+    rememberReturn(sourceServerId, sourceAgentId);
+    navigateToAgent({
+      serverId: sourceServerId,
+      agentId: sourceAgentId,
+      workspaceId: sourceWorkspaceId,
+    });
+  }, [localSource, rememberReturn, sourceServerId, sourceAgentId, sourceWorkspaceId]);
+  const requestReplyQuote = useAgentViewStore((state) => state.requestReplyQuote);
+  // The reply goes to the task's own chat, which openChat opens for a copied task too.
+  const replyInChat = useCallback(
+    (replyTo: CompanionEntry) => {
+      requestReplyQuote(sourceServerId, sourceAgentId, replyTo.text);
+      if (localSource) localSource.onReplyInChat();
+      else openChat();
+    },
+    [localSource, openChat, requestReplyQuote, sourceServerId, sourceAgentId],
+  );
+  const openChatAt = useAgentViewStore((state) => state.openChatAt);
+  // A copied task's place is in its origin chat, which this row cannot address.
+  const showInChat = useCallback(
+    (target: ChatJumpTarget) => {
+      openChatAt(row.serverId, row.agentId, target);
+      if (!localSource) {
+        rememberReturn(row.serverId, row.agentId);
+        navigateToAgent({
+          serverId: row.serverId,
+          agentId: row.agentId,
+          workspaceId: row.workspaceId,
+        });
+      }
+    },
+    [localSource, openChatAt, rememberReturn, row.serverId, row.agentId, row.workspaceId],
+  );
+  // Answer from the card: the reply quotes what it answers, as Reply in chat would.
+  const sendReply = useCallback(
+    async (replyTo: CompanionEntry, text: string) => {
+      if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
+      const quoted = buildReplyQuote(replyTo.text);
+      const result = await client.sendAgentMessage(
+        row.agentId,
+        quoted ? `${quoted}\n\n${text}` : text,
+        { messageId: globalThis.crypto.randomUUID() },
+      );
+      return { queued: result.queued };
+    },
+    [client, connection, row.agentId, t],
+  );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
-      if (!client || connection !== "online" || !supportsWrites || busy) return;
+      if (!client || connection !== "online" || !supportsWrites || busy || copiedTask) return;
       setBusy(true);
       setError(null);
       try {
@@ -222,7 +661,7 @@ export function GlobalStreamCard({
         setBusy(false);
       }
     },
-    [client, connection, supportsWrites, busy, row.agentId, row.item, onSaved, t],
+    [client, connection, supportsWrites, busy, copiedTask, row.agentId, row.item, onSaved, t],
   );
   const updateStatus = useCallback(
     (id: string, status: "open" | "reviewed" | "done") => {
@@ -236,37 +675,121 @@ export function GlobalStreamCard({
     },
     [update],
   );
+  const setDeferred = useCallback(
+    async (entryId: string, deferred: boolean) => {
+      if (!client || connection !== "online" || busy || copiedTask) return;
+      setBusy(true);
+      setError(null);
+      try {
+        await client.updateStreamEntry({
+          agentId: row.agentId,
+          entryId,
+          action: "set_deferred",
+          deferred,
+        });
+        onSaved();
+        if (deferred && triage) {
+          toast.show(t("agentPanel.stream.movedToLater"), {
+            action: {
+              label: t("agentPanel.stream.undo"),
+              onPress: () => void setDeferredRef.current?.(entryId, false),
+              testID: "stream-undo-later",
+            },
+          });
+        }
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : t("globalStream.saveFailed"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [client, connection, busy, copiedTask, row.agentId, onSaved, t, triage, toast],
+  );
+  // Undo runs after the card may have re-rendered; it calls the latest setDeferred.
+  const setDeferredRef = useRef<typeof setDeferred | null>(null);
+  setDeferredRef.current = setDeferred;
+  const defer = useCallback(
+    (entryId: string, deferred: boolean) => {
+      void setDeferred(entryId, deferred);
+    },
+    [setDeferred],
+  );
+  const unseenAnswer = hasUnseenReply(entry);
+  const markAnswerSeen = useCallback(async () => {
+    if (
+      !entry?.reply ||
+      !client ||
+      connection !== "online" ||
+      !supportsAnswers ||
+      busy ||
+      copiedTask
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await client.updateStreamEntry({
+        agentId: row.agentId,
+        entryId: entry.id,
+        action: "mark_reply_seen",
+        replyRevision: entry.reply.revision,
+      });
+      onSaved();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t("globalStream.saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }, [entry, client, connection, supportsAnswers, busy, copiedTask, row.agentId, onSaved, t]);
   return (
     <View style={styles.row} testID={`global-stream-row-${row.agentId}`}>
-      <Button variant="ghost" onPress={openChat} style={styles.source}>
-        {row.agentTitle} · {row.serverLabel}
-        {row.archived ? ` · ${t("globalStream.archived")}` : ""}
-      </Button>
-      <Text style={styles.path} numberOfLines={1}>
-        {row.cwd}
-      </Text>
+      <CardSourceLine
+        row={row}
+        copiedTask={copiedTask}
+        sourceServerId={sourceServerId}
+        onOpen={openChat}
+      />
+      {copiedTask ? (
+        <Text style={styles.notice} accessibilityRole="alert">
+          {t("globalStream.copiedTask")}
+        </Text>
+      ) : null}
       {row.item.kind === "entry" ? (
         <EntryCard
           entry={row.item.entry}
           serverId={row.serverId}
           onReturnToChat={openChat}
-          onReplyInChat={openChat}
+          onReplyInChat={replyInChat}
+          onShowInChat={copiedTask ? undefined : showInChat}
           onUpdateStatus={updateStatus}
           onRemovePin={removePin}
           onTagPress={onTagPress}
-          disabled={busy || connection !== "online" || !supportsWrites}
+          onSendReply={supportsQueuedReply && !copiedTask ? sendReply : undefined}
+          onDefer={supportsDefer && !copiedTask ? defer : undefined}
+          variant={triage ? "triage" : "default"}
+          disabled={busy || copiedTask || connection !== "online" || !supportsWrites}
         />
       ) : (
-        <View style={styles.artifact}>
-          <Text style={styles.description}>{t("globalStream.artifact")}</Text>
-          <Text selectable style={styles.artifactPath}>
-            {row.item.artifact.path}
-          </Text>
-          <Button variant="outline" onPress={openChat}>
-            {t("globalStream.openChat")}
-          </Button>
-        </View>
+        <WorkflowArtifact
+          artifact={row.item.artifact}
+          row={row}
+          localContext={localContext}
+          onOpenChat={openChat}
+          onSaved={onSaved}
+        />
       )}
+      {unseenAnswer && supportsAnswers ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          style={styles.inlineAction}
+          onPress={markAnswerSeen}
+          disabled={busy || copiedTask || connection !== "online"}
+          testID="stream-mark-answer-seen"
+        >
+          {t("agentPanel.stream.answers.markSeen")}
+        </Button>
+      ) : null}
       {busy ? <Text style={styles.description}>{t("globalStream.saving")}</Text> : null}
       {error ? (
         <Text accessibilityRole="alert" style={styles.notice}>
@@ -275,6 +798,49 @@ export function GlobalStreamCard({
       ) : null}
     </View>
   );
+}
+
+/** One muted line says where the card is from; the chat title opens it. */
+function CardSourceLine({
+  row,
+  copiedTask,
+  sourceServerId,
+  onOpen,
+}: {
+  row: GlobalStreamRow;
+  copiedTask: boolean;
+  sourceServerId: string;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.sourceLine}>
+      <Pressable onPress={onOpen} accessibilityRole="button" style={styles.sourcePress}>
+        <Text style={styles.source} numberOfLines={1}>
+          {copiedTask ? t("globalStream.openTaskSource") : row.agentTitle}
+        </Text>
+      </Pressable>
+      <Text style={styles.path} numberOfLines={1}>
+        {copiedTask ? sourceServerId : row.serverLabel}
+        {row.archived ? ` · ${t("globalStream.archived")}` : ""}
+        {row.cwd ? ` · ${projectName(row.cwd)}` : ""}
+      </Text>
+    </View>
+  );
+}
+
+/** The folder name tells projects apart; the full path is noise on a one-line source. */
+function projectName(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? cwd;
+}
+
+function localContextForSource(
+  context: WorkflowLocalContext | undefined,
+  serverId: string,
+  agentId: string,
+) {
+  return context?.serverId === serverId && context.agentId === agentId ? context : undefined;
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -286,17 +852,39 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[4],
     paddingBottom: theme.spacing[8],
   },
-  header: { gap: theme.spacing[3], marginBottom: theme.spacing[6] },
+  header: { gap: theme.spacing[2], marginBottom: theme.spacing[4] },
   controls: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },
+  search: { flexGrow: 1, flexBasis: 220 },
+  nowLater: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    width: "100%",
+    maxWidth: 800,
+    alignSelf: "center",
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: theme.spacing[2],
+  },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   notice: { color: theme.colors.statusWarning, fontSize: theme.fontSize.sm },
-  row: { gap: theme.spacing[2], marginBottom: theme.spacing[6] },
-  source: { alignSelf: "flex-start", minHeight: 44, maxWidth: "100%" },
-  path: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing[1],
+  row: { gap: theme.spacing[1], marginBottom: theme.spacing[4] },
+  sourceLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[1],
   },
+  sourcePress: { flexShrink: 1, maxWidth: "60%" },
+  source: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  path: { flex: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  inlineAction: { alignSelf: "flex-start" },
+  emptyState: { gap: theme.spacing[2], paddingVertical: theme.spacing[8] },
   artifact: {
     gap: theme.spacing[3],
     padding: theme.spacing[4],
@@ -306,9 +894,5 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.lg,
   },
   artifactPath: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
-  empty: {
-    color: theme.colors.foregroundMuted,
-    paddingVertical: theme.spacing[8],
-    fontSize: theme.fontSize.base,
-  },
+  empty: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.base },
 }));

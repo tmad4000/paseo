@@ -181,6 +181,13 @@ function routeSettingsToggle(ctx: ShortcutRoutingContext): ShortcutAction {
   return { kind: "router-back" };
 }
 
+function routeCommandCenterFiles(ctx: ShortcutRoutingContext): ShortcutAction {
+  if (parseHostWorkspaceRouteFromPathname(ctx.pathname)) {
+    return { kind: "command-center-toggle", nextOpen: true, scope: "files" };
+  }
+  return dispatch({ id: "workspace.project.pick", scope: "workspace" });
+}
+
 export function routeKeyboardShortcut(
   input: ShortcutRoutingInput,
   ctx: ShortcutRoutingContext,
@@ -223,13 +230,12 @@ export function routeKeyboardShortcut(
       return routeSettingsToggle(ctx);
     case "command-center.toggle":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen };
+    case "stream.needs-you.open":
+      return { kind: "router-push", route: "/stream?view=needs_you" };
     case "recent-sessions.open":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen, scope: "recent" };
     case "command-center.files":
-      if (parseHostWorkspaceRouteFromPathname(ctx.pathname)) {
-        return { kind: "command-center-toggle", nextOpen: true, scope: "files" };
-      }
-      return dispatch({ id: "workspace.project.pick", scope: "workspace" });
+      return routeCommandCenterFiles(ctx);
     case "shortcuts.dialog.toggle":
       return { kind: "shortcuts-dialog-toggle", nextOpen: !ctx.shortcutsDialogOpen };
     default:

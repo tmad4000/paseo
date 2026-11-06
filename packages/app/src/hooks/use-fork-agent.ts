@@ -9,6 +9,7 @@ import type { AssistantForkTarget } from "@/components/assistant-fork-menu";
 import type { ToastApi } from "@/components/toast-host";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostFeature } from "@/runtime/host-features";
 import { generateDraftId } from "@/stores/draft-keys";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
@@ -20,7 +21,14 @@ import {
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { toErrorMessage } from "@/utils/error-messages";
 import { buildNewWorkspaceRoute } from "@/utils/host-routes";
-import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
+import {
+  buildWorkspaceTabPersistenceKey,
+  type WorkspaceDraftTabSetup,
+  type WorkspaceTabTarget,
+} from "@/workspace-tabs/model";
+import { openWorkspaceTargetBeside } from "@/workspace-tabs/open-beside";
+import { useThreadDraftStore } from "@/threads/draft-store";
+import { threadAnchorKey } from "@/threads/model";
 
 /**
  * The subset of an agent record that a fork needs in order to seed the new
@@ -57,6 +65,11 @@ export interface ForkAgentRequest {
   workspaceId?: string;
   target: AssistantForkTarget;
   boundary?: ForkAgentBoundary;
+  /**
+   * For a thread: the workspace whose layout shows the chat, when the chat is a session from
+   * another workspace shown in a split. The thread opens and lives there.
+   */
+  layoutWorkspaceId?: string;
 }
 
 export interface UseForkAgentInput {
@@ -118,6 +131,47 @@ function buildForkDraftTabTarget(
 }
 
 /**
+ * Reply in thread: the same chat-history draft as a fork, opened beside the chat and linked to the
+ * reply it answers (src/threads). The main chat is not touched.
+ */
+async function openThreadDraft(input: {
+  serverId: string;
+  request: ForkAgentRequest;
+  draftSetup: WorkspaceDraftTabSetup | undefined;
+  prepareForkDraft: () => Promise<string>;
+  missingWorkspaceMessage: string;
+  failedMessage: string;
+  /** Compact layouts have no side pane: the thread opens as the visible tab instead. */
+  isCompact: boolean;
+}): Promise<void> {
+  const { request } = input;
+  // A thread runs where its main chat runs: the draft's workspace decides the new session's
+  // working directory, so it is always the main chat's own workspace.
+  const threadWorkspaceId = request.workspaceId ?? request.layoutWorkspaceId;
+  if (!threadWorkspaceId) throw new Error(input.missingWorkspaceMessage);
+  const anchor = request.boundary ? threadAnchorKey(request.boundary) : null;
+  if (!anchor) throw new Error(input.failedMessage);
+  const workspaceKey = buildWorkspaceTabPersistenceKey({
+    serverId: input.serverId,
+    workspaceId: threadWorkspaceId,
+  });
+  if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
+  const draftId = await input.prepareForkDraft();
+  useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
+  const target = buildForkDraftTabTarget(input.draftSetup, draftId);
+  // Compact layouts have no side pane, and a main chat shown as a split from another workspace
+  // cannot host a draft of its own workspace here: open the thread in that workspace instead.
+  const shownElsewhere = Boolean(
+    request.layoutWorkspaceId && request.layoutWorkspaceId !== threadWorkspaceId,
+  );
+  if (input.isCompact || shownElsewhere) {
+    navigateToWorkspace({ serverId: input.serverId, workspaceId: threadWorkspaceId, target });
+    return;
+  }
+  openWorkspaceTargetBeside({ workspaceKey, target });
+}
+
+/**
  * Shared fork driver behind both turn-footer fork affordances: the completed
  * turn's footer (which supplies a boundary pinned to that turn) and the
  * in-flight turn's footer next to the progress loader (which omits the boundary
@@ -131,8 +185,10 @@ export function useForkAgent(
   const router = useRouter();
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const supportsAgentForkContext = useHostFeature(serverId, "agentForkContext") && !readOnly;
+  const isCompact = useIsCompactFormFactor();
 
-  return useStableEvent(async ({ agentId, agent, workspaceId, target, boundary }) => {
+  return useStableEvent(async (request: ForkAgentRequest) => {
+    const { agentId, agent, workspaceId, target, boundary } = request;
     try {
       if (!supportsAgentForkContext) {
         toast?.error(t("message.actions.forkUnavailable"));
@@ -158,6 +214,19 @@ export function useForkAgent(
         });
         return draftId;
       };
+
+      if (target === "thread") {
+        await openThreadDraft({
+          serverId,
+          request,
+          draftSetup,
+          prepareForkDraft,
+          missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
+          failedMessage: t("message.actions.forkFailed"),
+          isCompact,
+        });
+        return;
+      }
 
       if (target === "tab") {
         if (!workspaceId) {

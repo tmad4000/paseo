@@ -28,4 +28,19 @@ describe("toast diagnostics", () => {
       }),
     ]);
   });
+
+  it("shows a dropped connection as a plain warning but records the raw error", () => {
+    const recorded: Array<{ source: string; severity?: string; message: unknown }> = [];
+    uninstallSink = setClientDiagnosticSink((input) => recorded.push(input));
+    const { result } = renderHook(() => useToastHost());
+    act(() => result.current.api.error("Transport not connected (status: reconnecting)"));
+    expect(result.current.toast?.variant).toBe("warning");
+    expect(result.current.toast?.nativeMessage).not.toContain("Transport");
+    expect(recorded).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        message: "Transport not connected (status: reconnecting)",
+      }),
+    ]);
+  });
 });

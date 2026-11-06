@@ -1,0 +1,33 @@
+
+ RUN  v4.1.7 /Volumes/External_SSD/agent-worktrees/paseo/3jk99a1h/paseo-sharing-phase1
+
+ ❯ packages/server/src/server/sharing/share-listener.test.ts (10 tests | 1 failed) 36ms
+     × serves HEAD with GET's status, headers and byte length but no body 35ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/src/server/sharing/share-listener.test.ts > share listener > serves HEAD with GET's status, headers and byte length but no body
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ packages/server/src/server/sharing/share-listener.test.ts:55:27
+     53|       const bytes = await get.arrayBuffer();
+     54|       const head = await fetch(`${url}${extension}`, { method: "HEAD" …
+     55|       expect(head.status).toBe(get.status);
+       |                           ^
+     56|       for (const name of ["content-type", "content-length", "cache-con…
+     57|         expect(head.headers.get(name)).toBe(get.headers.get(name));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (10)
+   Start at  23:19:07
+   Duration  334ms (transform 76ms, setup 0ms, import 231ms, tests 36ms, environment 0ms)
+

@@ -101,6 +101,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
 /**
  * Project mode keeps its project headers and groups nothing; status mode groups the rows; one-list
  * mode puts every row in a single headerless group, in the sort order the entries arrived in.
+ * Sessions mode has no workspace groups at all.
  */
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
@@ -109,6 +110,9 @@ function buildWorkspaceGroups(
 ): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
+      return [];
+    // Sessions mode lists chats, not workspaces; the model builds those rows itself.
+    case "sessions":
       return [];
     case "list":
       return oneListWorkspaceGroups(

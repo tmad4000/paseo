@@ -5928,6 +5928,7 @@ test("session Find exposes persisted pending recording evidence only in its exac
         searchedCount: 1,
         totalCount: 1,
         error: null,
+        routing: { provider: "codex", fallback: false, elapsedMs: expect.any(Number) },
         results: [
           {
             agentId: record.id,

@@ -7,6 +7,10 @@ import type {
   QueuedComposerAttachment,
 } from "@getpaseo/protocol/messages";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
+import {
+  parseUserMessageSender,
+  type UserMessageSender,
+} from "@getpaseo/protocol/user-message-sender";
 
 import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentPromptInput } from "../agent/agent-sdk-types.js";
@@ -57,6 +61,38 @@ export interface AgentDeliveryInspection {
 
 const MAX_DEVICE_OUTBOX_REPORTS = 64;
 const MAX_INSPECTED_RECEIPTS = 50;
+/**
+ * How long an edit hold lasts without a refresh. Editing clients refresh well
+ * inside this window; a device that vanishes mid-edit only stalls the queue
+ * this long.
+ */
+export const QUEUE_EDIT_HOLD_TTL_MS = 60_000;
+
+/**
+ * What Restart agent did about a head item whose delivery receipt was stuck in
+ * `pending` (its sender is gone, so the queue would never drain it again).
+ * `delivered`: the agent's timeline already holds the message, so it was
+ * dropped from the queue and recorded as drained. `resend`: no trace of it, so
+ * the receipt was cleared and the drain sends it again — a possible duplicate
+ * is preferred over a lost message.
+ */
+export interface StalledHeadRecovery {
+  itemId: string;
+  outcome: "delivered" | "resend";
+}
+
+export interface AgentQueueClearResult {
+  queue: AgentQueueSnapshot;
+  removed: number;
+  /** Items that could not be removed because they were already being submitted. */
+  kept: number;
+}
+
+interface EditHold {
+  itemId: string;
+  expiresAt: number;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export interface EnqueueAgentMessageInput {
   agentId: string;
@@ -65,6 +101,8 @@ export interface EnqueueAgentMessageInput {
   validateDestination?: () => Promise<void>;
   origin?: "voice";
   voiceOwner?: string;
+  /** Who queued it; recorded on the turn when it is delivered. */
+  sender?: UserMessageSender;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: AgentAttachment[];
   composerAttachments?: QueuedComposerAttachment[];
@@ -75,6 +113,12 @@ export interface SendQueuedPromptInput {
   prompt: AgentPromptInput;
   messageId: string;
   activeTurnBehavior?: "steer_only";
+  sender?: UserMessageSender;
+}
+
+function queuedItemSender(item: { sender?: string }): { sender?: UserMessageSender } {
+  const sender = parseUserMessageSender(item.sender);
+  return sender ? { sender } : {};
 }
 
 export interface AgentQueueServiceOptions {
@@ -112,6 +156,8 @@ export class AgentQueueService {
   private readonly sendNowClaims = new Set<string>();
   private unsubscribeAgentEvents: (() => void) | null = null;
   private readonly outboxReports = new Map<string, DeviceOutboxReport>();
+  /** agentId -> `${itemId}\0${owner}` -> hold. Memory only, like the drain itself. */
+  private readonly editHolds = new Map<string, Map<string, EditHold>>();
 
   constructor(options: AgentQueueServiceOptions) {
     this.store = options.store;
@@ -131,6 +177,7 @@ export class AgentQueueService {
           blockPendingPermissions: true,
           awaitRunStart: true,
           ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
+          ...(input.sender ? { runOptions: { sender: input.sender } } : {}),
           logger: this.logger,
         });
       });
@@ -170,6 +217,10 @@ export class AgentQueueService {
     this.listeners.clear();
     this.lastLifecycle.clear();
     this.lastPermissionCount.clear();
+    for (const holds of this.editHolds.values()) {
+      for (const hold of holds.values()) clearTimeout(hold.timer);
+    }
+    this.editHolds.clear();
   }
 
   subscribeToMutations(listener: AgentQueueMutationListener): () => void {
@@ -254,6 +305,7 @@ export class AgentQueueService {
       id: input.itemId,
       text,
       ...(input.origin ? { origin: input.origin, voiceOwner: input.voiceOwner } : {}),
+      ...(input.sender ? { sender: input.sender } : {}),
       createdAt: new Date().toISOString(),
       ...(attachments.length ? { attachments } : {}),
       ...(input.composerAttachments?.length
@@ -372,6 +424,74 @@ export class AgentQueueService {
     return toAgentQueueSnapshot(result.queue);
   }
 
+  /**
+   * Keeps a queued message from draining while someone is editing it. The hold
+   * pauses the queue at that message, so later messages stay in order behind
+   * it. Holding an item that is already being sent fails: the edit came too late.
+   * An explicit send-now still wins over a hold.
+   */
+  async setEditHold(
+    agentId: string,
+    itemId: string,
+    owner: string,
+    held: boolean,
+  ): Promise<AgentQueueSnapshot> {
+    const holdKey = `${itemId}\0${owner}`;
+    if (!held) {
+      this.releaseEditHold(agentId, holdKey);
+      this.scheduleDrain(agentId);
+      return this.list(agentId);
+    }
+    // Under the store lock, so a drain either claimed the item first or sees the hold.
+    await this.store.mutate(agentId, (current) => {
+      if (!current.items.some((item) => item.id === itemId)) {
+        throw new Error("This message is no longer queued.");
+      }
+      if (this.sendNowClaims.has(`${agentId}\0${itemId}`)) {
+        throw new Error("This queued message is already being sent.");
+      }
+      let holds = this.editHolds.get(agentId);
+      if (!holds) {
+        holds = new Map();
+        this.editHolds.set(agentId, holds);
+      }
+      const previous = holds.get(holdKey);
+      if (previous) clearTimeout(previous.timer);
+      const timer = setTimeout(() => {
+        if (this.editHolds.get(agentId)?.get(holdKey)?.timer !== timer) return;
+        this.releaseEditHold(agentId, holdKey);
+        this.scheduleDrain(agentId);
+      }, QUEUE_EDIT_HOLD_TTL_MS);
+      timer.unref?.();
+      holds.set(holdKey, {
+        itemId,
+        expiresAt: Date.now() + QUEUE_EDIT_HOLD_TTL_MS,
+        timer,
+      });
+      return current;
+    });
+    return this.list(agentId);
+  }
+
+  private releaseEditHold(agentId: string, holdKey: string): void {
+    const holds = this.editHolds.get(agentId);
+    const hold = holds?.get(holdKey);
+    if (!holds || !hold) return;
+    clearTimeout(hold.timer);
+    holds.delete(holdKey);
+    if (holds.size === 0) this.editHolds.delete(agentId);
+  }
+
+  private isEditHeld(agentId: string, itemId: string): boolean {
+    const holds = this.editHolds.get(agentId);
+    if (!holds) return false;
+    const now = Date.now();
+    for (const hold of holds.values()) {
+      if (hold.itemId === itemId && hold.expiresAt > now) return true;
+    }
+    return false;
+  }
+
   /** Sends authoritative stored content without racing an edit, drain, or second device. */
   async sendNow(agentId: string, itemId: string): Promise<AgentQueueSnapshot> {
     const key = `${agentId}\0${itemId}`;
@@ -425,6 +545,7 @@ export class AgentQueueService {
             prompt,
             messageId: itemId,
             activeTurnBehavior: "steer_only",
+            ...queuedItemSender(item),
           }).then(() => undefined),
       });
     }
@@ -467,6 +588,7 @@ export class AgentQueueService {
         prompt: buildAgentPrompt(item.text, item.images, item.attachments as AgentAttachment[]),
         messageId: item.id,
         activeTurnBehavior: "steer_only",
+        ...queuedItemSender(item),
       });
     } catch (error) {
       const restored = await this.store.mutate(agentId, (current) => {
@@ -521,8 +643,86 @@ export class AgentQueueService {
 
   async deleteForAgent(agentId: string): Promise<void> {
     await this.store.delete(agentId);
+    for (const hold of this.editHolds.get(agentId)?.values() ?? []) clearTimeout(hold.timer);
+    this.editHolds.delete(agentId);
     this.lastLifecycle.delete(agentId);
     this.lastPermissionCount.delete(agentId);
+  }
+
+  /**
+   * Explicit "deliver now": drains the queue head if the agent is free, without
+   * waiting for a running → idle edge. Nothing drains at daemon startup, and a
+   * queue left behind by a restart otherwise waits forever on an idle agent.
+   * Resolves once this drain attempt settles; later items keep draining on the
+   * normal idle edges, one per turn, in order.
+   */
+  async drainNow(agentId: string): Promise<AgentQueueSnapshot> {
+    this.scheduleDrain(agentId);
+    await this.drainTails.get(agentId);
+    return this.list(agentId);
+  }
+
+  /**
+   * Clears a stuck head receipt so the queue can move again. Only Restart agent
+   * calls this: it is the user's explicit statement that the previous dispatch
+   * is dead. `isDelivered` checks the agent's timeline for the message id.
+   * Returns null when the head was not stalled (no receipt, or still sending).
+   */
+  async recoverStalledHead(
+    agentId: string,
+    isDelivered: (item: StoredQueuedMessage) => boolean,
+  ): Promise<StalledHeadRecovery | null> {
+    const receipts = this.receipts;
+    if (!receipts) return null;
+    const head = (await this.store.get(agentId)).items[0];
+    if (!head) return null;
+    if (this.sendNowClaims.has(`${agentId}\0${head.id}`)) return null;
+    if ((await receipts.get(agentId, head.id)) !== "pending") return null;
+
+    const delivered = isDelivered(head);
+    const settled = await receipts.settleStalePending(
+      agentId,
+      head.id,
+      delivered ? "completed" : "absent",
+    );
+    if (!settled) return null;
+    if (delivered) {
+      const drained = await this.store.mutate(agentId, (current) =>
+        current.items.some((item) => item.id === head.id)
+          ? {
+              ...current,
+              items: current.items.filter((item) => item.id !== head.id),
+              drainedIds: recordDrainedId(current.drainedIds, head.id),
+            }
+          : current,
+      );
+      this.publish(drained);
+    }
+    this.logger.info(
+      { agentId, itemId: head.id, outcome: delivered ? "delivered" : "resend" },
+      "Recovered stalled queue head",
+    );
+    return { itemId: head.id, outcome: delivered ? "delivered" : "resend" };
+  }
+
+  /** Removes every queued item through the normal remove path; claimed items stay. */
+  async clear(agentId: string): Promise<AgentQueueClearResult> {
+    const items = (await this.store.get(agentId)).items;
+    let removed = 0;
+    let kept = 0;
+    for (const item of items) {
+      try {
+        await this.remove(agentId, item.id);
+        removed++;
+      } catch (error) {
+        kept++;
+        this.logger.info(
+          { err: error, agentId, itemId: item.id },
+          "Queue clear kept an item that is being submitted",
+        );
+      }
+    }
+    return { queue: await this.list(agentId), removed, kept };
   }
 
   private handleAgentState(agentId: string, lifecycle: AgentLifecycleStatus): void {
@@ -594,6 +794,9 @@ export class AgentQueueService {
         !this.agentManager.hasInFlightRun?.(agentId) &&
         !this.agentManager.getPendingPermissions?.(agentId).length
       ) {
+        if (this.isEditHeld(agentId, queue.items[0]!.id)) {
+          throw new Error("Queued input is waiting while someone edits it");
+        }
         // An uncertain or failed dispatch is still queued; it is not completion.
         throw new Error(
           "Queued input has not been confirmed submitted; inspect its delivery outcome",
@@ -620,6 +823,8 @@ export class AgentQueueService {
       return;
     }
     if (this.sendNowClaims.has(`${agentId}\0${next.id}`)) return;
+    // Someone is editing the head; its hold release or expiry drains again.
+    if (this.isEditHeld(agentId, next.id)) return;
 
     if (this.receipts) {
       await this.drainWithReceipt(agentId, next, this.receipts);
@@ -630,7 +835,7 @@ export class AgentQueueService {
     // Remembering the drained id makes a late enqueue retry of this item a no-op.
     let claimedItem: StoredQueuedMessage | undefined;
     const claimed = await this.store.mutate(agentId, (current) => {
-      if (current.items[0]?.id !== next.id) return current;
+      if (current.items[0]?.id !== next.id || this.isEditHeld(agentId, next.id)) return current;
       claimedItem = current.items[0];
       return {
         ...current,
@@ -653,6 +858,7 @@ export class AgentQueueService {
           sendItem.attachments as AgentAttachment[],
         ),
         messageId: sendItem.id,
+        ...queuedItemSender(sendItem),
       });
     } catch (error) {
       this.logger.warn(
@@ -677,7 +883,12 @@ export class AgentQueueService {
     const key = `${agentId}\0${next.id}`;
     let claimedItem: StoredQueuedMessage | undefined;
     await this.store.mutate(agentId, (current) => {
-      if (current.items[0]?.id !== next.id || this.sendNowClaims.has(key)) return current;
+      if (
+        current.items[0]?.id !== next.id ||
+        this.sendNowClaims.has(key) ||
+        this.isEditHeld(agentId, next.id)
+      )
+        return current;
       claimedItem = current.items[0];
       this.sendNowClaims.add(key);
       return current;
@@ -701,7 +912,12 @@ export class AgentQueueService {
               : {}),
             request,
             send: () =>
-              this.sendPrompt({ agentId, prompt, messageId: next.id }).then(() => undefined),
+              this.sendPrompt({
+                agentId,
+                prompt,
+                messageId: next.id,
+                ...queuedItemSender(claimedItem!),
+              }).then(() => undefined),
           });
         } catch (error) {
           this.logger.warn(

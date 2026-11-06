@@ -78,6 +78,14 @@ Permission requests are notification checkpoints, not the end of that subscripti
 The permission notification includes the normalized request plus the child and request IDs, so the caller can inspect it and respond without fetching agent status.
 A watched child that closes before its finish event also notifies the caller so delegated work cannot disappear silently during archive or workspace teardown.
 
+### Who sent it
+
+Every `user_message` timeline item carries an optional `sender`, and every agent records `createdBy`, in one vocabulary (`packages/protocol/src/user-message-sender.ts`): `human`, `schedule`, or `agent:<id>`. Client sends, voice and the client queue record `human`. `send_agent_prompt`, agent-scoped `create_agent` (detached included) and child finish notifications record the agent. Schedules, heartbeats and hub executions record `schedule`. A queued item keeps its sender until delivery. A provider echo of a prompt Paseo started inherits that turn's sender.
+
+`createdBy` is independent of `paseo.parent-agent-id`: detach removes the parent label, `createdBy` stays. Top-level MCP callers have no agent id and record no sender, which never counts as human. `messageActivity.lastHumanMessageAt` advances only on `human` turns; it drives the "Your last message" sort ([sidebar sorting](sidebar-sorting.md)) and the [Mine filter](sidebar-filter.md#mine). Records written before this field existed resolve on load: no `createdBy` means `human` unless the agent has a parent label, and a human-created agent's `lastUserMessageAt` seeds its human time. Provider history carries no sender, so imported turns count as human only for human-created agents.
+
+The CLI `paseo send` arrives over the client WebSocket like any app, so it records `human` even when an agent runs it.
+
 ## Provider-managed child agents
 
 Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.
@@ -187,7 +195,7 @@ Running provider-native subagents contribute `running` to the workspace owned by
 
 A finished workspace can be marked unread after it has been reviewed. The daemon restores
 `finished` attention on its newest eligible workspace-root agent without sending a new completion
-notification. Opening the workspace clears that attention through the normal focus flow.
+notification. It stays unread until the user reads it again (see [Reading](#reading)).
 
 Attention is set by the agent finishing or failing and cleared by the client's
 `workspace.clear_attention`, which fires when the user reads the chat. Loading an agent's runtime is
@@ -196,9 +204,38 @@ untouched. Forging either makes a background resume look like the user read a wo
 agent worked in it just now, which rewrites the sidebar timestamp permanently — persisted
 `updatedAt` is what workspace `statusEnteredAt` is re-derived from on the next daemon start.
 
+### Reading
+
+Reading is explicit by default. Opening, focusing or leaving a chat leaves it unread; the user
+reads it with the check on its sidebar row or tab (also "Mark as read" in their menus, inline
+Review session menus and the phone tab switcher), or by sending it a prompt. Settings → Chat → "Mark chats read when opened"
+restores the old focus-driven reads; the choice is per device (`AppSettings.markReadOnOpen`).
+
+- Reading clears `finished` and `error` attention. A chat waiting on a permission is answered,
+  not read: it offers no read check, a workspace read leaves its tab alone, and the host keeps its
+  attention.
+- Every read the app sends is `clear_agent_attention` with `read: { seenAttentionAt }`, the
+  attention time this device showed. The host then skips agents with permission attention or
+  pending permissions, and attention raised after `seenAttentionAt`, so a permission or a new
+  finish that races the click stays unread. Older hosts ignore `read` and clear unconditionally;
+  the app's own permission guard still applies there. The sidebar's workspace read
+  (`workspace.clear_attention`) filters permission on the host but has no seen-time bound.
+- A tab's dot shows host attention that is still readable, plus activity this strip saw land off
+  screen. Host attention is persisted, so the dot survives reloads, other devices and strips that
+  were not mounted. The app marks a tab read locally only after the host clear succeeds; a failed
+  read leaves both the dot and the sidebar unread. Local read marks record the activity time read
+  through (`stores/agent-read-marks-store.ts`), and newer activity raises the dot again.
+- Each check is labelled with what it reads ("Mark ‹name› as read"). The sidebar check appears on
+  hover, on keyboard focus within the row, and always on touch, where it is a 44pt target. On web
+  it has no button role because the row is already a `<button>`, the same as the row's kebab.
+- The policy lives in `shouldClearAgentAttention` (`packages/app/src/utils/agent-attention.ts`),
+  `reconcileTabActivity` (`packages/app/src/screens/workspace/workspace-tab-activity.ts`),
+  `workspace/mark-read.ts`, and the host's `isReadClearable`
+  (`packages/server/src/server/agent/agent-manager.ts`).
+
 ### Manual input and review status
 
-The Status submenu on agent tabs and workspace rows exposes Needs input (manual), Ready for
+The Status submenu on agent tabs, inline Review sessions and workspace rows exposes Needs input (manual), Ready for
 review, In review, Changes requested, Approved, and Clear manual status. Workspace actions show
 the session count and update all non-archived sessions owned by that workspace, including managed
 children. Same-directory sibling workspaces are unaffected. Tab actions target exactly that
@@ -216,6 +253,8 @@ to attention when idle, while real running/error/permission signals keep their n
 Approved removes review attention but leaves ordinary unread activity visible. A manually flagged
 child also contributes to its owning workspace so marking a visible child tab cannot hide the
 request inside a parent. Tab tooltips include the marker, and the submenu checks the saved value.
+Inline Review rows show the marker and Unread separately, and expose the same actions through
+right-click/long-press or a visible menu button. See [review navigation](sidebar-sorting.md#reviewing-sessions).
 
 The app gates these controls on `server_info.features.manualAgentStatus`; older hosts keep their
 existing read/unread actions and show an update hint only inside the new submenu. Label deletions
@@ -414,6 +453,8 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach   |
 | `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label     |
 | `labels["paseo.auto-open-agent-tab"]`        | `"true"?`     | Cross-client hint, stamped by `paseo run`, to auto-open the agent as a workspace tab |
+| `createdBy`                                  | `string?`     | `human`, `schedule` or `agent:<id>`; absent on records that predate it               |
+| `messageActivity.lastHumanMessageAt`         | `string?`     | Last turn a person sent; absent on records that predate it                           |
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                             |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.

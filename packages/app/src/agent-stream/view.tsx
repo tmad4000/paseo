@@ -3,6 +3,7 @@ import type { MessagePinHandler } from "@/companion-stream/message-pin-operation
 import { useMessagePin } from "@/companion-stream/use-message-pin";
 import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
+import { MessageReplyScope } from "@/components/reply/composer-quote";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   forwardRef,
@@ -56,6 +57,7 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
+import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useSendOutboxStore } from "@/stores/send-outbox-store";
 import { resolveChatMessageDeliveryState } from "@/composer/delivery-state";
 import { promptDirectSendAttention } from "@/composer/delivery-actions";
@@ -76,6 +78,8 @@ import { resolveStreamRenderStrategy } from "./strategy-resolver";
 import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strategy";
 import { ChatOutlineRail } from "@/agent-stream/chat-outline/rail";
 import { useChatOutline } from "@/agent-stream/chat-outline/use-chat-outline";
+import { ChatTrackedAnswers, useTrackQuestion } from "@/companion-stream/use-tracked-answers";
+import { useTimelineAnchorJump } from "./use-timeline-anchor-jump";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import {
@@ -106,6 +110,7 @@ import {
 } from "@/workspace/file-open";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useThreadsHost } from "@/threads/context";
 import { useForkAgent } from "@/hooks/use-fork-agent";
 import { isWeb } from "@/constants/platform";
 import type { Theme } from "@/styles/theme";
@@ -118,16 +123,20 @@ import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins
 function ChatSurfaceProviders({
   serverId,
   agentId,
+  readOnly,
   children,
 }: {
   serverId: string;
   agentId: string;
+  readOnly: boolean;
   children: ReactNode;
 }) {
   return (
     <ToolCallSheetProvider>
       <StreamTagScopeProvider serverId={serverId} agentId={agentId}>
-        {children}
+        <MessageReplyScope agentId={agentId} readOnly={readOnly}>
+          {children}
+        </MessageReplyScope>
       </StreamTagScopeProvider>
     </ToolCallSheetProvider>
   );
@@ -295,6 +304,8 @@ function renderLiveHeadStreamItem(input: {
 export interface AgentStreamViewHandle {
   scrollToBottom(reason?: BottomAnchorLocalRequest["reason"]): void;
   prepareForViewportChange(): void;
+  /** Scroll to a loaded timeline row by id, revealing older loaded history first if needed. */
+  jumpToStreamItem(itemId: string): void;
 }
 
 export interface AgentStreamViewProps {
@@ -477,20 +488,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const handlePin = useMessagePin(resolvedServerId, agentId, client, readOnly);
 
-    const handleQAndA = useCallback(
-      (text: string, messageId?: string) => {
-        if (!agentId || !client) return;
-        client
-          .updateCompanionEntry({
-            agentId,
-            action: "add_q_and_a",
-            text,
-            sourceId: messageId ? `msg:${messageId}` : undefined,
-          })
-          .catch(() => {});
-      },
-      [agentId, client],
-    );
+    const handleQAndA = useTrackQuestion(resolvedServerId, agentId, client, toast);
 
     const handleInlinePathPress = useStableEvent(
       (target: InlinePathTarget, disposition: OpenFileDisposition) => {
@@ -556,6 +554,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       handleInlinePathPress({ raw: filePath, path: filePath }, "preferred");
     });
 
+    const threadsHost = useThreadsHost();
     const handleForkAssistantTurn: AssistantTurnForkHandler = useStableEvent(
       async ({ target, boundary }) => {
         await forkAgent({
@@ -564,6 +563,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           workspaceId: context.workspaceId,
           target,
           boundary,
+          layoutWorkspaceId: threadsHost?.layoutWorkspaceId,
         });
       },
     );
@@ -684,6 +684,46 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       visibleMessageIds,
       revealLoadedMessage: revealLoadedHistory,
     });
+    const handleAnchorUnavailable = useCallback(() => {
+      toast?.error(t("agentPanel.stream.answers.jumpUnavailable"));
+    }, [t, toast]);
+    const timelineJump = useTimelineAnchorJump({
+      agentId,
+      serverId: resolvedServerId,
+      timelineEpoch,
+      tail: effectiveStreamItems,
+      head: effectiveStreamHead,
+      viewportRef,
+      visibleMessageIds,
+      revealLoadedMessage: revealLoadedHistory,
+      onUnavailable: handleAnchorUnavailable,
+    });
+
+    // The handle stays stable; the jump it forwards to changes with every loaded row.
+    const timelineJumpRef = useRef(timelineJump);
+    timelineJumpRef.current = timelineJump;
+
+    // Show in chat from a Stream card, the global Stream or the answers pane: applied once the
+    // chat's history is ready, after the switch to Chat has painted.
+    const chatJump = useAgentViewStore(
+      (state) => state.chatJump[`${resolvedServerId}:${agentId}`] ?? null,
+    );
+    const clearChatJump = useAgentViewStore((state) => state.clearChatJump);
+    useEffect(() => {
+      if (!chatJump || !isAuthoritativeHistoryReady || timelineEpoch === null) return;
+      clearChatJump(resolvedServerId, agentId, chatJump.requestId);
+      // Not cancelled on cleanup: clearing the request re-runs this effect before the frame.
+      requestAnimationFrame(() => {
+        timelineJumpRef.current.jumpToTarget(chatJump.target);
+      });
+    }, [
+      agentId,
+      chatJump,
+      clearChatJump,
+      isAuthoritativeHistoryReady,
+      resolvedServerId,
+      timelineEpoch,
+    ]);
 
     useImperativeHandle(
       ref,
@@ -693,6 +733,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         },
         prepareForViewportChange() {
           viewportRef.current?.prepareForViewportChange();
+        },
+        jumpToStreamItem(itemId: string) {
+          timelineJumpRef.current.jumpToItem(itemId);
         },
       }),
       [],
@@ -786,6 +829,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 onDeliveryAttentionPress={handleDeliveryAttention}
                 onPin={handlePin}
                 onQAndA={handleQAndA}
+                timelineCursor={item.timelineCursor}
               />
             )}
           </ChatFindExpansion>
@@ -1208,7 +1252,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         revealLoadedMessage={revealLoadedHistory}
         visibleMessageIds={visibleMessageIds}
       >
-        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId}>
+        <ChatSurfaceProviders serverId={resolvedServerId} agentId={agentId} readOnly={readOnly}>
           <AssistantSelectionCopySurface style={stylesheet.container}>
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({
@@ -1238,6 +1282,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               prompts={chatOutline.prompts}
               activePrompt={chatOutline.activePrompt}
               onJumpToPrompt={chatOutline.jumpToPrompt}
+            />
+            <ChatTrackedAnswers
+              serverId={resolvedServerId}
+              agentId={agentId}
+              client={client}
+              readOnly={readOnly}
+              jump={timelineJump}
             />
             {(!isNearBottom || isTimelineDetached) && (
               <View style={scrollToBottomContainerStyle} pointerEvents="box-none">

@@ -4,12 +4,14 @@
 export {
   orderProjectsWithPins,
   resolveDefaultProjectPlacements,
+  resolveProjectPickerSectionStarts,
   resolveDefaultProjectWorkspaceId,
   resolveProjectPinState,
   selectHostDefaultProject,
   splitPinnedProjects,
   type DefaultProjectPlacement,
   type HostProjectRef,
+  type ProjectPickerSection,
   type ProjectPinState,
 } from "./model";
 export {
@@ -28,3 +30,9 @@ export {
   useProjectPinMenuItems,
   type ProjectPinMenuItem,
 } from "./project-pin-ui";
+export {
+  ProjectPickerPinToggle,
+  ProjectPickerSectionHeader,
+  useProjectPickerPinOrdering,
+  type ProjectPickerPinOrdering,
+} from "./project-picker-ui";

@@ -61,6 +61,42 @@ describe("navigation focus history", () => {
     expect(history.getSnapshot().canGoBack).toBe(false);
   });
 
+  it("does not add duplicate observations of the same empty tab or clear Forward", () => {
+    const history = createNavigationFocusHistory();
+    const empty: WorkspaceFocusLocation = {
+      ...workspace("workspace-a", "empty-a"),
+      target: { kind: "new_tab" },
+    };
+    const draft: WorkspaceFocusLocation = {
+      ...workspace("workspace-a", "draft-a"),
+      target: { kind: "draft", draftId: "draft-a" },
+    };
+    history.record(empty);
+    history.record({ ...empty });
+    expect(history.getSnapshot().backEntries).toEqual([]);
+
+    history.record(draft);
+    expect(history.back()).toEqual(empty);
+    history.record(empty);
+    history.record({ ...empty });
+    expect(history.getSnapshot().forwardEntries).toEqual([draft]);
+    expect(history.forward()).toEqual(draft);
+  });
+
+  it("keeps distinct empty tab instances separate in history", () => {
+    const history = createNavigationFocusHistory();
+    const first: WorkspaceFocusLocation = {
+      ...workspace("workspace-a", "empty-a"),
+      target: { kind: "new_tab" },
+    };
+    const second: WorkspaceFocusLocation = { ...first, tabId: "empty-b" };
+    history.record(first);
+    history.record(second);
+    expect(history.back()).toEqual(first);
+    history.record(first);
+    expect(history.forward()).toEqual(second);
+  });
+
   it("ignores intermediate observations while crossing workspace routes", () => {
     const history = createNavigationFocusHistory();
     const first = workspace("workspace-a", "agent-a");

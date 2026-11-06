@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import { needsUserInput, type CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { i18n } from "@/i18n/i18next";
 
 vi.mock("react-native", () => ({
@@ -22,8 +22,87 @@ vi.mock("react-native", () => ({
       {children}
     </span>
   ),
+  Pressable: ({
+    children,
+    onPress,
+    testID,
+    accessibilityLabel,
+  }: {
+    children?: React.ReactNode;
+    onPress?: () => void;
+    testID?: string;
+    accessibilityLabel?: string;
+  }) => (
+    <button type="button" data-testid={testID} aria-label={accessibilityLabel} onClick={onPress}>
+      {children}
+    </button>
+  ),
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: () => ({}) } }));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: () => null },
+  cancelAnimation: () => {},
+  useAnimatedStyle: () => ({}),
+  useReducedMotion: () => false,
+  useSharedValue: (value: number) => ({ value }),
+  withRepeat: (value: number) => value,
+  withTiming: (value: number) => value,
+}));
+vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
+vi.mock("@/hooks/use-compact-time-ago", () => ({
+  useCompactTimeAgo: (date: Date | null) => (date ? "12m" : ""),
+}));
+const pulseFixture = vi.hoisted(() => ({
+  pulse: null as null | {
+    kind: string;
+    needsAttention: boolean;
+    since: number | null;
+    title: string | null;
+    error: string | null;
+  },
+  targets: [] as unknown[],
+}));
+vi.mock("./use-delegation-pulse", () => ({
+  useDelegationPulse: (target: unknown) => {
+    pulseFixture.targets.push(target);
+    return target ? pulseFixture.pulse : null;
+  },
+}));
+vi.mock("react-native-unistyles", () => ({
+  StyleSheet: { create: () => ({}) },
+  withUnistyles: (component: unknown) => component,
+}));
+vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" role="menuitem" onClick={onSelect} disabled={disabled}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("@/components/ui/text-input", async () => {
+  const { forwardRef, useImperativeHandle } = await import("react");
+  return {
+    EditingTextInput: forwardRef(function MockInput(
+      { onChangeText, testID }: { onChangeText: (text: string) => void; testID?: string },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ replaceText: () => undefined }));
+      // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop -- test double
+      return <input data-testid={testID} onChange={(event) => onChangeText(event.target.value)} />;
+    }),
+  };
+});
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: i18n.t.bind(i18n) }),
@@ -50,6 +129,7 @@ vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
 vi.mock("@/utils/time", () => ({ formatMessageTimestamp: () => "Oct 24, 2:10 PM" }));
 
 import { EntryCard } from "./entry-card";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 
 const ask: CompanionEntry = {
   id: "ask:ship",
@@ -83,6 +163,32 @@ const quote: CompanionEntry = {
   truncated: false,
 };
 
+const humanRequest: CompanionEntry = {
+  id: "question:needed",
+  kind: "question",
+  status: "open",
+  timestamp: ask.timestamp,
+  text: "Choose a date",
+  truncated: false,
+  inputRequest: { kind: "decision", recipient: "user" },
+};
+
+const permissionRequest: CompanionEntry = {
+  id: "permission:p",
+  kind: "permission",
+  requestId: "p",
+  requestKind: "tool",
+  status: "pending",
+  timestamp: ask.timestamp,
+  text: "Run deploy",
+  truncated: false,
+};
+
+const deferredRequest: CompanionEntry = { ...humanRequest, deferredAt: "2026-11-01T00:00:00Z" };
+
+const sourceAnchor = { epoch: "e1", startSeq: 7, endSeq: 7 };
+const anchored: CompanionEntry = { ...ask, sourceAnchor };
+
 function renderCard(entry: CompanionEntry) {
   return render(
     <EntryCard
@@ -106,6 +212,68 @@ describe("EntryCard", () => {
     cleanup();
     vi.unstubAllGlobals();
   });
+
+  it("labels a concrete decision and opens its task source on the named host", () => {
+    const view = renderCard({
+      id: "question:choice",
+      kind: "question",
+      status: "open",
+      timestamp: ask.timestamp,
+      text: "Choose the publishing date",
+      truncated: false,
+      inputRequest: {
+        kind: "decision",
+        recipient: "user",
+        subtaskId: "publish",
+        sourceMessageId: "message-3",
+        task: { serverId: "m5", agentId: "owner", entryId: "ask:release" },
+      },
+    });
+    expect(view.getByText("Decision · Needs you").textContent).toBe("Decision · Needs you");
+    expect(view.getByText("Subtask: publish").textContent).toBe("Subtask: publish");
+    fireEvent.click(view.getByText("Open task source"));
+    expect(navigateToAgent).toHaveBeenLastCalledWith({ serverId: "m5", agentId: "owner" });
+  });
+
+  it("marks a human request seen without resolving it; Read only expands and Done resolves explicitly", () => {
+    const entry = humanRequest;
+    const onUpdateStatus = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={entry}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(view.queryByRole("button", { name: "Reviewed" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Read" }));
+    expect(onUpdateStatus).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Seen (still needed)" }));
+    expect(onUpdateStatus).toHaveBeenLastCalledWith(entry.id, "reviewed");
+    expect(needsUserInput({ ...entry, status: "reviewed" })).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "Done" }));
+    expect(onUpdateStatus).toHaveBeenLastCalledWith(entry.id, "done");
+    expect(needsUserInput({ ...entry, status: "done" })).toBe(false);
+  });
+
+  it.each(["agent", "external"] as const)(
+    "keeps Reviewed for requests addressed to %s",
+    (recipient) => {
+      const view = renderCard({
+        id: "question:other",
+        kind: "question",
+        status: "open",
+        timestamp: ask.timestamp,
+        text: "Choose a date",
+        truncated: false,
+        inputRequest: { kind: "decision", recipient, recipientId: "recipient-1" },
+      });
+      expect(view.getByRole("button", { name: "Reviewed" })).toBeTruthy();
+      expect(view.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    },
+  );
 
   it("puts kind, state and time in one eyebrow and the text first line as headline", () => {
     const view = renderCard(ask);
@@ -162,5 +330,222 @@ describe("EntryCard", () => {
     expect(view.getByText("Remaining: Waiting for review")).toBeTruthy();
     expect(view.getByText("Evidence so far: Unit tests pass")).toBeTruthy();
     expect(view.getByText("Done").closest("button")?.disabled).toBe(true);
+  });
+
+  it("offers Show in chat with the entry's place, keeping Reply for pending asks", () => {
+    const onShowInChat = vi.fn();
+    const onReplyInChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={anchored}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={onReplyInChat}
+        onShowInChat={onShowInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Show in chat" }));
+    expect(onShowInChat).toHaveBeenLastCalledWith({ anchor: sourceAnchor });
+    fireEvent.click(view.getByRole("button", { name: "Reply in chat" }));
+    expect(onReplyInChat).toHaveBeenCalledWith(anchored);
+    cleanup();
+
+    // A quote's Open source becomes Show in chat, addressed by its message id.
+    const quoteView = render(
+      <EntryCard
+        entry={quote}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onShowInChat={onShowInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(quoteView.queryByRole("button", { name: "Open source" })).toBeNull();
+    fireEvent.click(quoteView.getByRole("button", { name: "Show in chat" }));
+    expect(onShowInChat).toHaveBeenLastCalledWith({ messageId: "42" });
+    cleanup();
+
+    // Nothing to place: the card keeps Back to chat.
+    const plain = renderCard(tagged);
+    expect(plain.queryByRole("button", { name: "Show in chat" })).toBeNull();
+    expect(plain.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+  });
+
+  it("offers only the status moves that change something", () => {
+    const view = renderCard(humanRequest);
+    expect(view.queryByRole("button", { name: "Open" })).toBeNull();
+    expect(view.getByRole("button", { name: "Seen (still needed)" })).toBeTruthy();
+    cleanup();
+    const reviewed = renderCard({ ...humanRequest, status: "reviewed" } as CompanionEntry);
+    expect(reviewed.getByRole("button", { name: "Open" })).toBeTruthy();
+    expect(reviewed.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    expect(reviewed.getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
+  it("sets a request aside for later and brings it back, without a status change", () => {
+    const onDefer = vi.fn();
+    const onUpdateStatus = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={onDefer}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Later" }));
+    expect(onDefer).toHaveBeenLastCalledWith(humanRequest.id, true);
+    expect(onUpdateStatus).not.toHaveBeenCalled();
+    cleanup();
+    const deferred = render(
+      <EntryCard
+        entry={deferredRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={onDefer}
+      />,
+    );
+    fireEvent.click(deferred.getByRole("button", { name: "Bring back" }));
+    expect(onDefer).toHaveBeenLastCalledWith(humanRequest.id, false);
+  });
+
+  it("answers a question in place when the card can send, staying on the list", async () => {
+    const onReplyInChat = vi.fn();
+    const onSendReply = vi.fn().mockResolvedValue({ queued: true });
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        onReturnToChat={vi.fn()}
+        onReplyInChat={onReplyInChat}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+        onSendReply={onSendReply}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Reply" }));
+    fireEvent.change(view.getByTestId("companion-entry-reply-input"), {
+      target: { value: "Use staging" },
+    });
+    fireEvent.click(view.getByRole("button", { name: "Send" }));
+    expect(onSendReply).toHaveBeenCalledWith(humanRequest, "Use staging");
+    await waitFor(() =>
+      expect(view.getByText("Queued. The agent gets it when its current turn ends.")).toBeTruthy(),
+    );
+    expect(onReplyInChat).not.toHaveBeenCalled();
+  });
+
+  it("gives Needs you one triage row: Reply, Later, Details and More", () => {
+    const onUpdateStatus = vi.fn();
+    const onReturnToChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={humanRequest}
+        variant="triage"
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={onUpdateStatus}
+        onRemovePin={vi.fn()}
+        onDefer={vi.fn()}
+      />,
+    );
+    for (const name of ["Reply", "Later", "Details"])
+      expect(view.getByRole("button", { name })).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Seen (still needed)" })).toBeNull();
+    expect(view.queryByText("Decision · Needs you")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Details" }));
+    expect(view.getByText("Decision · Needs you")).toBeTruthy();
+    fireEvent.click(view.getByRole("menuitem", { name: "Open in chat" }));
+    expect(onReturnToChat).toHaveBeenCalled();
+    fireEvent.click(view.getByRole("menuitem", { name: "Done" }));
+    expect(onUpdateStatus).toHaveBeenCalledWith(humanRequest.id, "done");
+  });
+
+  it("sends a permission to Chat for review and never offers Done for a tracked ask", () => {
+    const onReturnToChat = vi.fn();
+    const view = render(
+      <EntryCard
+        entry={permissionRequest}
+        variant="triage"
+        onReturnToChat={onReturnToChat}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Review permission" }));
+    expect(onReturnToChat).toHaveBeenCalled();
+    expect(view.queryByRole("button", { name: "Reply" })).toBeNull();
+    cleanup();
+    const tracked = render(
+      <EntryCard
+        entry={ask}
+        variant="triage"
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+      />,
+    );
+    expect(tracked.queryByRole("menuitem", { name: "Done" })).toBeNull();
+  });
+});
+
+const delegated: CompanionEntry = {
+  ...ask,
+  ask: { ...ask.ask!, state: "in_progress", delegatedAgentId: "child-77" },
+};
+const delegatedDone: CompanionEntry = {
+  ...delegated,
+  ask: { ...delegated.ask!, state: "done" },
+};
+
+describe("EntryCard delegated ask", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) await i18n.init();
+    await i18n.changeLanguage("en");
+  });
+  beforeEach(() => vi.stubGlobal("React", React));
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    pulseFixture.pulse = null;
+    pulseFixture.targets = [];
+    vi.mocked(navigateToAgent).mockClear();
+  });
+  const handlers = {
+    onReturnToChat: () => {},
+    onReplyInChat: () => {},
+    onUpdateStatus: () => {},
+    onRemovePin: () => {},
+  };
+
+  it("shows the working child's live state on the card without expanding it", () => {
+    pulseFixture.pulse = {
+      kind: "idle",
+      needsAttention: true,
+      since: 1,
+      title: "Deploy worker",
+      error: null,
+    };
+    const view = render(<EntryCard entry={delegated} serverId="srv" {...handlers} />);
+    const chip = view.getByTestId("companion-entry-delegation");
+    expect(chip.textContent).toBe("Deploy workerIdle 12m · ask still open");
+    expect(pulseFixture.targets.at(-1)).toEqual({ serverId: "srv", agentId: "child-77" });
+    fireEvent.click(chip);
+    expect(navigateToAgent).toHaveBeenCalledWith({ serverId: "srv", agentId: "child-77" });
+  });
+
+  it("shows nothing for a done ask or an ask without a child", () => {
+    const view = render(<EntryCard entry={delegatedDone} serverId="srv" {...handlers} />);
+    expect(view.queryByTestId("companion-entry-delegation")).toBeNull();
+    cleanup();
+    const solo = render(<EntryCard entry={ask} serverId="srv" {...handlers} />);
+    expect(solo.queryByTestId("companion-entry-delegation")).toBeNull();
   });
 });

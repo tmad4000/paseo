@@ -35,8 +35,14 @@ export function StreamNoteComposer({
   supportsTags,
   knownTags,
   onSubmit,
+  placeholderKey,
+  submitLabelKey,
+  testID = "companion-stream-note-input",
 }: {
   mode: ComposerMode;
+  placeholderKey?: string;
+  submitLabelKey?: string;
+  testID?: string;
   saving: boolean;
   online: boolean;
   supportsTags: boolean;
@@ -70,16 +76,16 @@ export function StreamNoteComposer({
         <NoteInput
           ref={input}
           style={styles.input}
-          placeholder={t(PLACEHOLDERS[mode])}
+          placeholder={t(placeholderKey ?? PLACEHOLDERS[mode])}
           maxLength={4000}
           editable={!saving}
           initialValue=""
           onChangeText={setText}
           onSubmitEditing={submit}
-          testID="companion-stream-note-input"
+          testID={testID}
         />
         <Button onPress={submit} disabled={saving || !online || !text.trim()}>
-          {t(SUBMIT_LABELS[mode])}
+          {t(submitLabelKey ?? SUBMIT_LABELS[mode])}
         </Button>
       </View>
       {showTags ? (

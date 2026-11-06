@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
+import { agentSender } from "@getpaseo/protocol/user-message-sender";
 
 import type {
   AgentPermissionRequest,
@@ -595,6 +596,7 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
         agentId: callerAgentId,
         itemId: randomUUID(),
         text: notificationPrompt,
+        sender: agentSender(childAgentId),
       });
       return;
     }
@@ -606,6 +608,7 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
       prompt: notificationPrompt,
       activeTurnBehavior: "steer",
       unarchive: false,
+      runOptions: { sender: agentSender(childAgentId) },
       logger,
     });
   }

@@ -688,6 +688,8 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     clientMessageId: z.string().optional(),
+    /** UserMessageSender: "human" | "schedule" | "agent:<id>". Absent on older daemons. */
+    sender: z.string().optional(),
   }),
   z.object({
     type: z.literal("assistant_message"),
@@ -831,6 +833,8 @@ const AgentActiveTurnPayloadSchema = z.object({
 export const AgentMessageActivitySchema = z.object({
   lastUserMessageAt: z.string().nullable(),
   lastAssistantMessageAt: z.string().nullable(),
+  /** Latest user turn sent by a person. Absent on daemons that predate sender tracking. */
+  lastHumanMessageAt: z.string().nullable().optional(),
 });
 
 export const AgentSnapshotPayloadSchema = z.object({
@@ -846,6 +850,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   updatedAt: z.string(),
   lastUserMessageAt: z.string().nullable(),
   messageActivity: AgentMessageActivitySchema.optional(),
+  /** UserMessageSender that created the agent. Absent on older daemons and legacy records. */
+  createdBy: z.string().optional(),
   status: AgentStatusSchema,
   activeTurn: AgentActiveTurnPayloadSchema.nullable().optional(),
   capabilities: AgentCapabilityFlagsSchema,
@@ -883,12 +889,19 @@ export const AgentListItemPayloadSchema = z.object({
   updatedAt: z.string(),
   lastUserMessageAt: z.string().nullable(),
   messageActivity: AgentMessageActivitySchema.optional(),
+  /** UserMessageSender that created the agent. Absent on older daemons and legacy records. */
+  createdBy: z.string().optional(),
   archivedAt: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   providerUnavailable: z.boolean().optional(),
+  // Fork: added for agent-side workspace awareness (list_agents, describe_workspace).
+  // Older daemons omit both; a row without workspaceId belongs to no known workspace.
+  workspaceId: z.string().optional(),
+  /** From the paseo.parent-agent-id label; absent for workspace roots. */
+  parentAgentId: z.string().optional(),
 });
 
 export type AgentListItemPayload = z.infer<typeof AgentListItemPayloadSchema>;
@@ -1035,6 +1048,14 @@ export const WorkspaceTitleSetRequestSchema = z.object({
   workspaceId: z.string(),
   // Null or empty string clears the title and reverts to the derived name.
   title: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const WorkspaceDescribeRequestSchema = z.object({
+  type: z.literal("workspace.describe.request"),
+  workspaceId: z.string(),
+  /** Leave this agent out of the result (for example the caller describing its own workspace). */
+  excludeAgentId: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -2281,6 +2302,62 @@ export const WorkspacePinSetResponsePayloadSchema = z.object({
   error: z.string().nullable(),
 });
 
+export const WorkspaceDescribedAskSchema = z.object({
+  askId: z.string(),
+  text: z.string(),
+  state: z.string(),
+});
+
+export const WorkspaceDescribedPinSchema = z.object({
+  entryId: z.string(),
+  text: z.string(),
+});
+
+/** Derived, not model-generated: message heads plus open asks and pins. */
+export const WorkspaceAgentFocusSchema = z.object({
+  /** Earliest user message the daemon could read, truncated. */
+  firstUserMessage: z.string().nullable(),
+  lastUserMessage: z.string().nullable(),
+  lastAssistantMessage: z.string().nullable(),
+  /** One paragraph built from the fields above, the open asks and the pins. */
+  summary: z.string(),
+});
+
+export const WorkspaceDescribedAgentSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable(),
+  provider: z.string(),
+  model: z.string().nullable(),
+  status: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastUserMessageAt: z.string().nullable(),
+  labels: z.record(z.string(), z.string()),
+  parentAgentId: z.string().nullable(),
+  focus: WorkspaceAgentFocusSchema,
+  /** Null when Stream is unavailable on this host; otherwise unfinished tracked asks. */
+  openAsks: z.array(WorkspaceDescribedAskSchema).nullable(),
+  pins: z.array(WorkspaceDescribedPinSchema).nullable(),
+});
+
+export const WorkspaceDescriptionSchema = z.object({
+  workspaceId: z.string(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  generatedAt: z.string(),
+  agents: z.array(WorkspaceDescribedAgentSchema),
+});
+
+export const WorkspaceDescribeResponseSchema = z.object({
+  type: z.literal("workspace.describe.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    description: WorkspaceDescriptionSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const WorkspacePinSetResponseSchema = z.object({
   type: z.literal("workspace.pin.set.response"),
   payload: WorkspacePinSetResponsePayloadSchema,
@@ -2713,11 +2790,15 @@ export const SessionSearchResultSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const SessionRoutingProviderSchema = z.enum(["codex", "jev", "openai-decisions"]);
+export type SessionRoutingProvider = z.infer<typeof SessionRoutingProviderSchema>;
+
 export const SessionSearchRequestSchema = z.object({
   type: z.literal("session.search.request"),
   requestId: z.string(),
   query: z.string().min(1).max(16000),
   workspaceIds: z.array(z.string()).max(1000),
+  routingProvider: SessionRoutingProviderSchema.optional(),
 });
 
 export const SessionSearchResponseSchema = z.object({
@@ -2728,6 +2809,13 @@ export const SessionSearchResponseSchema = z.object({
     searchedCount: z.number().int().nonnegative(),
     totalCount: z.number().int().nonnegative(),
     error: z.string().nullable(),
+    routing: z
+      .object({
+        provider: SessionRoutingProviderSchema,
+        elapsedMs: z.number().nonnegative(),
+        fallback: z.boolean(),
+      })
+      .optional(),
   }),
 });
 
@@ -2813,6 +2901,18 @@ export const AgentQueueEditRequestSchema = z.object({
   text: z.string(),
 });
 
+/**
+ * Pauses the queue at an item while a client edits it. Clients refresh `held:
+ * true` periodically; the daemon expires a hold that stops being refreshed.
+ */
+export const AgentQueueEditHoldRequestSchema = z.object({
+  type: z.literal("agent.queue.edit_hold.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  itemId: z.string(),
+  held: z.boolean(),
+});
+
 /** Atomically claims a queued item and sends its daemon-owned content using strict steering. */
 export const AgentQueueSendNowRequestSchema = z.object({
   type: z.literal("agent.queue.send_now.request"),
@@ -2823,6 +2923,31 @@ export const AgentQueueSendNowRequestSchema = z.object({
 
 export const AgentQueueListRequestSchema = z.object({
   type: z.literal("agent.queue.list.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/** Sends the queue head now if the agent is free, without waiting for an idle edge. Gated on `queueDrain`. */
+export const AgentQueueDrainRequestSchema = z.object({
+  type: z.literal("agent.queue.drain.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/** Removes every queued item that is not already being submitted. Gated on `queueDrain`. */
+export const AgentQueueClearRequestSchema = z.object({
+  type: z.literal("agent.queue.clear.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+
+/**
+ * Restart agent: restart the provider process, resume the same session, then
+ * deliver the queue in order (settling a head stuck on a pending receipt).
+ * Gated on `agentRestart`.
+ */
+export const AgentRestartRequestSchema = z.object({
+  type: z.literal("agent.restart.request"),
   requestId: z.string(),
   agentId: z.string(),
 });
@@ -2915,6 +3040,11 @@ export const AgentQueueEditResponseSchema = z.object({
   payload: AgentQueueResponsePayloadSchema,
 });
 
+export const AgentQueueEditHoldResponseSchema = z.object({
+  type: z.literal("agent.queue.edit_hold.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
 export const AgentQueueSendNowResponseSchema = z.object({
   type: z.literal("agent.queue.send_now.response"),
   payload: AgentQueueResponsePayloadSchema,
@@ -2923,6 +3053,37 @@ export const AgentQueueSendNowResponseSchema = z.object({
 export const AgentQueueListResponseSchema = z.object({
   type: z.literal("agent.queue.list.response"),
   payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueDrainResponseSchema = z.object({
+  type: z.literal("agent.queue.drain.response"),
+  payload: AgentQueueResponsePayloadSchema,
+});
+
+export const AgentQueueClearResponseSchema = z.object({
+  type: z.literal("agent.queue.clear.response"),
+  payload: AgentQueueResponsePayloadSchema.extend({
+    removed: z.number().int().nonnegative().optional(),
+    /** Items already being submitted, which clear leaves in place. */
+    kept: z.number().int().nonnegative().optional(),
+  }),
+});
+
+export const AgentRestartResponseSchema = z.object({
+  type: z.literal("agent.restart.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    /** `reloaded` (live process restarted) or `resumed` (stored agent loaded). */
+    mode: z.string().nullable(),
+    timelineSize: z.number().int().nonnegative().nullable(),
+    queuedBefore: z.number().int().nonnegative().nullable(),
+    queuedAfter: z.number().int().nonnegative().nullable(),
+    /** Set when the head was stuck on a pending receipt; outcome `delivered` or `resend`. */
+    recoveredHead: z.object({ itemId: z.string(), outcome: z.string() }).nullable(),
+    queue: AgentQueueSnapshotSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentQueueInspectResponseSchema = z.object({
@@ -3385,6 +3546,15 @@ export const ClearAgentAttentionMessageSchema = z.object({
   type: z.literal("clear_agent_attention"),
   agentId: z.union([z.string(), z.array(z.string())]),
   requestId: z.string().optional(),
+  /**
+   * The user read the chat. The host keeps permission attention and anything raised after
+   * `seenAttentionAt` (the attention time the user saw). Older hosts ignore this and clear.
+   */
+  read: z
+    .object({
+      seenAttentionAt: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const ClientHeartbeatMessageSchema = z.object({
@@ -3907,6 +4077,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectPinSetRequestSchema,
   ProjectDefaultSetRequestSchema,
   WorkspaceTitleSetRequestSchema,
+  WorkspaceDescribeRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
@@ -3994,11 +4165,15 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueEnqueueRequestSchema,
   AgentQueueRemoveRequestSchema,
   AgentQueueEditRequestSchema,
+  AgentQueueEditHoldRequestSchema,
   AgentQueueSendNowRequestSchema,
   AgentQueueListRequestSchema,
   AgentQueueReorderRequestSchema,
   AgentQueueGetItemImagesRequestSchema,
   AgentQueueInspectRequestSchema,
+  AgentQueueDrainRequestSchema,
+  AgentQueueClearRequestSchema,
+  AgentRestartRequestSchema,
   ClientOutboxReportRequestSchema,
   ClientDiagnosticsReportRequestSchema,
   ClientDiagnosticsListRequestSchema,
@@ -4374,6 +4549,7 @@ export const ServerInfoStatusPayloadSchema = z
         agentHistorySearch: z.boolean().optional(),
         // COMPAT(sessionSearch): added in v0.10.0, remove gate after 2027-04-04.
         sessionSearch: z.boolean().optional(),
+        sessionDecisionRouting: z.boolean().optional(),
         // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
         sessionTextSearch: z.boolean().optional(),
         // COMPAT(conversationMessageActivity): added in v0.10.0; remove gate after 2027-04-06.
@@ -4400,6 +4576,8 @@ export const ServerInfoStatusPayloadSchema = z
         deliveryInspect: z.boolean().optional(),
         // COMPAT(clientDiagnostics): fork feature, added in fork v0.10.0-beta.16, remove gate after 2027-04-23.
         clientDiagnostics: z.boolean().optional(),
+        // COMPAT(workspaceDescribe): fork feature, added in fork v0.10.0-beta.21, remove gate after 2027-04-28.
+        workspaceDescribe: z.boolean().optional(),
         // COMPAT(companionStream): fork feature, added in fork v0.10.0-beta.1, drop the gate after 2027-03-28.
         companionStream: z.boolean().optional(),
         conversationSharing: z.boolean().optional(),
@@ -4408,8 +4586,23 @@ export const ServerInfoStatusPayloadSchema = z
         durableStream: z.boolean().optional(),
         // COMPAT(streamTags): fork feature; #hashtag filters, tag counts and pinned tags.
         streamTags: z.boolean().optional(),
+        // COMPAT(streamAnswers): fork feature; tracked-question answers, anchors and seen state.
+        streamAnswers: z.boolean().optional(),
+        // COMPAT(streamOpenAsks): fork feature; Chat's floating pane also lists unresolved asks.
+        streamOpenAsks: z.boolean().optional(),
+        // COMPAT(streamDefer): fork feature; Needs you items can be set aside for later.
+        streamDefer: z.boolean().optional(),
+        // COMPAT(streamBlockedAsks): fork feature; blocked asks are in Needs you, which accepts group.
+        streamBlockedAsks: z.boolean().optional(),
+        streamWorkflow: z.boolean().optional(),
         queueEdit: z.boolean().optional(),
         queueSendNow: z.boolean().optional(),
+        // COMPAT(agentRestart): fork feature; Restart agent keeps the session and drains the queue. Remove gate after 2027-05-01.
+        agentRestart: z.boolean().optional(),
+        // COMPAT(queueDrain): fork feature; explicit queue drain and clear. Remove gate after 2027-05-01.
+        queueDrain: z.boolean().optional(),
+        // COMPAT(queueEditHold): fork feature; the queue waits while a message is being edited.
+        queueEditHold: z.boolean().optional(),
         // Strict steering never falls back to interrupting the active turn.
         steerOnly: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
@@ -7710,11 +7903,15 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentQueueEnqueueResponseSchema,
   AgentQueueRemoveResponseSchema,
   AgentQueueEditResponseSchema,
+  AgentQueueEditHoldResponseSchema,
   AgentQueueSendNowResponseSchema,
   AgentQueueListResponseSchema,
   AgentQueueReorderResponseSchema,
   AgentQueueGetItemImagesResponseSchema,
   AgentQueueInspectResponseSchema,
+  AgentQueueDrainResponseSchema,
+  AgentQueueClearResponseSchema,
+  AgentRestartResponseSchema,
   ClientOutboxReportResponseSchema,
   ClientDiagnosticsReportResponseSchema,
   ClientDiagnosticsListResponseSchema,
@@ -7729,6 +7926,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectPinSetResponseSchema,
   ProjectDefaultSetResponseSchema,
   WorkspaceTitleSetResponseSchema,
+  WorkspaceDescribeResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,
@@ -7940,6 +8138,11 @@ export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
 >;
 export type WorkspacePinSetResponse = z.infer<typeof WorkspacePinSetResponseSchema>;
+export type WorkspaceDescribeResponse = z.infer<typeof WorkspaceDescribeResponseSchema>;
+export type WorkspaceDescription = z.infer<typeof WorkspaceDescriptionSchema>;
+export type WorkspaceDescribedAgent = z.infer<typeof WorkspaceDescribedAgentSchema>;
+export type WorkspaceDescribedAsk = z.infer<typeof WorkspaceDescribedAskSchema>;
+export type WorkspaceDescribedPin = z.infer<typeof WorkspaceDescribedPinSchema>;
 export type WorkspacePinSetResponsePayload = z.infer<typeof WorkspacePinSetResponsePayloadSchema>;
 export type WorkspaceRecoveryState = z.infer<typeof WorkspaceRecoveryStateSchema>;
 export type WorkspaceRecoveryInspectResponse = z.infer<
@@ -8093,6 +8296,7 @@ export type ProjectPinSetRequest = z.infer<typeof ProjectPinSetRequestSchema>;
 export type ProjectDefaultSetRequest = z.infer<typeof ProjectDefaultSetRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
+export type WorkspaceDescribeRequest = z.infer<typeof WorkspaceDescribeRequestSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;
 export type SetAgentModeRequestMessage = z.infer<typeof SetAgentModeRequestMessageSchema>;

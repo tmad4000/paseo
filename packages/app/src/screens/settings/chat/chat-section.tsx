@@ -38,6 +38,14 @@ export function ChatSection() {
     (autoExpandReasoning: boolean) => void updateSettings({ autoExpandReasoning }),
     [updateSettings],
   );
+  const changeMarkReadOnOpen = useCallback(
+    (markReadOnOpen: boolean) => void updateSettings({ markReadOnOpen }),
+    [updateSettings],
+  );
+  const changeSortTabsByActivity = useCallback(
+    (sortTabsByActivity: boolean) => void updateSettings({ sortTabsByActivity }),
+    [updateSettings],
+  );
   const changeChatOutline = useCallback(
     (chatOutlineEnabled: boolean) => void updateSettings({ chatOutlineEnabled }),
     [updateSettings],
@@ -70,6 +78,30 @@ export function ChatSection() {
           )}
         </SettingsCard>
       </SettingsSection>
+      <SettingsSection title={t("settings.general.markReadOnOpen.section")}>
+        <SettingsCard>
+          <SettingsSwitch
+            label={t("settings.general.markReadOnOpen.label")}
+            hint={t("settings.general.markReadOnOpen.description")}
+            value={settings.markReadOnOpen}
+            onValueChange={changeMarkReadOnOpen}
+            testID="settings-mark-read-on-open"
+          />
+        </SettingsCard>
+      </SettingsSection>
+      {isNative ? null : (
+        <SettingsSection title={t("settings.general.sortTabsByActivity.section")}>
+          <SettingsCard>
+            <SettingsSwitch
+              label={t("settings.general.sortTabsByActivity.label")}
+              hint={t("settings.general.sortTabsByActivity.description")}
+              value={settings.sortTabsByActivity}
+              onValueChange={changeSortTabsByActivity}
+              testID="settings-sort-tabs-by-activity"
+            />
+          </SettingsCard>
+        </SettingsSection>
+      )}
     </View>
   );
 }

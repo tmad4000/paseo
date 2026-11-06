@@ -30,8 +30,18 @@ const { mockTheme } = vi.hoisted(() => ({
 vi.mock("lucide-react-native", () => {
   const StubIcon = () => null;
   return {
+    AppWindow: StubIcon,
+    Archive: StubIcon,
+    Circle: StubIcon,
+    LayoutPanelLeft: StubIcon,
+    ListOrdered: StubIcon,
+    RefreshCcwDot: StubIcon,
+    Send: StubIcon,
+    Square: StubIcon,
+    Trash2: StubIcon,
     ArrowLeftToLine: StubIcon,
     ArrowRightToLine: StubIcon,
+    CircleCheck: StubIcon,
     Copy: StubIcon,
     CopyX: StubIcon,
     Ellipsis: StubIcon,

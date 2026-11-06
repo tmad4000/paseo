@@ -66,4 +66,35 @@ describe("renderQueueInspection", () => {
     expect(text).toContain("none recorded");
     expect(text).toContain("no device has reported since the host started");
   });
+
+  it("points at restart when the first queued message is stuck on an interrupted delivery", () => {
+    const stuck = renderQueueInspection(
+      inspection({
+        queue: {
+          agentId: "agent-1",
+          revision: 4,
+          items: [
+            { id: "head", text: "first", createdAt: "2026-10-28T05:43:45Z" },
+            { id: "next", text: "second", createdAt: "2026-10-28T07:37:55Z" },
+          ],
+        },
+        receipts: [{ messageId: "head", state: "pending", createdAt: "2026-10-28T05:44:01Z" }],
+      }),
+      10,
+    );
+    expect(stuck).toContain("The first message is stuck");
+    expect(stuck).toContain("paseo agent restart agent-1");
+
+    const healthy = renderQueueInspection(
+      inspection({
+        queue: {
+          agentId: "agent-1",
+          revision: 4,
+          items: [{ id: "head", text: "first", createdAt: "2026-10-28T05:43:45Z" }],
+        },
+      }),
+      10,
+    );
+    expect(healthy).not.toContain("is stuck");
+  });
 });

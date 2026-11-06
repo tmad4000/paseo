@@ -63,9 +63,10 @@ into a host workspace, use `navigateToWorkspace()`. Do not make the caller
 branch on its current route.
 
 Pass only `serverId` and `workspaceId` for normal attention-aware navigation.
-When the action names a specific tab, pass it as `target`; that explicit choice
-is authoritative. Callers should not choose between separate route and tab
-navigation APIs.
+When the action names a reopenable tab, pass it as `target`; that explicit choice
+is authoritative. For an existing empty New tab, follow the
+[focus-history restore rule](#focus-history). Callers should not choose between
+separate route and tab navigation APIs.
 
 The root stack owns `h/[serverId]`; the host stack owns
 `workspace/[workspaceId]/index`. Repeated global-route hops must `POP_TO` the
@@ -124,6 +125,50 @@ workspace deck entries and tab panels remain mounted, so restoring their focus
 also preserves live scroll and selection state without duplicating that state
 in the history stack.
 
+Back/Forward restores the exact existing empty New tab. Repeated observations of
+that same tab do not add visits or clear Forward; distinct empty tabs remain
+separate locations. Empty tabs have no reopenable resource identity, so restore
+through `navigateToWorkspace()` with `preserveTabFocus: true` and no `target`,
+then focus the recorded `tabId`. Omitting only the target would allow normal
+attention routing to open an unrelated session. This exception does not change
+resource equality or the allocation of fresh empty tabs. Regression coverage
+lives in `focus-history.test.ts` and `focus-history-runtime.test.ts`.
+
+The chevron beside each header Back/Forward arrow opens every retained entry in
+that direction (up to the focus-history model's 50-entry bound), nearest first.
+The arrow itself still moves one step. Right-click and long-press open the same
+menu; compact layouts use a scrollable sheet. On wide layouts, resting a mouse
+over either control for 350 ms previews the full menu without moving editor focus
+or dismissing the keyboard. Moving away closes the preview; activating the
+chevron promotes it to a keyboard-focused menu. A multi-step menu jump moves every
+skipped location to the opposite stack, so Forward retraces them in order. This
+focus history is in memory; the separate Recent sessions clock menu uses the
+persisted visit list and survives reload.
+
+A history row for a workspace location shows that workspace's open tab count
+with the same mark the sidebar row uses (`WorkspaceTabCountBadge`), so you can
+tell a busy workspace from a one-tab one before going back to it. Route rows and
+workspaces with no open tabs show no count.
+
+### Maximized panes
+
+A maximized pane covers its siblings, so a focus change that lands on one of
+them would look like nothing happened: Back/Forward or a history row, a sidebar
+or Command Center jump to a session open in another pane, a pane shortcut, a
+split. The rule is that focus never lands somewhere hidden. `SplitContainer`
+watches the focused pane; when it moves onto a pane the maximized one covers
+(`focusMovedBehindMaximizedPane`), the split is restored and an info toast says
+"Unmaximized the pane to show this tab", with **Maximize this pane** to maximize
+where you landed. Maximizing a pane also focuses it, so keystrokes never go to a
+covered pane. One check at the focus change covers every current and future
+operation; do not add per-command maximize guards.
+
+Focus mode needs no reveal: it already shows whichever pane is focused, and
+sidebar shortcuts leave it. Two alternatives were rejected. Blocking the
+operation behind a "Unmaximize to continue" prompt costs a click on every such
+Back and would need history rollback. Carrying the maximize over to the
+destination hides what changed.
+
 ## Agent Targets
 
 Notifications and agent URLs enter the router with different authoritative
@@ -137,6 +182,19 @@ targets.
 
 Both paths converge on `navigateToAgent()`. Do not make notification routing
 guess a workspace, and do not add a workspace to the stable agent URL format.
+
+## Copied workspace and tab links
+
+The workspace header copies explicit routes instead of the address bar: tab focus is
+stored outside Expo Router, and the workspace route consumes its `open` query.
+Session links retain the stable agent route described above. Terminal, file and
+setup links use the existing workspace `open` intent. Device-local drafts and
+browser tabs have no portable route, so their menu offers only a workspace link.
+Web links retain the serving origin; native uses its configured Expo scheme;
+desktop uses `paseo-fork://h/...` rather than its internal renderer origin.
+Desktop's navigation inbox handles both session and workspace targets, including
+links received before a window is ready. These are navigation links for devices
+already paired to the host, not invitations or public shares.
 
 ## Params
 
@@ -212,7 +270,7 @@ Before landing route changes:
 - [ ] Did you change `packages/app/src/app`? Re-read this file.
 - [ ] Did you touch remembered workspace restore? Keep root on `/h/[serverId]`.
 - [ ] Did a route return to a workspace? Use `navigateToWorkspace()` and pass a
-      `target` when the action names a specific tab.
+      `target` for reopenable tabs; see [Focus History](#focus-history) for empty-tab restore.
 - [ ] Did you add a route? Register it in the layout that directly owns it.
 - [ ] Did `useLocalSearchParams()` lose a required param? Fix the route tree.
 - [ ] Did native show a blank screen without a crash? Suspect route ownership

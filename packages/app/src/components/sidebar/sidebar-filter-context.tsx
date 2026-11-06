@@ -13,6 +13,7 @@ import {
   EMPTY_SIDEBAR_TAB_MATCHES,
   mergeSidebarMessageHits,
   sumSidebarMessageSearchCoverage,
+  selectSidebarWorkspaceMatchTarget,
   type SidebarMessageHit,
   type SidebarMessageSearchCoverage,
   type SidebarTabMatch,
@@ -60,6 +61,11 @@ export function useUniqueSessionForQuery(): SessionTarget | null {
 
 export function useSidebarWorkspaceTabMatches(workspaceKey: string): readonly SidebarTabMatch[] {
   return useContext(SidebarTabMatchesContext).tabMatches.get(workspaceKey) ?? NO_TAB_MATCHES;
+}
+
+export function useSidebarWorkspaceMatchTarget(workspaceKey: string) {
+  const matches = useSidebarWorkspaceTabMatches(workspaceKey);
+  return useMemo(() => selectSidebarWorkspaceMatchTarget(matches), [matches]);
 }
 
 /** The workspaces each host may answer for: the sidebar's current scope before the text query. */

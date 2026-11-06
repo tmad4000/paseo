@@ -62,6 +62,137 @@ Codex foreground turn IDs now include a fresh UUID. A recreated provider cannot 
 counter at the same ID and suppress new Stream outcomes. Duplicate delivery of the same turn
 still deduplicates. This does not repair previously missing historical cards.
 
+## Answers to your questions
+
+Chat shows a floating **Your questions** pane listing questions you asked that need attention.
+Two kinds of existing Stream entries are your questions:
+
+- **Tracked asks** an agent records with `set_stream_ask` when the ask expects an answer:
+  `ask.expectsAnswer: true`, a headline ending in `?`, or an attached answer. These appear with
+  no tap from you. Agent questions to you (`set_stream_question`) are needed input, not your
+  questions, and never appear.
+- **Track Q&A** on one of your own messages (optional). On hosts with
+  `server_info.features.streamAnswers` the entry carries the message's timeline position as
+  `questionAnchor` and a stable ID derived from it, so tracking a message twice keeps one entry.
+  Q&A records without an anchor (older ones) stay in Stream and never ask for attention.
+
+The answer lives on the question's own entry as `reply` (`stream-answers.ts`), with its own
+`revision`, `answeredAt` and `provenance`:
+
+- **Explicit** answers come from `set_stream_answer` (MCP) or the `set_reply` update action,
+  addressed to the stable `askId` or Q&A `entryId`. Each question gets its own answer, so several
+  asks from one message stay distinct. An agent answers when it actually knows, including after
+  more chat or from a delegated child (`agentId` = the owning chat; the child is recorded as
+  `answeredByAgentId`). `replyRevision` is the revision last read: the same answer again is a
+  no-op, a stale revision is a conflict. An explicit answer replaces any candidate.
+- A **candidate** is the host's guess for a tracked message: the first settled response after
+  it, meaning assistant messages after the last tool call and before your next message, once a
+  turn completed or you sent another message. Failed or canceled turns and `[System Error]`
+  rows never become candidates. The pane labels it **Possible answer** with "The agent has not
+  confirmed it answers it", because "I'll check" is a candidate too. A candidate is never
+  replaced by another candidate, only by an explicit answer. Candidates attach for chats whose
+  timeline is loaded; after a timeline epoch change the message is found again by provider
+  message id.
+
+Seen is your own review state, kept apart from ask state: `replySeenRevision`, set only by
+**Mark seen** (`mark_reply_seen` with the revision shown). A new revision is unseen again
+without touching other entries. A finished ask is not seen, and an ask's state and evidence are
+never an answer: a done ask without an answer leaves the pane, a done ask with an unseen answer
+stays. Rewriting an ask keeps its answer and seen state. **Stop tracking** sets a Q&A message's
+status to `done`; no answer reopens it, but tracking the message again does. An ask edit that
+omits `expectsAnswer` keeps its previous value. The wire snapshot carries up to 20 older entries needing
+attention beyond its newest 50, so turn outcomes do not push them out of Chat.
+
+The pane sits over the top of Chat, below the Chat/Stream switcher and clear of the composer.
+Rows are **New answer**, then **Possible answer**, then **Waiting for answer**, newest first.
+**Question** jumps to the tracked message, loading its history window when needed; for an ask
+it jumps to `ask.sourceMessageId` when that message is loaded. **Answer** jumps to a
+candidate's anchor; **Open answering chat** opens the chat that wrote an explicit answer. Tap
+an answer to expand it. Mark seen and Stop tracking wait for the host; the row leaves only when
+the updated snapshot arrives, and a failed save stays visible. The header collapses the list
+(compact starts collapsed). **×** hides the pane until an answer, or a new revision, arrives
+that was not showing when you hid it. Seen and stopped entries stay in Stream.
+
+Agents list your questions with `list_stream_asks questions=true` (entry IDs, replies and
+seen revisions). Orchestrating agents should record each question you ask as an ask with
+`expectsAnswer` and answer it with `set_stream_answer`; the tool descriptions say so.
+
+Evidence (`tracked-answers.spec.ts`): waiting asks, a possible answer and a waiting message at
+[390](stream-answers/tracked-answers-waiting-390.png) /
+[1440](stream-answers/tracked-answers-waiting-1440.png); explicit answers after a jump at
+[390](stream-answers/tracked-answers-new-390.png) /
+[1440](stream-answers/tracked-answers-new-1440.png).
+
+### Open asks
+
+On hosts with `server_info.features.streamOpenAsks` the same pane also lists the chat's other
+unresolved asks (state `open`, `in_progress` or `blocked`) in an **Open asks · N** section below
+**Questions · N**, and the header reads **Questions and asks**. Older hosts keep the
+questions-only pane. Done asks never show; nor do asks already listed as questions, or linked
+duplicates of a canonical task (`ask.canonicalTask`), which show in the canonical chat.
+
+Each row leads with content: a muted eyebrow with the state chip (**Blocked**, **In progress**,
+**Open**) and, for a delegated ask, the owning chat's title (a short id when this client does not
+know the chat) as a link that opens it; then the ask headline; then the first line of
+`remaining` as **Next:**. Blocked asks sort first, since they usually wait on you, then in
+progress, then open; newest first within each. Tapping a row jumps to `ask.sourceMessageId`
+when that message is loaded in Chat; otherwise (no id, a prose source, or history not loaded)
+it opens the ask's card: this chat's Stream, on Tasks, searched to the ask's headline.
+
+Collapse and **×** work as above; once hidden, the pane returns for a new or revised answer or
+for an ask that becomes blocked, or a delegated child that newly needs you, not for progress on
+other asks.
+
+#### Delegated asks
+
+The delegating chat owns an open loop as much as the child working it. An ask's working session
+is its `delegatedAgentId` on this host, else its newest linked `sessions` entry that is not the
+owning chat (`delegationTarget`, `companion-stream/delegation-pulse.ts`). Instead of the owner
+link, its row shows that child live: a status dot, the child's title as a link to it, and its
+state with elapsed time. **Running · 4m** counts from the open turn, **Waiting on permission**,
+**Idle 12m · ask still open**, **Errored**, **Closed · ask still open** (closed or archived),
+**Starting**, or **Status unavailable** when this client holds no snapshot (another host that
+is not connected, or an archived child it never loaded). The ask's Stream card shows the same
+line without Read.
+
+State comes from the child's agent snapshot in the session store, which the host's
+`agent_update` pushes keep current for every non-archived agent with a workspace placement; one
+serialized selector (`useDelegationPulses`) re-renders a row only when its child changes. Nothing
+polls. Permission, idle, error and closed need the delegator: the header counts them (**N need
+attention**) and they light a minimized pane's pill. So does the child's own open question for a
+person (its Needs you items, `needsUserInput`): the line reads **Idle 3h · 1 question for you**,
+and a new question is new attention even when the state does not change. An idle child is never
+read as a finished ask;
+only the ask's own state can close it. Only the running dot moves: a slow opacity pulse that
+stops with reduced motion and in hidden retained panels.
+
+The child links back. Its pane lists **Delegated to this chat · N**: each unresolved ask on this
+host whose working session is this chat, with its state and owning chat. Tapping one opens the
+owning chat on that ask's card in Stream. The lookup scans snapshots the client already holds
+(cached per agent map), so an owner outside them is not listed.
+
+Delegation without an ask is tracked too. The host labels every agent another agent creates with
+`paseo.parent-agent-id`, which the client reads as `Agent.parentAgentId`. **Delegated chats · N**
+lists this chat's live children that no ask here links (`selectUntrackedChildren`; an ask links a
+child by `delegatedAgentId` or a `sessions` entry, done or not). It appears in the floating pane
+and above the chat's own Stream Activity and Tasks, so the delegating chat always says the work
+went over there and links to it, even when its agent never recorded an ask. With no ask to leave
+unfinished, these rows read plain **Idle** and **Closed** with a muted dot. Only permission,
+errors and the child's open questions count as attention. Archived children drop out, and the
+first five show, then **Show N more**.
+
+Evidence (`delegation-pulse.spec.ts`, real mock children): a running and an idle child
+([running](stream-answers/delegation-pulse-running.png)), the running child stopped and followed
+live ([idle](stream-answers/delegation-pulse-idle.png)), the Stream card
+([card](stream-answers/delegation-pulse-stream-card.png)) and the child's link back
+([child](stream-answers/delegation-pulse-child-backlink.png)).
+
+Evidence (`open-asks-pane.spec.ts`, fixture `open-asks-fixture.ts`: 20 unresolved asks shaped
+like a real orchestration chat, 3 of them questions, 6 blocked): the pane at
+[390](stream-answers/open-asks-390.png) / [1440](stream-answers/open-asks-1440.png), and an ask
+card opened from it at [390](stream-answers/open-asks-card-390.png) /
+[1440](stream-answers/open-asks-card-1440.png).
+
 ## Cards
 
 Each card leads with its content. One muted eyebrow line combines kind, state and time
@@ -111,10 +242,14 @@ the parsed tags.
 ## Durable ask checklist
 
 Per-chat Stream opens on **Activity**, including completed replies and saved pins.
-**Checklist** shows explicitly tracked asks; it is empty when no agent has recorded one,
-even when Activity contains captured replies. Its empty state links back to Activity.
-Use **Show unresolved only** to focus on outstanding entries, **Show completed too** to
-restore completed work, and **Load more** to read older pages. Pinned shows saved pins.
+On hosts with `streamWorkflow`, **Tasks** shows canonical tracked asks, **Q&A** shows
+your questions, **Saved** shows pins and file references, and **Needs you** shows concrete
+input dependencies. The same records appear globally and in linked worker chats; local
+scope is a filter. Current tasks precede completed history. Older hosts retain Activity
+and Saved with an update notice for new views. A blocked ask is needed input: it appears in
+Needs you with the first line of `remaining` as its reason unless its blocker names someone
+else ([blocked asks](stream-workflow.md#blocked-asks-are-needed-input)). **Load more** reads older pages.
+See [shared workflow](stream-workflow.md) for identity, ownership and migration details.
 Refresh and reconnect reread durable records;
 offline pages remain readable with a stale-data notice. Cached data is not an offline archive.
 
@@ -160,8 +295,11 @@ remain 4,000 characters. A refresh restarts pagination so state changes during b
 `packages/protocol/src/companion-stream.ts` defines the existing entry shapes;
 `global-stream.ts` defines additive `stream.list.request/response` and
 `stream.entry.update.request/response` RPCs. `server_info.features.globalStream` gates global
-reads and acknowledged writes; older hosts need updating. `streamTags` gates tag filters, counts, pinned
-tags and `stream.tags.pin.request`. The old mutation RPC remains
+reads and acknowledged writes; older hosts need updating. `streamWorkflow` gates the
+shared Tasks/Q&A/Needs you projections and cross-session scope. `streamTags` gates tag filters, counts, pinned
+tags and `stream.tags.pin.request`. `streamAnswers` gates replies (`reply`, `replySeenRevision`),
+`ask.expectsAnswer`, Q&A anchors and status, the `set_reply`/`mark_reply_seen` actions and
+`userQuestionsOnly` listing. The old mutation RPC remains
 accepted for old clients. Existing entry kinds/statuses and snapshot fields are unchanged.
 Ask data is optional metadata on the existing question shape, with open/done mirrored for older
 readers; no new entry kind or legacy status is emitted. `durableStream` gates per-chat pagination

@@ -1,7 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { SettingsCard, SettingsSection, SettingsSelect } from "@/components/settings";
-import { useAppSettings, type SendBehavior } from "@/hooks/use-settings";
+import {
+  SettingsCard,
+  SettingsSection,
+  SettingsSelect,
+  SettingsSwitch,
+} from "@/components/settings";
+import { useAppSettings, type SendBehavior, type AppSettings } from "@/hooks/use-settings";
 
 const SEND_BEHAVIORS: readonly SendBehavior[] = ["interrupt", "steer", "queue"];
 
@@ -20,6 +25,15 @@ export function SendingSection() {
     (sendBehavior: SendBehavior) => void updateSettings({ sendBehavior }),
     [updateSettings],
   );
+  const changeRouting = useCallback(
+    (sessionRoutingProvider: AppSettings["sessionRoutingProvider"]) =>
+      void updateSettings({ sessionRoutingProvider }),
+    [updateSettings],
+  );
+  const changeLiveRouting = useCallback(
+    (liveRoutingSuggestions: boolean) => void updateSettings({ liveRoutingSuggestions }),
+    [updateSettings],
+  );
   return (
     <SettingsSection title={t("settings.general.sending")}>
       <SettingsCard>
@@ -29,6 +43,24 @@ export function SendingSection() {
           value={settings.sendBehavior}
           options={options}
           onValueChange={change}
+        />
+        <SettingsSelect
+          label="Chat routing"
+          hint="Experimental matcher for Filter projects. Jev falls back to OpenAI Decisions, then Current LLM."
+          value={settings.sessionRoutingProvider}
+          options={[
+            { value: "codex", label: "Current LLM" },
+            { value: "jev", label: "Jev" },
+            { value: "openai-decisions", label: "OpenAI Decisions" },
+          ]}
+          onValueChange={changeRouting}
+        />
+        <SettingsSwitch
+          label="Live routing suggestions"
+          hint="Find chats while typing or dictating. Suggestions never send. Available with Jev or OpenAI Decisions."
+          value={settings.liveRoutingSuggestions}
+          disabled={settings.sessionRoutingProvider === "codex"}
+          onValueChange={changeLiveRouting}
         />
       </SettingsCard>
     </SettingsSection>

@@ -42,6 +42,25 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("persists the experimental routing selection and defaults to OpenAI Decisions", async () => {
+    const fresh = makeDeps();
+    expect((await loadAppSettingsFromStorage(fresh)).sessionRoutingProvider).toBe(
+      "openai-decisions",
+    );
+    expect((await loadAppSettingsFromStorage(fresh)).liveRoutingSuggestions).toBe(false);
+    const saved = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          sessionRoutingProvider: "jev",
+          liveRoutingSuggestions: true,
+        }),
+      }),
+    });
+    expect(await loadAppSettingsFromStorage(saved)).toMatchObject({
+      sessionRoutingProvider: "jev",
+      liveRoutingSuggestions: true,
+    });
+  });
   it("preserves a persisted steer send behavior", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
@@ -195,6 +214,26 @@ describe("loadAppSettingsFromStorage", () => {
     const result = await loadAppSettingsFromStorage(deps);
 
     expect(result.chatOutlineEnabled).toBe(false);
+  });
+
+  it("keeps tabs in a stable order by default", async () => {
+    const deps = makeDeps();
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sortTabsByActivity).toBe(false);
+  });
+
+  it("loads an opted-in sort-tabs-by-activity preference", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sortTabsByActivity: true }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sortTabsByActivity).toBe(true);
   });
 
   it("defaults sidebar navigation items to an empty preference list", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_REDACTION } from "@getpaseo/protocol/sharing";
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
-import { redactTimeline, SECRET_PATTERNS } from "./redaction.js";
+import { redactTimeline } from "./redaction.js";
 
 const metadata = {
   title: "A conversation",
@@ -33,7 +33,7 @@ describe("share redaction", () => {
       ]),
       metadata,
     );
-    expect(first.messages[0]).toMatchObject({ text: "[secret hidden] API_[secret hidden]" });
+    expect(first.messages[0]).toMatchObject({ text: "[secret hidden] API_KEY=[secret hidden]" });
     const second = redactTimeline(
       rows([
         {
@@ -89,7 +89,7 @@ describe("share redaction", () => {
     );
     expect(second.messages).toEqual(first.messages);
   });
-  it.each(secretFixtures.map((fixture, index) => [SECRET_PATTERNS[index]!.name, fixture]))(
+  it.each(secretFixtures.map((fixture, index) => [`fixture ${index + 1}`, fixture]))(
     "masks %s in user and assistant text",
     (_name, fixture) => {
       const result = redactTimeline(
@@ -217,7 +217,10 @@ describe("share redaction", () => {
       { ...metadata, title: "password=hidden" },
       { ...DEFAULT_REDACTION, include: { reasoning: true, errors: true, toolCalls: false } },
     );
-    expect(result.title).toBe("[secret hidden]");
-    expect(result.messages).toMatchObject([{ text: "[email]" }, { text: "[secret hidden]" }]);
+    expect(result.title).toBe("password=[secret hidden]");
+    expect(result.messages).toMatchObject([
+      { text: "[email]" },
+      { text: "password=[secret hidden]" },
+    ]);
   });
 });

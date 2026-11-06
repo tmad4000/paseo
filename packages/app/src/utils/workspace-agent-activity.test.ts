@@ -16,6 +16,8 @@ function agent(input: {
   labels?: Record<string, string>;
   archivedAt?: string | null;
   parentAgentId?: string | null;
+  createdBy?: string;
+  messageActivity?: Agent["messageActivity"];
 }): Agent {
   return {
     serverId: "host-a",
@@ -63,6 +65,8 @@ function agent(input: {
     attentionTimestamp: input.attentionTimestamp ? new Date(input.attentionTimestamp) : null,
     archivedAt: input.archivedAt ? new Date(input.archivedAt) : null,
     parentAgentId: input.parentAgentId ?? null,
+    ...(input.createdBy ? { createdBy: input.createdBy } : {}),
+    ...(input.messageActivity ? { messageActivity: input.messageActivity } : {}),
     labels: input.labels ?? {},
   };
 }
@@ -150,6 +154,9 @@ describe("workspace agent activity index", () => {
             lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+            startedAt: new Date("2026-01-01T00:00:00.000Z"),
+            mine: true,
+            delegatedByAgentId: null,
           },
         ],
         [
@@ -162,6 +169,9 @@ describe("workspace agent activity index", () => {
             lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+            startedAt: new Date("2026-01-01T00:00:00.000Z"),
+            mine: true,
+            delegatedByAgentId: null,
           },
         ],
       ]),
@@ -212,6 +222,9 @@ describe("workspace agent activity index", () => {
       lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
       lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
       lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+      startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      mine: true,
+      delegatedByAgentId: null,
     });
   });
 
@@ -251,6 +264,9 @@ describe("workspace agent activity index", () => {
             lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+            startedAt: new Date("2026-01-01T00:00:00.000Z"),
+            mine: true,
+            delegatedByAgentId: null,
           },
         ],
         [
@@ -263,6 +279,9 @@ describe("workspace agent activity index", () => {
             lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
             lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+            startedAt: new Date("2026-01-01T00:00:00.000Z"),
+            mine: false,
+            delegatedByAgentId: "parent",
           },
         ],
       ]),
@@ -344,6 +363,9 @@ describe("workspace agent activity index", () => {
       lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
       lastUserMessageAt: new Date("2026-01-01T00:00:00.000Z"),
       lastAssistantMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+      startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      mine: true,
+      delegatedByAgentId: null,
     });
   });
 
@@ -493,4 +515,95 @@ it("projects persistent manual input and review after unread attention is cleare
       buildWorkspaceAgentActivityIndex(new Map([[subject.id, subject]])).get("workspace")?.status,
     ).toBe(expected);
   }
+});
+
+it("dates a workspace by its earliest top-level chat, ignoring archived and child chats", () => {
+  const first = agent({ id: "first", workspaceId: "workspace", updatedAt: "2026-10-02T00:00:00Z" });
+  first.createdAt = new Date("2026-10-02T00:00:00Z");
+  const later = agent({ id: "later", workspaceId: "workspace", updatedAt: "2026-10-30T00:00:00Z" });
+  later.createdAt = new Date("2026-10-20T00:00:00Z");
+  const archived = agent({
+    id: "archived",
+    workspaceId: "workspace",
+    updatedAt: "2026-09-01T00:00:00Z",
+    archivedAt: "2026-09-02T00:00:00Z",
+  });
+  archived.createdAt = new Date("2026-09-01T00:00:00Z");
+  const child = agent({
+    id: "child",
+    workspaceId: "workspace",
+    updatedAt: "2026-09-01T00:00:00Z",
+    parentAgentId: "later",
+  });
+  child.createdAt = new Date("2026-09-01T00:00:00Z");
+  const agents = new Map([first, later, archived, child].map((item) => [item.id, item]));
+
+  const index = buildWorkspaceAgentActivityIndex(agents);
+  // The latest chat owns the row's status, but the start date still comes from the first one.
+  expect(index.get("workspace")?.agentId).toBe("later");
+  expect(index.get("workspace")?.startedAt).toEqual(new Date("2026-10-02T00:00:00Z"));
+});
+
+describe("workspace ownership and the human clock", () => {
+  const injected = {
+    lastUserMessageAt: "2026-05-02T00:00:00.000Z",
+    lastAssistantMessageAt: "2026-05-02T00:01:00.000Z",
+    lastHumanMessageAt: "2026-05-01T00:00:00.000Z",
+  };
+
+  it("sorts Your last message by the last turn a person sent, not an injected prompt", () => {
+    const result = buildWorkspaceAgentActivityIndex(
+      new Map([
+        [
+          "a",
+          agent({
+            id: "a",
+            workspaceId: "w",
+            updatedAt: "2026-05-02T00:01:00.000Z",
+            messageActivity: injected,
+          }),
+        ],
+      ]),
+    );
+    expect(result.get("w")?.lastUserMessageAt?.toISOString()).toBe("2026-05-01T00:00:00.000Z");
+    expect(result.get("w")?.lastMessageAt?.toISOString()).toBe("2026-05-02T00:01:00.000Z");
+  });
+
+  it("marks a delegated workspace nobody talked to as not mine, with its delegator", () => {
+    const result = buildWorkspaceAgentActivityIndex(
+      new Map([
+        [
+          "child",
+          agent({
+            id: "child",
+            workspaceId: "w",
+            updatedAt: "2026-05-02T00:00:00.000Z",
+            createdBy: "agent:orchestrator",
+            messageActivity: { ...injected, lastHumanMessageAt: null },
+          }),
+        ],
+      ]),
+    );
+    expect(result.get("w")?.mine).toBe(false);
+    expect(result.get("w")?.delegatedByAgentId).toBe("orchestrator");
+  });
+
+  it("counts a delegated workspace as mine once a person sends it a turn", () => {
+    const result = buildWorkspaceAgentActivityIndex(
+      new Map([
+        [
+          "child",
+          agent({
+            id: "child",
+            workspaceId: "w",
+            updatedAt: "2026-05-02T00:00:00.000Z",
+            createdBy: "agent:orchestrator",
+            messageActivity: injected,
+          }),
+        ],
+      ]),
+    );
+    expect(result.get("w")?.mine).toBe(true);
+    expect(result.get("w")?.delegatedByAgentId).toBe("orchestrator");
+  });
 });

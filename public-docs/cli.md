@@ -121,6 +121,7 @@ Then list, use, rename, or archive it:
 ```bash
 paseo workspace ls
 paseo run --workspace <workspace-id> "implement authentication"
+paseo workspace describe [workspace-id] --json   # what each chat is on; default: your own workspace
 paseo workspace rename <workspace-id> "Auth rework"
 paseo workspace rename <workspace-id> --reset   # back to the branch or directory name
 paseo workspace archive <workspace-id>

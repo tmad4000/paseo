@@ -4,9 +4,10 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
+import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import {
   View,
-  ScrollView,
   Pressable,
   Text,
   StyleSheet as RNStyleSheet,
@@ -29,6 +30,7 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -40,6 +42,7 @@ import {
   Square,
   Pencil,
   Trash2,
+  GripVertical,
   AudioLines,
   CircleDot,
   FileText,
@@ -85,6 +88,7 @@ import {
   sendQueuedComposerMessageNow,
   updateQueuedComposerMessage,
   removeQueuedComposerMessageLocally,
+  reorderQueuedComposerMessagesLocally,
   toggleForgeAttachmentFromPicker,
   uploadFileAttachments,
   type AttachmentPersister,
@@ -176,6 +180,7 @@ import { useComposerForgeAutoAttach } from "./forge-auto-attach";
 import { readClipboardImage } from "./clipboard-image";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
+import { isConnectionErrorMessage, toDisplayErrorMessage } from "@/utils/error-messages";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
 import {
   appendWorkspaceFileAttachment,
@@ -439,10 +444,46 @@ interface RenderQueueTrackArgs {
   collapseLabel: string;
   handleSaveQueuedMessage: (id: string, expectedText: string, text: string) => Promise<boolean>;
   handleSendQueuedNow: (id: string) => Promise<void>;
+  /** Absent when the host cannot pause its queue for an edit. */
+  handleHoldQueuedMessageForEdit?: (id: string, held: boolean) => void;
+  handleQueueEditAsNewMessage: (text: string) => Promise<boolean>;
+  /** Full id list in the new order. Absent when the queue cannot be reordered. */
+  handleReorderQueuedMessages?: (orderedIds: string[]) => void;
+  reorderLabel: string;
   editLabel: string;
   saveLabel: string;
   cancelLabel: string;
   sendNowLabel: string;
+}
+
+interface QueueRow {
+  item: QueuedMessage;
+  detached: boolean;
+}
+
+const queueRowKey = (row: QueueRow): string => row.item.id;
+
+const DETACHED_QUEUE_EDIT_SUFFIX = ":detached";
+
+/** Ids of queued-message edits whose message left the queue, from their persisted markers. */
+function listDetachedQueueEditIds(
+  drafts: Record<string, { lifecycle: string }>,
+  draftScope: string,
+): string[] {
+  const prefix = `${draftScope}:`;
+  const ids: string[] = [];
+  for (const [key, record] of Object.entries(drafts)) {
+    if (record.lifecycle !== "active") continue;
+    if (!key.startsWith(prefix) || !key.endsWith(DETACHED_QUEUE_EDIT_SUFFIX)) continue;
+    ids.push(key.slice(prefix.length, -DETACHED_QUEUE_EDIT_SUFFIX.length));
+  }
+  return ids;
+}
+
+/** Daemon refusals that mean the message is being, or has been, sent rather than edited. */
+function isQueuedMessageLeavingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /no longer queued|is being sent|already being sent|already being submitted/.test(message);
 }
 
 function resolveQueuedPendingLabel(
@@ -478,16 +519,126 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
     collapseLabel,
     handleSaveQueuedMessage,
     handleSendQueuedNow,
+    handleHoldQueuedMessageForEdit,
+    handleQueueEditAsNewMessage,
+    handleReorderQueuedMessages,
+    reorderLabel,
     editLabel,
     saveLabel,
     cancelLabel,
     sendNowLabel,
   } = args;
+  // Rows being edited, as last seen. A message can leave the queue mid-edit (it
+  // drained, or another device sent it); its row stays mounted so the edit survives.
+  const [editingItems, setEditingItems] = useState<ReadonlyMap<string, QueuedMessage>>(
+    () => new Map(),
+  );
+  const handleEditingChange = useCallback((item: QueuedMessage, editing: boolean) => {
+    setEditingItems((previous) => {
+      if (editing ? previous.has(item.id) : !previous.has(item.id)) return previous;
+      const next = new Map(previous);
+      if (editing) next.set(item.id, item);
+      else next.delete(item.id);
+      return next;
+    });
+  }, []);
+  // Detached edits outlive this track (switching chats, restarting) through a
+  // marker the row writes once it sees its message gone.
+  const persistedDetached = useDraftStore(
+    useShallow((state) => listDetachedQueueEditIds(state.drafts, draftScope)),
+  );
+  const rows = useMemo((): QueueRow[] => {
+    const queuedIds = new Set(queuedMessages.map((item) => item.id));
+    const detachedById = new Map<string, QueuedMessage>();
+    for (const id of persistedDetached) {
+      detachedById.set(id, { id, text: "", attachments: [] });
+    }
+    for (const item of editingItems.values()) detachedById.set(item.id, item);
+    const detached = [...detachedById.values()]
+      .filter((item) => !queuedIds.has(item.id))
+      .map((item) => ({ item, detached: true }));
+    return [...detached, ...queuedMessages.map((item) => ({ item, detached: false }))];
+  }, [editingItems, persistedDetached, queuedMessages]);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
   const expanded = expandedOverride ?? queuedMessages.length <= 3;
   const accessibilityState = useMemo(() => ({ expanded }), [expanded]);
   const toggleExpanded = useCallback(() => setExpandedOverride(!expanded), [expanded]);
-  if (queuedMessages.length === 0) return null;
+  // Collapsing hides queued rows, never an edit that has nowhere else to live.
+  const visibleRows = expanded ? rows : rows.filter((row) => row.detached);
+  // Un-acked rows are unknown to the host, so they cannot be placed; they ride at the end.
+  const reorderableCount = visibleRows.filter(
+    (row) => !row.detached && !pendingMessageIds.has(row.item.id),
+  ).length;
+  const canReorder = handleReorderQueuedMessages !== undefined && reorderableCount > 1;
+  const handleDragEnd = useCallback(
+    (ordered: QueueRow[]) => handleReorderQueuedMessages?.(ordered.map((row) => row.item.id)),
+    [handleReorderQueuedMessages],
+  );
+  const renderDraggableRow = useCallback(
+    ({
+      item: { item, detached },
+      drag,
+      dragHandleProps,
+    }: DraggableRenderItemInfo<QueueRow>): ReactElement => (
+      <QueuedMessageRow
+        item={item}
+        detached={detached}
+        reorderLabel={
+          canReorder && !detached && !pendingMessageIds.has(item.id) ? reorderLabel : undefined
+        }
+        onDrag={drag}
+        dragHandleProps={dragHandleProps}
+        onEditingChange={handleEditingChange}
+        onHoldForEdit={handleHoldQueuedMessageForEdit}
+        onQueueAsNew={handleQueueEditAsNewMessage}
+        draftKey={`${draftScope}:${item.id}`}
+        onRemove={handleRemoveQueuedMessage}
+        removeLabel={removeLabel}
+        readLabel={readLabel}
+        isPending={pendingMessageIds.has(item.id)}
+        deliveryState={deliveryStates?.get(item.id)}
+        pendingLabel={resolveQueuedPendingLabel(
+          item.id,
+          removalFailedIds,
+          removalPendingIds,
+          removalFailedLabel,
+          removalPendingLabel,
+          pendingLabel,
+        )}
+        onSave={handleSaveQueuedMessage}
+        onSendNow={handleSendQueuedNow}
+        editLabel={editLabel}
+        saveLabel={saveLabel}
+        cancelLabel={cancelLabel}
+        sendNowLabel={sendNowLabel}
+      />
+    ),
+    [
+      canReorder,
+      cancelLabel,
+      deliveryStates,
+      draftScope,
+      editLabel,
+      handleEditingChange,
+      handleHoldQueuedMessageForEdit,
+      handleQueueEditAsNewMessage,
+      handleRemoveQueuedMessage,
+      handleSaveQueuedMessage,
+      handleSendQueuedNow,
+      pendingLabel,
+      pendingMessageIds,
+      readLabel,
+      removalFailedIds,
+      removalFailedLabel,
+      removalPendingIds,
+      removalPendingLabel,
+      removeLabel,
+      reorderLabel,
+      saveLabel,
+      sendNowLabel,
+    ],
+  );
+  if (rows.length === 0) return null;
   return (
     <View style={styles.queueTrack}>
       <Pressable
@@ -512,41 +663,22 @@ function QueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
           <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
         )}
       </Pressable>
-      {expanded && (
-        <ScrollView
+      {visibleRows.length > 0 && (
+        // Detached edits share the list (without a handle) so a row that leaves the
+        // queue mid-edit stays mounted and keeps its focus and cursor.
+        <DraggableList
           testID="composer-queue-list"
+          data={visibleRows}
+          keyExtractor={queueRowKey}
+          renderItem={renderDraggableRow}
+          onDragEnd={handleDragEnd}
+          useDragHandle
           style={styles.queueList}
+          containerStyle={styles.queueListContainer}
           contentContainerStyle={styles.queueListContent}
           keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-        >
-          {queuedMessages.map((item) => (
-            <QueuedMessageRow
-              key={item.id}
-              item={item}
-              draftKey={`${draftScope}:${item.id}`}
-              onRemove={handleRemoveQueuedMessage}
-              removeLabel={removeLabel}
-              readLabel={readLabel}
-              isPending={pendingMessageIds.has(item.id)}
-              deliveryState={deliveryStates?.get(item.id)}
-              pendingLabel={resolveQueuedPendingLabel(
-                item.id,
-                removalFailedIds,
-                removalPendingIds,
-                removalFailedLabel,
-                removalPendingLabel,
-                pendingLabel,
-              )}
-              onSave={handleSaveQueuedMessage}
-              onSendNow={handleSendQueuedNow}
-              editLabel={editLabel}
-              saveLabel={saveLabel}
-              cancelLabel={cancelLabel}
-              sendNowLabel={sendNowLabel}
-            />
-          ))}
-        </ScrollView>
+          extraData={visibleRows}
+        />
       )}
     </View>
   );
@@ -880,8 +1012,21 @@ function QueuedRowStatus({
   );
 }
 
+/** How often an open editor renews its hold; well inside the daemon's 60 s expiry. */
+const QUEUE_EDIT_HOLD_REFRESH_MS = 20_000;
+
 interface QueuedMessageRowProps {
   item: QueuedMessage;
+  /** The message left the queue while being edited. The edit lives on here until queued or discarded. */
+  detached: boolean;
+  /** Present when the row can be dragged to a new place in the queue. */
+  reorderLabel?: string;
+  /** Native: starts the drag. Web drags start from `dragHandleProps` instead. */
+  onDrag: () => void;
+  dragHandleProps?: DraggableListDragHandleProps;
+  onEditingChange: (item: QueuedMessage, editing: boolean) => void;
+  onHoldForEdit?: (id: string, held: boolean) => void;
+  onQueueAsNew: (text: string) => Promise<boolean>;
   draftKey: string;
   isPending: boolean;
   deliveryState?: MessageDeliveryState;
@@ -899,6 +1044,13 @@ interface QueuedMessageRowProps {
 
 function QueuedMessageRow({
   item,
+  detached,
+  reorderLabel,
+  onDrag,
+  dragHandleProps,
+  onEditingChange,
+  onHoldForEdit,
+  onQueueAsNew,
   draftKey,
   isPending,
   deliveryState,
@@ -913,7 +1065,12 @@ function QueuedMessageRow({
   removeLabel,
   readLabel,
 }: QueuedMessageRowProps) {
+  const { t } = useTranslation();
   const baselineKey = `${draftKey}:baseline`;
+  const detachedRef = useRef(detached);
+  detachedRef.current = detached;
+  const itemRef = useRef(item);
+  itemRef.current = item;
   const restoredDraft = useDraftStore.getState().getDraftInput(draftKey)?.text;
   const [isEditing, setIsEditing] = useState(restoredDraft !== undefined);
   const [draft, setDraft] = useState(restoredDraft ?? item.text);
@@ -965,33 +1122,62 @@ function QueuedMessageRow({
     editingRef.current = true;
     setIsEditing(true);
   }, [item.text, preserveDraft]);
-  const handleSave = useCallback(async () => {
-    if (savingRef.current || !editingRef.current) return;
-    savingRef.current = true;
-    setIsSaving(true);
-    const text = editInputRef.current?.getText() ?? draftRef.current;
-    preserveDraft(text);
-    try {
-      await flushDraftPersistStorage();
-      if (
-        text === expectedTextRef.current ||
-        (await onSave(item.id, expectedTextRef.current, text))
-      ) {
-        if (useDraftStore.getState().drafts[draftKey]?.version !== draftVersionRef.current) return;
-        expectedTextRef.current = text;
-        if (draftRef.current === text) {
-          clearSavedDraft();
-          editingRef.current = false;
-          setIsEditing(false);
-        } else {
-          preserveDraft(draftRef.current);
-        }
+  const handleSave = useCallback(
+    async (intent: "commit" | "leave" = "leave") => {
+      if (savingRef.current || !editingRef.current) return;
+      const text = editInputRef.current?.getText() ?? draftRef.current;
+      if (detachedRef.current) {
+        // Nothing is queued to save into; keep the words until queued or discarded.
+        preserveDraft(text);
+        return;
       }
-    } finally {
-      savingRef.current = false;
-      setIsSaving(false);
-    }
-  }, [clearSavedDraft, draftKey, item.id, onSave, preserveDraft]);
+      if (!text.trim() && item.attachments.length === 0) {
+        // An emptied message has nothing left to send. Done/Save removes it;
+        // a blur or leaving the screen keeps the draft so a stray tap cannot delete.
+        preserveDraft(text);
+        if (intent !== "commit") return;
+        savingRef.current = true;
+        setIsSaving(true);
+        try {
+          if (await onRemove(item.id)) {
+            clearSavedDraft();
+            editingRef.current = false;
+            // The track keeps an editing row whose message leaves; this one is done.
+            setIsEditing(false);
+          }
+        } finally {
+          savingRef.current = false;
+          setIsSaving(false);
+        }
+        return;
+      }
+      savingRef.current = true;
+      setIsSaving(true);
+      preserveDraft(text);
+      try {
+        await flushDraftPersistStorage();
+        if (
+          text === expectedTextRef.current ||
+          (await onSave(item.id, expectedTextRef.current, text))
+        ) {
+          if (useDraftStore.getState().drafts[draftKey]?.version !== draftVersionRef.current)
+            return;
+          expectedTextRef.current = text;
+          if (draftRef.current === text) {
+            clearSavedDraft();
+            editingRef.current = false;
+            setIsEditing(false);
+          } else {
+            preserveDraft(draftRef.current);
+          }
+        }
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [clearSavedDraft, draftKey, item.attachments.length, item.id, onRemove, onSave, preserveDraft],
+  );
   useEffect(() => {
     let active = true;
     void useDraftStore
@@ -1014,12 +1200,66 @@ function QueuedMessageRow({
   }, [baselineKey, draftKey, item.text]);
   const saveOnLeaveRef = useRef(handleSave);
   saveOnLeaveRef.current = handleSave;
+  const leaveSaveRef = useRef<Promise<void> | null>(null);
+  // Declared before the hold effect: on unmount React runs cleanups in order, so
+  // the save is in flight before the hold is released and the queue drains.
   useEffect(
     () => () => {
-      void saveOnLeaveRef.current().catch(() => {});
+      leaveSaveRef.current = saveOnLeaveRef.current().catch(() => {});
     },
     [],
   );
+  useEffect(() => {
+    if (!isEditing) return undefined;
+    const editedItem = itemRef.current;
+    onEditingChange(editedItem, true);
+    return () => onEditingChange(editedItem, false);
+  }, [isEditing, onEditingChange]);
+  useEffect(() => {
+    if (!isEditing || detached || !onHoldForEdit) return undefined;
+    const id = item.id;
+    onHoldForEdit(id, true);
+    const refresh = setInterval(() => onHoldForEdit(id, true), QUEUE_EDIT_HOLD_REFRESH_MS);
+    return () => {
+      clearInterval(refresh);
+      void Promise.resolve(leaveSaveRef.current).finally(() => onHoldForEdit(id, false));
+    };
+  }, [detached, isEditing, item.id, onHoldForEdit]);
+  const detachedMarkerKey = `${draftKey}${DETACHED_QUEUE_EDIT_SUFFIX}`;
+  useEffect(() => {
+    if (!detached || !isEditing) return;
+    const store = useDraftStore.getState();
+    if (store.getDraftInput(detachedMarkerKey)) return;
+    store.saveDraftInput({
+      draftKey: detachedMarkerKey,
+      draft: { text: "", attachments: [] },
+    });
+  }, [detached, detachedMarkerKey, isEditing]);
+  const finishDetachedEdit = useCallback(() => {
+    clearSavedDraft();
+    useDraftStore.getState().clearDraftInput({ draftKey: detachedMarkerKey, lifecycle: "sent" });
+    editingRef.current = false;
+    setIsEditing(false);
+  }, [clearSavedDraft, detachedMarkerKey]);
+  const discardDetachedEdit = useCallback(() => {
+    if (!savingRef.current) finishDetachedEdit();
+  }, [finishDetachedEdit]);
+  const queueDetachedEdit = useCallback(async () => {
+    const text = editInputRef.current?.getText() ?? draftRef.current;
+    if (savingRef.current || !text.trim()) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    preserveDraft(text);
+    try {
+      if (await onQueueAsNew(text)) finishDetachedEdit();
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
+  }, [finishDetachedEdit, onQueueAsNew, preserveDraft]);
+  const queueDetachedFromUI = useCallback(() => {
+    void queueDetachedEdit().catch(() => {});
+  }, [queueDetachedEdit]);
   const handleRemove = useCallback(async () => {
     if (isRemoving) return;
     setIsRemoving(true);
@@ -1032,15 +1272,31 @@ function QueuedMessageRow({
   const saveFromUI = useCallback(() => {
     void handleSave().catch(() => {});
   }, [handleSave]);
+  const commitFromUI = useCallback(() => {
+    void handleSave("commit").catch(() => {});
+  }, [handleSave]);
+  const removesOnSave = !draft.trim() && item.attachments.length === 0;
   const removeFromUI = useCallback(() => {
     void handleRemove().catch(() => {});
   }, [handleRemove]);
   const toggleReading = useCallback(() => setIsReading((value) => !value), []);
   const sendFromUI = useCallback(() => onSendNow(item.id), [item.id, onSendNow]);
   const readingAccessibilityState = useMemo(() => ({ expanded: isReading }), [isReading]);
+  // Finished with a detached edit: the row goes once the track drops it.
+  if (detached && !isEditing) return null;
   if (isEditing) {
+    // One editor for both states, so focus and cursor survive the message leaving the queue.
     return (
-      <View style={[styles.queueItem, styles.queueEditItem]} testID={`queued-message-${item.id}`}>
+      <View
+        style={[styles.queueItem, styles.queueEditItem]}
+        testID={`queued-message-${item.id}`}
+        accessibilityLiveRegion={detached ? "polite" : undefined}
+      >
+        {detached && (
+          <Text style={styles.queueDetachedNotice} testID="queued-message-detached-notice">
+            {t("composer.attachments.queueEditLeftQueue")}
+          </Text>
+        )}
         <TextInput
           ref={editInputRef}
           initialValue={draft}
@@ -1053,26 +1309,64 @@ function QueuedMessageRow({
           style={styles.queueEditInput}
           scrollEnabled
         />
-        <View style={styles.queueActions}>
-          <Pressable
-            onPress={saveFromUI}
-            disabled={isSaving}
-            style={styles.queueEditTextButton}
-            accessibilityRole="button"
-            accessibilityLabel={cancelLabel}
-          >
-            <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
-          </Pressable>
-          <Pressable
-            onPress={saveFromUI}
-            disabled={isSaving}
-            style={[styles.queueEditTextButton, styles.queueEditSaveButton]}
-            accessibilityRole="button"
-            accessibilityLabel={saveLabel}
-          >
-            <Text style={styles.queueEditSaveButtonLabel}>{saveLabel}</Text>
-          </Pressable>
-        </View>
+        {detached ? (
+          <View style={styles.queueActions}>
+            <Pressable
+              onPress={discardDetachedEdit}
+              disabled={isSaving}
+              style={styles.queueEditTextButton}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.attachments.queueEditDiscard")}
+            >
+              <Text style={styles.queueEditTextButtonLabel}>
+                {t("composer.attachments.queueEditDiscard")}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={queueDetachedFromUI}
+              disabled={isSaving || !draft.trim()}
+              style={[styles.queueEditTextButton, styles.queueEditSaveButton]}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.attachments.queueEditAsNewMessage")}
+            >
+              <Text style={styles.queueEditSaveButtonLabel}>
+                {t("composer.attachments.queueEditAsNewMessage")}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.queueActions}>
+            <Pressable
+              onPress={commitFromUI}
+              disabled={isSaving}
+              style={styles.queueEditTextButton}
+              accessibilityRole="button"
+              accessibilityLabel={cancelLabel}
+            >
+              <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
+            </Pressable>
+            <Pressable
+              onPress={commitFromUI}
+              disabled={isSaving}
+              style={[
+                styles.queueEditTextButton,
+                removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={removesOnSave ? removeLabel : saveLabel}
+            >
+              <Text
+                style={
+                  removesOnSave
+                    ? styles.queueEditRemoveButtonLabel
+                    : styles.queueEditSaveButtonLabel
+                }
+              >
+                {removesOnSave ? removeLabel : saveLabel}
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     );
   }
@@ -1100,6 +1394,12 @@ function QueuedMessageRow({
         />
       </Pressable>
       <View style={styles.queueActions}>
+        <QueuedMessageGrip
+          itemId={item.id}
+          label={reorderLabel}
+          drag={onDrag}
+          dragHandleProps={dragHandleProps}
+        />
         {!isPending && (
           <>
             <Pressable
@@ -1136,6 +1436,54 @@ function QueuedMessageRow({
           )}
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+// Space lifts and Escape cancels a keyboard drag; see resolveKeyboardFocusScope.
+const KEYBOARD_OWNER_DATASET = { keyboardOwner: "true" };
+const NO_DRAG_HANDLE_PROPS: DraggableListDragHandleProps = {};
+
+function QueuedMessageGrip({
+  itemId,
+  label,
+  drag,
+  dragHandleProps,
+}: {
+  itemId: string;
+  /** Absent when the row cannot move; nothing renders. */
+  label: string | undefined;
+  drag: () => void;
+  dragHandleProps: DraggableListDragHandleProps | undefined;
+}): ReactElement | null {
+  if (label === undefined) return null;
+  const icon = <ThemedGripVertical size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
+  if (isNative) {
+    return (
+      <Pressable
+        onPressIn={drag}
+        style={styles.queueDragHandle}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID={`queued-message-drag-${itemId}`}
+      >
+        {icon}
+      </Pressable>
+    );
+  }
+  // dnd-kit's attributes make this the focusable sortable handle (Space to lift, arrows to move).
+  const { attributes, listeners, setActivatorNodeRef } = dragHandleProps ?? NO_DRAG_HANDLE_PROPS;
+  return (
+    <View
+      {...attributes}
+      {...listeners}
+      ref={setActivatorNodeRef as unknown as Ref<View>}
+      dataSet={KEYBOARD_OWNER_DATASET}
+      accessibilityLabel={label}
+      style={styles.queueDragHandle}
+      testID={`queued-message-drag-${itemId}`}
+    >
+      {icon}
     </View>
   );
 }
@@ -1811,6 +2159,10 @@ function ComposerContentImpl({
   const supportsQueueSendNow = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.queueSendNow === true,
   );
+  // COMPAT(queueEditHold): fork feature; older hosts keep draining mid-edit.
+  const supportsQueueEditHold = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.queueEditHold === true,
+  );
   const applyAgentQueueSnapshot = useSessionStore((state) => state.applyAgentQueueSnapshot);
   const forgeAutoAttachRef = useRef<ReturnType<typeof useComposerForgeAutoAttach>>(null);
   const [isForgeResolving, setIsForgeResolving] = useState(false);
@@ -1853,6 +2205,12 @@ function ComposerContentImpl({
   const isUploadingFile = pendingFiles.length > 0;
   const [pendingNativeImagePastes, setPendingNativeImagePastes] = useState(0);
   const [sendError, setSendError] = useState<string | null>(null);
+  // A connection failure stops being true once the host is back; don't leave it on screen.
+  useEffect(() => {
+    if (isConnected) {
+      setSendError((current) => (current && isConnectionErrorMessage(current) ? null : current));
+    }
+  }, [isConnected]);
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
@@ -2164,7 +2522,11 @@ function ComposerContentImpl({
   latestAttachmentsRef.current = attachments;
   const queueSubmissionInFlight = useRef(new Set<string>());
   const queueMessage = useCallback(
-    async (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+    async (
+      queuedMessage: string,
+      queuedAttachments: ComposerAttachment[],
+      options?: { keepComposer?: boolean },
+    ): Promise<boolean> => {
       const submissionKey = JSON.stringify([queuedMessage.trim(), queuedAttachments]);
       if (queueSubmissionInFlight.current.has(submissionKey)) {
         const error = new Error("This queued message is still being saved.");
@@ -2205,9 +2567,9 @@ function ComposerContentImpl({
             setSendError(result.error);
             throw new Error(result.error);
           }
-          if (!result.queued) return;
-          clearComposer();
-          return;
+          if (!result.queued) return false;
+          if (!options?.keepComposer) clearComposer();
+          return true;
         }
 
         const result = queueComposerMessage({
@@ -2216,9 +2578,10 @@ function ComposerContentImpl({
           attachments: queuedAttachments,
           queue: queueWriter,
         });
-        if (!result.queued) return;
+        if (!result.queued) return false;
 
-        clearComposer();
+        if (!options?.keepComposer) clearComposer();
+        return true;
       } finally {
         queueSubmissionInFlight.current.delete(submissionKey);
       }
@@ -2257,8 +2620,8 @@ function ComposerContentImpl({
         // Parent-managed submits are still valid submit paths even when the
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
-        queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
-          return queueMessage(queuedText, queuedAttachments);
+        queueMessage: async ({ message: queuedText, attachments: queuedAttachments }) => {
+          await queueMessage(queuedText, queuedAttachments);
         },
         submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
           if (submitBehavior !== "preserve-and-lock") {
@@ -2560,9 +2923,12 @@ function ComposerContentImpl({
           applyAgentQueueSnapshot(serverId, snapshot);
           return true;
         } catch (error) {
-          setSendError(
-            error instanceof Error ? error.message : t("composer.errors.queueEditFailed"),
-          );
+          // The message is leaving the queue; its row keeps the edit and says so.
+          if (!isQueuedMessageLeavingError(error)) {
+            setSendError(
+              error instanceof Error ? error.message : t("composer.errors.queueEditFailed"),
+            );
+          }
           return false;
         }
       }
@@ -2587,6 +2953,56 @@ function ComposerContentImpl({
       supportsQueueEdit,
       t,
     ],
+  );
+
+  const handleHoldQueuedMessageForEdit = useMemo(() => {
+    if (!supportsAgentMessageQueue || !supportsQueueEditHold || !client) return undefined;
+    return (id: string, held: boolean) => {
+      // Best effort: a missed hold only means the old drain-mid-edit behaviour,
+      // which the row already survives.
+      void client.holdQueuedAgentMessageForEdit({ agentId, itemId: id, held }).catch(() => {});
+    };
+  }, [agentId, client, supportsAgentMessageQueue, supportsQueueEditHold]);
+
+  const handleQueueEditAsNewMessage = useCallback(
+    async (text: string): Promise<boolean> => {
+      try {
+        return await queueMessage(text, [], { keepComposer: true });
+      } catch {
+        return false;
+      }
+    },
+    [queueMessage],
+  );
+
+  const handleReorderQueuedMessages = useCallback(
+    (orderedIds: string[]) => {
+      // Optimistic: the row lands where it was dropped; the host's snapshot then
+      // replaces the list wholesale, so other devices and a refused move converge.
+      const moved = reorderQueuedComposerMessagesLocally({
+        agentId,
+        orderedIds,
+        queue: queueWriter,
+      });
+      if (!moved || !supportsAgentMessageQueue || !client) return;
+      void (async () => {
+        try {
+          const snapshot = await client.reorderQueuedAgentMessages(agentId, orderedIds);
+          applyAgentQueueSnapshot(serverId, snapshot);
+        } catch (error) {
+          setSendError(
+            error instanceof Error ? error.message : t("composer.errors.queueReorderFailed"),
+          );
+          // Put back the host's order; an equal-revision snapshot replaces the optimistic one.
+          try {
+            applyAgentQueueSnapshot(serverId, await client.listQueuedAgentMessages(agentId));
+          } catch {
+            // The next broadcast refreshes it.
+          }
+        }
+      })();
+    },
+    [agentId, applyAgentQueueSnapshot, client, queueWriter, serverId, supportsAgentMessageQueue, t],
   );
 
   const handleRemoveQueuedMessage = useCallback(
@@ -3121,6 +3537,10 @@ function ComposerContentImpl({
         collapseLabel={t("composer.attachments.collapseQueuedMessages")}
         handleSaveQueuedMessage={handleSaveQueuedMessage}
         handleSendQueuedNow={handleSendQueuedNow}
+        handleHoldQueuedMessageForEdit={handleHoldQueuedMessageForEdit}
+        handleQueueEditAsNewMessage={handleQueueEditAsNewMessage}
+        handleReorderQueuedMessages={handleReorderQueuedMessages}
+        reorderLabel={t("composer.attachments.reorderQueuedMessage")}
         editLabel={t("composer.attachments.editQueuedMessage")}
         saveLabel={t("composer.attachments.saveQueuedMessage")}
         cancelLabel={t("composer.attachments.doneQueuedMessage")}
@@ -3138,6 +3558,9 @@ function ComposerContentImpl({
       handleRemoveQueuedMessage,
       handleSaveQueuedMessage,
       handleSendQueuedNow,
+      handleHoldQueuedMessageForEdit,
+      handleQueueEditAsNewMessage,
+      handleReorderQueuedMessages,
       isAgentRunning,
       queuedMessages,
       pendingMessageIds,
@@ -3188,14 +3611,22 @@ function ComposerContentImpl({
 
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
+  const dismissSendError = useCallback(() => setSendError(null), []);
   const sendErrorNode = useMemo(
     () =>
       sendError ? (
-        <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
-        </Text>
+        <Pressable
+          onPress={dismissSendError}
+          accessibilityRole="button"
+          accessibilityHint={t("common.actions.dismiss")}
+          testID="composer-send-error"
+        >
+          <Text accessibilityRole="alert" style={styles.sendErrorText}>
+            {toDisplayErrorMessage(sendError)}
+          </Text>
+        </Pressable>
       ) : null,
-    [sendError],
+    [dismissSendError, sendError, t],
   );
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")
@@ -3431,6 +3862,8 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[2],
   },
   queueList: { maxHeight: 240, flexShrink: 1 },
+  // The list's default container fills its parent, which collapses inside the auto-height composer.
+  queueListContainer: { flexGrow: 0, flexShrink: 1, flexBasis: "auto", maxHeight: 240 },
   queueListContent: { gap: theme.spacing[2], paddingBottom: theme.spacing[2] },
   queueReadItem: { flexDirection: "column", alignItems: "stretch" },
   queueHeader: {
@@ -3467,6 +3900,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
     gap: theme.spacing[2],
+  },
+  queueDragHandle: {
+    width: 24,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
   queueEditItem: {
     flexDirection: "column",
@@ -3506,12 +3945,23 @@ const styles = StyleSheet.create((theme: Theme) => ({
     color: theme.colors.accentForeground,
     fontSize: theme.fontSize.sm,
   },
+  queueEditRemoveButton: {
+    backgroundColor: theme.colors.destructive,
+  },
+  queueEditRemoveButtonLabel: {
+    color: theme.colors.destructiveForeground,
+    fontSize: theme.fontSize.sm,
+  },
   queueText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
   queuePendingText: {
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  queueDetachedNotice: {
+    color: theme.colors.statusWarning,
     fontSize: theme.fontSize.sm,
   },
   queueAttentionText: {
@@ -3556,6 +4006,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
 const ThemedAttachmentSpinner = withUnistyles(LoadingSpinner);
 const ThemedTrash = withUnistyles(Trash2);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedGripVertical = withUnistyles(GripVertical);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronUp = withUnistyles(ChevronUp);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);

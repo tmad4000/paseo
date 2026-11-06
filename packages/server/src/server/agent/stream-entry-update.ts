@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import {
   TrackedAskInputSchema,
+  StreamInputRequestSchema,
   type TrackedAskInput,
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
 import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
 import { parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
 import { retainCompanionEntries } from "./companion-stream.js";
+import { markReplySeen, setExplicitReply } from "./stream-answers.js";
 
 /** Tags parsed at write time; omitted when the text has none. */
 function tagsFor(text: string): { tags?: string[] } {
@@ -17,32 +19,17 @@ function tagsFor(text: string): { tags?: string[] } {
 export function applyStreamEntryUpdate(
   entries: CompanionEntry[],
   input: StreamEntryUpdate,
+  serverId?: string,
 ): CompanionEntry[] {
-  if (input.action === "set_ask") return setAsk(entries, input);
-  if (input.action === "update_status") {
-    if (!input.status) throw new Error("Status is required");
-    const target = entries.find((entry) => entry.id === input.entryId);
-    if (!target || (target.kind !== "question" && target.kind !== "feature_request"))
-      throw new Error("Stream item no longer exists or cannot be changed");
-    if (target.ask) {
-      if (input.status === "done" && target.ask.state !== "done")
-        throw new Error("Use set_stream_ask with completion evidence to mark this ask done");
-      const state = ({ open: "open", reviewed: "in_progress", done: "done" } as const)[
-        input.status
-      ];
-      return setAsk(entries, {
-        ...input,
-        entryId: target.id.slice(4),
-        text: target.text,
-        // COMPAT(askRevision): added fork beta.11; remove after 2027-04-07 when old question clients are retired.
-        expectedRevision: input.expectedRevision ?? target.ask.revision,
-        ask: { ...target.ask, state },
-      });
-    }
-    return retainCompanionEntries(
-      entries.map((entry) => (entry === target ? { ...target, status: input.status! } : entry)),
-    );
-  }
+  if (input.action === "set_ask") return setAsk(entries, input, serverId);
+  const target = entries.find((entry) => entry.id === input.entryId);
+  if (target?.ask?.canonicalTask)
+    throw new Error("This is a task reference. Update its canonical origin instead.");
+  if (input.action === "update_status") return updateStatus(entries, input);
+  if (input.action === "set_reply")
+    return setExplicitReply(entries, input, new Date().toISOString());
+  if (input.action === "mark_reply_seen") return markReplySeen(entries, input);
+  if (input.action === "set_deferred") return setDeferred(entries, input);
   if (input.action === "remove_pin") {
     if (!entries.some((entry) => entry.id === input.entryId && entry.kind === "pin"))
       throw new Error("Pinned item no longer exists");
@@ -54,6 +41,46 @@ export function applyStreamEntryUpdate(
   const exists = entries.some((item) => item.id === entry.id);
   return retainCompanionEntries(
     exists ? entries.map((item) => (item.id === entry.id ? entry : item)) : [...entries, entry],
+  );
+}
+
+/**
+ * Set a request aside for later, or bring it back. Status and the ask stay as they are; asking
+ * again replaces the entry without deferredAt, so a renewed request resurfaces.
+ */
+function setDeferred(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
+  if (input.deferred === undefined) throw new Error("Say whether to defer the item");
+  const target = entries.find((entry) => entry.id === input.entryId);
+  if (!target) throw new Error("Stream item no longer exists");
+  if (Boolean(target.deferredAt) === input.deferred) return entries;
+  const { deferredAt: _previous, ...rest } = target;
+  const next = (
+    input.deferred ? { ...rest, deferredAt: new Date().toISOString() } : rest
+  ) as CompanionEntry;
+  return entries.map((entry) => (entry === target ? next : entry));
+}
+
+function updateStatus(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
+  if (!input.status) throw new Error("Status is required");
+  const target = entries.find((entry) => entry.id === input.entryId);
+  if (target?.kind === "q_and_a") return setQAndAStatus(entries, target, input.status);
+  if (!target || (target.kind !== "question" && target.kind !== "feature_request"))
+    throw new Error("Stream item no longer exists or cannot be changed");
+  if (target.ask) {
+    if (input.status === "done" && target.ask.state !== "done")
+      throw new Error("Use set_stream_ask with completion evidence to mark this ask done");
+    const state = ({ open: "open", reviewed: "in_progress", done: "done" } as const)[input.status];
+    return setAsk(entries, {
+      ...input,
+      entryId: target.id.slice(4),
+      text: target.text,
+      // COMPAT(askRevision): added fork beta.11; remove after 2027-04-07 when old question clients are retired.
+      expectedRevision: input.expectedRevision ?? target.ask.revision,
+      ask: { ...target.ask, state },
+    });
+  }
+  return retainCompanionEntries(
+    entries.map((entry) => (entry === target ? { ...target, status: input.status! } : entry)),
   );
 }
 
@@ -73,6 +100,7 @@ function createEntry(
         timestamp: existing?.timestamp ?? common.timestamp,
         kind: "question",
         status: input.status ?? "open",
+        inputRequest: parseInputRequest(input.inputRequest, existing?.inputRequest),
       };
     }
     case "add_pin": {
@@ -86,53 +114,145 @@ function createEntry(
       };
     }
     case "add_q_and_a":
-      return { ...common, id: `qa:${randomUUID()}`, kind: "q_and_a", answer: input.answerText };
+      return createQAndA(entries, input, common);
     default:
       throw new Error("Unknown Stream action");
   }
 }
 
-function setAsk(entries: CompanionEntry[], input: StreamEntryUpdate): CompanionEntry[] {
+type QAndAEntry = Extract<CompanionEntry, { kind: "q_and_a" }>;
+
+/** Stop (done) or resume (open) tracking a Q&A message. Seen is mark_reply_seen, not a status. */
+function setQAndAStatus(
+  entries: CompanionEntry[],
+  target: QAndAEntry,
+  status: "open" | "reviewed" | "done",
+): CompanionEntry[] {
+  if (status === "reviewed") throw new Error("Mark the answer seen instead");
+  return entries.map((entry) => (entry === target ? { ...target, status } : entry));
+}
+
+function createQAndA(
+  entries: CompanionEntry[],
+  input: StreamEntryUpdate,
+  common: Pick<QAndAEntry, "timestamp" | "text" | "truncated" | "tags">,
+): CompanionEntry {
+  // A stable ID makes tracking the same message again a no-op instead of a second card;
+  // tracking a message the user stopped tracking resumes it, keeping its answer and seen state.
+  const id = `qa:${input.entryId ?? randomUUID()}`;
+  const existing = entries.find((entry) => entry.id === id);
+  if (existing?.kind === "q_and_a")
+    return existing.status === "done" ? { ...existing, status: "open" } : existing;
+  const questionMessageId = input.sourceId?.startsWith("msg:")
+    ? input.sourceId.slice(4)
+    : undefined;
+  return {
+    ...common,
+    id,
+    kind: "q_and_a",
+    answer: input.answerText,
+    ...(questionMessageId ? { questionMessageId } : {}),
+    ...(input.questionAnchor ? { questionAnchor: input.questionAnchor } : {}),
+  };
+}
+
+function setAsk(
+  entries: CompanionEntry[],
+  input: StreamEntryUpdate,
+  serverId?: string,
+): CompanionEntry[] {
   if (!input.entryId?.trim() || !input.ask || !input.text?.trim())
     throw new Error("Ask ID, text and explicit state are required");
   if (input.text.length > 4000 || input.entryId.length > 200)
     throw new Error("Ask text or ID is too long");
   const id = `ask:${input.entryId}`;
   const previous = entries.find((entry) => entry.id === id);
-  const ask = TrackedAskInputSchema.parse(input.ask);
-  validateAskCompletion(ask);
+  const ask = parseAskEdit(input.ask, previous);
+  const blocker = parseAskBlocker(ask, input.inputRequest, previous);
   const revision = previous?.ask?.revision ?? 0;
-  const entry: CompanionEntry = {
+  const entry = createTrackedAskEntry({
     id,
-    kind: "question",
-    timestamp: previous?.timestamp ?? new Date().toISOString(),
     text: input.text.trim(),
-    truncated: false,
-    ...tagsFor(input.text.trim()),
-    status: ask.state === "done" ? "done" : "open",
-    ask: {
-      state: ask.state,
-      remaining: ask.remaining,
-      evidence: ask.evidence,
-      sourceMessageId: ask.sourceMessageId,
-      delegatedAgentId: ask.delegatedAgentId,
-      subtasks: ask.subtasks,
-      revision,
-      provenance: "explicit",
-    },
-  };
-  if (
-    previous?.ask &&
-    previous.text === entry.text &&
-    JSON.stringify(TrackedAskInputSchema.parse(previous.ask)) === JSON.stringify(ask)
-  )
-    return entries;
+    ask,
+    blocker,
+    previous,
+    revision,
+    agentId: input.agentId,
+    serverId,
+  });
+  if (isUnchangedAsk(previous, entry.text, ask, blocker)) return entries;
+  if (previous?.ask?.canonicalTask)
+    throw new Error("This is a task reference. Update its canonical origin instead.");
   if (input.expectedRevision !== revision)
     throw new Error(
       `Ask revision conflict: expectedRevision must be ${revision}; read the ask before updating`,
     );
   entry.ask!.revision = revision + 1;
   return previous ? entries.map((item) => (item.id === id ? entry : item)) : [...entries, entry];
+}
+
+/** Repeating an identical write is a no-op, so a lost acknowledgement can be retried. */
+function isUnchangedAsk(
+  previous: CompanionEntry | undefined,
+  text: string,
+  ask: TrackedAskInput,
+  blocker: CompanionEntry["inputRequest"],
+): boolean {
+  return Boolean(
+    previous?.ask &&
+    previous.text === text &&
+    JSON.stringify(TrackedAskInputSchema.parse(previous.ask)) === JSON.stringify(ask) &&
+    JSON.stringify(previous.inputRequest) === JSON.stringify(blocker),
+  );
+}
+
+/** A valid ask from an edit. An edit that omits expectsAnswer keeps the question waiting. */
+function parseAskEdit(
+  input: TrackedAskInput,
+  previous: CompanionEntry | undefined,
+): TrackedAskInput {
+  const ask = TrackedAskInputSchema.parse(input);
+  ask.expectsAnswer ??= previous?.ask?.expectsAnswer;
+  ask.sessions ??= previous?.ask?.sessions;
+  ask.canonicalTask ??= previous?.ask?.canonicalTask;
+  if (ask.sessions) {
+    const keys = ask.sessions.map((session) => JSON.stringify([session.serverId, session.agentId]));
+    if (new Set(keys).size !== keys.length) throw new Error("Task session links must be unique");
+  }
+  validateAskCompletion(ask);
+  return ask;
+}
+
+/**
+ * Who a blocked ask waits on. Defaults to the user, so a blocked ask reaches Needs you; naming an
+ * agent or external recipient keeps it out. A still-blocked edit keeps the previous blocker; the
+ * blocker is dropped when the ask leaves blocked, so a stale one never lingers.
+ */
+function parseAskBlocker(
+  ask: TrackedAskInput,
+  input: StreamEntryUpdate["inputRequest"],
+  previous: CompanionEntry | undefined,
+): CompanionEntry["inputRequest"] {
+  if (ask.state !== "blocked") {
+    if (input) throw new Error("A blocker only applies to a blocked ask");
+    return undefined;
+  }
+  const kept = previous?.ask?.state === "blocked" ? previous.inputRequest : undefined;
+  if (!input) return kept;
+  const request = StreamInputRequestSchema.parse(input);
+  if (request.recipient !== "user" && !request.recipientId)
+    throw new Error("Name the agent or external recipient");
+  if (request.task || request.subtaskId)
+    throw new Error("A blocker names who the ask waits on, not a task link");
+  return request;
+}
+
+/** The answer and its seen state belong to the question, not to one revision of the ask. */
+function answerStateOf(
+  previous: CompanionEntry | undefined,
+): Pick<CompanionEntry, "reply" | "replySeenRevision"> {
+  if (!previous?.reply) return {};
+  return { reply: previous.reply, replySeenRevision: previous.replySeenRevision };
 }
 
 function validateAskCompletion(ask: TrackedAskInput): void {
@@ -145,4 +265,97 @@ function validateAskCompletion(ask: TrackedAskInput): void {
     throw new Error("Describe what blocks this ask in remaining");
   if (new Set(ask.subtasks?.map((task) => task.id)).size !== (ask.subtasks?.length ?? 0))
     throw new Error("Subtask IDs must be unique");
+}
+
+function parseInputRequest(
+  input: StreamEntryUpdate["inputRequest"],
+  previous: CompanionEntry["inputRequest"],
+): CompanionEntry["inputRequest"] {
+  const request = StreamInputRequestSchema.parse(
+    input ?? previous ?? { kind: "input", recipient: "user" },
+  );
+  if (request.recipient !== "user" && !request.recipientId)
+    throw new Error("Name the agent or external recipient");
+  if (request.subtaskId && !request.task)
+    throw new Error("A subtask input needs its canonical task reference");
+  return request;
+}
+
+/** A copied task is readable context, never another writable authority. */
+export function assertStreamWriteAuthority(
+  entries: readonly CompanionEntry[],
+  input: StreamEntryUpdate,
+  serverId?: string,
+): void {
+  const targetId = input.action === "set_ask" ? `ask:${input.entryId}` : input.entryId;
+  const target = entries.find((entry) => entry.id === targetId);
+  const origin = target?.ask?.origin;
+  if (
+    origin &&
+    serverId &&
+    (origin.serverId !== serverId ||
+      origin.agentId !== input.agentId ||
+      origin.entryId !== targetId)
+  )
+    throw new Error("This task snapshot is not authoritative. Update its canonical origin.");
+  const canonical = input.ask?.canonicalTask;
+  if (
+    canonical &&
+    canonical.serverId === serverId &&
+    canonical.agentId === input.agentId &&
+    canonical.entryId === `ask:${input.entryId}`
+  )
+    throw new Error("A task cannot reference itself");
+}
+
+interface AskEntryCreation {
+  id: string;
+  text: string;
+  ask: TrackedAskInput;
+  blocker: CompanionEntry["inputRequest"];
+  previous: CompanionEntry | undefined;
+  revision: number;
+  agentId: string;
+  serverId: string | undefined;
+}
+function createTrackedAskEntry({
+  id,
+  text,
+  ask,
+  blocker,
+  previous,
+  revision,
+  agentId,
+  serverId,
+}: AskEntryCreation): CompanionEntry {
+  return {
+    id,
+    kind: "question",
+    timestamp: previous?.timestamp ?? new Date().toISOString(),
+    text: text,
+    truncated: false,
+    ...tagsFor(text),
+    status: ask.state === "done" ? "done" : "open",
+    ...answerStateOf(previous),
+    ...(blocker ? { inputRequest: blocker } : {}),
+    ask: {
+      taskId:
+        previous?.ask?.taskId ??
+        (previous?.ask ? JSON.stringify([serverId, agentId, id]) : `task:${randomUUID()}`),
+      origin:
+        previous?.ask?.origin ??
+        (serverId ? { serverId, agentId: agentId, entryId: id } : undefined),
+      sessions: ask.sessions,
+      canonicalTask: ask.canonicalTask,
+      state: ask.state,
+      remaining: ask.remaining,
+      evidence: ask.evidence,
+      sourceMessageId: ask.sourceMessageId,
+      delegatedAgentId: ask.delegatedAgentId,
+      subtasks: ask.subtasks,
+      expectsAnswer: ask.expectsAnswer,
+      revision,
+      provenance: "explicit",
+    },
+  };
 }

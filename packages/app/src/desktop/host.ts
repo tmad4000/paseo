@@ -1,3 +1,4 @@
+import type { AppDeepLinkTarget } from "@getpaseo/protocol/app-deep-link";
 import { Platform } from "react-native";
 import { getElectronHost } from "@/desktop/electron/host";
 import type { BrowserKeyboardPolicy } from "@/desktop/browser/shortcuts";
@@ -117,7 +118,11 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
-  openNew?: (options?: { pendingOpenProjectPath?: string | null }) => Promise<void>;
+  openNew?: (options?: {
+    pendingOpenProjectPath?: string | null;
+    /** Land the new window on this agent. Older desktop builds ignore it. */
+    agent?: { serverId: string; agentId: string } | null;
+  }) => Promise<void>;
   getCurrentWindow?: () => DesktopWindowBridge;
 }
 
@@ -126,7 +131,7 @@ export interface DesktopEventsBridge {
 }
 
 export interface DesktopAgentNavigationBridge {
-  ready?: () => Promise<{ serverId: string; agentId: string } | null>;
+  ready?: () => Promise<AppDeepLinkTarget | null>;
 }
 
 export type DesktopBrowserShortcutEvent =

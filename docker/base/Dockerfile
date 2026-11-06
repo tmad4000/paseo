@@ -5,7 +5,11 @@ FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS source-pack
 
 ARG PASEO_VERSION
 
-ENV ONNXRUNTIME_NODE_INSTALL=skip
+# Metro transforms the generated WebSocket validator while packing the server.
+# Its compiler worker can exceed Node's default 4 GiB heap on CI. Keep the
+# larger compiler budget in this build stage; the runtime starts from a fresh image.
+ENV ONNXRUNTIME_NODE_INSTALL=skip \
+    NODE_OPTIONS=--max-old-space-size=8192
 
 WORKDIR /tmp/paseo-src
 COPY . .

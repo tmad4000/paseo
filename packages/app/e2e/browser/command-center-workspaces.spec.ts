@@ -122,7 +122,7 @@ test.describe("Command center workspaces", () => {
     }
   });
 
-  test("single-host workspace subtitle omits the host and shows project · branch", async ({
+  test("single-host workspace subtitle shows project, branch, and compact activity", async ({
     page,
   }) => {
     const seeded = await seedWorkspace({
@@ -150,7 +150,12 @@ test.describe("Command center workspaces", () => {
       await expect(row).toBeVisible({ timeout: 30_000 });
 
       const subtitle = row.getByTestId("command-center-workspace-subtitle");
-      await expect(subtitle).toHaveText(`${seeded.projectDisplayName} · ${WORKSPACE_BRANCH}`);
+      await expect
+        .poll(async () => (await subtitle.innerText()).split(" · ").slice(0, 2))
+        .toEqual([seeded.projectDisplayName, WORKSPACE_BRANCH]);
+      await expect
+        .poll(async () => (await subtitle.innerText()).split(" · ").slice(2).join(" · "))
+        .toMatch(/^(now|\d+m)$/);
     } finally {
       await seeded.cleanup();
     }

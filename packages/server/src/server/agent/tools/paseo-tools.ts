@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { TrackedAskInputSchema } from "@getpaseo/protocol/companion-stream";
+import {
+  TrackedAskInputSchema,
+  StreamInputRequestSchema,
+  askBlockerReason,
+} from "@getpaseo/protocol/companion-stream";
+import type { StreamRow } from "@getpaseo/protocol/global-stream";
 import { appendStreamTags, parseStreamHashtags } from "@getpaseo/protocol/stream-tags";
+import { agentSender } from "@getpaseo/protocol/user-message-sender";
 import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
@@ -18,6 +24,7 @@ import {
   AgentSnapshotPayloadSchema,
   UiTabPlacementSchema,
   UiWorkspaceTabTargetSchema,
+  WorkspaceDescriptionSchema,
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
 import type { AgentListItemPayload, UiCommandMessage } from "../../messages.js";
@@ -30,16 +37,12 @@ import {
   REVIEW_STATUSES,
 } from "@getpaseo/protocol/agent-labels";
 import { resolveUiTabCloseCommand, resolveUiTabOpenCommand } from "../../ui-commands.js";
-import {
-  buildStoredAgentPayload,
-  toAgentListItemPayload,
-  toAgentPayload,
-} from "../agent-projections.js";
+import { buildStoredAgentPayload, toAgentPayload } from "../agent-projections.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
 import { ensureAgentLoaded } from "../agent-loading.js";
-import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
+import { restartAgentCommand } from "../restart-agent.js";
 import {
   archiveByScope,
   killTerminalsForWorkspace,
@@ -101,6 +104,12 @@ import {
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
+import { getSharedPersistedConversationReader } from "../../session-text-history.js";
+import {
+  collectAgentListItems,
+  describeWorkspace,
+  readAgentWorkspaceId,
+} from "../workspace-describe.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import type {
   PaseoToolCatalog,
@@ -174,6 +183,28 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+/** A small list_stream_asks row: enough to triage without full evidence, subtasks or replies. */
+function compactStreamAskRow(row: StreamRow, entryId: string | null, askId: string | null) {
+  const entry = row.item.kind === "entry" ? row.item.entry : null;
+  const ask = entry?.ask;
+  return {
+    askId,
+    entryId,
+    agentId: row.agentId,
+    agentTitle: row.agentTitle,
+    archived: row.archived,
+    kind: entry?.kind ?? row.item.kind,
+    state: ask?.state ?? null,
+    headline: askBlockerReason(
+      entry?.text ?? (row.item.kind === "artifact" ? row.item.artifact.path : ""),
+    ),
+    next: ask ? askBlockerReason(ask.remaining) || null : null,
+    blockedOn: ask?.state === "blocked" ? (entry?.inputRequest ?? { recipient: "user" }) : null,
+    revision: ask?.revision ?? null,
+    timestamp: row.timestamp,
+  };
 }
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -598,6 +629,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     logger,
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
+  const agentListDeps = {
+    agentManager,
+    agentStorage,
+    listRegisteredProviderIds: () => providerSnapshotManager.listRegisteredProviderIds(),
+    logger: childLogger,
+  };
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
@@ -1976,6 +2013,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         queueService: agentQueueService,
         agentId,
         text: prompt,
+        ...(callerAgentId ? { sender: agentSender(callerAgentId) } : {}),
         ...(sessionMode ? { sessionMode } : {}),
         ...(interrupt !== undefined ? { interrupt } : {}),
         logger: childLogger,
@@ -2127,25 +2165,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const requestedCwd = cwd?.trim() ? expandUserPath(cwd) : callerCwd;
       const statusFilter = statuses && statuses.length > 0 ? new Set(statuses) : null;
       const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
-      const liveSnapshots = agentManager.listAgents();
-      const liveAgents = await Promise.all(
-        liveSnapshots.map((snapshot) =>
-          serializeSnapshotWithMetadata(agentStorage, snapshot, childLogger),
-        ),
-      );
-      const liveIds = new Set(liveSnapshots.map((snapshot) => snapshot.id));
-      const storedRecords = await agentStorage.list();
-      const registeredProviderIds = new Set(providerSnapshotManager.listRegisteredProviderIds());
-      const storedAgents = storedRecords
-        .filter((record) => !record.internal && !liveIds.has(record.id))
-        .filter((record) => includeArchived || !record.archivedAt)
-        .filter(
-          (record) =>
-            includeArchived || isStoredAgentProviderAvailable(record, registeredProviderIds),
-        )
-        .map((record) => buildStoredAgentPayload(record, registeredProviderIds));
-      const agents = [...liveAgents, ...storedAgents]
-        .map(toAgentListItemPayload)
+      const { items } = await collectAgentListItems(agentListDeps, { includeArchived });
+      const agents = items
         .filter((agent) => !requestedCwd || isSameOrDescendantPath(requestedCwd, agent.cwd))
         .filter((agent) => !statusFilter || statusFilter.has(agent.status))
         .filter((agent) => !agent.archivedAt || resolveAgentListActivityTime(agent) >= sinceMs)
@@ -2155,6 +2176,56 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       return {
         content: [],
         structuredContent: ensureValidJson({ agents }),
+      };
+    },
+  );
+
+  registerTool(
+    "describe_workspace",
+    {
+      title: "Describe workspace",
+      description:
+        "What each chat (tab) in a workspace is on, without starting any provider. Defaults to your own workspace. For every non-archived agent: id, title, provider/model, status, timestamps, labels, parentAgentId, a derived one-paragraph focus summary (first and latest user message, head of the last reply, open asks, pins) and the open Stream asks. Pass excludeSelf: true to leave yourself out.",
+      inputSchema: {
+        workspaceId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Workspace to describe. Defaults to the caller's workspace."),
+        excludeSelf: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Leave the calling agent out of the result."),
+      },
+      outputSchema: WorkspaceDescriptionSchema.shape,
+    },
+    async ({ workspaceId, excludeSelf = false }) => {
+      let targetWorkspaceId = workspaceId?.trim() || null;
+      if (!targetWorkspaceId && callerAgentId) {
+        targetWorkspaceId = await readAgentWorkspaceId(
+          { agentManager, agentStorage },
+          callerAgentId,
+        );
+      }
+      if (!targetWorkspaceId) {
+        throw new Error("workspaceId is required outside an agent-scoped session");
+      }
+      const description = await describeWorkspace(
+        {
+          ...agentListDeps,
+          agentManager,
+          workspaceRegistry: options.workspaceRegistry,
+          conversationReader: getSharedPersistedConversationReader(),
+        },
+        {
+          workspaceId: targetWorkspaceId,
+          ...(excludeSelf && callerAgentId ? { excludeAgentId: callerAgentId } : {}),
+        },
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson(description),
       };
     },
   );
@@ -2234,6 +2305,177 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   );
 
   registerTool(
+    "restart_agent",
+    {
+      title: "Restart agent",
+      description:
+        "Restart the agent's provider process and resume the same session (context and timeline kept), then deliver its queued messages in order. Use this for a stuck agent: idle while its queue does not drain. A queue head whose earlier delivery attempt never finished is checked against the timeline: dropped if it already arrived, otherwise sent again.",
+      inputSchema: {
+        agentId: z.string(),
+      },
+      outputSchema: {
+        agentId: z.string(),
+        mode: z.string(),
+        timelineSize: z.number(),
+        queuedBefore: z.number().nullable(),
+        queuedAfter: z.number().nullable(),
+        recoveredHead: z.object({ itemId: z.string(), outcome: z.string() }).nullable(),
+      },
+    },
+    async ({ agentId }) => {
+      if (callerAgentId && agentId === callerAgentId) {
+        // Restarting the caller would kill the process running this tool call.
+        throw new Error(
+          "An agent cannot restart itself; ask another agent or the user to restart it.",
+        );
+      }
+      const result = await restartAgentCommand(
+        {
+          agentManager,
+          agentQueueService,
+          loadAgent: (id) =>
+            ensureAgentLoaded(id, { agentManager, agentStorage, logger: childLogger }),
+          logger: childLogger,
+        },
+        agentId,
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          agentId: result.agentId,
+          mode: result.mode,
+          timelineSize: result.timelineSize,
+          queuedBefore: result.queue?.before ?? null,
+          queuedAfter: result.queue?.after ?? null,
+          recoveredHead: result.queue?.recoveredHead ?? null,
+        }),
+      };
+    },
+  );
+
+  if (agentQueueService) {
+    const queueService = agentQueueService;
+    const queueItemsView = async (agentId: string) => {
+      const inspection = await queueService.inspect(agentId);
+      const receiptState = new Map(
+        inspection.receipts.map((receipt) => [receipt.messageId, receipt.state]),
+      );
+      return {
+        agentId,
+        revision: inspection.queue.revision,
+        items: inspection.queue.items.map((item) => ({
+          id: item.id,
+          createdAt: item.createdAt,
+          preview: item.text.length > 280 ? `${item.text.slice(0, 280)}…` : item.text,
+          imageCount: item.images?.length ?? 0,
+          attachmentCount: item.attachments?.length ?? 0,
+          receipt: receiptState.get(item.id) ?? null,
+        })),
+      };
+    };
+    const queueOutputSchema = {
+      agentId: z.string(),
+      revision: z.number(),
+      items: z.array(
+        z.object({
+          id: z.string(),
+          createdAt: z.string(),
+          preview: z.string(),
+          imageCount: z.number(),
+          attachmentCount: z.number(),
+          receipt: z.string().nullable(),
+        }),
+      ),
+    };
+
+    registerTool(
+      "list_queue",
+      {
+        title: "List queued messages",
+        description:
+          "List the messages queued for an agent, in delivery order, with each item's delivery receipt (null = not attempted, pending = attempt in progress or interrupted).",
+        inputSchema: { agentId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId }) => ({
+        content: [],
+        structuredContent: ensureValidJson(await queueItemsView(agentId)),
+      }),
+    );
+
+    registerTool(
+      "drain_queue",
+      {
+        title: "Drain queue",
+        description:
+          "Deliver the agent's queued messages now, in order, if the agent is idle. Sends the head immediately; the rest follow one per turn. Does not restart the agent; use restart_agent when the head is stuck.",
+        inputSchema: { agentId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId }) => {
+        await queueService.drainNow(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "send_queued_now",
+      {
+        title: "Send queued message now",
+        description:
+          "Send one queued message immediately, steering it into the active turn if the agent is running.",
+        inputSchema: { agentId: z.string(), itemId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId, itemId }) => {
+        await queueService.sendNow(agentId, itemId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "remove_queued_message",
+      {
+        title: "Remove queued message",
+        description: "Remove one queued message without sending it.",
+        inputSchema: { agentId: z.string(), itemId: z.string() },
+        outputSchema: queueOutputSchema,
+      },
+      async ({ agentId, itemId }) => {
+        await queueService.remove(agentId, itemId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson(await queueItemsView(agentId)),
+        };
+      },
+    );
+
+    registerTool(
+      "clear_queue",
+      {
+        title: "Clear queue",
+        description:
+          "Remove every queued message for an agent without sending them. Messages already being submitted are kept. The queue journal keeps a recoverable record.",
+        inputSchema: { agentId: z.string() },
+        outputSchema: { removed: z.number(), kept: z.number() },
+      },
+      async ({ agentId }) => {
+        const result = await queueService.clear(agentId);
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ removed: result.removed, kept: result.kept }),
+        };
+      },
+    );
+  }
+
+  registerTool(
     "update_agent",
     {
       title: "Update agent",
@@ -2297,7 +2539,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track a durable ask",
       description:
-        "Create or revise an explicit ask/task in the conversation checklist. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing. Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. This does not prompt or run any agent.",
+        "Create or revise a canonical task stored with its source conversation. Keep one record across continuation/delegation: link execution sessions with ask.sessions, and edit this origin from other sessions using agentId. taskId returned on reads is immutable. Mark an existing mirrored ask with ask.canonicalTask only when its exact canonical host/agent/entry is known; the mirror becomes read-only history and leaves current-work views. Never deduplicate by text. Use one stable askId per request, expectedRevision=0 to create, and list_stream_asks to read revisions before updates. Repeat identical writes safely after a lost acknowledgement. Full replacement: preserve source/delegation/subtasks when editing (an omitted expectsAnswer keeps its previous value). Done requires evidence, no remaining work, and finished subtasks; a turn ending or child going idle is not completion. Reopen with state=open. Never infer success. When the user asked a question, set ask.expectsAnswer=true (or phrase the text as a question) so it waits in Chat's answers pane, then attach the answer with set_stream_answer. state=blocked means the work cannot continue. Blocked asks appear in the user's Needs you automatically, with the first line of remaining as the reason, so start remaining with what you need from them (for example 'Needs your go-ahead to deploy to production'). If the blocker is not the user, set blocker (recipient agent or external, with recipientId) so it stays out of Needs you. If you already raised the input with set_stream_question, link that question to this ask (its inputRequest.task) instead of describing it twice. When the user unblocks you, revise the ask to in_progress in the same turn. This records context, never grants permission, and does not prompt or run any agent.",
       inputSchema: {
         agentId: z
           .string()
@@ -2315,9 +2557,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         expectedRevision: z.number().int().min(0),
         text: z.string().min(1).max(4000),
         ask: TrackedAskInputSchema,
+        blocker: StreamInputRequestSchema.omit({ task: true, subtaskId: true })
+          .optional()
+          .describe(
+            "Only with state=blocked: who the ask waits on. Defaults to the user. recipient 'agent' or 'external' (with recipientId) keeps it out of Needs you. kind: approval for a go-ahead, action when the user must do something, input or decision otherwise. A still-blocked edit keeps the previous blocker; leaving blocked clears it.",
+          ),
       },
     },
-    async ({ agentId, askId, expectedRevision, text, ask }) => {
+    async ({ agentId, askId, expectedRevision, text, ask, blocker }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) throw new Error("An agentId is required");
       await agentManager.updateCompanionEntry({
@@ -2327,6 +2574,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         expectedRevision,
         text,
         ask,
+        inputRequest: blocker,
       });
       return {
         content: [],
@@ -2345,34 +2593,127 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Read the durable ask checklist",
       description:
-        "Read explicit tracked asks and their revisions without starting a provider. Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change.",
+        "Read explicit tracked asks and their revisions without starting a provider. Pages include completed asks unless unresolvedOnly=true. Follow nextCursor to read all asks. Read unresolved asks when starting/resuming orchestration, and update each after evidence or blockers change. questions=true instead lists the user's questions (asks expecting an answer and tracked Q&A messages) with entryId, reply (text, provenance, revision) and replySeenRevision; use them with set_stream_answer.",
       inputSchema: {
         agentId: z.string().optional(),
         cursor: z.string().optional(),
         unresolvedOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).optional(),
+        questions: z.boolean().optional(),
+        global: z
+          .boolean()
+          .optional()
+          .describe(
+            "List canonical tasks across all saved sessions, including archived/dormant, without starting providers.",
+          ),
+        needsYou: z
+          .boolean()
+          .optional()
+          .describe(
+            "List what waits on a person: blocked asks (reason in remaining), open input/decision/approval/action requests and pending permissions. Not user questions waiting for agent answers.",
+          ),
+        states: z
+          .array(z.enum(["open", "in_progress", "blocked", "done"]))
+          .min(1)
+          .max(4)
+          .optional()
+          .describe("Only tracked asks in these states, for example ['blocked']."),
+        compact: z
+          .boolean()
+          .optional()
+          .describe(
+            "Return small rows (askId, entryId, agentId, agentTitle, kind, state, headline, next, blockedOn, revision, timestamp) instead of full entries. Default page size 25. Use this for global reads.",
+          ),
       },
     },
-    async ({ agentId, cursor, unresolvedOnly, limit }) => {
-      const targetAgentId = agentId ?? callerAgentId;
-      if (!targetAgentId) throw new Error("An agentId is required");
+    async ({
+      agentId,
+      cursor,
+      unresolvedOnly,
+      limit,
+      questions,
+      global: globally,
+      needsYou,
+      states,
+      compact,
+    }) => {
+      const targetAgentId = globally ? undefined : (agentId ?? callerAgentId);
+      if (!globally && !targetAgentId) throw new Error("An agentId is required");
+      let view: "needs_you" | "questions" | "tasks" = "tasks";
+      if (questions) view = "questions";
+      if (needsYou) view = "needs_you";
       const page = await agentManager.listGlobalStream({
         agentId: targetAgentId,
-        asksOnly: true,
+        view,
         includeArchived: true,
         cursor,
-        limit,
-        filter: unresolvedOnly ? "pending" : "all",
+        limit: limit ?? (compact ? 25 : undefined),
+        askStates: states,
+        filter: unresolvedOnly && !questions && !needsYou ? "pending" : "all",
+      });
+      const rows = page.rows.map((row) => {
+        const entryId = row.item.kind === "entry" ? row.item.entry.id : null;
+        const askId = entryId?.startsWith("ask:") ? entryId.slice(4) : null;
+        return compact
+          ? compactStreamAskRow(row, entryId, askId)
+          : Object.assign({}, row, { entryId, askId });
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ ...page, rows }),
+      };
+    },
+  );
+
+  registerTool(
+    "set_stream_answer",
+    {
+      title: "Answer a question the user asked",
+      description:
+        "Attach your answer to a question the user asked, on its own Stream entry: a tracked ask (askId) or a tracked Q&A message (entryId from list_stream_asks questions=true). The user sees it in Chat's answers pane until they mark it seen. Answer each question separately, including several asks from one message, and answer late or from a delegated chat (pass the owning agentId) once you actually know. Do not attach acknowledgements such as \"I'll check\". replyRevision is the answer revision you last read (0 for none); repeating the same answer is a no-op, a stale revision is a conflict. A changed answer is shown to the user again. This does not change the ask's state or evidence (use set_stream_ask), and it is not for questions you ask the user (use set_stream_question).",
+      inputSchema: {
+        agentId: z
+          .string()
+          .optional()
+          .describe("Conversation that owns the question; defaults to caller."),
+        askId: z.string().min(1).max(200).optional().describe("Tracked ask ID, without ask:."),
+        entryId: z
+          .string()
+          .min(1)
+          .max(300)
+          .optional()
+          .describe("Stream entry ID, such as qa:<id> from list_stream_asks questions=true."),
+        answer: z.string().min(1).max(4000),
+        replyRevision: z.number().int().min(0),
+        sourceMessageId: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("The chat message that holds the answer, when known."),
+      },
+    },
+    async ({ agentId, askId, entryId, answer, replyRevision, sourceMessageId }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) throw new Error("An agentId is required");
+      if (Boolean(askId) === Boolean(entryId))
+        throw new Error("Pass exactly one of askId or entryId");
+      const targetEntryId = askId ? `ask:${askId}` : entryId!;
+      await agentManager.updateCompanionEntry({
+        agentId: targetAgentId,
+        entryId: targetEntryId,
+        action: "set_reply",
+        text: answer,
+        replyRevision,
+        sourceId: sourceMessageId ? `msg:${sourceMessageId}` : undefined,
+        answeredByAgentId:
+          callerAgentId && callerAgentId !== targetAgentId ? callerAgentId : undefined,
       });
       return {
         content: [],
         structuredContent: ensureValidJson({
-          ...page,
-          rows: page.rows.map((row) =>
-            Object.assign({}, row, {
-              askId: row.item.kind === "entry" ? row.item.entry.id.slice(4) : null,
-            }),
-          ),
+          agentId: targetAgentId,
+          entryId: targetEntryId,
+          accepted: true,
         }),
       };
     },
@@ -2383,7 +2724,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Track an open Stream question",
       description:
-        "Keep one durable question in this conversation's Stream and the global Stream. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. This records context, never grants permission or sends a chat message.",
+        "Keep one concrete input/decision/approval/action request in Stream and global Needs you. inputRequest identifies its exact recipient, canonical task/subtask and source message. Multiple requests can remain open while agent work continues. Do not record the user's own questions here; use set_stream_ask expectsAnswer. Use a stable questionId for each needed input, including items in lists. Reuse that ID to edit or mark done only when that specific question is answered; unrelated replies do not resolve questions. When the input unblocks a tracked ask, set inputRequest.task to that ask (its serverId, agentId and entryId 'ask:<askId>' from list_stream_asks); Needs you then shows one card for both. This records context, never grants permission or sends a chat message.",
       inputSchema: {
         agentId: z.string().optional().describe("Defaults to this calling agent."),
         questionId: z
@@ -2393,9 +2734,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .describe("Stable ID for this particular question; reuse for edits and resolution."),
         text: z.string().min(1).max(4000),
         status: z.enum(["open", "reviewed", "done"]).optional(),
+        inputRequest: StreamInputRequestSchema.optional(),
       },
     },
-    async ({ agentId, questionId, text, status }) => {
+    async ({ agentId, questionId, text, status, inputRequest }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) throw new Error("An agentId is required");
       await agentManager.updateCompanionEntry({
@@ -2404,6 +2746,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         action: "add_question",
         text,
         status,
+        inputRequest,
       });
       return {
         content: [],

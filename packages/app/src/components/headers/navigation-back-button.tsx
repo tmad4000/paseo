@@ -1,9 +1,12 @@
-import { useCallback, useMemo } from "react";
-import type { GestureResponderEvent } from "react-native";
-import { ArrowLeft, ArrowRight } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text, View, type GestureResponderEvent, type PointerEvent } from "react-native";
+import { ArrowLeft, ArrowRight, ChevronDown } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
-import { withUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HeaderToggleButton } from "./header-toggle-button";
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { iconButtonChromeStyle } from "@/components/ui/icon-button-chrome";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -11,7 +14,14 @@ import {
   ContextMenuTrigger,
   useContextMenu,
 } from "@/components/ui/context-menu";
+import {
+  useWorkspaceTabCount,
+  WorkspaceTabCountBadge,
+} from "@/components/sidebar/workspace-tab-count";
+import { isWeb } from "@/constants/platform";
+import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import {
   navigateInFocusHistory,
   useCanNavigateBackInFocusHistory,
@@ -23,8 +33,10 @@ import { describeFocusLocation, type FocusLocationLabel } from "@/navigation/foc
 import { useSessionStore } from "@/stores/session-store";
 import { selectWorkspace } from "@/stores/session-store-hooks/selectors";
 import type { ShortcutKey } from "@/utils/format-shortcut";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import type { Theme } from "@/styles/theme";
 
+const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedArrowLeft = withUnistyles(ArrowLeft);
 const ThemedArrowRight = withUnistyles(ArrowRight);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -35,13 +47,15 @@ const DIRECTIONS = {
   back: {
     testID: "navigation-back-button",
     labelKey: "common.actions.navigateBack",
-    shortcutKeys: ["mod", "alt", "ArrowLeft"],
+    historyLabelKey: "common.actions.backHistory",
+    shortcutHelpId: "navigation-back",
     Icon: ThemedArrowLeft,
   },
   forward: {
     testID: "navigation-forward-button",
     labelKey: "common.actions.navigateForward",
-    shortcutKeys: ["mod", "alt", "ArrowRight"],
+    historyLabelKey: "common.actions.forwardHistory",
+    shortcutHelpId: "navigation-forward",
     Icon: ThemedArrowRight,
   },
 } as const satisfies Record<
@@ -49,12 +63,11 @@ const DIRECTIONS = {
   {
     testID: string;
     labelKey: string;
-    shortcutKeys: readonly ShortcutKey[];
+    historyLabelKey: string;
+    shortcutHelpId: string;
     Icon: typeof ThemedArrowLeft;
   }
 >;
-
-const MAX_HISTORY_MENU_ENTRIES = 15;
 
 /** Rows for the history menu, labelled from whatever the session store knows right now. */
 function NavigationHistoryMenuItems({ direction }: { direction: NavigationFocusHistoryDirection }) {
@@ -72,9 +85,11 @@ function NavigationHistoryMenuItems({ direction }: { direction: NavigationFocusH
       agentTitle: (serverId: string, agentId: string) =>
         sessions.sessions[serverId]?.agents.get(agentId)?.title ?? null,
     };
-    return entries
-      .slice(0, MAX_HISTORY_MENU_ENTRIES)
-      .map((location) => describeFocusLocation(location, deps));
+    return entries.map((location) => ({
+      label: describeFocusLocation(location, deps),
+      workspaceKey:
+        location.kind === "workspace" ? buildWorkspaceTabPersistenceKey(location) : null,
+    }));
   }, [entries, t]);
 
   return rows.map((row, index) => (
@@ -85,7 +100,8 @@ function NavigationHistoryMenuItems({ direction }: { direction: NavigationFocusH
       direction={direction}
       steps={index + 1}
       isCompact={isCompact}
-      label={row}
+      label={row.label}
+      workspaceKey={row.workspaceKey}
     />
   ));
 }
@@ -95,20 +111,37 @@ function NavigationHistoryMenuItem({
   steps,
   isCompact,
   label,
+  workspaceKey,
 }: {
   direction: NavigationFocusHistoryDirection;
   steps: number;
   isCompact: boolean;
   label: FocusLocationLabel;
+  /** The destination's workspace, so the row shows its open tabs like the sidebar does. */
+  workspaceKey: string | null;
 }) {
+  const tabCount = useWorkspaceTabCount(workspaceKey);
+  const testID = `navigation-${direction}-history-item-${steps - 1}`;
   const handleSelect = useCallback(() => {
     navigateInFocusHistory(direction, { isCompact, steps });
   }, [direction, isCompact, steps]);
+  const trailing = useMemo(
+    () =>
+      tabCount > 0 ? (
+        <WorkspaceTabCountBadge
+          count={tabCount}
+          withTooltip={false}
+          testID={`${testID}-tab-count`}
+        />
+      ) : undefined,
+    [tabCount, testID],
+  );
   return (
     <ContextMenuItem
-      testID={`navigation-${direction}-history-item-${steps - 1}`}
+      testID={testID}
       description={label.subtitle ?? undefined}
       onSelect={handleSelect}
+      trailing={trailing}
     >
       {label.title}
     </ContextMenuItem>
@@ -123,25 +156,182 @@ function NavigationHistoryButton({
   available: boolean;
 }) {
   const { t } = useTranslation();
-  const { testID, labelKey } = DIRECTIONS[direction];
+  const { testID, historyLabelKey } = DIRECTIONS[direction];
+  const [open, setOpen] = useState(false);
+  const [hoverPreview, setHoverPreview] = useState(false);
+  const surfaceRef = useRef<View>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHover = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      cancelHover();
+      setHoverPreview(false);
+      setOpen(next);
+    },
+    [cancelHover],
+  );
+  const handleHoverOpen = useCallback(() => {
+    setHoverPreview(true);
+    setOpen(true);
+  }, []);
 
-  // Right-click or long-press lists the history in that direction, as a browser's
-  // Back button does.
+  // Both the visible chevron and the existing right-click/long-press gesture open
+  // the same menu. The arrow remains a one-step Back/Forward action.
   return (
-    <ContextMenu>
-      <ContextMenuTrigger contextOnly enabled={available} testID={`${testID}-history-trigger`}>
-        <NavigationHistoryPressable direction={direction} available={available} />
-      </ContextMenuTrigger>
+    <ContextMenu open={open} onOpenChange={handleOpenChange} dismissKeyboardOnOpen={!hoverPreview}>
+      <NavigationHistoryHoverRegion
+        available={available}
+        surfaceRef={surfaceRef}
+        timer={timer}
+        cancel={cancelHover}
+        hoverPreview={hoverPreview}
+        onHoverOpen={handleHoverOpen}
+      >
+        <ContextMenuTrigger contextOnly enabled={available} testID={`${testID}-history-trigger`}>
+          <NavigationHistoryPressable direction={direction} available={available} />
+        </ContextMenuTrigger>
+        <NavigationHistoryDropdownTrigger
+          direction={direction}
+          available={available}
+          hoverPreview={hoverPreview}
+        />
+      </NavigationHistoryHoverRegion>
       <ContextMenuContent
+        hoverPreview={hoverPreview}
+        surfaceRef={surfaceRef}
+        offset={0}
         align="start"
         minWidth={240}
         maxWidth={360}
-        sheetTitle={t(labelKey)}
+        sheetTitle={t(historyLabelKey)}
+        scrollable
+        maxHeight={480}
         testID={`${testID}-history`}
       >
         <NavigationHistoryMenuItems direction={direction} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** A pointer preview shares the real menu and leaves click/keyboard/touch opening unchanged. */
+function NavigationHistoryHoverRegion({
+  available,
+  hoverPreview,
+  surfaceRef,
+  timer,
+  cancel,
+  onHoverOpen,
+  children,
+}: {
+  available: boolean;
+  hoverPreview: boolean;
+  surfaceRef: React.RefObject<View | null>;
+  timer: React.RefObject<ReturnType<typeof setTimeout> | null>;
+  cancel: () => void;
+  onHoverOpen: () => void;
+  children: React.ReactNode;
+}) {
+  const menu = useContextMenu();
+  const isCompact = useIsCompactFormFactor();
+  const triggerRef = useRef<View>(null);
+  useEffect(() => cancel, [cancel, available, isCompact]);
+  const setMenuOpen = menu.setOpen;
+  useEffect(() => {
+    if (!available || isCompact) {
+      cancel();
+      if (hoverPreview) setMenuOpen(false);
+    }
+  }, [available, isCompact, hoverPreview, cancel, setMenuOpen]);
+  const leave = useCallback(() => {
+    cancel();
+    if (hoverPreview) menu.setOpen(false);
+  }, [cancel, hoverPreview, menu]);
+  const stay = useCallback(() => {}, []);
+  useHoverSafeZone({
+    enabled: isWeb && !isCompact && available,
+    triggerRef,
+    contentRef: surfaceRef,
+    onEnterSafeZone: stay,
+    onLeaveSafeZone: leave,
+  });
+  const move = useCallback(
+    (event: PointerEvent) => {
+      if (
+        !isWeb ||
+        isCompact ||
+        !available ||
+        menu.open ||
+        timer.current ||
+        event.nativeEvent.pointerType !== "mouse"
+      )
+        return;
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        menu.setAnchorRect(null);
+        onHoverOpen();
+      }, 350);
+    },
+    [isCompact, available, menu, onHoverOpen, timer],
+  );
+  return (
+    <View ref={triggerRef} style={styles.buttonGroup} onPointerMove={move}>
+      {children}
+    </View>
+  );
+}
+
+function NavigationHistoryDropdownTrigger({
+  direction,
+  available,
+  hoverPreview,
+}: {
+  direction: NavigationFocusHistoryDirection;
+  available: boolean;
+  hoverPreview: boolean;
+}) {
+  const { t } = useTranslation();
+  const menu = useContextMenu();
+  const activate = useCallback(() => {
+    menu.setOpen(hoverPreview || !menu.open);
+  }, [hoverPreview, menu]);
+  const { testID, historyLabelKey } = DIRECTIONS[direction];
+  const label = t(historyLabelKey);
+  const triggerStyle = useCallback(
+    (state: { hovered: boolean; pressed: boolean; open: boolean }) =>
+      iconButtonChromeStyle({ size: "large", state, disabled: !available }),
+    [available],
+  );
+
+  return (
+    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <DropdownMenuTrigger
+          testID={`${testID}-history-menu-button`}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          disabled={!available}
+          onActivate={activate}
+          style={triggerStyle}
+        >
+          {({ hovered, open }) => {
+            let colorMapping = mutedColorMapping;
+            if (!available) {
+              colorMapping = extraMutedColorMapping;
+            } else if (hovered || open) {
+              colorMapping = foregroundColorMapping;
+            }
+            return <ThemedChevronDown size={14} uniProps={colorMapping} />;
+          }}
+        </DropdownMenuTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{label}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -155,15 +345,18 @@ function NavigationHistoryPressable({
   const { t } = useTranslation();
   const menu = useContextMenu();
   const isCompact = useIsCompactFormFactor();
-  const { testID, labelKey, shortcutKeys, Icon } = DIRECTIONS[direction];
+  const { testID, labelKey, shortcutHelpId, Icon } = DIRECTIONS[direction];
+  // The effective binding, so a rebound Back/Forward advertises what it now does.
+  const shortcutKeys = useShortcutKeys(shortcutHelpId);
   const tooltipKeys = useMemo<ShortcutKey[]>(
-    () => (isCompact ? [] : [...shortcutKeys]),
+    () => (isCompact || !shortcutKeys ? [] : (shortcutKeys[0] ?? [])),
     [isCompact, shortcutKeys],
   );
   const accessibilityState = useMemo(() => ({ disabled: !available }), [available]);
   const handlePress = useCallback(() => {
+    menu.setOpen(false);
     navigateInFocusHistory(direction, { isCompact });
-  }, [direction, isCompact]);
+  }, [direction, isCompact, menu]);
   const handleLongPress = useCallback(
     (event: GestureResponderEvent) => {
       if (!available) return;
@@ -217,3 +410,15 @@ export function NavigationForwardButton() {
   }
   return <NavigationHistoryButton direction="forward" available={canGoForward} />;
 }
+
+const styles = StyleSheet.create((theme) => ({
+  buttonGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  tooltipText: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.popoverForeground,
+  },
+}));
