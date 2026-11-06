@@ -54,6 +54,18 @@ In messages tier and find-or-start are unchanged. A row opens its chat in its ho
 does not mark it read; the row's check and menu do that, as review rows do. Keyboard workspace
 shortcuts number only the pinned workspaces in this mode.
 
+## Sessions needing input
+
+Workspace rows expose **Needs input (N)** with up to three exact session titles and an
+expansion control for the rest. Collapse is saved per host and workspace on this device.
+The preview appears in project, status and one-list grouping, including pinned workspaces.
+Search keeps its title-match rows instead of the preview.
+
+Permission requests and manual Needs input markers both count, including blocked child
+sessions that normally live under their parent. Selecting a row opens that exact session;
+it does not approve a permission or clear its Needs input marker. Resolved requests leave
+the preview as the host directory updates. Review previews keep their separate collapse state.
+
 ## Reviewing sessions
 
 Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;

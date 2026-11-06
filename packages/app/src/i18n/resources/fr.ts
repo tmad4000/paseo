@@ -1737,6 +1737,8 @@ export const fr: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Actions de révision pour {{title}}",
+    needsInputSessions: "Intervention requise ({{count}})",
+    sessionActions: "Actions de session pour {{title}}",
     reviewSessions: "À examiner ({{count}})",
     openTabs_one: "{{count}} onglet ouvert",
     openTabs: "{{count}} onglets ouverts",
