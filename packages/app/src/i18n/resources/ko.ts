@@ -1255,6 +1255,9 @@ export const ko: TranslationResources = {
         splitDown: "창을 아래로 분할",
         splitRightWithSession: "세션으로 오른쪽 분할…",
         splitDownWithSession: "세션으로 아래쪽 분할…",
+        dropSessionOtherHost:
+          "이 호스트의 세션만 여기에 놓을 수 있습니다. 여러 호스트를 함께 보려면 보기를 사용하세요.",
+        dropSessionNoSession: "이 워크스페이스에는 열 세션이 없습니다.",
         changes: "변경 사항",
         files: "파일",
         pullRequest: "풀 리퀘스트",

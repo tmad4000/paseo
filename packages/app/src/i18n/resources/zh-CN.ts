@@ -1240,6 +1240,8 @@ export const zhCN: TranslationResources = {
         splitDown: "向下拆分窗格",
         splitRightWithSession: "向右拆分并放入会话…",
         splitDownWithSession: "向下拆分并放入会话…",
+        dropSessionOtherHost: "这里只能放入此主机的会话。要混合多个主机，请使用视图。",
+        dropSessionNoSession: "该工作区没有可打开的会话。",
         changes: "更改",
         files: "文件",
         pullRequest: "拉取请求",

@@ -19,6 +19,7 @@ import { useSessionStore } from "@/stores/session-store";
 import type { Theme } from "@/styles/theme";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { formatCompactTimeAgo } from "@/utils/time";
+import { SidebarDragSource } from "@/workspace-tabs/sidebar-drag-source";
 import {
   selectNestedTabMatches,
   splitSidebarMatch,
@@ -118,29 +119,40 @@ const NestedTabRow = memo(function NestedTabRow({
       .getState()
       .entry?.sendHere({ serverId: match.serverId, agentId: match.agentId });
   }, [match.agentId, match.serverId]);
+  const dropPayload = useMemo(
+    () => ({
+      kind: "agent" as const,
+      serverId: match.serverId,
+      agentId: match.agentId,
+      workspaceId: match.workspaceId,
+    }),
+    [match.agentId, match.serverId, match.workspaceId],
+  );
   return (
     <View style={styles.tabRowLine}>
-      <Pressable
-        accessibilityRole={isWeb ? undefined : "button"}
-        accessibilityLabel={t("sidebar.filterSidebar.matches.openTab", { title: match.title })}
-        onPress={handlePress}
-        style={tabRowStyle}
-        testID={`sidebar-filter-tab-match-${match.serverId}-${match.agentId}`}
-      >
-        <View style={styles.iconSlot}>
-          <ThemedProviderGlyph
-            provider={match.provider}
-            serverId={match.serverId}
-            uniProps={foregroundMutedColorMapping}
+      <SidebarDragSource payload={dropPayload}>
+        <Pressable
+          accessibilityRole={isWeb ? undefined : "button"}
+          accessibilityLabel={t("sidebar.filterSidebar.matches.openTab", { title: match.title })}
+          onPress={handlePress}
+          style={tabRowStyle}
+          testID={`sidebar-filter-tab-match-${match.serverId}-${match.agentId}`}
+        >
+          <View style={styles.iconSlot}>
+            <ThemedProviderGlyph
+              provider={match.provider}
+              serverId={match.serverId}
+              uniProps={foregroundMutedColorMapping}
+            />
+          </View>
+          <HighlightedText
+            text={match.title}
+            range={match.range}
+            style={styles.tabTitle}
+            matchStyle={styles.match}
           />
-        </View>
-        <HighlightedText
-          text={match.title}
-          range={match.range}
-          style={styles.tabTitle}
-          matchStyle={styles.match}
-        />
-      </Pressable>
+        </Pressable>
+      </SidebarDragSource>
       {routable ? (
         <Button
           size="xs"

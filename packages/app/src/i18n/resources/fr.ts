@@ -1264,6 +1264,9 @@ export const fr: TranslationResources = {
         splitDown: "Diviser le volet vers le bas",
         splitRightWithSession: "Diviser à droite avec une session…",
         splitDownWithSession: "Diviser en bas avec une session…",
+        dropSessionOtherHost:
+          "Seules les sessions de cet hôte peuvent être déposées ici. Utilisez une vue pour mélanger les hôtes.",
+        dropSessionNoSession: "Cet espace de travail n'a aucune session à ouvrir.",
         changes: "Modifications",
         files: "Fichiers",
         pullRequest: "Demande de fusion",

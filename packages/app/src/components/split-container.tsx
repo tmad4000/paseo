@@ -65,6 +65,7 @@ import {
   resolveSplitDropPosition,
   type SplitDropZoneHover,
 } from "@/components/split-drop-zone";
+import { useSidebarDropZoneForPane } from "@/workspace-tabs/sidebar-session-drop";
 import {
   deriveWorkspacePaneState,
   getWorkspacePaneDescriptors,
@@ -200,7 +201,6 @@ interface SplitNodeViewProps extends Omit<
 interface SplitPaneViewProps extends Omit<
   SplitNodeViewProps,
   | "node"
-  | "workspaceKey"
   | "focusedPaneId"
   | "activeDragTabId"
   | "showDropZones"
@@ -1086,6 +1086,7 @@ function SplitNodeView({
         <WindowChromeRegion corners={windowChromeCorners}>
           <SplitPaneView
             pane={node.pane}
+            workspaceKey={workspaceKey}
             uiTabs={uiTabs}
             activityByAgentId={activityByAgentId}
             unreadTabIds={unreadTabIds}
@@ -1202,6 +1203,7 @@ function SplitNodeView({
 
 function SplitPaneView({
   pane,
+  workspaceKey,
   uiTabs,
   activityByAgentId,
   unreadTabIds,
@@ -1241,6 +1243,20 @@ function SplitPaneView({
 }: SplitPaneViewProps) {
   const paneRef = useRef<View | null>(null);
   const stableOnFocusPane = useStableEvent(onFocusPane);
+  // A sidebar row dragged over this pane (see workspace-tabs/sidebar-session-drop).
+  const sidebarDropZone = useSidebarDropZoneForPane(workspaceKey, pane.id);
+  const sidebarDropPreview = useMemo<SplitDropZoneHover | null>(
+    () =>
+      sidebarDropZone && sidebarDropZone !== "tabs"
+        ? { paneId: pane.id, position: sidebarDropZone }
+        : null,
+    [pane.id, sidebarDropZone],
+  );
+  const paneDropDataSet = useMemo(
+    () => ({ sidebarDropPane: pane.id, sidebarDropWorkspace: workspaceKey }),
+    [pane.id, workspaceKey],
+  );
+  const tabsDropDataSet = useMemo(() => ({ sidebarDropTabs: pane.id }), [pane.id]);
   // Views dim panes you are not working in, like iTerm's inactive split panes.
   const dimInactivePane = Boolean(useViewPaneActions()) && workspaceHasMultiplePanes && !isFocused;
   const paneState = useMemo(
@@ -1361,8 +1377,9 @@ function SplitPaneView({
         collapsable={false}
         style={styles.pane}
         testID={`workspace-pane-${pane.id}`}
+        dataSet={paneDropDataSet}
       >
-        <WindowChromeSafeArea placement="inline" style={styles.paneTabs}>
+        <WindowChromeSafeArea placement="inline" style={styles.paneTabs} dataSet={tabsDropDataSet}>
           <TitlebarDragRegion />
           <WorkspaceDesktopTabsRow
             paneId={pane.id}
@@ -1398,6 +1415,13 @@ function SplitPaneView({
             focusModeEnabled={Boolean(focusModeEnabled)}
             onExitFocusMode={onExitFocusMode}
           />
+          {sidebarDropZone === "tabs" ? (
+            <View
+              pointerEvents="none"
+              style={styles.tabStripDropPreview}
+              testID={`workspace-tabs-drop-preview-${pane.id}`}
+            />
+          ) : null}
         </WindowChromeSafeArea>
 
         <View
@@ -1416,7 +1440,11 @@ function SplitPaneView({
             onFocusPane={stableOnFocusPane}
             buildPaneContentModel={buildPaneContentModel}
           />
-          <SplitDropZone paneId={pane.id} active={showDropZones} preview={dropPreview} />
+          <SplitDropZone
+            paneId={pane.id}
+            active={showDropZones || sidebarDropPreview !== null}
+            preview={sidebarDropPreview ?? dropPreview}
+          />
         </View>
       </View>
     </RenderProfile>
@@ -1531,6 +1559,15 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 0,
     backgroundColor: theme.colors.surface0,
     overflow: "hidden",
+  },
+  tabStripDropPreview: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 2,
+    borderColor: theme.colors.accent,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.accent,
+    opacity: 0.35,
+    zIndex: 40,
   },
   paneTabs: {
     position: "relative",
