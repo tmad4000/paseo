@@ -1711,6 +1711,8 @@ export const ja: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} のレビュー操作",
+    needsInputSessions: "入力が必要 ({{count}})",
+    sessionActions: "{{title}} のセッション操作",
     reviewSessions: "レビュー ({{count}})",
     openTabs_one: "{{count}} 個の開いているタブ",
     openTabs: "{{count}} 個の開いているタブ",

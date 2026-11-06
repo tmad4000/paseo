@@ -1730,6 +1730,8 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Ações de revisão para {{title}}",
+    needsInputSessions: "Precisa de intervenção ({{count}})",
+    sessionActions: "Ações da sessão {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} aba aberta",
     openTabs: "{{count}} abas abertas",

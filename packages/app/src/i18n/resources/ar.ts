@@ -1694,6 +1694,8 @@ export const ar: TranslationResources = {
   },
   sidebar: {
     reviewActions: "إجراءات مراجعة {{title}}",
+    needsInputSessions: "بحاجة إلى إدخال ({{count}})",
+    sessionActions: "إجراءات الجلسة {{title}}",
     reviewSessions: "مراجعة ({{count}})",
     openTabs_one: "علامة تبويب مفتوحة: {{count}}",
     openTabs: "{{count}} علامات تبويب مفتوحة",

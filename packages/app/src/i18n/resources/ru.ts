@@ -1715,6 +1715,8 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Действия проверки для {{title}}",
+    needsInputSessions: "Требуется ввод ({{count}})",
+    sessionActions: "Действия с сеансом {{title}}",
     reviewSessions: "Проверка ({{count}})",
     openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",

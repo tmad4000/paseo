@@ -86,6 +86,7 @@ import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pi
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
+import { WorkspaceNeedsInputList } from "./workspace-review-list";
 import { SidebarSessionList } from "@/components/sidebar/sidebar-session-list";
 import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
 
@@ -585,6 +586,11 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
         drag={drag}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       <SidebarWorkspaceTabMatches
         workspaceKey={workspace.workspaceKey}

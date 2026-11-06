@@ -1705,6 +1705,8 @@ export const en = {
   },
   sidebar: {
     reviewActions: "Review actions for {{title}}",
+    needsInputSessions: "Needs input ({{count}})",
+    sessionActions: "Session actions for {{title}}",
     reviewSessions: "Review ({{count}})",
     openTabs_one: "{{count}} open tab",
     openTabs: "{{count}} open tabs",

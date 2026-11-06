@@ -1741,6 +1741,8 @@ export const es: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Acciones de revisión para {{title}}",
+    needsInputSessions: "Necesita intervención ({{count}})",
+    sessionActions: "Acciones de sesión para {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} pestaña abierta",
     openTabs: "{{count}} pestañas abiertas",

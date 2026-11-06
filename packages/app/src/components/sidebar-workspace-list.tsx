@@ -1,4 +1,7 @@
-import { WorkspaceReviewList } from "@/components/sidebar/workspace-review-list";
+import {
+  WorkspaceNeedsInputList,
+  WorkspaceReviewList,
+} from "@/components/sidebar/workspace-review-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -1490,6 +1493,11 @@ function WorkspaceRowItem({
         drag={drag ?? noop}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       <WorkspaceReviewList
         serverId={workspace.serverId}
