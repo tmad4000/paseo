@@ -3022,6 +3022,12 @@ export const es: TranslationResources = {
         description:
           "Si está desactivado, un chat sigue sin leer hasta que lo marques como leído o le envíes un mensaje",
       },
+      sortTabsByActivity: {
+        section: "Pestañas",
+        label: "Ordenar pestañas por actividad reciente",
+        description:
+          "Si está activado, el chat con la actividad más reciente pasa al principio de la fila de pestañas. Si está desactivado, las pestañas se quedan donde las pusiste",
+      },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",
         description:

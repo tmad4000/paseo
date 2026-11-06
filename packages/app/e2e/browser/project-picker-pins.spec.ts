@@ -138,8 +138,11 @@ test.describe("compact touch project picker", () => {
     const trigger = await openNew(page, projects);
     const pin = page.getByRole("button", { name: `Pin project: ${FAVORITE}`, exact: true });
     const box = await pin.boundingBox();
-    expect(box!.width).toBeGreaterThanOrEqual(40);
-    expect(box!.height).toBeGreaterThanOrEqual(40);
+    // A 40px target can measure 39.99997px when layout above it sits on a fractional pixel;
+    // allow float noise, not a smaller target.
+    const subpixel = 0.01;
+    expect(box!.width).toBeGreaterThanOrEqual(40 - subpixel);
+    expect(box!.height).toBeGreaterThanOrEqual(40 - subpixel);
     await pin.tap();
     const unpin = page.getByRole("button", { name: `Unpin project: ${FAVORITE}`, exact: true });
     await expect(unpin).toBeVisible();

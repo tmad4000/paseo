@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { test, expect } from "../support/fixtures";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
-import { enableReadOnOpen } from "../support/helpers/read-on-open";
+import { seedAppSettings } from "../support/helpers/read-on-open";
 
+// These flows opt into "Sort tabs by recent activity"; the fork default keeps tab order stable
+// (see the stable-order test at the end of this file).
 // Read on open: visiting the tab reads it. Explicit (the default): the visit leaves the dot,
 // and the tab's own check (desktop) or its switcher row's check (phone) reads it.
 for (const mode of ["read on open", "explicit read"] as const)
@@ -16,7 +18,10 @@ for (const mode of ["read on open", "explicit read"] as const)
         : `background tab activity is ordered and stays unread after a visit until read at ${viewport.name}`;
     test(title, async ({ page }) => {
       test.setTimeout(120_000);
-      if (mode === "read on open") await enableReadOnOpen(page);
+      await seedAppSettings(page, {
+        sortTabsByActivity: true,
+        ...(mode === "read on open" ? { markReadOnOpen: true } : {}),
+      });
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const session = await seedMockAgentWorkspace({
         repoPrefix: "workspace-tab-activity-",
@@ -103,3 +108,55 @@ for (const mode of ["read on open", "explicit read"] as const)
       }
     });
   }
+
+test("background tab activity keeps the tab order by default at desktop", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const session = await seedMockAgentWorkspace({
+    repoPrefix: "workspace-tab-stable-order-",
+    title: `first-${randomUUID().slice(0, 6)}`,
+  });
+  try {
+    const second = await session.client.createAgent({
+      provider: "mock",
+      cwd: session.cwd,
+      workspaceId: session.workspaceId,
+      title: "second tab",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+    });
+    const third = await session.client.createAgent({
+      provider: "mock",
+      cwd: session.cwd,
+      workspaceId: session.workspaceId,
+      title: "third tab",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+    });
+    await openAgentRoute(page, session);
+    await openAgentRoute(page, { workspaceId: session.workspaceId, agentId: second.id });
+    await openAgentRoute(page, { workspaceId: session.workspaceId, agentId: third.id });
+    await expect(page.getByTestId(`workspace-tab-agent_${session.agentId}`)).toBeVisible();
+    await expect(page.getByTestId(`workspace-tab-agent_${second.id}`)).toBeVisible();
+    await expect(page.getByTestId(`workspace-tab-agent_${third.id}`)).toBeVisible();
+
+    const tabIds = () =>
+      page
+        .locator('[data-testid^="workspace-tab-agent_"]')
+        .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid")));
+    const before = await tabIds();
+    // Give a background tab that is not already first its own activity; the default order
+    // must not move it to the front. The third tab is focused, so neither candidate is.
+    const activeAgentId = [session.agentId, second.id].find(
+      (agentId) => before[0] !== `workspace-tab-agent_${agentId}`,
+    );
+    if (!activeAgentId) throw new Error("expected a background tab that is not first");
+
+    await session.client.sendAgentMessage(activeAgentId, "Report a short result");
+    await session.client.waitForFinish(activeAgentId);
+    await expect(page.getByTestId(`workspace-tab-unread-agent_${activeAgentId}`)).toBeVisible();
+    expect(await tabIds()).toEqual(before);
+  } finally {
+    await session.cleanup();
+  }
+});

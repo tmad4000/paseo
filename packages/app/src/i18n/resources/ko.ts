@@ -2974,6 +2974,12 @@ export const ko: TranslationResources = {
         description:
           "끄면 읽음으로 표시하거나 메시지를 보낼 때까지 채팅이 읽지 않음 상태로 유지됩니다",
       },
+      sortTabsByActivity: {
+        section: "탭",
+        label: "최근 활동순으로 탭 정렬",
+        description:
+          "켜면 가장 최근에 활동한 채팅이 탭 줄의 맨 앞으로 이동합니다. 끄면 탭이 놓은 자리에 그대로 있습니다",
+      },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",
         description: "에이전트의 사고 및 추론 블록을 기본적으로 모두 펼쳐 표시합니다.",

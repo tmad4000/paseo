@@ -3025,6 +3025,12 @@ export const fr: TranslationResources = {
         description:
           "Désactivé, une discussion reste non lue jusqu'à ce que vous la marquiez comme lue ou lui envoyiez un message",
       },
+      sortTabsByActivity: {
+        section: "Onglets",
+        label: "Trier les onglets par activité récente",
+        description:
+          "Activé, le chat le plus récemment actif passe en tête de la rangée d’onglets. Désactivé, les onglets restent là où vous les avez placés",
+      },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",
         description: "Afficher le raisonnement de l'agent entièrement développé par défaut",

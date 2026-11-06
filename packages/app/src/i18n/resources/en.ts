@@ -3103,6 +3103,12 @@ export const en = {
         label: "Mark chats read when opened",
         description: "When off, a chat stays unread until you mark it read or send it a message",
       },
+      sortTabsByActivity: {
+        section: "Tabs",
+        label: "Sort tabs by recent activity",
+        description:
+          "When on, the chat with the latest activity moves to the front of the tab row. When off, tabs stay where you put them",
+      },
       autoExpandReasoning: {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
