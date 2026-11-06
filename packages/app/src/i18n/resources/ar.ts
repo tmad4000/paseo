@@ -1940,6 +1940,14 @@ export const ar: TranslationResources = {
       status: {
         serviceRunning: "الخدمة {{name}} قيد التشغيل",
         serviceUnhealthy: "الخدمة {{name}} غير سليمة",
+        indicator: {
+          loading: "قيد البدء",
+          running: "يعمل: وكيل قيد التشغيل",
+          needs_input: "بحاجة إليك: وكيل ينتظر إذنًا أو إجابة",
+          attention: "انتهى: مخرجات جديدة لم تقرأها",
+          failed: "خطأ: توقف وكيل بسبب خطأ",
+          done: "خامل: لا جديد",
+        },
         creating: "جارٍ الإنشاء...",
       },
       checks: {
@@ -1953,6 +1961,7 @@ export const ar: TranslationResources = {
       actions: {
         markAsRead: "تعليم كمقروء",
         markAsReadNamed: "تعليم {{name}} كمقروء",
+        markAsReadHint: "تعليم كمقروء: يزيل مؤشر الانتهاء/الخطأ لمساحة العمل هذه",
         menu: "إجراءات Workspace",
         newWorkspace: "مساحة عمل جديدة",
         showMore: "عرض المزيد",

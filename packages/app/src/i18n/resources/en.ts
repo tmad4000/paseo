@@ -1952,6 +1952,14 @@ export const en = {
       status: {
         serviceRunning: "Service {{name}} running",
         serviceUnhealthy: "Service {{name}} unhealthy",
+        indicator: {
+          loading: "Starting up",
+          running: "Working: an agent is running",
+          needs_input: "Needs you: an agent is waiting for permission or an answer",
+          attention: "Finished: new output you haven't read",
+          failed: "Error: an agent stopped with an error",
+          done: "Idle: nothing new",
+        },
         creating: "Creating...",
       },
       checks: {
@@ -1965,6 +1973,7 @@ export const en = {
       actions: {
         markAsRead: "Mark as read",
         markAsReadNamed: "Mark {{name}} as read",
+        markAsReadHint: "Mark as read: clears this workspace's finished/error indicator",
         menu: "Workspace actions",
         newWorkspace: "New workspace",
         showMore: "Show more",
