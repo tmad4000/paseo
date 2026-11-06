@@ -1706,6 +1706,7 @@ export const ko: TranslationResources = {
   sidebar: {
     reviewActions: "{{title}} 검토 작업",
     needsInputSessions: "입력 필요 ({{count}})",
+    needsInputSince: "{{time}}부터 입력 필요",
     sessionActions: "{{title}} 세션 작업",
     reviewSessions: "검토 ({{count}})",
     openTabs_one: "열린 탭 {{count}}개",

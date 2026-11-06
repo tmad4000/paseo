@@ -1,4 +1,9 @@
-import { createWorkspaceReviewSelector, type ReviewAgent } from "./workspace-review-model";
+import {
+  createWorkspaceReviewSelector,
+  needsInputSince,
+  newestNeedsInputSince,
+  type ReviewAgent,
+} from "./workspace-review-model";
 import { describe, expect, it } from "vitest";
 import type { SessionTextSearchHit } from "@getpaseo/protocol/messages";
 import {
@@ -328,6 +333,61 @@ describe("workspace review identities", () => {
     expect(needsInput(resolved, "ws-1").map((entry) => entry.id)).toEqual(["manual"]);
     expect(needsInput(directory, "ws-2").map((entry) => entry.id)).toEqual(["other"]);
     expect(needsInput(undefined, "ws-1")).toEqual([]);
+  });
+  it("times needing input from the permission edge, else the moment the session went quiet", () => {
+    const at = (iso: string) => new Date(iso);
+    expect(
+      needsInputSince(
+        reviewAgent("edge", {
+          attentionReason: "permission",
+          attentionTimestamp: at("2026-11-06T09:00:00Z"),
+          lastActivityAt: at("2026-11-06T09:05:00Z"),
+        }),
+      ),
+    ).toBe(Date.parse("2026-11-06T09:00:00Z"));
+    expect(
+      needsInputSince(
+        reviewAgent("pending", {
+          attentionReason: null,
+          pendingPermissions: [{ id: "p" } as ReviewAgent["pendingPermissions"][number]],
+          attentionTimestamp: at("2026-11-06T08:00:00Z"),
+          lastActivityAt: at("2026-11-06T09:05:00Z"),
+        }),
+      ),
+    ).toBe(Date.parse("2026-11-06T09:05:00Z"));
+    expect(
+      needsInputSince(
+        reviewAgent("manual", {
+          labels: { "paseo.manual-needs-input": "true" },
+          updatedAt: at("2026-11-06T07:00:00Z"),
+        }),
+      ),
+    ).toBe(Date.parse("2026-11-06T07:00:00Z"));
+    expect(needsInputSince(reviewAgent("unknown", { lastActivityAt: new Date(Number.NaN) }))).toBe(
+      0,
+    );
+  });
+  it("sorts sessions needing input newest first and gives the workspace that newest time", () => {
+    const needsInput = createWorkspaceReviewSelector<ReviewAgent>("needs_input");
+    const waiting = (id: string, iso: string | null) =>
+      reviewAgent(id, {
+        requiresAttention: false,
+        attentionReason: "permission",
+        attentionTimestamp: iso ? new Date(iso) : null,
+      });
+    const directory = new Map(
+      [
+        waiting("older", "2026-11-06T08:00:00Z"),
+        waiting("unknown", null),
+        waiting("newer", "2026-11-06T09:00:00Z"),
+        reviewAgent("finished", { lastActivityAt: new Date("2026-11-06T10:00:00Z") }),
+      ].map((entry) => [entry.id, entry]),
+    );
+    const rows = needsInput(directory, "ws-1");
+    expect(rows.map((entry) => entry.id)).toEqual(["newer", "older", "unknown"]);
+    expect(newestNeedsInputSince(rows)).toBe(Date.parse("2026-11-06T09:00:00Z"));
+    expect(newestNeedsInputSince(needsInput(directory, "ws-2"))).toBeNull();
+    expect(newestNeedsInputSince([waiting("only-unknown", null)])).toBeNull();
   });
   it("orders by completed assistant replies with unknown times last and deterministic ties", () => {
     const clock = (lastAssistantMessageAt: string) => ({
