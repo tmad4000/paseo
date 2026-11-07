@@ -35,17 +35,25 @@ vi.mock("react-native", () => ({
     </button>
   ),
   FlatList: ({
+    data,
+    renderItem,
+    keyExtractor,
     ListHeaderComponent,
     ListEmptyComponent,
     ListFooterComponent,
   }: {
+    data?: unknown[];
+    renderItem?: (info: { item: unknown }) => React.ReactNode;
+    keyExtractor?: (item: unknown) => string;
     ListHeaderComponent?: React.ReactNode;
     ListEmptyComponent?: React.ReactNode;
     ListFooterComponent?: React.ReactNode;
   }) => (
     <div>
       {ListHeaderComponent}
-      {ListEmptyComponent}
+      {data?.length
+        ? data.map((item) => <div key={keyExtractor?.(item)}>{renderItem?.({ item })}</div>)
+        : ListEmptyComponent}
       {ListFooterComponent}
     </div>
   ),
@@ -658,4 +666,87 @@ it("comes back from a chat to the same side, search and host", () => {
   });
   expect(rendered.getByText("globalStream.nothingLater")).toBeTruthy();
   expect(useStreamReturnStore.getState().restore).toBeNull();
+});
+
+const blockedRow: GlobalStreamRow = {
+  ...row,
+  id: "blocked",
+  item: {
+    kind: "entry",
+    entry: {
+      id: "ask:deploy",
+      kind: "question",
+      status: "open",
+      text: "Deploy the release",
+      timestamp: "2026-10-05T00:00:00Z",
+      truncated: false,
+      ask: {
+        state: "blocked",
+        remaining: "Needs your go-ahead to deploy\nThen verify.",
+        evidence: "",
+        revision: 1,
+        provenance: "explicit",
+      },
+    },
+  },
+};
+
+function mockNeedsYouRows(rows: GlobalStreamRow[], hasNextPage = false) {
+  vi.mocked(useGlobalStream).mockReturnValue({
+    rows,
+    notices: [],
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    isFetching: false,
+    isLoading: false,
+    hasNextPage,
+    isFetchingNextPage: false,
+    tagCounts: [],
+    pinnedTags: [],
+    supportsTags: false,
+    setTagPinned: vi.fn(),
+  });
+}
+
+it("groups Needs you into Blocked then Questions with counts, and collapse is remembered", async () => {
+  const { useNeedsYouGroupsStore } = await import("./needs-you-groups");
+  useNeedsYouGroupsStore.setState({ collapsed: [] });
+  mockNeedsYouRows([row, blockedRow]);
+  const rendered = render(<StreamWorkflowFeed initialView="needs_you" />);
+  const blockedHeader = rendered.getByText("▾ globalStream.groupBlocked · 1");
+  const questionsHeader = rendered.getByText("▾ globalStream.groupQuestions · 1");
+  expect(
+    blockedHeader.compareDocumentPosition(questionsHeader) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(rendered.getAllByText("Done")).toHaveLength(2);
+  fireEvent.click(blockedHeader);
+  expect(useNeedsYouGroupsStore.getState().collapsed).toEqual(["blocked"]);
+  expect(rendered.getByText("▸ globalStream.groupBlocked · 1")).toBeTruthy();
+  expect(rendered.getAllByText("Done")).toHaveLength(1);
+  useNeedsYouGroupsStore.setState({ collapsed: [] });
+});
+
+it("shows N+ group counts without the full set, and hides views and Archived in Needs you", () => {
+  mockNeedsYouRows([blockedRow], true);
+  const rendered = render(<StreamWorkflowFeed initialView="needs_you" />);
+  expect(rendered.getByText("▾ globalStream.groupBlocked · 1+")).toBeTruthy();
+  expect(rendered.queryByText("globalStream.archived")).toBeNull();
+  expect(rendered.queryByText("globalStream.activity")).toBeNull();
+  cleanup();
+  mockNeedsYouRows([blockedRow]);
+  const tasks = render(<StreamWorkflowFeed initialView="tasks" />);
+  expect(tasks.getByText("globalStream.archived")).toBeTruthy();
+  expect(tasks.queryByText(/globalStream.groupBlocked/)).toBeNull();
+});
+
+it("a reply to a blocked ask quotes its headline and blocker, not its whole plan", async () => {
+  state.queueSupported = true;
+  const rendered = render(<GlobalStreamCard row={blockedRow} onSaved={vi.fn()} triage />);
+  fireEvent.click(rendered.getByText("Send reply"));
+  await waitFor(() => expect(state.sendAgentMessage).toHaveBeenCalled());
+  const sent = state.sendAgentMessage.mock.calls[0][1] as string;
+  expect(sent).toContain("Deploy the release");
+  expect(sent).toContain("Needs your go-ahead to deploy");
+  expect(sent).not.toContain("Then verify.");
+  expect(sent.endsWith("Use staging")).toBe(true);
 });

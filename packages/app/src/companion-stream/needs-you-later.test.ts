@@ -45,3 +45,23 @@ describe("splitLater", () => {
     expect(splitLater(rows, "tasks", true)).toEqual({ data: rows, nowCount: 0, laterCount: 0 });
   });
 });
+
+describe("splitLater with blocked asks", () => {
+  it("moves a deferred blocked ask to Later", () => {
+    const blocked = row("blocked", "2026-11-01T02:00:00Z");
+    if (blocked.item.kind === "entry")
+      blocked.item.entry = {
+        ...blocked.item.entry,
+        id: "ask:blocked",
+        ask: {
+          state: "blocked",
+          remaining: "Needs your go-ahead",
+          evidence: "",
+          revision: 1,
+          provenance: "explicit",
+        },
+      };
+    expect(splitLater([row("a"), blocked], "needs_you", true).data).toEqual([blocked]);
+    expect(splitLater([row("a"), blocked], "needs_you", false).laterCount).toBe(1);
+  });
+});

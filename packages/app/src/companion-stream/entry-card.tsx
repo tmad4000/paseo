@@ -1,4 +1,6 @@
 import {
+  askBlockerReason,
+  isBlockedAskOnUser,
   isCompanionEntryPending,
   needsUserInput,
   type CompanionEntry,
@@ -79,13 +81,21 @@ export function EntryCard({
   const triage = variant === "triage";
   const actionSize = useActionSize(triage);
   const [expanded, setExpanded] = useState(false);
-  const [replying, setReplying] = useState(false);
-  const toggleReplying = useCallback(() => setReplying((value) => !value), []);
+  // The inline reply's starting text while it is open; Go ahead opens it prefilled, never sent.
+  const [replyDraft, setReplyDraft] = useState<string | null>(null);
+  const replying = replyDraft !== null;
+  const toggleReplying = useCallback(
+    () => setReplyDraft((value) => (value === null ? "" : null)),
+    [],
+  );
+  const { t } = useTranslation();
+  const goAhead = useCallback(() => setReplyDraft(t("globalStream.goAheadText")), [t]);
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
   const pending = isCompanionEntryPending(entry);
   const quote = entry.kind === "pin" && Boolean(entry.sourceId);
   // Only an agent's question takes a typed answer; a permission is allowed or denied in Chat.
   const inlineReply = pending && entry.kind === "question" && onSendReply ? onSendReply : undefined;
+  const blocked = triage && isBlockedAskOnUser(entry);
 
   return (
     <View
@@ -100,6 +110,7 @@ export function EntryCard({
         previewLines={triage ? 2 : 5}
         onTagPress={onTagPress}
       />
+      {triage ? <TriageReason entry={entry} blocked={blocked} /> : null}
       <AskDelegationPulse ask={entry.ask} serverId={serverId} />
       <EntryExtras entry={entry} serverId={serverId} expanded={expanded} triage={triage} />
 
@@ -113,6 +124,7 @@ export function EntryCard({
           replying={replying}
           onToggleExpanded={toggleExpanded}
           onToggleInlineReply={inlineReply ? toggleReplying : undefined}
+          onGoAhead={blocked && inlineReply ? goAhead : undefined}
           onReplyInChat={onReplyInChat}
           onReturnToChat={onReturnToChat}
           onShowInChat={onShowInChat}
@@ -137,8 +149,10 @@ export function EntryCard({
           onDefer={onDefer}
         />
       )}
-      {inlineReply && replying ? (
+      {inlineReply && replyDraft !== null ? (
         <InlineReply
+          key={replyDraft}
+          initialText={replyDraft}
           entry={entry}
           disabled={disabled}
           size={actionSize}
@@ -148,6 +162,30 @@ export function EntryCard({
       ) : null}
     </View>
   );
+}
+
+/**
+ * Needs you's always-visible reason line: what a blocked ask waits on (the first line of its
+ * remaining work), or the blocked task a question unblocks. Neither hides behind Details.
+ */
+function TriageReason({ entry, blocked }: { entry: CompanionEntry; blocked: boolean }) {
+  const { t } = useTranslation();
+  if (blocked && entry.ask) {
+    const reason = askBlockerReason(entry.ask.remaining);
+    return reason ? (
+      <Text style={styles.waitingOnYou} numberOfLines={2} testID="companion-entry-waiting-on-you">
+        <Text style={styles.waitingLabel}>{t("globalStream.waitingOnYou")} </Text>
+        {reason}
+      </Text>
+    ) : null;
+  }
+  if (!entry.ask && entry.inputRequest?.task)
+    return (
+      <Text style={styles.description} numberOfLines={1} testID="companion-entry-unblocks">
+        {t("globalStream.unblocksTask")}
+      </Text>
+    );
+  return null;
 }
 
 /** Triage on a phone gets 44px targets: it is tapped through quickly, often one-handed. */
@@ -258,6 +296,7 @@ function TriageActions({
   replying,
   onToggleExpanded,
   onToggleInlineReply,
+  onGoAhead,
   onReplyInChat,
   onReturnToChat,
   onShowInChat,
@@ -271,6 +310,8 @@ function TriageActions({
   replying: boolean;
   onToggleExpanded: () => void;
   onToggleInlineReply?: () => void;
+  /** Blocked ask: open the inline reply prefilled with a go-ahead. Sending stays deliberate. */
+  onGoAhead?: () => void;
   onReplyInChat: (entry: CompanionEntry) => void;
   onReturnToChat: () => void;
   onShowInChat?: (target: ChatJumpTarget) => void;
@@ -298,6 +339,18 @@ function TriageActions({
     !entry.ask;
   return (
     <View style={styles.actions}>
+      {onGoAhead ? (
+        <Button
+          variant="default"
+          size={size}
+          onPress={onGoAhead}
+          disabled={disabled}
+          accessibilityHint={t("globalStream.goAheadHint")}
+          testID="companion-entry-go-ahead"
+        >
+          {t("globalStream.goAhead")}
+        </Button>
+      ) : null}
       {permission ? (
         <Button variant="secondary" size={size} onPress={openInChat} disabled={disabled}>
           {t("agentPanel.stream.reviewPermission")}
@@ -445,12 +498,15 @@ function ReadToggle({
  */
 function InlineReply({
   entry,
+  initialText = "",
   disabled,
   size,
   onSend,
   onClose,
 }: {
   entry: CompanionEntry;
+  /** Starting text, editable before sending (Go ahead prefills it). */
+  initialText?: string;
   disabled: boolean;
   size: ActionSize;
   onSend: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
@@ -458,7 +514,7 @@ function InlineReply({
 }) {
   const { t } = useTranslation();
   const input = useRef<EditingTextInputHandle>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<"sent" | "queued" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -488,7 +544,7 @@ function InlineReply({
           placeholder={t("agentPanel.stream.replyPlaceholder")}
           maxLength={4000}
           editable={!sending}
-          initialValue=""
+          initialValue={initialText}
           autoFocus
           onChangeText={setText}
           onSubmitEditing={send}
@@ -853,6 +909,8 @@ function AskDetails({ ask, serverId }: { ask: TrackedAsk; serverId?: string }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  waitingOnYou: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
+  waitingLabel: { color: theme.colors.statusWarning, fontWeight: theme.fontWeight.medium },
   card: {
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[3],

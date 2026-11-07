@@ -164,6 +164,14 @@ export const ko: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    groupBlocked: "Blocked",
+    groupQuestions: "Questions",
+    groupPermissions: "Permissions",
+    waitingOnYou: "Waiting on you:",
+    goAhead: "Go ahead",
+    goAheadText: "Go ahead.",
+    goAheadHint: "Opens a reply with a go-ahead for you to edit and send. Nothing is sent yet.",
+    unblocksTask: "Unblocks a blocked task",
     nowPartial: "지금 · {{count}}+",
     laterPartial: "나중에 · {{count}}+",
     nothingNow: "지금 처리할 항목이 없습니다.",
@@ -175,7 +183,7 @@ export const ko: TranslationResources = {
     backToNeedsYou: "Needs you로 돌아가기",
     backToStream: "Stream으로 돌아가기",
     needsYouDescription:
-      "Concrete input, decisions, approvals and actions requested from you. Answers waiting for you to read are separate.",
+      "Blocked work, concrete input, decisions, approvals and permissions waiting on you. Answers waiting for you to read are separate.",
     allSessions: "All sessions",
     thisChat: "This chat",
     scopeDescription:

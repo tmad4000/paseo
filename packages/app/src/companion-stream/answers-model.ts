@@ -1,4 +1,5 @@
 import {
+  askBlockerReason,
   getAnswerAttention,
   type AnswerAttention,
   type TrackedAskInput,
@@ -102,16 +103,6 @@ const ASK_STATE_ORDER: Record<OpenAskState, number> = {
   open: 2,
 };
 
-/** First non-empty line of an ask's remaining work. */
-export function askNextAction(remaining: string): string {
-  return (
-    remaining
-      .split("\n")
-      .find((line) => line.trim())
-      ?.trim() ?? ""
-  );
-}
-
 /**
  * The chat's unresolved Stream asks, for the pane's Open asks section. Blocked asks lead (they
  * usually wait on the user), then work in progress, then open; newest first. Done asks never
@@ -129,7 +120,7 @@ export function selectOpenAsks(
     items.push({
       entry,
       state: ask.state,
-      nextAction: askNextAction(ask.remaining),
+      nextAction: askBlockerReason(ask.remaining),
       delegatedAgentId: ask.delegatedAgentId || undefined,
     });
   }
