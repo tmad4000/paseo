@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { closeLastBlankTab } from "./close-last-blank-tab";
+import {
+  collectAllTabs,
+  createWorkspaceLayoutWithExplorerSidebar,
+  splitPaneEmptyInLayout,
+} from "@/stores/workspace-layout-actions";
 import {
   createNavigationFocusHistory,
   type NavigationFocusLocation,
@@ -22,6 +28,104 @@ function workspace(
 }
 
 describe("navigation focus history", () => {
+  it("closes the final blank tab and returns past empty visits to the useful opener", () => {
+    const history = createNavigationFocusHistory();
+    const layout = createWorkspaceLayoutWithExplorerSidebar();
+    const tabId = collectAllTabs(layout.root).find((tab) => tab.target.kind === "new_tab")!.tabId;
+    const opener = workspace("opener", "agent-a");
+    const blank = { ...workspace("empty", tabId), target: { kind: "new_tab" } as const };
+    history.record(opener);
+    history.record({ ...workspace("other-empty", "another"), target: { kind: "new_tab" } });
+    history.record({ kind: "route", pathname: "/new" });
+    history.record(workspace("empty", "old-closed-agent"));
+    history.record(blank);
+    const closeTab = vi.fn();
+    const navigateSessions = vi.fn();
+    const navigateBack = vi.fn((steps: number) => {
+      expect(closeTab).toHaveBeenCalledOnce();
+      expect(history.back(steps)).toEqual(opener);
+      history.record(opener);
+      return true;
+    });
+    expect(
+      closeLastBlankTab({
+        serverId: "server-1",
+        workspaceId: "empty",
+        tabId,
+        layout,
+        explorerSidebarPaneId: "explorer",
+        history,
+        closeTab,
+        navigateBack,
+        navigateSessions,
+      }),
+    ).toBe(true);
+    expect(navigateBack).toHaveBeenCalledWith(4);
+    expect(navigateSessions).not.toHaveBeenCalled();
+    expect([
+      ...history.getSnapshot().backEntries,
+      ...history.getSnapshot().forwardEntries,
+    ]).not.toContainEqual(blank);
+  });
+
+  it("falls back to Sessions without history, including a failed restore", () => {
+    for (const hasHistory of [false, true]) {
+      const history = createNavigationFocusHistory();
+      const layout = createWorkspaceLayoutWithExplorerSidebar();
+      const tabId = collectAllTabs(layout.root).find((tab) => tab.target.kind === "new_tab")!.tabId;
+      if (hasHistory) history.record(workspace("opener", "agent-a"));
+      history.record({ ...workspace("empty", tabId), target: { kind: "new_tab" } });
+      const navigateSessions = vi.fn();
+      const closeTab = vi.fn();
+      expect(
+        closeLastBlankTab({
+          serverId: "server-1",
+          workspaceId: "empty",
+          tabId,
+          layout,
+          explorerSidebarPaneId: "explorer",
+          history,
+          closeTab,
+          navigateBack: () => false,
+          navigateSessions,
+        }),
+      ).toBe(true);
+      expect(closeTab).toHaveBeenCalledOnce();
+      expect(navigateSessions).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("leaves ordinary closing in charge when another pane remains", () => {
+    const split = splitPaneEmptyInLayout({
+      layout: createWorkspaceLayoutWithExplorerSidebar(),
+      targetPaneId: "main",
+      position: "right",
+      createNodeId: (prefix) => `${prefix}-split`,
+      maxTreeDepth: 5,
+    });
+    if (!split) throw new Error("expected split");
+    const tabId = collectAllTabs(split.layout.root).find(
+      (tab) => tab.target.kind === "new_tab",
+    )!.tabId;
+    const closeTab = vi.fn();
+    const navigateSessions = vi.fn();
+    expect(
+      closeLastBlankTab({
+        serverId: "server-1",
+        workspaceId: "empty",
+        tabId,
+        layout: split.layout,
+        explorerSidebarPaneId: "explorer",
+        history: createNavigationFocusHistory(),
+        closeTab,
+        navigateBack: () => false,
+        navigateSessions,
+      }),
+    ).toBe(false);
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(navigateSessions).not.toHaveBeenCalled();
+  });
+
   it("returns to tab focus in true recency order, including across workspaces", () => {
     const history = createNavigationFocusHistory();
     const firstAgent = workspace("workspace-a", "agent-a");

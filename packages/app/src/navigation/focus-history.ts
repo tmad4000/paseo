@@ -236,6 +236,23 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       return go("forward", steps);
     },
 
+    /** Closed empty tabs have no resource to reopen. Remove their visits too. */
+    forgetTab(serverId: string, workspaceId: string, tabId: string): void {
+      if (pending) {
+        abandon(pending);
+        pending = null;
+      }
+      const keep = (location: NavigationFocusLocation) =>
+        location.kind !== "workspace" ||
+        location.serverId !== serverId ||
+        location.workspaceId !== workspaceId ||
+        location.tabId !== tabId;
+      past = past.filter(keep);
+      future = future.filter(keep);
+      if (current && !keep(current)) current = null;
+      publish();
+    },
+
     /** The restore failed before it could navigate. */
     cancelRestore(): void {
       if (!pending) {

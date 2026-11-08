@@ -895,7 +895,11 @@ export function createWorkspaceLayoutStore(
             const closingTab = collectAllTabs(layout.root).find(
               (tab) => tab.tabId === normalizedTabId,
             );
-            if (closingPane?.tabIds.length === 1 && closingTab?.target.kind === "new_tab") {
+            if (
+              closingPane?.tabIds.length === 1 &&
+              closingTab?.target.kind === "new_tab" &&
+              canDismissPaneInLayout(layout, closingPane.id, explorerSidebarPaneId)
+            ) {
               const nextLayout =
                 closingPane.id === explorerSidebarPaneId
                   ? setPaneHiddenInLayout({

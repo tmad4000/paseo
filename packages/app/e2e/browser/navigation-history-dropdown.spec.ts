@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "../support/fixtures";
 import { createMockIdleAgent, openWorkspaceWithAgents } from "../support/helpers/archive-tab";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { gotoWorkspace } from "../support/helpers/launcher";
 
 function agentTab(page: Page, agentId: string) {
   return page.getByTestId(`workspace-tab-agent_${agentId}`).filter({ visible: true }).first();
@@ -10,6 +11,27 @@ test.describe.configure({ timeout: 120_000 });
 
 const visibleControl = (page: Page, testID: string) =>
   page.getByTestId(testID).filter({ visible: true }).first();
+
+for (const width of [1400, 390]) {
+  test(`closing the final blank New tab leaves for Sessions without a warning at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    const workspace = await seedWorkspace({ repoPrefix: "close-final-blank-", git: false });
+    try {
+      await page.setViewportSize({ width, height: 900 });
+      await gotoWorkspace(page, workspace.workspaceId);
+      await expect(
+        page.getByTestId("workspace-new-tab-panel").filter({ visible: true }),
+      ).toHaveCount(1);
+      await page.keyboard.press("Alt+Shift+w");
+      await expect(page).toHaveURL(/\/sessions(?:\?|$)/);
+      await expect(page.getByRole("dialog").filter({ visible: true })).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`closed-blank-${width}.png`) });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}
 
 test("visible history dropdown reaches older sessions and preserves Back/Forward order", async ({
   page,
