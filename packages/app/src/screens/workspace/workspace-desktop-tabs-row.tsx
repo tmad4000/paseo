@@ -285,6 +285,8 @@ function WorkspaceNewTabButton({
           purpose="primary"
           host="main"
           paneId={paneId}
+          onSplitRight={splitEnabled ? onSplitRight : undefined}
+          onSplitDown={splitEnabled ? onSplitDown : undefined}
         />
       </DropdownMenu>
     );
