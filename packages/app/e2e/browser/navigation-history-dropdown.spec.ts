@@ -23,7 +23,19 @@ for (const width of [1400, 390]) {
       await expect(
         page.getByTestId("workspace-new-tab-panel").filter({ visible: true }),
       ).toHaveCount(1);
-      await page.keyboard.press("Alt+Shift+w");
+      if (width < 600) {
+        await page.getByTestId("workspace-tab-switcher-trigger").click();
+        await page
+          .locator('[data-testid^="workspace-tab-menu-tab_"][data-testid$="-trigger"]')
+          .filter({ visible: true })
+          .click();
+        await page
+          .locator('[data-testid^="workspace-tab-menu-tab_"][data-testid$="-close"]')
+          .filter({ visible: true })
+          .click();
+      } else {
+        await page.keyboard.press("Alt+Shift+w");
+      }
       await expect(page).toHaveURL(/\/sessions(?:\?|$)/);
       await expect(page.getByRole("dialog").filter({ visible: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`closed-blank-${width}.png`) });
