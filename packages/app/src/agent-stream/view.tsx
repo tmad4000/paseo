@@ -578,6 +578,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agent: context,
         workspaceId: context.workspaceId,
         target,
+        layoutWorkspaceId: threadsHost?.layoutWorkspaceId,
       });
     });
 

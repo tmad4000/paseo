@@ -913,6 +913,7 @@ export const fr: TranslationResources = {
       reply: "Répondre",
       forkMenu: "Dupliquer le message",
       forkInNewTab: "Dupliquer dans un nouvel onglet",
+      forkInSplitPane: "Bifurquer dans un panneau partagé",
       forkInNewWorkspace: "Dupliquer dans un nouvel espace de travail",
       forkUnavailable: "Mettez l'hôte à jour pour utiliser ceci.",
       forkMissingWorkspace: "Cet agent n'est pas dans un espace de travail.",

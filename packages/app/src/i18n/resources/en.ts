@@ -899,6 +899,7 @@ export const en = {
       reply: "Reply",
       forkMenu: "Fork chat from here",
       forkInNewTab: "Fork in a new tab",
+      forkInSplitPane: "Fork in a split pane",
       forkInNewWorkspace: "Fork in a new workspace",
       forkUnavailable: "Update the host to use this.",
       forkMissingWorkspace: "This agent is not in a workspace.",

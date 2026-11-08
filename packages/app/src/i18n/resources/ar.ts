@@ -899,6 +899,7 @@ export const ar: TranslationResources = {
       reply: "رد",
       forkMenu: "تفريع الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",
+      forkInSplitPane: "تفرع في جزء مقسوم",
       forkInNewWorkspace: "تفريع في مساحة عمل جديدة",
       forkUnavailable: "حدّث المضيف لاستخدام هذا.",
       forkMissingWorkspace: "هذا الوكيل ليس في مساحة عمل.",
