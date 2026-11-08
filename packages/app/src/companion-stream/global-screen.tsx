@@ -1,4 +1,8 @@
-import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
+import {
+  askBlockerReason,
+  type CompanionEntry,
+  type NeedsYouGroup as NeedsYouGroupName,
+} from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -45,6 +49,11 @@ import { useStreamReturnStore, type StreamPlace } from "./stream-return";
 import { useToast } from "@/contexts/toast-context";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { splitLater } from "./needs-you-later";
+import {
+  groupNeedsYouRows,
+  useNeedsYouGroupsStore,
+  type NeedsYouListItem,
+} from "./needs-you-groups";
 import { DelegatedChatsList } from "./delegated-chats";
 import type { DelegationTarget } from "./delegation-pulse";
 import { useDelegatedChildren } from "./use-delegation-pulse";
@@ -53,7 +62,12 @@ const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const KEEP_VISIBLE_CONTENT = { minIndexForVisible: 0 };
-const rowKey = (row: GlobalStreamRow) => JSON.stringify([row.serverId, row.id]);
+const itemKey = (item: NeedsYouListItem) =>
+  item.type === "header"
+    ? `needs-you-group-${item.group}`
+    : JSON.stringify([item.row.serverId, item.row.id]);
+const asRowItems = (rows: GlobalStreamRow[]): NeedsYouListItem[] =>
+  rows.map((row) => ({ type: "row", row }));
 
 export function GlobalStreamScreen() {
   const { view } = useLocalSearchParams<{ view?: string }>();
@@ -116,7 +130,7 @@ export function StreamWorkflowFeed({
   useEffect(() => setView(initialView), [initialView]);
   // Back on the Stream, the chat it opened no longer offers the way back here. Coming back
   // through it restores the place it was opened from: side, search, host and scroll.
-  const listRef = useRef<FlatList<GlobalStreamRow>>(null);
+  const listRef = useRef<FlatList<NeedsYouListItem>>(null);
   const scrollOffset = useRef(0);
   const pendingScroll = useRef<number | null>(null);
   useRestoreStreamPlace(!scope && focused, (place) => {
@@ -181,6 +195,16 @@ export function StreamWorkflowFeed({
   // Counts cover loaded pages only. An empty side with more pages keeps loading until it finds
   // an item or runs out, so "Later · 0" never hides deferred items on a later page.
   const searchingSide = view === "needs_you" && data.length === 0 && hasNextPage;
+  // Needs you's Now side is grouped: Blocked, then Questions, then Permissions.
+  const collapsedGroups = useNeedsYouGroupsStore((state) => state.collapsed);
+  const toggleGroup = useNeedsYouGroupsStore((state) => state.toggle);
+  const items = useMemo(
+    () =>
+      view === "needs_you" && !showLater
+        ? groupNeedsYouRows(data, collapsedGroups)
+        : asRowItems(data),
+    [view, showLater, data, collapsedGroups],
+  );
   useEffect(() => {
     if (searchingSide && !isFetchingNextPage && !isFetching) void fetchNextPage();
   }, [searchingSide, isFetchingNextPage, isFetching, fetchNextPage]);
@@ -223,17 +247,26 @@ export function StreamWorkflowFeed({
   const knownTags = useMemo(() => query.tagCounts.map((item) => item.tag), [query.tagCounts]);
   const triage = view === "needs_you";
   const renderItem = useCallback(
-    ({ item }: { item: GlobalStreamRow }) => (
-      <GlobalStreamCard
-        row={item}
-        onSaved={refresh}
-        onTagPress={tagPress}
-        localContext={localContext}
-        onRememberReturn={rememberReturn}
-        triage={triage}
-      />
-    ),
-    [refresh, tagPress, localContext, rememberReturn, triage],
+    ({ item }: { item: NeedsYouListItem }) =>
+      item.type === "header" ? (
+        <NeedsYouGroupHeader
+          group={item.group}
+          count={item.count}
+          partial={hasNextPage}
+          collapsed={item.collapsed}
+          onToggle={toggleGroup}
+        />
+      ) : (
+        <GlobalStreamCard
+          row={item.row}
+          onSaved={refresh}
+          onTagPress={tagPress}
+          localContext={localContext}
+          onRememberReturn={rememberReturn}
+          triage={triage}
+        />
+      ),
+    [refresh, tagPress, localContext, rememberReturn, triage, hasNextPage, toggleGroup],
   );
   const tabs = useMemo(
     () => [
@@ -257,14 +290,17 @@ export function StreamWorkflowFeed({
           >
             {t("globalStream.needsYou")}
           </Button>
-          <SegmentedControl
-            value={view}
-            onValueChange={chooseView}
-            options={tabs}
-            size="sm"
-            textWrap
-            testID="stream-workflow-views"
-          />
+          {/* Needs you is an inbox: its own views and the Archived toggle would only add chrome. */}
+          {view !== "needs_you" || scope ? (
+            <SegmentedControl
+              value={view}
+              onValueChange={chooseView}
+              options={tabs}
+              size="sm"
+              textWrap
+              testID="stream-workflow-views"
+            />
+          ) : null}
           {scope ? (
             <Button size="sm" variant="ghost" onPress={toggleScope} testID="stream-scope">
               {t(local ? "globalStream.thisChat" : "globalStream.allSessions")}
@@ -301,13 +337,15 @@ export function StreamWorkflowFeed({
               )}
             </Button>
           ) : null}
-          <Button
-            size="sm"
-            variant={includeArchived ? "secondary" : "ghost"}
-            onPress={toggleArchived}
-          >
-            {t("globalStream.archived")}
-          </Button>
+          {view !== "needs_you" ? (
+            <Button
+              size="sm"
+              variant={includeArchived ? "secondary" : "ghost"}
+              onPress={toggleArchived}
+            >
+              {t("globalStream.archived")}
+            </Button>
+          ) : null}
           <Button size="sm" variant="ghost" onPress={refresh} disabled={isFetching}>
             {t("globalStream.refresh")}
           </Button>
@@ -423,9 +461,9 @@ export function StreamWorkflowFeed({
         ref={listRef}
         onScroll={trackScroll}
         scrollEventThrottle={100}
-        data={data}
+        data={items}
         maintainVisibleContentPosition={KEEP_VISIBLE_CONTENT}
-        keyExtractor={rowKey}
+        keyExtractor={itemKey}
         renderItem={renderItem}
         contentContainerStyle={styles.feed}
         keyboardShouldPersistTaps="handled"
@@ -495,6 +533,45 @@ function FeedEmpty({
     </View>
   );
 }
+
+/** A Needs you group's header: label and count; pressing it collapses or expands the group. */
+function NeedsYouGroupHeader({
+  group,
+  count,
+  partial,
+  collapsed,
+  onToggle,
+}: {
+  group: NeedsYouGroupName;
+  count: number;
+  /** More pages exist, so the count is of loaded items: shown as "N+". */
+  partial: boolean;
+  collapsed: boolean;
+  onToggle: (group: NeedsYouGroupName) => void;
+}) {
+  const { t } = useTranslation();
+  const toggle = useCallback(() => onToggle(group), [onToggle, group]);
+  const state = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
+  return (
+    <Pressable
+      onPress={toggle}
+      accessibilityRole="button"
+      accessibilityState={state}
+      style={styles.groupHeader}
+      testID={`needs-you-group-${group}`}
+    >
+      <Text style={styles.groupLabel}>
+        {`${collapsed ? "▸" : "▾"} ${t(NEEDS_YOU_GROUP_LABELS[group])} · ${count}${partial ? "+" : ""}`}
+      </Text>
+    </Pressable>
+  );
+}
+
+const NEEDS_YOU_GROUP_LABELS = {
+  blocked: "globalStream.groupBlocked",
+  question: "globalStream.groupQuestions",
+  permission: "globalStream.groupPermissions",
+} as const;
 
 /** Needs you: what is waiting now, or what was set aside for later. Pinned above the list. */
 function NowLaterSwitch({
@@ -631,7 +708,7 @@ export function GlobalStreamCard({
   const sendReply = useCallback(
     async (replyTo: CompanionEntry, text: string) => {
       if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
-      const quoted = buildReplyQuote(replyTo.text);
+      const quoted = buildReplyQuote(replyQuoteText(replyTo));
       const result = await client.sendAgentMessage(
         row.agentId,
         quoted ? `${quoted}\n\n${text}` : text,
@@ -829,6 +906,17 @@ function CardSourceLine({
   );
 }
 
+/**
+ * What a card's reply quotes: a blocked ask quotes its headline and the blocker line, not its
+ * whole text and plan, so the agent sees exactly what the reply answers.
+ */
+export function replyQuoteText(entry: CompanionEntry): string {
+  if (entry.ask?.state !== "blocked") return entry.text;
+  const reason = askBlockerReason(entry.ask.remaining);
+  const headline = askBlockerReason(entry.text);
+  return reason ? `${headline}\n${reason}` : entry.text;
+}
+
 /** The folder name tells projects apart; the full path is noise on a one-line source. */
 function projectName(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(Boolean);
@@ -884,6 +972,18 @@ const styles = StyleSheet.create((theme) => ({
   },
   path: { flex: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   inlineAction: { alignSelf: "flex-start" },
+  groupHeader: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[1],
+    marginBottom: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  groupLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
   emptyState: { gap: theme.spacing[2], paddingVertical: theme.spacing[8] },
   artifact: {
     gap: theme.spacing[3],

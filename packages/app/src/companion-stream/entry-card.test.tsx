@@ -94,12 +94,22 @@ vi.mock("@/components/ui/text-input", async () => {
   const { forwardRef, useImperativeHandle } = await import("react");
   return {
     EditingTextInput: forwardRef(function MockInput(
-      { onChangeText, testID }: { onChangeText: (text: string) => void; testID?: string },
+      {
+        onChangeText,
+        testID,
+        initialValue,
+      }: { onChangeText: (text: string) => void; testID?: string; initialValue?: string },
       ref,
     ) {
       useImperativeHandle(ref, () => ({ replaceText: () => undefined }));
-      // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop -- test double
-      return <input data-testid={testID} onChange={(event) => onChangeText(event.target.value)} />;
+      return (
+        <input
+          data-testid={testID}
+          defaultValue={initialValue}
+          // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop -- test double
+          onChange={(event) => onChangeText(event.target.value)}
+        />
+      );
     }),
   };
 });
@@ -493,6 +503,82 @@ describe("EntryCard", () => {
       />,
     );
     expect(tracked.queryByRole("menuitem", { name: "Done" })).toBeNull();
+  });
+});
+
+describe("EntryCard blocked ask in Needs you", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) await i18n.init();
+    await i18n.changeLanguage("en");
+  });
+  beforeEach(() => vi.stubGlobal("React", React));
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+  const blocked: CompanionEntry = {
+    ...ask,
+    ask: {
+      ...ask.ask!,
+      remaining: "Needs your go-ahead to deploy to production\nThen verify the release.",
+    },
+  };
+  const renderTriage = (entry: CompanionEntry, props: Record<string, unknown> = {}) =>
+    render(
+      <EntryCard
+        entry={entry}
+        variant="triage"
+        onReturnToChat={vi.fn()}
+        onReplyInChat={vi.fn()}
+        onUpdateStatus={vi.fn()}
+        onRemovePin={vi.fn()}
+        onDefer={vi.fn()}
+        {...props}
+      />,
+    );
+
+  it("shows what it waits on without Details", () => {
+    const view = renderTriage(blocked);
+    expect(view.getByTestId("companion-entry-waiting-on-you").textContent).toBe(
+      "Waiting on you: Needs your go-ahead to deploy to production",
+    );
+    expect(view.queryByText(/Then verify the release/)).toBeNull();
+  });
+
+  it("Go ahead opens a prefilled reply and sends nothing until Send", async () => {
+    const onSendReply = vi.fn().mockResolvedValue({ queued: true });
+    const view = renderTriage(blocked, { onSendReply });
+    fireEvent.click(view.getByRole("button", { name: "Go ahead" }));
+    const input = view.getByTestId("companion-entry-reply-input") as HTMLInputElement;
+    expect(input.value).toBe("Go ahead.");
+    expect(onSendReply).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Send" }));
+    expect(onSendReply).toHaveBeenCalledWith(blocked, "Go ahead.");
+    await waitFor(() =>
+      expect(view.getByText("Queued. The agent gets it when its current turn ends.")).toBeTruthy(),
+    );
+  });
+
+  it("offers Later on a blocked ask, and no Go ahead without an inline reply", () => {
+    const onDefer = vi.fn();
+    const view = renderTriage(blocked, { onDefer });
+    expect(view.queryByRole("button", { name: "Go ahead" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Later" }));
+    expect(onDefer).toHaveBeenCalledWith(blocked.id, true);
+  });
+
+  it("says a linked question unblocks a task", () => {
+    const linked: CompanionEntry = {
+      ...humanRequest,
+      inputRequest: {
+        kind: "approval",
+        recipient: "user",
+        task: { serverId: "h", agentId: "a", entryId: "ask:ship" },
+      },
+    };
+    expect(renderTriage(linked).getByTestId("companion-entry-unblocks").textContent).toBe(
+      "Unblocks a blocked task",
+    );
   });
 });
 

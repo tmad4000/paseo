@@ -161,3 +161,66 @@ for (const width of [390, 1440]) {
     });
   });
 }
+
+for (const width of [390, 1440]) {
+  test(`a blocked ask waits under Blocked in Needs you until its agent resumes at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    page.setDefaultTimeout(15_000);
+    const owner = await seedMockAgentWorkspace({
+      repoPrefix: "stream-blocked-",
+      title: "Blocked origin",
+    });
+    try {
+      const blocked = {
+        state: "blocked" as const,
+        remaining: `Needs your go-ahead to deploy ${width}\nThen verify the release.`,
+        evidence: "",
+      };
+      await owner.client.updateStreamEntry({
+        agentId: owner.agentId,
+        action: "set_ask",
+        entryId: "deploy",
+        expectedRevision: 0,
+        text: `Deploy release ${width}`,
+        ask: blocked,
+      });
+      await page.setViewportSize({ width, height: 950 });
+      await page.goto("/stream?view=needs_you", { waitUntil: "commit" });
+      const global = page.getByTestId("global-stream");
+      await expect(global.getByTestId("needs-you-group-blocked")).toContainText("Blocked");
+      const card = global
+        .getByTestId(`global-stream-row-${owner.agentId}`)
+        .getByTestId("companion-entry-ask:deploy");
+      await expect(card.getByTestId("companion-entry-waiting-on-you")).toContainText(
+        `Needs your go-ahead to deploy ${width}`,
+      );
+      await card.getByTestId("companion-entry-go-ahead").click();
+      await expect(card.getByTestId("companion-entry-reply-input")).toHaveValue("Go ahead.");
+      await page.screenshot({
+        path: testInfo.outputPath(`needs-you-blocked-${width}.png`),
+        fullPage: true,
+      });
+      await card.getByTestId("companion-entry-reply-send").click();
+      await expect(card.getByRole("alert").filter({ hasText: /Sent|Queued/ })).toBeVisible();
+
+      await owner.client.updateStreamEntry({
+        agentId: owner.agentId,
+        action: "set_ask",
+        entryId: "deploy",
+        expectedRevision: 1,
+        text: `Deploy release ${width}`,
+        ask: { ...blocked, state: "in_progress", remaining: "Deploying" },
+      });
+      expect(
+        (await owner.client.listGlobalStream({ view: "needs_you", agentId: owner.agentId })).rows,
+      ).toHaveLength(0);
+      await page.reload({ waitUntil: "commit" });
+      await expect(page.getByTestId("stream-show-now")).toBeVisible();
+      await expect(page.getByTestId("companion-entry-ask:deploy")).toHaveCount(0);
+    } finally {
+      await owner.cleanup();
+    }
+  });
+}

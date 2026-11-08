@@ -163,6 +163,14 @@ export const zhCN: TranslationResources = {
     questions: "Q&A",
     saved: "Saved",
     needsYou: "Needs you",
+    groupBlocked: "Blocked",
+    groupQuestions: "Questions",
+    groupPermissions: "Permissions",
+    waitingOnYou: "Waiting on you:",
+    goAhead: "Go ahead",
+    goAheadText: "Go ahead.",
+    goAheadHint: "Opens a reply with a go-ahead for you to edit and send. Nothing is sent yet.",
+    unblocksTask: "Unblocks a blocked task",
     nowPartial: "现在 · {{count}}+",
     laterPartial: "稍后 · {{count}}+",
     nothingNow: "目前没有需要你处理的事项。",
@@ -174,7 +182,7 @@ export const zhCN: TranslationResources = {
     backToNeedsYou: "返回 Needs you",
     backToStream: "返回 Stream",
     needsYouDescription:
-      "Concrete input, decisions, approvals and actions requested from you. Answers waiting for you to read are separate.",
+      "Blocked work, concrete input, decisions, approvals and permissions waiting on you. Answers waiting for you to read are separate.",
     allSessions: "All sessions",
     thisChat: "This chat",
     scopeDescription:
