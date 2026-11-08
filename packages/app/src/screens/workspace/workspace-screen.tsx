@@ -1,4 +1,7 @@
 import { useFirstMessage } from "@/first-message/reader";
+import { closeLastBlankTab } from "@/navigation/close-last-blank-tab";
+import { navigationFocusHistory } from "@/navigation/focus-history";
+import { navigateInFocusHistory } from "@/navigation/focus-history-runtime";
 import { useWorkspaceLinks } from "./use-workspace-links";
 import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -752,6 +755,13 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
     Keyboard.dismiss();
     setIsOpen(true);
   }, []);
+  const handleCloseSwitcherTab = useCallback(
+    (tabId: string) => {
+      setIsOpen(false);
+      return onCloseTab(tabId);
+    },
+    [onCloseTab],
+  );
   const currentAgentId = activeTab?.target.kind === "agent" ? activeTab.target.agentId : null;
   const handleFindCurrentChat = useCallback(() => {
     if (currentAgentId) onFindInChat(currentAgentId);
@@ -795,7 +805,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
           onRenameTab={onRenameTab}
-          onCloseTab={onCloseTab}
+          onCloseTab={handleCloseSwitcherTab}
           onCloseTabsAbove={onCloseTabsAbove}
           onCloseTabsBelow={onCloseTabsBelow}
           onCloseOtherTabs={onCloseOtherTabs}
@@ -817,7 +827,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCopyFilePath,
       onReloadAgent,
       onRenameTab,
-      onCloseTab,
+      handleCloseSwitcherTab,
       onCloseTabsAbove,
       onCloseTabsBelow,
       onCloseOtherTabs,
@@ -1676,6 +1686,7 @@ function WorkspaceScreenContent({
   isRouteFocused,
   recoveryRequested,
 }: WorkspaceScreenContentProps) {
+  const router = useRouter();
   const { t } = useTranslation();
   const _insets = useSafeAreaInsets();
   const toast = useToast();
@@ -2945,6 +2956,23 @@ function WorkspaceScreenContent({
       if (!tab) {
         return;
       }
+      if (
+        tab.target.kind === "new_tab" &&
+        workspaceLayout &&
+        closeLastBlankTab({
+          serverId: normalizedServerId,
+          workspaceId: normalizedWorkspaceId,
+          tabId,
+          layout: workspaceLayout,
+          explorerSidebarPaneId,
+          history: navigationFocusHistory,
+          closeTab: () => handleClosePassiveTab({ tabId, target: tab.target }),
+          navigateBack: (steps) => navigateInFocusHistory("back", { isCompact: isMobile, steps }),
+          navigateSessions: () => router.navigate("/sessions"),
+        })
+      ) {
+        return;
+      }
       if (!(await confirmDiscardModifiedTab(tabId))) {
         return;
       }
@@ -2964,6 +2992,12 @@ function WorkspaceScreenContent({
       handleCloseAgentTab,
       handleClosePassiveTab,
       handleCloseTerminalTab,
+      workspaceLayout,
+      normalizedServerId,
+      normalizedWorkspaceId,
+      explorerSidebarPaneId,
+      isMobile,
+      router,
     ],
   );
 

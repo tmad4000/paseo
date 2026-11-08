@@ -134,6 +134,12 @@ attention routing to open an unrelated session. This exception does not change
 resource equality or the allocation of fresh empty tabs. Regression coverage
 lives in `focus-history.test.ts` and `focus-history-runtime.test.ts`.
 
+Closing the final blank New tab leaves the empty workspace for the nearest useful
+Back-history visit, or `/sessions` when none remains. Other blank tabs and the
+`/new` flow are skipped. Forget the closed blank tab in both history directions;
+it has no resource identity to reopen. Closing a blank split pane still stays in
+the workspace and reveals its surviving sibling.
+
 The chevron beside each header Back/Forward arrow opens every retained entry in
 that direction (up to the focus-history model's 50-entry bound), nearest first.
 The arrow itself still moves one step. Right-click and long-press open the same
