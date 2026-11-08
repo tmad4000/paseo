@@ -890,6 +890,7 @@ export const zhCN: TranslationResources = {
       reply: "回复",
       forkMenu: "分叉消息",
       forkInNewTab: "分叉到新标签页",
+      forkInSplitPane: "在拆分窗格中分叉",
       forkInNewWorkspace: "分叉到新工作区",
       forkUnavailable: "请更新主机以使用此功能。",
       forkMissingWorkspace: "此 Agent 不在工作区中。",

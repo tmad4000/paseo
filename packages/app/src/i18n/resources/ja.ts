@@ -908,6 +908,7 @@ export const ja: TranslationResources = {
       reply: "返信",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
+      forkInSplitPane: "分割ペインでフォーク",
       forkInNewWorkspace: "新しいワークスペースにフォーク",
       forkUnavailable: "これを使用するにはホストを更新してください。",
       forkMissingWorkspace: "このエージェントはワークスペース内にありません。",

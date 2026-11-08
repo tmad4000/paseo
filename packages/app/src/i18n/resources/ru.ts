@@ -907,6 +907,7 @@ export const ru: TranslationResources = {
       reply: "Ответить",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
+      forkInSplitPane: "Ответвить в разделённой панели",
       forkInNewWorkspace: "Создать форк в новом рабочем пространстве",
       forkUnavailable: "Обновите хост, чтобы использовать эту функцию.",
       forkMissingWorkspace: "Этот агент не связан с рабочим пространством.",
