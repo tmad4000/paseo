@@ -275,7 +275,7 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
       pointerEvents="box-none"
       testID="tracked-answers-pane"
     >
-      <View style={styles.card}>
+      <View style={styles.card} testID="tracked-answers-card">
         <PaneTooltip label={t("agentPanel.stream.answers.minimizeTip")}>
           <Pressable
             onPress={minimize}
@@ -300,6 +300,7 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
           ref={scrollRef}
           style={styles.list}
           contentContainerStyle={styles.listContent}
+          testID="tracked-answers-list"
           onScroll={rememberScroll}
           scrollEventThrottle={64}
           onContentSizeChange={restoreScroll}
@@ -895,9 +896,14 @@ const styles = StyleSheet.create((theme) => ({
     width: "auto",
     maxHeight: "45%",
   },
+  // The card and its list must both be allowed to shrink below their content height. Flex items
+  // default to flexShrink 0 here, and a percentage maxHeight against the anchor's auto height
+  // resolves to nothing, so without this the card ran past the anchor's cap and was clipped
+  // instead of letting the list scroll.
   card: {
     alignSelf: "stretch",
-    maxHeight: "100%",
+    flexShrink: 1,
+    minHeight: 0,
     backgroundColor: theme.colors.surface0,
     borderRadius: theme.borderRadius.xl,
     borderWidth: theme.borderWidth[1],
@@ -957,6 +963,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   list: {
     flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
     borderTopWidth: theme.borderWidth[1],
     borderTopColor: theme.colors.border,
   },
