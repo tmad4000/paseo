@@ -913,6 +913,7 @@ export const ptBR: TranslationResources = {
       reply: "Responder",
       forkMenu: "Bifurcar mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
+      forkInSplitPane: "Bifurcar em um painel dividido",
       forkInNewWorkspace: "Bifurcar em um novo workspace",
       forkUnavailable: "Atualize o host para usar isto.",
       forkMissingWorkspace: "Este agente não está em um workspace.",

@@ -915,6 +915,7 @@ export const es: TranslationResources = {
       reply: "Responder",
       forkMenu: "Bifurcar mensaje",
       forkInNewTab: "Bifurcar en una pestaña nueva",
+      forkInSplitPane: "Bifurcar en un panel dividido",
       forkInNewWorkspace: "Bifurcar en un espacio de trabajo nuevo",
       forkUnavailable: "Actualiza el host para usar esto.",
       forkMissingWorkspace: "Este agente no está en un espacio de trabajo.",

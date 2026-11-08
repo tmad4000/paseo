@@ -98,14 +98,17 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
 
-async function mountPane(width: number): Promise<HTMLElement> {
-  await page.viewport(width, 900);
+async function mountPane(
+  width: number,
+  { height = 900, items = entries }: { height?: number; items?: CompanionEntry[] } = {},
+): Promise<HTMLElement> {
+  await page.viewport(width, height);
   const container = document.createElement("div");
   // Stands in for the chat the pane floats over.
   Object.assign(container.style, {
     position: "relative",
     width: `${width}px`,
-    height: "900px",
+    height: `${height}px`,
     background: "#fafafa",
   });
   document.body.appendChild(container);
@@ -113,7 +116,7 @@ async function mountPane(width: number): Promise<HTMLElement> {
   act(() =>
     root.render(
       <TrackedAnswersPane
-        entries={entries}
+        entries={items}
         agentId="chat-1"
         actions={actions}
         showOpenAsks
@@ -215,4 +218,40 @@ describe("TrackedAnswersPane in a browser", () => {
       .element(page.getByTestId("tracked-answer-text"))
       .toHaveAttribute("aria-expanded", "true");
   });
+
+  // The reported bug: with more asks than fit, the card was clipped at its height cap and the
+  // list could not scroll, so the asks below the fold were unreachable.
+  for (const compact of [true, false]) {
+    it(`${compact ? "on a phone" : "on desktop"}: a long list scrolls inside the capped card`, async () => {
+      fixture.compact = compact;
+      const many = Array.from({ length: 14 }, (_, index) =>
+        ask(`Long-running ask number ${index + 1}`, at(30, 14, index), "in_progress", "Next: x."),
+      );
+      const height = 640;
+      await mountPane(compact ? 390 : 1440, { height, items: many });
+      if (compact) await page.getByTestId("tracked-answers-expand").click();
+      await expect.element(page.getByTestId("tracked-answers-list")).toBeVisible();
+
+      const anchor = rect("tracked-answers-pane");
+      const card = rect("tracked-answers-card");
+      const list = document.querySelector<HTMLElement>('[data-testid="tracked-answers-list"]')!;
+      // The card stays inside the pane's height cap instead of running past it.
+      expect(anchor.height).toBeLessThanOrEqual(height * (compact ? 0.45 : 0.6) + 1);
+      expect(card.bottom).toBeLessThanOrEqual(anchor.bottom + 1);
+      expect(list.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.bottom + 1);
+      // And the overflow lives in the list, which scrolls to the last ask.
+      expect(list.scrollHeight).toBeGreaterThan(list.clientHeight + 50);
+      const allRows = list.querySelectorAll('[data-testid^="open-ask-ask:"]');
+      const bottomBefore = allRows[allRows.length - 1]!.getBoundingClientRect().bottom;
+      list.scrollTop = list.scrollHeight;
+      list.dispatchEvent(new Event("scroll"));
+      const rows = list.querySelectorAll('[data-testid^="open-ask-ask:"]');
+      expect(rows.length).toBe(many.length);
+      const last = rows[rows.length - 1]!.getBoundingClientRect();
+      // Before scrolling, the bottom-most ask sat below the visible list.
+      expect(bottomBefore).toBeGreaterThan(list.getBoundingClientRect().bottom);
+      expect(last.bottom).toBeLessThanOrEqual(list.getBoundingClientRect().bottom + 1);
+      expect(last.top).toBeGreaterThanOrEqual(list.getBoundingClientRect().top - 1);
+    });
+  }
 });

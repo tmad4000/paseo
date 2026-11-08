@@ -7,6 +7,7 @@ import {
   forkInFlightTurnToNewTab,
   forkMostRecentAssistantTurnToNewTab,
   forkMostRecentAssistantTurnToNewWorkspace,
+  forkMostRecentAssistantTurnToSplitPane,
   observeForkAttachment,
 } from "../support/helpers/assistant-fork";
 import { expectComposerVisible, submitMessage } from "../support/helpers/composer";
@@ -124,6 +125,41 @@ test.describe("Assistant fork menu", () => {
     });
     await expect(agentTab).toHaveAttribute("aria-selected", "false");
     await expectChatHistoryAttachment(page);
+  });
+
+  test("forks an assistant turn into a split pane beside the source chat", async ({
+    page,
+    seedForkWorkspace,
+  }) => {
+    const session = await seedForkWorkspace({
+      repoPrefix: "assistant-fork-split-pane-",
+      title: "Assistant fork split pane",
+      initialPrompt: "emit 1 coalesced agent stream updates for assistant fork split pane.",
+      model: "ten-second-stream",
+    });
+
+    await openAgentRoute(page, session);
+    await expectComposerVisible(page);
+    await awaitAssistantMessage(page);
+    await session.client.waitForFinish(session.agentId, 45_000);
+
+    const plusButtons = page.getByTestId("workspace-new-tab-button").filter({ visible: true });
+    await expect(plusButtons).toHaveCount(1);
+    const agentTab = page.getByTestId(`workspace-tab-agent_${session.agentId}`);
+    await expect(agentTab).toHaveAttribute("aria-selected", "true");
+
+    await forkMostRecentAssistantTurnToSplitPane(page);
+
+    // A second pane opens beside the chat with the fork draft selected in it, and the source chat
+    // stays open and selected in its own pane.
+    await expect(plusButtons).toHaveCount(2, { timeout: 30_000 });
+    const draftTab = page
+      .locator('[data-testid^="workspace-tab-draft_"]')
+      .and(page.locator('[aria-selected="true"]'));
+    await expect(draftTab).toHaveCount(1, { timeout: 30_000 });
+    await expect(agentTab).toHaveAttribute("aria-selected", "true");
+    await expectChatHistoryAttachment(page);
+    await page.screenshot({ path: test.info().outputPath("fork-split-pane.png") });
   });
 
   test("keeps the fork attachment after submitting an existing-workspace draft tab", async ({

@@ -83,6 +83,11 @@ export async function forkMostRecentAssistantTurnToNewTab(page: Page): Promise<v
   await page.getByRole("menuitem", { name: "Fork in a new tab" }).click();
 }
 
+export async function forkMostRecentAssistantTurnToSplitPane(page: Page): Promise<void> {
+  await openMostRecentAssistantForkMenu(page);
+  await page.getByRole("menuitem", { name: "Fork in a split pane" }).click();
+}
+
 export async function expectInFlightForkAvailable(page: Page): Promise<void> {
   const trigger = inFlightTurn(page).getByRole("button", { name: "Fork chat" });
   await expect(trigger).toHaveCount(1, { timeout: 30_000 });
