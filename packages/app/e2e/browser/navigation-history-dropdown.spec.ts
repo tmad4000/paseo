@@ -38,6 +38,9 @@ for (const width of [1400, 390]) {
       }
       await expect(page).toHaveURL(/\/sessions(?:\?|$)/);
       await expect(page.getByRole("dialog").filter({ visible: true })).toHaveCount(0);
+      await expect(
+        page.getByText("Switch tab", { exact: true }).filter({ visible: true }),
+      ).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`closed-blank-${width}.png`) });
     } finally {
       await workspace.cleanup();

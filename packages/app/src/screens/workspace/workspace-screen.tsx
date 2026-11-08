@@ -755,6 +755,13 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
     Keyboard.dismiss();
     setIsOpen(true);
   }, []);
+  const handleCloseSwitcherTab = useCallback(
+    (tabId: string) => {
+      setIsOpen(false);
+      return onCloseTab(tabId);
+    },
+    [onCloseTab],
+  );
   const currentAgentId = activeTab?.target.kind === "agent" ? activeTab.target.agentId : null;
   const handleFindCurrentChat = useCallback(() => {
     if (currentAgentId) onFindInChat(currentAgentId);
@@ -798,7 +805,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
           onRenameTab={onRenameTab}
-          onCloseTab={onCloseTab}
+          onCloseTab={handleCloseSwitcherTab}
           onCloseTabsAbove={onCloseTabsAbove}
           onCloseTabsBelow={onCloseTabsBelow}
           onCloseOtherTabs={onCloseOtherTabs}
@@ -820,7 +827,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCopyFilePath,
       onReloadAgent,
       onRenameTab,
-      onCloseTab,
+      handleCloseSwitcherTab,
       onCloseTabsAbove,
       onCloseTabsBelow,
       onCloseOtherTabs,
