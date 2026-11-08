@@ -6746,6 +6746,9 @@ describe("MCP tool annotations", () => {
     "update_agent",
     "create_schedule",
     "send_terminal_keys",
+    // Read-shaped, but can start a provider session.
+    "get_agent_activity",
+    "inspect_provider",
   ];
 
   it("marks read-only and Stream bookkeeping tools so MCP clients skip approval, and leaves the rest gated", async () => {
@@ -6787,6 +6790,15 @@ describe("MCP tool annotations", () => {
           destructiveHint: false,
           openWorldHint: false,
         });
+      }
+
+      const annotatedNames = new Set<string>([
+        ...PASEO_READ_ONLY_TOOL_NAMES,
+        ...PASEO_STREAM_BOOKKEEPING_TOOL_NAMES,
+      ]);
+      for (const tool of listedTools.tools) {
+        if (annotatedNames.has(tool.name)) continue;
+        expect(tool.annotations, `${tool.name} stays unannotated`).toBeUndefined();
       }
 
       for (const name of GATED_TOOL_NAMES) {

@@ -15,6 +15,11 @@ import type { PaseoToolAnnotations } from "./types.js";
  * - Stream bookkeeping writes, which change only revisioned Stream records and
  *   never run, message, stop or reconfigure an agent.
  *
+ * Tools that look like reads but can start a provider session stay out:
+ * `get_agent_activity` loads (resumes or creates) a stored agent before
+ * reading its timeline, and `inspect_provider` may open a throwaway session to
+ * list draft features.
+ *
  * Everything else (creating, prompting, stopping or archiving agents, answering
  * permissions, changing modes, schedules, terminals, workspaces, browser tools
  * and voice) stays unannotated, so clients keep their normal approval gate.
@@ -33,13 +38,11 @@ const STREAM_BOOKKEEPING: PaseoToolAnnotations = {
 export const PASEO_READ_ONLY_TOOL_NAMES = [
   "list_agents",
   "get_agent_status",
-  "get_agent_activity",
   "list_pending_permissions",
   "list_stream_asks",
   "list_profiles",
   "list_providers",
   "list_models",
-  "inspect_provider",
   "list_schedules",
   "inspect_schedule",
   "schedule_logs",
