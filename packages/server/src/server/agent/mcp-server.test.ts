@@ -14,6 +14,10 @@ import { z } from "zod";
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { createAgentMcpServer } from "./mcp-server.js";
 import { createPaseoToolCatalog } from "./tools/paseo-tools.js";
+import {
+  PASEO_READ_ONLY_TOOL_NAMES,
+  PASEO_STREAM_BOOKKEEPING_TOOL_NAMES,
+} from "./tools/tool-annotations.js";
 import { AgentManager, type ManagedAgent } from "./agent-manager.js";
 import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -6722,6 +6726,78 @@ describe("tab MCP tools", () => {
       ]);
     } finally {
       await client.close();
+    }
+  });
+});
+
+describe("MCP tool annotations", () => {
+  const logger = createTestLogger();
+
+  // Registered only when the host wires the matching dependency (e.g. the agent queue).
+  const CONDITIONALLY_REGISTERED = new Set<string>(["list_queue"]);
+
+  const GATED_TOOL_NAMES = [
+    "create_agent",
+    "send_agent_prompt",
+    "respond_to_permission",
+    "kill_agent",
+    "archive_agent",
+    "set_agent_mode",
+    "update_agent",
+    "create_schedule",
+    "send_terminal_keys",
+  ];
+
+  it("marks read-only and Stream bookkeeping tools so MCP clients skip approval, and leaves the rest gated", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue({
+      id: "agent-1",
+      cwd: REPO_CWD,
+      workspaceId: BROWSER_WORKSPACE_ID,
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      browserToolsEnabled: false,
+      callerAgentId: "agent-1",
+      logger,
+    });
+
+    const client = await connectInMemoryMcpClient(server);
+    try {
+      const listedTools = await client.listTools();
+      const byName = new Map(listedTools.tools.map((tool) => [tool.name, tool]));
+
+      for (const name of PASEO_READ_ONLY_TOOL_NAMES) {
+        const tool = byName.get(name);
+        if (CONDITIONALLY_REGISTERED.has(name) && !tool) continue;
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations, `${name} annotations`).toEqual({
+          readOnlyHint: true,
+          openWorldHint: false,
+        });
+      }
+
+      for (const name of PASEO_STREAM_BOOKKEEPING_TOOL_NAMES) {
+        const tool = byName.get(name);
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations, `${name} annotations`).toEqual({
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        });
+      }
+
+      for (const name of GATED_TOOL_NAMES) {
+        const tool = byName.get(name);
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations?.readOnlyHint, `${name} readOnlyHint`).not.toBe(true);
+        expect(tool?.annotations?.destructiveHint, `${name} destructiveHint`).not.toBe(false);
+      }
+    } finally {
+      await client.close();
+      await server.close();
     }
   });
 });

@@ -118,6 +118,7 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "./types.js";
+import { resolvePaseoToolAnnotations } from "./tool-annotations.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 
@@ -661,12 +662,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     if (!isPaseoToolEnabled(options.paseoToolPolicy, name)) {
       return;
     }
+    const annotations = config.annotations ?? resolvePaseoToolAnnotations(name);
     tools.set(name, {
       name,
       title: config.title,
       description: config.description ?? name,
       inputSchema: config.inputSchema,
       outputSchema: config.outputSchema,
+      ...(annotations ? { annotations } : {}),
       handler: handler as PaseoToolDefinition["handler"],
     });
   };
