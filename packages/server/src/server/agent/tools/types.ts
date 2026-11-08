@@ -12,11 +12,20 @@ export interface PaseoToolResult {
   isError?: boolean;
 }
 
+/** MCP tool annotation hints (subset of the MCP `ToolAnnotations` shape). */
+export interface PaseoToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface PaseoToolConfig {
   title?: string;
   description?: string;
   inputSchema?: z.ZodRawShape | z.ZodType;
   outputSchema?: z.ZodRawShape;
+  annotations?: PaseoToolAnnotations;
 }
 
 export interface PaseoToolDefinition extends PaseoToolConfig {
