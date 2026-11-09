@@ -1190,6 +1190,11 @@ export const ja: TranslationResources = {
       modified: "未保存の変更",
       newActivity: "新しいアクティビティ",
       seenNotRead: "表示済み・未読",
+      agentRunning: "エージェント実行中",
+      needsInput: "入力が必要",
+      readLayerUnread: "未読",
+      seenLayerNotSeen: "最後のアクティビティ以降未表示",
+      seenLayerSeen: "表示済み",
       loadingAgentTitle: "エージェントタイトルを読み込み中",
       fallback: {
         newAgent: "新しいエージェント",

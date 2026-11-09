@@ -1180,6 +1180,11 @@ export const ar: TranslationResources = {
       modified: "تغييرات غير محفوظة",
       newActivity: "نشاط جديد",
       seenNotRead: "تمت المشاهدة، غير مقروء",
+      agentRunning: "الوكيل قيد التشغيل",
+      needsInput: "يحتاج إلى إدخال",
+      readLayerUnread: "غير مقروء",
+      seenLayerNotSeen: "لم تتم المشاهدة منذ آخر نشاط",
+      seenLayerSeen: "تمت المشاهدة",
       loadingAgentTitle: "جارٍ تحميل عنوان الوكيل",
       fallback: {
         newAgent: "وكيل جديد",

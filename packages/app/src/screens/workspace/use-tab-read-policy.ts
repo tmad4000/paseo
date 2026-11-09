@@ -18,8 +18,7 @@ export function useTabReadPolicy(
   const viewingMarksRead = useSettings((settings) => settings.markReadOnOpen);
   const readThroughByAgentKey = useAgentReadMarksStore((state) => state.readThroughByAgentKey);
   const seenThroughByAgentKey = useAgentReadMarksStore((state) => state.seenThroughByAgentKey);
-  // A joined "id<TAB>attentionAt" list keeps the selector's result stable across unrelated
-  // session updates.
+  // A joined id list keeps the selector's result stable across unrelated session updates.
   const attentionKey = useSessionStore(
     useCallback(
       (state) => {
@@ -30,27 +29,17 @@ export function useTabReadPolicy(
           const agent = serverId
             ? state.sessions[serverId]?.agents?.get(tab.target.agentId)
             : undefined;
-          if (hasClearableAgentAttention(agent)) {
-            const attentionAt = agent?.attentionTimestamp?.getTime() ?? 0;
-            ids.push(`${tab.target.agentId}\t${Number.isFinite(attentionAt) ? attentionAt : 0}`);
-          }
+          if (hasClearableAgentAttention(agent)) ids.push(tab.target.agentId);
         }
         return ids.join("\n");
       },
       [fallbackServerId, tabs],
     ),
   );
-  const { attentionAgentIds, attentionAtByAgentId } = useMemo(() => {
-    const ids = new Set<string>();
-    const attentionAt = new Map<string, number>();
-    for (const entry of attentionKey ? attentionKey.split("\n") : []) {
-      const [agentId, at] = entry.split("\t");
-      if (!agentId) continue;
-      ids.add(agentId);
-      attentionAt.set(agentId, Number(at) || 0);
-    }
-    return { attentionAgentIds: ids, attentionAtByAgentId: attentionAt };
-  }, [attentionKey]);
+  const attentionAgentIds = useMemo(
+    () => new Set(attentionKey ? attentionKey.split("\n") : []),
+    [attentionKey],
+  );
   return useMemo(() => {
     const readThroughByAgentId = new Map<string, number>();
     const seenThroughByAgentId = new Map<string, number>();
@@ -69,11 +58,9 @@ export function useTabReadPolicy(
       readThroughByAgentId,
       attentionAgentIds,
       seenThroughByAgentId,
-      attentionAtByAgentId,
     };
   }, [
     attentionAgentIds,
-    attentionAtByAgentId,
     fallbackServerId,
     readThroughByAgentKey,
     seenThroughByAgentKey,

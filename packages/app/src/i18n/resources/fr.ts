@@ -1194,6 +1194,11 @@ export const fr: TranslationResources = {
       modified: "Modifications non enregistrées",
       newActivity: "Nouvelle activité",
       seenNotRead: "Vu, non lu",
+      agentRunning: "Agent en cours",
+      needsInput: "Attend une réponse",
+      readLayerUnread: "Non lu",
+      seenLayerNotSeen: "Pas vu depuis la dernière activité",
+      seenLayerSeen: "Vu",
       loadingAgentTitle: "Titre d'agent de chargement",
       fallback: {
         newAgent: "Nouvel agent",

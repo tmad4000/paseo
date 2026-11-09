@@ -1180,6 +1180,11 @@ export const en = {
       modified: "Unsaved changes",
       newActivity: "New activity",
       seenNotRead: "Seen, not read",
+      agentRunning: "Agent running",
+      needsInput: "Needs input",
+      readLayerUnread: "Unread",
+      seenLayerNotSeen: "Not seen since last activity",
+      seenLayerSeen: "Seen",
       loadingAgentTitle: "Loading agent title",
       fallback: {
         newAgent: "New agent",

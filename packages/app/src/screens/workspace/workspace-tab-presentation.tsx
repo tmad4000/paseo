@@ -20,6 +20,10 @@ import {
 import type { Theme } from "@/styles/theme";
 import { usePanelInstanceAttributes } from "@/panels/panel-instance-attributes";
 import type { TabReadState } from "@/screens/workspace/workspace-tab-activity";
+import {
+  resolveTabStatusMarks,
+  type TabStatusMarks,
+} from "@/screens/workspace/workspace-tab-status-marks";
 
 export interface WorkspaceTabPresentation {
   key: string;
@@ -31,8 +35,12 @@ export interface WorkspaceTabPresentation {
   titleState: "ready" | "loading";
   icon: React.ComponentType<PanelIconProps>;
   statusBucket: SidebarStateBucket | null;
+  /** Working right now, even when the bucket reports needs_input, so both marks can show. */
+  running: boolean;
 }
 
+/** How far the seen dot sits left of the read ring, so the two circles overlap. */
+const READ_PAIR_OFFSET = 4;
 const DEFAULT_STATUS_DOT_OFFSET = -2;
 const STATUS_ALERT_OFFSET = -3;
 
@@ -95,12 +103,14 @@ function WorkspaceTabPresentationResolverInner({
       titleState: descriptor.titleState,
       icon: descriptor.icon,
       statusBucket: descriptor.statusBucket,
+      running: descriptor.statusRunning ?? descriptor.statusBucket === "running",
     }),
     [
       descriptor.icon,
       descriptor.label,
       descriptor.tooltip,
       descriptor.statusBucket,
+      descriptor.statusRunning,
       descriptor.subtitle,
       descriptor.titleState,
       tab.key,
@@ -126,10 +136,11 @@ interface WorkspaceTabIconProps {
    */
   backdrop: SurfaceBackdrop;
   /**
-   * The tab's read level, drawn on the icon's corner badge: filled for new activity, a hollow
-   * ring for seen-not-read, nothing once read. Red when the agent failed, accent otherwise. The
-   * running ring and the needs-input alert keep priority. Left out, the badge shows the status
-   * bucket as before (the split drag chip, subagents track and other non-strip icons).
+   * The tab's read level, drawn as two overlapping circles (see `resolveTabStatusMarks`): a
+   * hollow read ring while unread, with a filled seen dot in front while this device has not
+   * looked at the latest activity. They stay visible while the agent runs or needs input. Left
+   * out, the corner shows the status bucket as before (the split drag chip, subagents track and
+   * other non-strip icons).
    */
   readState?: TabReadState;
 }
@@ -142,63 +153,68 @@ const needsInputAlertMapping = (theme: Theme) => ({
   fill: getStatusDotColor({ theme, bucket: "needs_input" }) ?? undefined,
 });
 
-type ReadBadge = Exclude<TabReadState, "read">;
-
-/**
- * What the icon's corner shows. The running ring and needs-input alert keep priority; then the
- * read badge when the caller tracks read state; otherwise (no read state) the status bucket dot.
- */
-function resolveCornerBadge(
-  bucket: WorkspaceTabPresentation["statusBucket"],
-  readState: TabReadState | undefined,
-): { readBadge: ReadBadge | null; color: string | undefined } {
-  if (bucket === "running" || bucket === "needs_input")
-    return { readBadge: null, color: undefined };
-  if (readState === "new" || readState === "seen") {
-    const color = bucket === "failed" ? styles.statusDotFailed.color : styles.statusDotUnread.color;
-    return { readBadge: readState, color };
-  }
-  if (readState === "read") return { readBadge: null, color: undefined };
-  if (bucket === "failed") return { readBadge: null, color: styles.statusDotFailed.color };
-  if (bucket === "attention") return { readBadge: null, color: styles.statusDotAttention.color };
-  return { readBadge: null, color: undefined };
-}
-
-function TabReadBadge({
-  readBadge,
-  color,
+function TabReadLayers({
+  marks,
   knockoutColor,
   presentationKey,
 }: {
-  readBadge: ReadBadge;
-  color: string | undefined;
+  marks: NonNullable<TabStatusMarks["read"]>;
   knockoutColor: string | undefined;
   presentationKey: string;
 }): ReactElement {
   const { t } = useTranslation();
-  const seen = readBadge === "seen";
-  const badgeStyle = useMemo(
-    () => [
-      styles.statusDot,
-      // A seen ring is hollow: the badge fills with the surface and the ring draws inside it.
-      { backgroundColor: seen ? knockoutColor : color, borderColor: knockoutColor },
-    ],
-    [color, knockoutColor, seen],
+  const color =
+    marks.tone === "failed" ? styles.statusDotFailed.color : styles.statusDotUnread.color;
+  const pairStyle = useMemo(
+    () => [styles.readPair, marks.placement === "topRight" ? styles.readPairTop : null],
+    [marks.placement],
   );
-  const seenRingStyle = useMemo(() => [styles.seenRing, { borderColor: color }], [color]);
-  const dataSet = useMemo(() => ({ readState: readBadge }), [readBadge]);
-  const label = seen
-    ? t("workspace.tabs.seenNotRead", { defaultValue: "Seen, not read" })
-    : t("workspace.tabs.newActivity", { defaultValue: "New activity" });
+  const ringShellStyle = useMemo(
+    () => [
+      styles.readPairCircle,
+      styles.readPairRing,
+      { backgroundColor: knockoutColor, borderColor: knockoutColor },
+    ],
+    [knockoutColor],
+  );
+  const ringStyle = useMemo(() => [styles.seenRing, { borderColor: color }], [color]);
+  const dotStyle = useMemo(
+    () => [
+      styles.readPairCircle,
+      styles.readPairDot,
+      { backgroundColor: color, borderColor: knockoutColor },
+    ],
+    [color, knockoutColor],
+  );
+  const readState = marks.unseen ? "new" : "seen";
+  const dataSet = useMemo(
+    () => ({ readState, placement: marks.placement }),
+    [readState, marks.placement],
+  );
+  const unreadLabel = t("workspace.tabs.readLayerUnread", { defaultValue: "Unread" });
+  const seenLabel = marks.unseen
+    ? t("workspace.tabs.seenLayerNotSeen", { defaultValue: "Not seen since last activity" })
+    : t("workspace.tabs.seenLayerSeen", { defaultValue: "Seen" });
   return (
     <View
-      style={badgeStyle}
+      style={pairStyle}
       dataSet={dataSet}
-      accessibilityLabel={label}
+      accessibilityLabel={`${unreadLabel} · ${seenLabel}`}
       testID={`workspace-tab-unread-${presentationKey}`}
     >
-      {seen ? (
-        <View style={seenRingStyle} testID={`workspace-tab-seen-${presentationKey}`} />
+      {/* Seen keeps the `workspace-tab-seen-` id on the lone read ring (#178's contract). */}
+      <View
+        style={ringShellStyle}
+        testID={
+          marks.unseen
+            ? `workspace-tab-read-ring-${presentationKey}`
+            : `workspace-tab-seen-${presentationKey}`
+        }
+      >
+        <View style={ringStyle} />
+      </View>
+      {marks.unseen ? (
+        <View style={dotStyle} testID={`workspace-tab-unseen-${presentationKey}`} />
       ) : null}
     </View>
   );
@@ -213,16 +229,21 @@ export function WorkspaceTabIcon({
   backdrop,
   readState,
 }: WorkspaceTabIconProps): ReactElement {
+  const { t } = useTranslation();
   const iconColor = active ? styles.iconActive.color : styles.iconInactive.color;
-  const bucket = presentation.statusBucket;
-  const isRunning = bucket === "running";
-  const showNeedsInputAlert = bucket === "needs_input";
-  const { readBadge, color: statusDotColor } = resolveCornerBadge(bucket, readState);
+  const marks = resolveTabStatusMarks({
+    bucket: presentation.statusBucket,
+    running: presentation.running,
+    readState,
+  });
   const Icon = presentation.icon;
   const agentIconWrapperStyle = useMemo(
     () => [styles.agentIconWrapper, { width: size, height: size }],
     [size],
   );
+  let statusDotColor: string | undefined;
+  if (marks.statusDot === "failed") statusDotColor = styles.statusDotFailed.color;
+  else if (marks.statusDot === "attention") statusDotColor = styles.statusDotAttention.color;
   const statusDotStyle = useMemo(
     () => [
       styles.statusDot,
@@ -233,35 +254,36 @@ export function WorkspaceTabIcon({
     ],
     [statusDotColor, statusDotBorderColor],
   );
-  let cornerDot: ReactElement | null = null;
-  if (readBadge) {
-    cornerDot = (
-      <TabReadBadge
-        readBadge={readBadge}
-        color={statusDotColor}
-        knockoutColor={statusDotBorderColor ?? styles[`knockout_${backdrop}`].color}
-        presentationKey={presentation.key}
-      />
-    );
-  } else if (statusDotColor) {
-    cornerDot = <View style={statusDotStyle} />;
-  }
+  const alertStyle =
+    marks.needsInput === "topLeft" ? styles.statusAlertTopLeft : styles.statusAlertOverlay;
 
   return (
     <View style={agentIconWrapperStyle}>
       <Icon size={size} color={iconColor} strokeWidth={strokeWidth} />
-      {isRunning ? (
+      {marks.running ? (
         <View
           style={styles.statusRing}
           accessibilityRole="progressbar"
-          accessibilityLabel="Agent running"
+          accessibilityLabel={t("workspace.tabs.agentRunning", { defaultValue: "Agent running" })}
+          testID={`workspace-tab-running-${presentation.key}`}
         >
           <StatusRing backdrop={backdrop} />
         </View>
       ) : null}
-      {cornerDot}
-      {showNeedsInputAlert ? (
-        <View style={styles.statusAlertOverlay}>
+      {marks.statusDot ? <View style={statusDotStyle} /> : null}
+      {marks.read ? (
+        <TabReadLayers
+          marks={marks.read}
+          knockoutColor={statusDotBorderColor ?? styles[`knockout_${backdrop}`].color}
+          presentationKey={presentation.key}
+        />
+      ) : null}
+      {marks.needsInput ? (
+        <View
+          style={alertStyle}
+          accessibilityLabel={t("workspace.tabs.needsInput", { defaultValue: "Needs input" })}
+          testID={`workspace-tab-needs-input-${presentation.key}`}
+        >
           <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputAlertMapping} />
         </View>
       ) : null}
@@ -386,6 +408,38 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     right: STATUS_ALERT_OFFSET,
     bottom: STATUS_ALERT_OFFSET,
+  },
+  statusAlertTopLeft: {
+    position: "absolute",
+    left: STATUS_ALERT_OFFSET,
+    top: STATUS_ALERT_OFFSET,
+  },
+  readPair: {
+    position: "absolute",
+    right: DEFAULT_STATUS_DOT_OFFSET,
+    bottom: DEFAULT_STATUS_DOT_OFFSET,
+    width: STATUS_INDICATOR_DOT_SIZE + READ_PAIR_OFFSET,
+    height: STATUS_INDICATOR_DOT_SIZE,
+  },
+  readPairTop: {
+    bottom: undefined,
+    top: DEFAULT_STATUS_DOT_OFFSET,
+  },
+  readPairCircle: {
+    position: "absolute",
+    top: 0,
+    width: STATUS_INDICATOR_DOT_SIZE,
+    height: STATUS_INDICATOR_DOT_SIZE,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readPairRing: {
+    right: 0,
+  },
+  readPairDot: {
+    left: 0,
   },
   statusDotFailed: {
     color: getStatusDotColor({ theme, bucket: "failed" }) ?? undefined,

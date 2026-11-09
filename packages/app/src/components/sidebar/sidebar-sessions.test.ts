@@ -96,6 +96,38 @@ function agents(...list: Agent[]): Map<string, Agent> {
 const workspaces = [makeWorkspace("ws-a"), makeWorkspace("ws-b", { projectName: "docs" })];
 
 describe("buildSidebarSessionRows", () => {
+  it("carries running separately from the bucket, so a working chat marked Needs input shows both", () => {
+    const rows = buildSidebarSessionRows({
+      hosts: [
+        {
+          serverId: "srv",
+          agents: agents(
+            makeAgent({
+              id: "working-flagged",
+              turn: { phase: "open", cancellationRequestId: null } as Agent["turn"],
+              labels: { "paseo.manual-needs-input": "true" },
+            }),
+            makeAgent({
+              id: "working",
+              turn: { phase: "open", cancellationRequestId: null } as Agent["turn"],
+            }),
+            makeAgent({ id: "idle-flagged", labels: { "paseo.manual-needs-input": "true" } }),
+          ),
+        },
+      ],
+      workspaces,
+      query: "",
+      sortMode: "title",
+    });
+    const byId = new Map(rows.map((row) => [row.agentId, row]));
+    expect(byId.get("working-flagged")).toMatchObject({
+      statusBucket: "needs_input",
+      running: true,
+    });
+    expect(byId.get("working")).toMatchObject({ statusBucket: "running", running: true });
+    expect(byId.get("idle-flagged")).toMatchObject({ statusBucket: "needs_input", running: false });
+  });
+
   it("lists top-level chats across hosts by latest conversation activity", () => {
     const rows = buildSidebarSessionRows({
       hosts: [

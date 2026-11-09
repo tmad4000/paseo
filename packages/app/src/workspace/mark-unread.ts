@@ -1,6 +1,5 @@
 import { i18n } from "@/i18n/i18next";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
-import { useAgentReadMarksStore } from "@/stores/agent-read-marks-store";
 import { findPaneById } from "@/stores/workspace-layout-actions";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 
@@ -51,10 +50,8 @@ export async function markAgentTabUnread(input: {
   const focusToken =
     focusedPane?.focusedTabId === tabId ? layoutStore.unfocusPane(workspaceKey) : null;
   try {
+    // Only the read layer changes: what this device has already seen stays seen.
     await client.markAgentUnread(workspaceId, agentId);
-    // Unread means "not even looked at": drop the seen ring too. The host's fresh attention stamp
-    // already outruns the seen mark; clearing it locally keeps this device from depending on that.
-    useAgentReadMarksStore.getState().clearSeen({ serverId, agentId });
   } catch (error) {
     if (focusToken) {
       layoutStore.restorePaneFocus(workspaceKey, focusToken);

@@ -12,11 +12,12 @@ export function getStatusDotColor(input: {
   // badges on the same row — see the band's note in theme.ts — so going through the status
   // family here instead would quietly put the row's state below its metadata.
   //
-  // needs_input is amber because it wants something from you. Working is blue: an agent doing
-  // its job is the one busy state that asks for nothing, so it should not sit in the same
-  // color as the states that do.
+  // needs_input is red (fork choice, Jacob 2026-11-09): it wants something from you and has to
+  // stand out even next to a running ring on the same icon. It shares the danger colour with
+  // failed but never its shape — needs_input is always the alert glyph, failed always a dot.
+  // Working is blue: an agent doing its job is the one busy state that asks for nothing.
   if (bucket === "needs_input") {
-    return theme.colors.statusDotWarning;
+    return theme.colors.statusDotDanger;
   }
   if (bucket === "failed") {
     return theme.colors.statusDotDanger;

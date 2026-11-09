@@ -225,6 +225,7 @@ function useRowPresentation(
       titleState: row.label ? "ready" : "loading",
       icon: getProviderIcon(row.provider, serverId),
       statusBucket: row.bucket,
+      running: row.bucket === "running",
     };
   }, [row, serverId, t]);
 }
