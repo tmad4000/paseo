@@ -10,6 +10,7 @@ import {
   AgentFeatureSchema,
   AgentStatusSchema,
   AgentMessageActivitySchema,
+  AgentTaskItemPayloadSchema,
 } from "../messages.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
@@ -86,6 +87,8 @@ const STORED_AGENT_SCHEMA = z.object({
   owner: AgentOwnerSchema.optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
   companionEntries: z.array(CompanionEntrySchema).optional(),
+  /** The agent's latest task list; see agent-task-snapshot.ts. */
+  tasks: z.array(AgentTaskItemPayloadSchema).optional(),
   // Stream tags pinned in this chat. Not on the live agent: snapshots carry the stored value forward.
   pinnedStreamTags: z.array(z.string()).optional(),
 });

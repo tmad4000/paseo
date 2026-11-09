@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Session task checklist — pspin-tg2
+
+`session-task-checklist`: each chat's own plan (Claude TodoWrite/TaskCreate/TaskUpdate/TaskList,
+Codex `turn/plan/updated`) rides on the agent snapshot as `tasks`, bounded to 50 entries of 240
+characters and persisted on the agent record. The sidebar workspace row shows a muted checklist
+mark with done/total, summed over unarchived chats that still have open tasks, and a tooltip
+naming the in-progress task; finished lists drop out. The composer task pill prefers the snapshot
+copy, so it no longer disappears when the latest `todo` item is outside the loaded timeline
+window. These are the agent's plan, kept visually apart from Stream asks (the user's
+commitments). Older hosts: no sidebar count; the pill keeps its timeline derivation
+(`COMPAT(agentTaskSnapshot)`). Source on `feat/session-task-checklist`.
+
 ## Stable workspace tab order — pspin-8eb
 
 `stable-tab-order`: desktop and web tabs retain opened or dragged order by default. Settings →

@@ -1721,6 +1721,8 @@ export const ko: TranslationResources = {
     reviewSessions: "검토 ({{count}})",
     openTabs_one: "열린 탭 {{count}}개",
     openTabs: "열린 탭 {{count}}개",
+    agentTasks: "에이전트 작업: {{total}}개 중 {{completed}}개 완료",
+    agentActiveTask: "진행 중: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

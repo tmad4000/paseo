@@ -85,6 +85,7 @@ import {
   type AgentSessionConfig,
   type SteerResult,
   type AgentStreamEvent,
+  type AgentTaskItem,
   type AgentTimelineItem,
   type AgentUsage,
   type AgentRuntimeInfo,
@@ -92,6 +93,11 @@ import {
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
+import {
+  restoreAgentTasks,
+  sameAgentTaskSnapshot,
+  toAgentTaskSnapshot,
+} from "./agent-task-snapshot.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
@@ -534,6 +540,8 @@ interface ManagedAgentBase {
   labels: Record<string, string>;
   artifacts: AgentArtifact[];
   companionEntries?: CompanionEntry[];
+  /** The agent's latest task list, from its most recent `todo` timeline item. */
+  tasks?: AgentTaskItem[];
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -1520,6 +1528,7 @@ export class AgentManager {
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1556,6 +1565,7 @@ export class AgentManager {
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1811,6 +1821,7 @@ export class AgentManager {
         artifacts: existing.artifacts,
         restoring: true,
         companionEntries: existing.companionEntries,
+        tasks: existing.tasks,
       });
     } catch (error) {
       if (closedExisting) {
@@ -2134,6 +2145,7 @@ export class AgentManager {
         labels: record.labels,
         artifacts: record.artifacts ?? [],
         companionEntries: restoreCompanionEntries(record),
+        tasks: restoreAgentTasks(record),
       },
     });
   }
@@ -3833,6 +3845,7 @@ export class AgentManager {
       owner?: AgentOwner;
       artifacts?: AgentArtifact[];
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -4013,6 +4026,7 @@ export class AgentManager {
           owner?: AgentOwner;
           artifacts?: AgentArtifact[];
           companionEntries?: CompanionEntry[];
+          tasks?: AgentTaskItem[];
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -4056,6 +4070,7 @@ export class AgentManager {
       labels: options?.labels ?? {},
       artifacts: resolveInitialArtifacts(options?.artifacts),
       companionEntries: restoreCompanionEntries(options),
+      tasks: restoreAgentTasks(options),
     } as ActiveManagedAgent;
   }
 
@@ -4521,6 +4536,14 @@ export class AgentManager {
     }
   }
 
+  /** Keeps the snapshot's task list in step with the provider's latest `todo` item. */
+  private applyTaskSnapshot(agent: ActiveManagedAgent, items: readonly AgentTaskItem[]): void {
+    const next = toAgentTaskSnapshot(items);
+    if (sameAgentTaskSnapshot(agent.tasks, next)) return;
+    agent.tasks = next;
+    this.emitState(agent);
+  }
+
   private mergeHistoricalMessageActivity(
     agent: ActiveManagedAgent,
     events: Iterable<Extract<AgentStreamEvent, { type: "timeline" }>>,
@@ -4824,6 +4847,10 @@ export class AgentManager {
       flags.shouldDispatchEvent = false;
       flags.shouldNotifyWaiters = false;
       return;
+    }
+
+    if (event.item.type === "todo") {
+      this.applyTaskSnapshot(agent, event.item.items);
     }
 
     if (options?.fromHistory) {

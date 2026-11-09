@@ -1709,6 +1709,8 @@ export const ar: TranslationResources = {
     reviewSessions: "مراجعة ({{count}})",
     openTabs_one: "علامة تبويب مفتوحة: {{count}}",
     openTabs: "{{count}} علامات تبويب مفتوحة",
+    agentTasks: "مهام الوكيل: اكتمل {{completed}} من {{total}}",
+    agentActiveTask: "الآن: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

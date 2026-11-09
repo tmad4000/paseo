@@ -1746,6 +1746,8 @@ export const ptBR: TranslationResources = {
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} aba aberta",
     openTabs: "{{count}} abas abertas",
+    agentTasks: "Tarefas do agente: {{completed}} de {{total}} concluídas",
+    agentActiveTask: "Agora: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

@@ -1,3 +1,4 @@
+import { resolveSessionTasks } from "@/agent-tasks/model";
 import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
 import { StreamReturnButton } from "@/companion-stream/stream-return";
@@ -1231,9 +1232,13 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   }, [handleReturnToChat, streamViewRef]);
   const artifactFeedAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
-  const tasks = useSessionStore((state): TodoEntry[] | undefined =>
+  const snapshotTasks = useSessionStore(
+    (state): TodoEntry[] | undefined => state.sessions[serverId]?.agents.get(agentId)?.tasks,
+  );
+  const timelineTasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
   );
+  const tasks = resolveSessionTasks(snapshotTasks, timelineTasks);
   const archiveFinishedSubagents = useArchiveFinishedSubagents({
     serverId,
     parentAgentId: agentId,

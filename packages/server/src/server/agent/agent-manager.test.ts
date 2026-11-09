@@ -12507,3 +12507,64 @@ describe("clearAgentAttention as a read", () => {
     expect(agent.attention).toEqual({ requiresAttention: false });
   });
 });
+
+test("the agent's latest task list rides on its snapshot and survives reopen", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-task-snapshot-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const session = new TestAgentSession({ provider: "codex", cwd: workdir });
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  let agentId: string | undefined;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    expect(toAgentPayload(manager.getAgent(agent.id)!).tasks).toEqual([]);
+    session.pushEvent({ type: "turn_started", provider: "codex", turnId: "plan" });
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      turnId: "plan",
+      item: {
+        type: "todo",
+        items: [
+          { id: "0", text: "Read the code", status: "completed", completed: true },
+          { id: "1", text: "Write tests", status: "in_progress", completed: false },
+        ],
+      },
+    });
+    await vi.waitFor(() => expect(manager.getAgent(agent.id)?.tasks).toHaveLength(2));
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      turnId: "plan",
+      item: {
+        type: "todo",
+        items: [
+          { id: "0", text: "Read the code", status: "completed", completed: true },
+          { id: "1", text: "Write tests", status: "completed", completed: true },
+          { id: "2", text: "Open the PR", status: "pending", completed: false },
+        ],
+      },
+    });
+    await manager.flush();
+    const tasks = manager.getAgent(agent.id)?.tasks;
+    expect(tasks?.map((task) => task.status)).toEqual(["completed", "completed", "pending"]);
+    expect(toAgentPayload(manager.getAgent(agent.id)!).tasks).toEqual(tasks);
+    session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "plan" });
+    await manager.flush();
+    await manager.closeAgent(agent.id);
+    await storage.flush();
+    expect((await storage.get(agent.id))?.tasks).toEqual(tasks);
+    await ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+    expect(manager.getAgent(agent.id)?.tasks).toEqual(tasks);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
