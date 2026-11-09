@@ -93,7 +93,11 @@ import {
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
-import { sameAgentTaskSnapshot, toAgentTaskSnapshot } from "./agent-task-snapshot.js";
+import {
+  restoreAgentTasks,
+  sameAgentTaskSnapshot,
+  toAgentTaskSnapshot,
+} from "./agent-task-snapshot.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
@@ -2141,7 +2145,7 @@ export class AgentManager {
         labels: record.labels,
         artifacts: record.artifacts ?? [],
         companionEntries: restoreCompanionEntries(record),
-        tasks: record.tasks ?? [],
+        tasks: restoreAgentTasks(record),
       },
     });
   }
@@ -4066,7 +4070,7 @@ export class AgentManager {
       labels: options?.labels ?? {},
       artifacts: resolveInitialArtifacts(options?.artifacts),
       companionEntries: restoreCompanionEntries(options),
-      tasks: options?.tasks ?? [],
+      tasks: restoreAgentTasks(options),
     } as ActiveManagedAgent;
   }
 

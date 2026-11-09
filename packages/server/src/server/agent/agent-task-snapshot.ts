@@ -16,13 +16,18 @@ function clip(text: string): string {
 
 /** The bounded snapshot copy of a provider's latest `todo` timeline item. */
 export function toAgentTaskSnapshot(items: readonly AgentTaskItem[]): AgentTaskItem[] {
-  return items.slice(0, MAX_SNAPSHOT_TASKS).map((item) => ({
-    text: clip(item.text),
-    completed: item.completed,
-    ...(item.id ? { id: item.id } : {}),
-    ...(item.status ? { status: item.status } : {}),
-    ...(item.activeForm ? { activeForm: clip(item.activeForm) } : {}),
-  }));
+  return items.slice(0, MAX_SNAPSHOT_TASKS).map((item) => {
+    const task: AgentTaskItem = { text: clip(item.text), completed: item.completed };
+    if (item.id) task.id = item.id;
+    if (item.status) task.status = item.status;
+    if (item.activeForm) task.activeForm = clip(item.activeForm);
+    return task;
+  });
+}
+
+/** The stored or carried-over list; records written before tasks were tracked have none. */
+export function restoreAgentTasks(source?: { tasks?: AgentTaskItem[] }): AgentTaskItem[] {
+  return source?.tasks ?? [];
 }
 
 export function sameAgentTaskSnapshot(

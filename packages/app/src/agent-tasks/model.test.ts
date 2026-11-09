@@ -29,9 +29,7 @@ function agent(
 
 describe("resolveSessionTasks", () => {
   it("prefers the snapshot, which does not depend on the loaded timeline window", () => {
-    expect(resolveSessionTasks([todo("snapshot")], [todo("timeline")])).toEqual([
-      todo("snapshot"),
-    ]);
+    expect(resolveSessionTasks([todo("snapshot")], [todo("timeline")])).toEqual([todo("snapshot")]);
   });
 
   it("falls back to the timeline for older hosts and lists that predate tracking", () => {
@@ -84,11 +82,14 @@ describe("workspace task progress", () => {
 
   it("compares progress by content so unrelated directory changes do not repaint a row", () => {
     expect(
-      sameTaskProgress({ completed: 1, total: 2, active: null }, {
-        completed: 1,
-        total: 2,
-        active: null,
-      }),
+      sameTaskProgress(
+        { completed: 1, total: 2, active: null },
+        {
+          completed: 1,
+          total: 2,
+          active: null,
+        },
+      ),
     ).toBe(true);
     expect(sameTaskProgress(null, null)).toBe(true);
     expect(sameTaskProgress(null, { completed: 0, total: 1, active: null })).toBe(false);
