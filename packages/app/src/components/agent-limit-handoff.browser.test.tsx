@@ -18,6 +18,7 @@ vi.mock("react-native-safe-area-context", () => ({
 }));
 vi.mock("@/hooks/use-providers-snapshot", () => ({
   useProvidersSnapshot: () => ({
+    supportsSnapshot: true,
     isLoading: false,
     error: null,
     refetchIfStale: vi.fn(),

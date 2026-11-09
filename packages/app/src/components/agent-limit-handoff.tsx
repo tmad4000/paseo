@@ -39,6 +39,7 @@ export function AgentLimitHandoff({
   const connected = useHostRuntimeIsConnected(serverId);
   const supportsFork = useHostFeature(serverId, "agentForkContext");
   const snapshot = useProvidersSnapshot(serverId, { enabled: Boolean(notice), cwd: agent.cwd });
+  const canPrepare = supportsFork && snapshot.supportsSnapshot;
   const fork = useForkAgent({ serverId, toast });
   const { layoutWorkspaceId } = usePaneContext();
   const [selection, setSelection] = useState<{ provider: AgentProvider; modelId: string } | null>(
@@ -62,7 +63,7 @@ export function AgentLimitHandoff({
         provider.modelSelection.rows.some((row) => row.modelId === selection.modelId),
     );
   const prepareHandoff = useStableEvent(async () => {
-    if (!selection || !validSelection || !connected || pendingRef.current || !supportsFork) return;
+    if (!selection || !validSelection || !connected || pendingRef.current || !canPrepare) return;
     pendingRef.current = true;
     setPending(true);
     try {
@@ -95,7 +96,7 @@ export function AgentLimitHandoff({
         >
           <View style={styles.body}>
             <Text style={styles.description}>{t("agentPanel.limitHandoff.description")}</Text>
-            {!supportsFork ? (
+            {!canPrepare ? (
               <Text style={styles.description}>{t("message.actions.forkUnavailable")}</Text>
             ) : (
               <View style={styles.controls}>
@@ -123,7 +124,7 @@ export function AgentLimitHandoff({
               </View>
             )}
             {snapshot.error ? <Text style={styles.description}>{snapshot.error}</Text> : null}
-            {!snapshot.isLoading && providers.length === 0 && supportsFork ? (
+            {!snapshot.isLoading && providers.length === 0 && canPrepare ? (
               <Text style={styles.description}>{t("agentPanel.limitHandoff.noAlternatives")}</Text>
             ) : null}
           </View>

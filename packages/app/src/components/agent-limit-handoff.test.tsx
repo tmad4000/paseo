@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { AgentLimitHandoff } from "./agent-limit-handoff";
 
-const state = vi.hoisted(() => ({ connected: true, supported: true, fork: vi.fn() }));
+const state = vi.hoisted(() => ({
+  connected: true,
+  supported: true,
+  snapshotSupported: true,
+  fork: vi.fn(),
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/i18n/i18next", () => ({ i18n: { t: (key: string) => key } }));
 vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: () => ({}) } }));
@@ -18,6 +23,7 @@ vi.mock("@/panels/pane-context", () => ({
 vi.mock("@/constants/layout", () => ({ MAX_CONTENT_WIDTH: 800 }));
 vi.mock("@/hooks/use-providers-snapshot", () => ({
   useProvidersSnapshot: () => ({
+    supportsSnapshot: state.snapshotSupported,
     isLoading: false,
     error: null,
     refetchIfStale: vi.fn(),
@@ -122,6 +128,7 @@ beforeEach(() => {
   vi.stubGlobal("React", React);
   state.connected = true;
   state.supported = true;
+  state.snapshotSupported = true;
   state.fork.mockReset().mockResolvedValue(undefined);
 });
 afterEach(cleanup);
@@ -179,6 +186,14 @@ describe("provider limit handoff controls", () => {
     render(<Callout />);
     expect(screen.getByText("message.actions.forkUnavailable")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("requires a host model catalog instead of misreporting an older host as having no providers", () => {
+    state.snapshotSupported = false;
+    render(<Callout />);
+    expect(screen.getByText("message.actions.forkUnavailable")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("agentPanel.limitHandoff.noAlternatives")).toBeNull();
   });
 
   it("removes the notice during execution and after a successful outcome", () => {
