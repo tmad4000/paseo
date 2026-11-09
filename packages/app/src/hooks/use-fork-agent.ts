@@ -11,7 +11,10 @@ import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostFeature } from "@/runtime/host-features";
-import { generateDraftId } from "@/stores/draft-keys";
+import { generateDraftId, buildDraftStoreKey } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
+import { buildHandoffDraftSetup, buildHandoffPrompt } from "@/hooks/provider-limit";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useSessionStore } from "@/stores/session-store";
 import {
@@ -64,6 +67,8 @@ export interface ForkAgentRequest {
   agent: ForkAgentSource;
   workspaceId?: string;
   target: AssistantForkTarget;
+  /** Explicit alternate provider selection; opens a reviewable continuation draft. */
+  handoff?: { provider: AgentProvider; modelId: string };
   boundary?: ForkAgentBoundary;
   /**
    * For a thread: the workspace whose layout shows the chat, when the chat is a session from
@@ -121,6 +126,12 @@ function buildForkDraftSetup(agent: ForkAgentSource): WorkspaceDraftTabSetup | u
     thinkingOptionId: agent.thinkingOptionId ?? agent.runtimeInfo?.thinkingOptionId ?? null,
     featureValues,
   };
+}
+
+function resolveForkDraftSetup(request: ForkAgentRequest, sameProviderMessage: string) {
+  if (!request.handoff) return buildForkDraftSetup(request.agent);
+  if (request.handoff.provider === request.agent.provider) throw new Error(sameProviderMessage);
+  return buildHandoffDraftSetup({ cwd: request.agent.cwd, ...request.handoff });
 }
 
 function buildForkDraftTabTarget(
@@ -245,7 +256,7 @@ export function useForkAgent(
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
-      const draftSetup = buildForkDraftSetup(agent);
+      const draftSetup = resolveForkDraftSetup(request, t("agentPanel.limitHandoff.chooseAnother"));
       const prepareForkDraft = async () => {
         const draftId = generateDraftId();
         const payload = await client.buildAgentForkContext(agentId, boundary);
@@ -260,6 +271,12 @@ export function useForkAgent(
           scopeKey: buildDraftWorkspaceAttachmentScopeKey(draftId),
           attachments: [attachment],
         });
+        if (request.handoff) {
+          useDraftStore.getState().editDraftText({
+            draftKey: buildDraftStoreKey({ serverId, agentId, draftId }),
+            text: buildHandoffPrompt({ serverId, agentId }),
+          });
+        }
         return draftId;
       };
 

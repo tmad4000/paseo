@@ -547,6 +547,16 @@ export const ja: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "このエージェントは利用上限に達しました",
+      description:
+        "別のエージェントを選択してください。同じワークスペースにこのチャットの履歴を含む継続用の下書きを作成します。確認して送信すると再開します。",
+      chooseAnother: "引き継ぎ先には別のプロバイダーを選択してください。",
+      prepare: "引き継ぎを準備",
+      preparing: "準備中…",
+      noAlternatives:
+        "このホストで利用できる他のプロバイダーはありません。ホスト設定で有効にするか、利用上限のリセットをお待ちください。",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",

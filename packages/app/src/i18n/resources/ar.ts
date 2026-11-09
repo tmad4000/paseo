@@ -541,6 +541,16 @@ export const ar: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "وصل هذا الوكيل إلى حد الاستخدام",
+      description:
+        "اختر وكيلاً آخر. ستتضمن مسودة المتابعة سجل هذه المحادثة في مساحة العمل نفسها؛ راجعها ثم أرسلها للمتابعة.",
+      chooseAnother: "اختر مزوداً مختلفاً لهذا التسليم.",
+      prepare: "إعداد التسليم",
+      preparing: "جارٍ الإعداد…",
+      noAlternatives:
+        "لا يتوفر مزود آخر على هذا المضيف. فعّل أحدها في إعدادات المضيف أو انتظر إعادة تعيين حد هذا الوكيل.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",

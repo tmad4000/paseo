@@ -329,6 +329,14 @@ jobs:
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
 
+      - name: Upload handoff visual checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: limit-handoff-visual-checks
+          path: packages/app/.vitest-screenshots/limit-handoff-*.png
+          if-no-files-found: ignore
+
   sdk-tests:
     name: sdk-tests
     needs: changes

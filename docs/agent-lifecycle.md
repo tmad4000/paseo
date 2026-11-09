@@ -492,3 +492,28 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                             |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.
+
+## Continuing after a provider usage limit
+
+The chat shows **This agent reached its limit** for a direct usage/rate-limit
+notice in its latest retained turn outcome (including Claude notices reported as
+completed), or a terminal error before any outcome was captured. It is hidden
+while a turn is starting/running and a newer outcome retires an old notice. Pins,
+asks, ordinary discussion of limits and tool HTTP 429 errors do not trigger it.
+The original provider notice remains visible, including any reset time it supplied.
+
+Choose a different provider/model and **Prepare handoff**. This uses the existing
+host `agentForkContext` capability and model picker to open a continuation draft
+beside the source chat, or as a new tab on compact layouts. The source workspace
+and directory are retained. The standard chat-history attachment links to the
+source; the editable prompt asks the successor to reconcile the live workspace
+and source asks before resuming unfinished work. The user sends the draft to
+start the successor. Preparing a draft never starts a provider or marks asks done.
+
+Provider-specific modes, thinking levels and feature flags are cleared at the
+handoff boundary; the target draft resolves its normal provider settings. The
+source session, its asks, pending messages, approvals and history remain intact.
+The attachment contains the history retained by the existing fork-context API,
+not a guarantee of complete provider history or a model-written summary. This is
+explicit handoff, not automatic fallback, and does not change provider error
+classification or release/install a running daemon.

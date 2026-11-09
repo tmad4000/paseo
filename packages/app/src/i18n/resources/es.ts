@@ -549,6 +549,16 @@ export const es: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Este agente alcanzó su límite",
+      description:
+        "Elige otro agente. Un borrador de continuación incluirá el historial de este chat en el mismo espacio de trabajo; revísalo y envíalo para continuar.",
+      chooseAnother: "Elige otro proveedor para esta transferencia.",
+      prepare: "Preparar transferencia",
+      preparing: "Preparando…",
+      noAlternatives:
+        "No hay otros proveedores disponibles en este host. Activa uno en sus ajustes o espera a que se restablezca el límite.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",

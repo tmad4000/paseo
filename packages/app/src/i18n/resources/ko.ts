@@ -543,6 +543,16 @@ export const ko: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "이 에이전트가 사용 한도에 도달했습니다",
+      description:
+        "다른 에이전트를 선택하세요. 같은 작업 공간에 이 채팅 기록을 포함한 이어가기 초안이 생성됩니다. 검토한 후 보내면 계속할 수 있습니다.",
+      chooseAnother: "인계할 다른 제공업체를 선택하세요.",
+      prepare: "인계 준비",
+      preparing: "준비 중…",
+      noAlternatives:
+        "이 호스트에서 사용 가능한 다른 제공업체가 없습니다. 호스트 설정에서 활성화하거나 한도가 초기화될 때까지 기다리세요.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",

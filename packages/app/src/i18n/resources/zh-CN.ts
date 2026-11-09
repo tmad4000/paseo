@@ -534,6 +534,16 @@ export const zhCN: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "此代理已达到使用上限",
+      description:
+        "请选择其他代理。将在同一工作区创建包含此聊天记录的继续工作草稿；请检查后发送以继续。",
+      chooseAnother: "请选择其他提供商接手。",
+      prepare: "准备交接",
+      preparing: "正在准备…",
+      noAlternatives:
+        "此主机没有其他可用的提供商。请在主机设置中启用一个，或等待此代理的限额重置。",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",

@@ -537,6 +537,16 @@ export const en = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "This agent reached its limit",
+      description:
+        "Choose another agent. A continuation draft will include this chat’s history in the same workspace; review it, then send to continue.",
+      chooseAnother: "Choose a different provider for this handoff.",
+      prepare: "Prepare handoff",
+      preparing: "Preparing…",
+      noAlternatives:
+        "No other providers are available on this host. Enable one in host settings, or wait for this agent’s limit to reset.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
