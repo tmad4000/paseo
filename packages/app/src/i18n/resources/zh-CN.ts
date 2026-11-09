@@ -1674,6 +1674,8 @@ export const zhCN: TranslationResources = {
     reviewSessions: "审阅 ({{count}})",
     openTabs_one: "{{count}} 个打开的标签页",
     openTabs: "{{count}} 个打开的标签页",
+    agentTasks: "代理任务：已完成 {{completed}}/{{total}}",
+    agentActiveTask: "进行中：{{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

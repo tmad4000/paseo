@@ -1712,6 +1712,8 @@ export const ru: TranslationResources = {
     reviewSessions: "Проверка ({{count}})",
     openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",
+    agentTasks: "Задачи агента: выполнено {{completed}} из {{total}}",
+    agentActiveTask: "Сейчас: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

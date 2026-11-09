@@ -1734,6 +1734,8 @@ export const fr: TranslationResources = {
     reviewSessions: "À examiner ({{count}})",
     openTabs_one: "{{count}} onglet ouvert",
     openTabs: "{{count}} onglets ouverts",
+    agentTasks: "Tâches de l'agent : {{completed}} sur {{total}} terminées",
+    agentActiveTask: "En cours : {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

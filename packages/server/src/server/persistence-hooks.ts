@@ -142,6 +142,7 @@ export function extractTimestamps(record: StoredAgentRecord): {
   owner?: StoredAgentRecord["owner"];
   artifacts?: StoredAgentRecord["artifacts"];
   companionEntries?: StoredAgentRecord["companionEntries"];
+  tasks?: StoredAgentRecord["tasks"];
 } {
   return {
     createdAt: new Date(record.createdAt),
@@ -154,6 +155,7 @@ export function extractTimestamps(record: StoredAgentRecord): {
     owner: record.owner,
     artifacts: record.artifacts,
     companionEntries: record.companionEntries,
+    tasks: record.tasks,
   };
 }
 

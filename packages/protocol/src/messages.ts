@@ -680,6 +680,15 @@ const ToolCallTimelineItemPayloadSchema: z.ZodType<ToolCallTimelineItem, unknown
     ToolCallCanceledPayloadSchema,
   ]);
 
+/** One entry in an agent's own task list (Claude TodoWrite/Task tools, Codex plan updates). */
+export const AgentTaskItemPayloadSchema = z.object({
+  text: z.string(),
+  completed: z.boolean(),
+  id: z.string().optional(),
+  status: z.enum(["pending", "in_progress", "completed"]).optional(),
+  activeForm: z.string().optional(),
+});
+
 // zod-aot 0.20.4 miscompiles this as a nested discriminated union by omitting
 // the inner tool_call branch from the generated outer dispatch.
 export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknown> = z.union([
@@ -703,15 +712,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
   ToolCallTimelineItemPayloadSchema,
   z.object({
     type: z.literal("todo"),
-    items: z.array(
-      z.object({
-        text: z.string(),
-        completed: z.boolean(),
-        id: z.string().optional(),
-        status: z.enum(["pending", "in_progress", "completed"]).optional(),
-        activeForm: z.string().optional(),
-      }),
-    ),
+    items: z.array(AgentTaskItemPayloadSchema),
   }),
   z.object({
     type: z.literal("error"),
@@ -871,6 +872,11 @@ export const AgentSnapshotPayloadSchema = z.object({
   providerUnavailable: z.boolean().optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
   companionEntries: z.array(CompanionEntrySchema).optional(),
+  /**
+   * The agent's latest task list (its own plan, not the user's Stream asks). Present, possibly
+   * empty, on daemons that track it; absent on older daemons.
+   */
+  tasks: z.array(AgentTaskItemPayloadSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;

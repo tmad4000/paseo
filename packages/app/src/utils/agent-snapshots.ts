@@ -141,5 +141,6 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     labels: snapshot.labels,
     artifacts: snapshot.artifacts,
     companionEntries: snapshot.companionEntries,
+    ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),
   };
 }

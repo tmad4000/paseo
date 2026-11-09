@@ -1702,6 +1702,8 @@ export const en = {
     reviewSessions: "Review ({{count}})",
     openTabs_one: "{{count}} open tab",
     openTabs: "{{count}} open tabs",
+    agentTasks: "Agent tasks: {{completed}} of {{total}} done",
+    agentActiveTask: "Now: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

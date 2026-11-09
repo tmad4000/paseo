@@ -115,6 +115,8 @@ export interface Agent {
   projectPlacement?: ProjectPlacementPayload | null;
   artifacts?: AgentArtifact[];
   companionEntries?: CompanionEntry[];
+  /** The agent's latest task list from the snapshot; absent on hosts that do not track it. */
+  tasks?: TodoEntry[];
 }
 
 export interface WorkspaceDescriptor {

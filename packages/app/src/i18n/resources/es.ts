@@ -1738,6 +1738,8 @@ export const es: TranslationResources = {
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} pestaña abierta",
     openTabs: "{{count}} pestañas abiertas",
+    agentTasks: "Tareas del agente: {{completed}} de {{total}} hechas",
+    agentActiveTask: "Ahora: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

@@ -106,6 +106,7 @@ export function toStoredAgentRecord(
     owner: agent.owner,
     artifacts: agent.artifacts ?? [],
     companionEntries: agent.companionEntries ?? [],
+    tasks: agent.tasks ?? [],
   } satisfies StoredAgentRecord;
 }
 
@@ -154,6 +155,7 @@ export function toAgentPayload(
     labels: agent.labels,
     artifacts: agent.artifacts ?? [],
     companionEntries: selectSnapshotCompanionEntries(agent.companionEntries ?? []),
+    tasks: agent.tasks ?? [],
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -273,6 +275,7 @@ export function buildStoredAgentPayload(
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],
     companionEntries: selectSnapshotCompanionEntries(restoreCompanionEntries(record)),
+    tasks: record.tasks ?? [],
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

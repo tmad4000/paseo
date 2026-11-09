@@ -1708,6 +1708,8 @@ export const ja: TranslationResources = {
     reviewSessions: "レビュー ({{count}})",
     openTabs_one: "{{count}} 個の開いているタブ",
     openTabs: "{{count}} 個の開いているタブ",
+    agentTasks: "エージェントのタスク: {{total}} 件中 {{completed}} 件完了",
+    agentActiveTask: "実行中: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",

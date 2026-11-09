@@ -31,6 +31,7 @@ import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sideba
 import { SCRIM_WIDTH, TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import { WorkspaceTabCount } from "./workspace-tab-count";
+import { WorkspaceTaskCount } from "./workspace-task-count";
 import { useSessionStore } from "@/stores/session-store";
 import { formatDelegatorName } from "@/utils/agent-ownership";
 
@@ -207,6 +208,10 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
               {workspaceLabel}
             </Text>
             <View style={sidebarWorkspaceRowStyles.rowRight}>
+              <WorkspaceTaskCount
+                serverId={workspace.serverId}
+                workspaceId={workspace.workspaceId}
+              />
               <WorkspaceTabCount workspaceKey={workspace.workspaceKey} />
               {children}
             </View>
