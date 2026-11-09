@@ -132,6 +132,11 @@ export const ru: TranslationResources = {
     noReplyYet: "Сначала дождитесь ответа в ветке.",
     parentUnavailable: "Основной чат больше недоступен.",
   },
+  sidebarSessions: {
+    actions: "Действия для {{title}}",
+    archive: "Архивировать сеанс",
+    open: "Открыть {{title}} в {{meta}}",
+  },
   sessionPins: {
     title: "Закреплённые сеансы",
     pin: "Закрепить сеанс",
@@ -335,6 +340,7 @@ export const ru: TranslationResources = {
       groupByStatus: "Группировать по статусу",
       groupInOneList: "Показывать чаты одним списком",
       showAllSessions: "Показать все сессии",
+      groupAsSessions: "Показывать чаты как сеансы",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -901,6 +907,7 @@ export const ru: TranslationResources = {
       reply: "Ответить",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
+      forkInSplitPane: "Ответвить в разделённой панели",
       forkInNewWorkspace: "Создать форк в новом рабочем пространстве",
       forkUnavailable: "Обновите хост, чтобы использовать эту функцию.",
       forkMissingWorkspace: "Этот агент не связан с рабочим пространством.",
@@ -1183,6 +1190,12 @@ export const ru: TranslationResources = {
       loading: "Загрузка...",
       modified: "Несохранённые изменения",
       newActivity: "Новая активность",
+      seenNotRead: "Просмотрено, не прочитано",
+      agentRunning: "Агент работает",
+      needsInput: "Нужен ответ",
+      readLayerUnread: "Не прочитано",
+      seenLayerNotSeen: "Не просмотрено после последней активности",
+      seenLayerSeen: "Просмотрено",
       loadingAgentTitle: "Загрузка названия агента",
       fallback: {
         newAgent: "Новый агент",
@@ -1254,6 +1267,9 @@ export const ru: TranslationResources = {
         splitDown: "Разделить панель снизу",
         splitRightWithSession: "Разделить вправо с сессией…",
         splitDownWithSession: "Разделить вниз с сессией…",
+        dropSessionOtherHost:
+          "Сюда можно перетащить только сессии этого хоста. Чтобы совместить хосты, используйте вид.",
+        dropSessionNoSession: "В этом рабочем пространстве нет сессии для открытия.",
         changes: "Изменения",
         files: "Файлы",
         pullRequest: "PR",
@@ -1709,6 +1725,9 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Действия проверки для {{title}}",
+    needsInputSessions: "Требуется ввод ({{count}})",
+    needsInputSince: "Требуется ввод с {{time}}",
+    sessionActions: "Действия с сеансом {{title}}",
     reviewSessions: "Проверка ({{count}})",
     openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",
@@ -1835,6 +1854,7 @@ export const ru: TranslationResources = {
         project: "Проект",
         status: "Статус",
         list: "Один список",
+        sessions: "Сеансы",
         labels: "Метки",
       },
       titleSource: {
@@ -1953,6 +1973,14 @@ export const ru: TranslationResources = {
       status: {
         serviceRunning: "Сервис {{name}} запущен",
         serviceUnhealthy: "Сервис {{name}} работает некорректно",
+        indicator: {
+          loading: "Запуск",
+          running: "Работает: агент выполняется",
+          needs_input: "Нужны вы: агент ждёт разрешения или ответа",
+          attention: "Готово: есть непрочитанный результат",
+          failed: "Ошибка: агент остановился с ошибкой",
+          done: "Простой: ничего нового",
+        },
         creating: "Создание...",
       },
       checks: {
@@ -1966,6 +1994,8 @@ export const ru: TranslationResources = {
       actions: {
         markAsRead: "Отметить как прочитанное",
         markAsReadNamed: "Отметить «{{name}}» как прочитанное",
+        markAsReadHint:
+          "Отметить как прочитанное: убирает индикатор завершения/ошибки этого рабочего пространства",
         menu: "Действия рабочего пространства",
         newWorkspace: "Новое рабочее пространство",
         showMore: "Показать ещё",
@@ -2993,6 +3023,12 @@ export const ru: TranslationResources = {
         label: "Отмечать чаты прочитанными при открытии",
         description:
           "Если выключено, чат остаётся непрочитанным, пока вы не отметите его прочитанным или не отправите сообщение",
+      },
+      sortTabsByActivity: {
+        section: "Вкладки",
+        label: "Сортировать вкладки по недавней активности",
+        description:
+          "Если включено, чат с последней активностью перемещается в начало ряда вкладок. Если выключено, вкладки остаются там, где вы их разместили",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",

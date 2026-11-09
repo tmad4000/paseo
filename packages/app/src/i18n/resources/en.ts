@@ -128,6 +128,11 @@ export const en = {
     noReplyYet: "Wait for the thread's answer first.",
     parentUnavailable: "The main thread is no longer available.",
   },
+  sidebarSessions: {
+    actions: "Actions for {{title}}",
+    archive: "Archive session",
+    open: "Open {{title}} in {{meta}}",
+  },
   sessionPins: {
     title: "Pinned sessions",
     pin: "Pin session",
@@ -328,6 +333,7 @@ export const en = {
       groupByStatus: "Group by status",
       groupInOneList: "Show chats in one list",
       showAllSessions: "Show all sessions",
+      groupAsSessions: "Show chats as sessions",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -893,6 +899,7 @@ export const en = {
       reply: "Reply",
       forkMenu: "Fork chat from here",
       forkInNewTab: "Fork in a new tab",
+      forkInSplitPane: "Fork in a split pane",
       forkInNewWorkspace: "Fork in a new workspace",
       forkUnavailable: "Update the host to use this.",
       forkMissingWorkspace: "This agent is not in a workspace.",
@@ -1172,6 +1179,12 @@ export const en = {
       loading: "Loading...",
       modified: "Unsaved changes",
       newActivity: "New activity",
+      seenNotRead: "Seen, not read",
+      agentRunning: "Agent running",
+      needsInput: "Needs input",
+      readLayerUnread: "Unread",
+      seenLayerNotSeen: "Not seen since last activity",
+      seenLayerSeen: "Seen",
       loadingAgentTitle: "Loading agent title",
       fallback: {
         newAgent: "New agent",
@@ -1243,6 +1256,9 @@ export const en = {
         splitDown: "Split pane down",
         splitRightWithSession: "Split right with session…",
         splitDownWithSession: "Split down with session…",
+        dropSessionOtherHost:
+          "Only sessions from this host can be dropped here. Use a View to mix hosts.",
+        dropSessionNoSession: "That workspace has no session to open.",
         changes: "Changes",
         files: "Files",
         pullRequest: "Pull request",
@@ -1699,6 +1715,9 @@ export const en = {
   },
   sidebar: {
     reviewActions: "Review actions for {{title}}",
+    needsInputSessions: "Needs input ({{count}})",
+    needsInputSince: "Needing input since {{time}}",
+    sessionActions: "Session actions for {{title}}",
     reviewSessions: "Review ({{count}})",
     openTabs_one: "{{count}} open tab",
     openTabs: "{{count}} open tabs",
@@ -1825,6 +1844,7 @@ export const en = {
         project: "Project",
         status: "Status",
         list: "One list",
+        sessions: "Sessions",
         labels: "Labels",
       },
       titleSource: {
@@ -1942,6 +1962,14 @@ export const en = {
       status: {
         serviceRunning: "Service {{name}} running",
         serviceUnhealthy: "Service {{name}} unhealthy",
+        indicator: {
+          loading: "Starting up",
+          running: "Working: an agent is running",
+          needs_input: "Needs you: an agent is waiting for permission or an answer",
+          attention: "Finished: new output you haven't read",
+          failed: "Error: an agent stopped with an error",
+          done: "Idle: nothing new",
+        },
         creating: "Creating...",
       },
       checks: {
@@ -1955,6 +1983,7 @@ export const en = {
       actions: {
         markAsRead: "Mark as read",
         markAsReadNamed: "Mark {{name}} as read",
+        markAsReadHint: "Mark as read: clears this workspace's finished/error indicator",
         menu: "Workspace actions",
         newWorkspace: "New workspace",
         showMore: "Show more",
@@ -3097,6 +3126,12 @@ export const en = {
         section: "Read status",
         label: "Mark chats read when opened",
         description: "When off, a chat stays unread until you mark it read or send it a message",
+      },
+      sortTabsByActivity: {
+        section: "Tabs",
+        label: "Sort tabs by recent activity",
+        description:
+          "When on, the chat with the latest activity moves to the front of the tab row. When off, tabs stay where you put them",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

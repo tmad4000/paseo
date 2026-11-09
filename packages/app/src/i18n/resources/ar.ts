@@ -130,6 +130,11 @@ export const ar: TranslationResources = {
     noReplyYet: "انتظر إجابة السلسلة أولاً.",
     parentUnavailable: "لم تعد المحادثة الرئيسية متاحة.",
   },
+  sidebarSessions: {
+    actions: "إجراءات {{title}}",
+    archive: "أرشفة الجلسة",
+    open: "فتح {{title}} في {{meta}}",
+  },
   sessionPins: {
     title: "الجلسات المثبتة",
     pin: "تثبيت الجلسة",
@@ -332,6 +337,7 @@ export const ar: TranslationResources = {
       groupByStatus: "تجميع حسب الحالة",
       groupInOneList: "عرض المحادثات في قائمة واحدة",
       showAllSessions: "إظهار كل الجلسات",
+      groupAsSessions: "عرض المحادثات كجلسات",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
       thinkingGroupLabel: "التفكير",
@@ -893,6 +899,7 @@ export const ar: TranslationResources = {
       reply: "رد",
       forkMenu: "تفريع الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",
+      forkInSplitPane: "تفرع في جزء مقسوم",
       forkInNewWorkspace: "تفريع في مساحة عمل جديدة",
       forkUnavailable: "حدّث المضيف لاستخدام هذا.",
       forkMissingWorkspace: "هذا الوكيل ليس في مساحة عمل.",
@@ -1172,6 +1179,12 @@ export const ar: TranslationResources = {
       loading: "تحميل...",
       modified: "تغييرات غير محفوظة",
       newActivity: "نشاط جديد",
+      seenNotRead: "تمت المشاهدة، غير مقروء",
+      agentRunning: "الوكيل قيد التشغيل",
+      needsInput: "يحتاج إلى إدخال",
+      readLayerUnread: "غير مقروء",
+      seenLayerNotSeen: "لم تتم المشاهدة منذ آخر نشاط",
+      seenLayerSeen: "تمت المشاهدة",
       loadingAgentTitle: "جارٍ تحميل عنوان الوكيل",
       fallback: {
         newAgent: "وكيل جديد",
@@ -1243,6 +1256,8 @@ export const ar: TranslationResources = {
         splitDown: "تقسيم الجزء لأسفل",
         splitRightWithSession: "تقسيم لليمين مع جلسة…",
         splitDownWithSession: "تقسيم للأسفل مع جلسة…",
+        dropSessionOtherHost: "يمكن إفلات جلسات هذا المضيف فقط هنا. استخدم عرضًا لدمج المضيفين.",
+        dropSessionNoSession: "لا توجد جلسة لفتحها في مساحة العمل هذه.",
         changes: "التغييرات",
         files: "الملفات",
         pullRequest: "طلب السحب",
@@ -1688,6 +1703,9 @@ export const ar: TranslationResources = {
   },
   sidebar: {
     reviewActions: "إجراءات مراجعة {{title}}",
+    needsInputSessions: "بحاجة إلى إدخال ({{count}})",
+    needsInputSince: "بحاجة إلى إدخال منذ {{time}}",
+    sessionActions: "إجراءات الجلسة {{title}}",
     reviewSessions: "مراجعة ({{count}})",
     openTabs_one: "علامة تبويب مفتوحة: {{count}}",
     openTabs: "{{count}} علامات تبويب مفتوحة",
@@ -1814,6 +1832,7 @@ export const ar: TranslationResources = {
         project: "المشروع",
         status: "الحالة",
         list: "قائمة واحدة",
+        sessions: "الجلسات",
         labels: "التسميات",
       },
       titleSource: {
@@ -1931,6 +1950,14 @@ export const ar: TranslationResources = {
       status: {
         serviceRunning: "الخدمة {{name}} قيد التشغيل",
         serviceUnhealthy: "الخدمة {{name}} غير سليمة",
+        indicator: {
+          loading: "قيد البدء",
+          running: "يعمل: وكيل قيد التشغيل",
+          needs_input: "بحاجة إليك: وكيل ينتظر إذنًا أو إجابة",
+          attention: "انتهى: مخرجات جديدة لم تقرأها",
+          failed: "خطأ: توقف وكيل بسبب خطأ",
+          done: "خامل: لا جديد",
+        },
         creating: "جارٍ الإنشاء...",
       },
       checks: {
@@ -1944,6 +1971,7 @@ export const ar: TranslationResources = {
       actions: {
         markAsRead: "تعليم كمقروء",
         markAsReadNamed: "تعليم {{name}} كمقروء",
+        markAsReadHint: "تعليم كمقروء: يزيل مؤشر الانتهاء/الخطأ لمساحة العمل هذه",
         menu: "إجراءات Workspace",
         newWorkspace: "مساحة عمل جديدة",
         showMore: "عرض المزيد",
@@ -2949,6 +2977,12 @@ export const ar: TranslationResources = {
         section: "حالة القراءة",
         label: "تعليم المحادثات كمقروءة عند فتحها",
         description: "عند الإيقاف، تبقى المحادثة غير مقروءة حتى تعلّمها كمقروءة أو ترسل إليها رسالة",
+      },
+      sortTabsByActivity: {
+        section: "علامات التبويب",
+        label: "ترتيب علامات التبويب حسب النشاط الأخير",
+        description:
+          "عند التشغيل، تنتقل المحادثة ذات النشاط الأحدث إلى بداية صف علامات التبويب. عند الإيقاف، تبقى علامات التبويب حيث وضعتها",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

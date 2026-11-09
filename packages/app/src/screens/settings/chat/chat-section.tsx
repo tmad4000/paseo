@@ -42,6 +42,10 @@ export function ChatSection() {
     (markReadOnOpen: boolean) => void updateSettings({ markReadOnOpen }),
     [updateSettings],
   );
+  const changeSortTabsByActivity = useCallback(
+    (sortTabsByActivity: boolean) => void updateSettings({ sortTabsByActivity }),
+    [updateSettings],
+  );
   const changeChatOutline = useCallback(
     (chatOutlineEnabled: boolean) => void updateSettings({ chatOutlineEnabled }),
     [updateSettings],
@@ -85,6 +89,19 @@ export function ChatSection() {
           />
         </SettingsCard>
       </SettingsSection>
+      {isNative ? null : (
+        <SettingsSection title={t("settings.general.sortTabsByActivity.section")}>
+          <SettingsCard>
+            <SettingsSwitch
+              label={t("settings.general.sortTabsByActivity.label")}
+              hint={t("settings.general.sortTabsByActivity.description")}
+              value={settings.sortTabsByActivity}
+              onValueChange={changeSortTabsByActivity}
+              testID="settings-sort-tabs-by-activity"
+            />
+          </SettingsCard>
+        </SettingsSection>
+      )}
     </View>
   );
 }

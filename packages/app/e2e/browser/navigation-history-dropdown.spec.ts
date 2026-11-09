@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "../support/fixtures";
 import { createMockIdleAgent, openWorkspaceWithAgents } from "../support/helpers/archive-tab";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { gotoWorkspace } from "../support/helpers/launcher";
+import { parseStoredFocusHistory } from "../../src/navigation/focus-history-storage";
 
 function agentTab(page: Page, agentId: string) {
   return page.getByTestId(`workspace-tab-agent_${agentId}`).filter({ visible: true }).first();
@@ -10,6 +12,94 @@ test.describe.configure({ timeout: 120_000 });
 
 const visibleControl = (page: Page, testID: string) =>
   page.getByTestId(testID).filter({ visible: true }).first();
+
+test("Back and Forward survive renderer reload and cold startup", async ({ page }, testInfo) => {
+  const workspace = await seedWorkspace({ repoPrefix: "persist-focus-history-" });
+  try {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    const first = await createMockIdleAgent(workspace.client, {
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Earlier persisted session",
+    });
+    const second = await createMockIdleAgent(workspace.client, {
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Later persisted session",
+    });
+    await openWorkspaceWithAgents(page, [first, second]);
+    for (const agent of [first, second]) {
+      await agentTab(page, agent.id).click({ position: { x: 12, y: 13 } });
+      await expect(agentTab(page, agent.id)).toHaveAttribute("aria-selected", "true");
+    }
+    await visibleControl(page, "navigation-back-button").click();
+    await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");
+    await expect
+      .poll(
+        async () =>
+          parseStoredFocusHistory(
+            await page.evaluate(() => localStorage.getItem("paseo:focus-history")),
+          )?.current,
+      )
+      .toMatchObject({ target: { kind: "agent", agentId: first.id } });
+
+    await page.reload();
+    await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");
+    await visibleControl(page, "navigation-forward-button").click();
+    await expect(agentTab(page, second.id)).toHaveAttribute("aria-selected", "true");
+    await expect
+      .poll(
+        async () =>
+          parseStoredFocusHistory(
+            await page.evaluate(() => localStorage.getItem("paseo:focus-history")),
+          )?.current,
+      )
+      .toMatchObject({ target: { kind: "agent", agentId: second.id } });
+    await page.goto("/");
+    await expect(agentTab(page, second.id)).toHaveAttribute("aria-selected", "true");
+    await visibleControl(page, "navigation-back-button").click();
+    await expect(agentTab(page, first.id)).toHaveAttribute("aria-selected", "true");
+    await page.screenshot({ path: testInfo.outputPath("restored-history.png") });
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+for (const width of [1400, 390]) {
+  test(`closing the final blank New tab leaves for Sessions without a warning at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    const workspace = await seedWorkspace({ repoPrefix: "close-final-blank-", git: false });
+    try {
+      await page.setViewportSize({ width, height: 900 });
+      await gotoWorkspace(page, workspace.workspaceId);
+      await expect(
+        page.getByTestId("workspace-new-tab-panel").filter({ visible: true }),
+      ).toHaveCount(1);
+      if (width < 600) {
+        await page.getByTestId("workspace-tab-switcher-trigger").click();
+        await page
+          .locator('[data-testid^="workspace-tab-menu-tab_"][data-testid$="-trigger"]')
+          .filter({ visible: true })
+          .click();
+        await page
+          .locator('[data-testid^="workspace-tab-menu-tab_"][data-testid$="-close"]')
+          .filter({ visible: true })
+          .click();
+      } else {
+        await page.keyboard.press("Alt+Shift+w");
+      }
+      await expect(page).toHaveURL(/\/sessions(?:\?|$)/);
+      await expect(page.getByRole("dialog").filter({ visible: true })).toHaveCount(0);
+      await expect(
+        page.getByText("Switch tab", { exact: true }).filter({ visible: true }),
+      ).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`closed-blank-${width}.png`) });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}
 
 test("visible history dropdown reaches older sessions and preserves Back/Forward order", async ({
   page,

@@ -25,30 +25,46 @@ import { collectAllTabs, findPaneById } from "@/stores/workspace-layout-actions"
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 import { buildMarkReadMenuEntries, useAgentReadAction } from "@/workspace/use-agent-read-action";
+import { formatMessageTimestamp } from "@/utils/time";
 import { useSidebarModel } from "./sidebar-model";
-import { workspaceReviewAgents } from "./workspace-review-model";
+import { NeedsInputTimestamp } from "./workspace-trailing";
+import {
+  needsInputSince,
+  workspaceNeedsInputAgents,
+  workspaceReviewAgents,
+} from "./workspace-review-model";
 
 const PREVIEW_LIMIT = 3;
 
-export function WorkspaceReviewList({
-  serverId,
-  workspaceId,
-  onNavigate,
-}: {
+interface WorkspaceAttentionListProps {
   serverId: string;
   workspaceId: string;
   onNavigate?: () => void;
-}) {
+}
+
+export function WorkspaceReviewList(props: WorkspaceAttentionListProps) {
+  return <WorkspaceAttentionList {...props} kind="review" />;
+}
+
+export function WorkspaceNeedsInputList(props: WorkspaceAttentionListProps) {
+  return <WorkspaceAttentionList {...props} kind="needs-input" />;
+}
+
+function WorkspaceAttentionList({
+  serverId,
+  workspaceId,
+  onNavigate,
+  kind,
+}: WorkspaceAttentionListProps & { kind: "review" | "needs-input" }) {
   const { searchQuery } = useSidebarModel();
+  const selectAgents = kind === "needs-input" ? workspaceNeedsInputAgents : workspaceReviewAgents;
   const agents = useSessionStore(
     useShallow((state) =>
-      searchQuery.trim()
-        ? []
-        : workspaceReviewAgents(state.sessions[serverId]?.agents, workspaceId),
+      searchQuery.trim() ? [] : selectAgents(state.sessions[serverId]?.agents, workspaceId),
     ),
   );
   const { t } = useTranslation();
-  const collapseKey = `review:${serverId}:${workspaceId}`;
+  const collapseKey = `${kind}:${serverId}:${workspaceId}`;
   const collapsed = useSidebarCollapsedSectionsStore((state) =>
     state.collapsedWorkspaceGroupKeys.has(collapseKey),
   );
@@ -60,26 +76,31 @@ export function WorkspaceReviewList({
   const showAllState = useMemo(() => ({ expanded: showAll }), [showAll]);
   if (agents.length === 0) return null;
   const visible = showAll ? agents : agents.slice(0, PREVIEW_LIMIT);
+  const heading = t(
+    kind === "needs-input" ? "sidebar.needsInputSessions" : "sidebar.reviewSessions",
+    { count: agents.length },
+  );
   return (
-    <View style={styles.list} testID={`workspace-review-list-${serverId}-${workspaceId}`}>
+    <View style={styles.list} testID={`workspace-${kind}-list-${serverId}-${workspaceId}`}>
       <Button
         variant="ghost"
         size="sm"
         onPress={toggleCollapsed}
         accessibilityState={expandedState}
         aria-expanded={!collapsed}
-        accessibilityLabel={t("sidebar.reviewSessions", { count: agents.length })}
+        accessibilityLabel={heading}
         style={styles.heading}
         textStyle={styles.meta}
       >
-        {`${collapsed ? "›" : "⌄"} ${t("sidebar.reviewSessions", { count: agents.length })}`}
+        {`${collapsed ? "›" : "⌄"} ${heading}`}
       </Button>
       {!collapsed ? (
         <>
           {visible.map((agent) => (
-            <ReviewRow
+            <AttentionRow
               key={agent.id}
               agent={agent}
+              kind={kind}
               serverId={serverId}
               workspaceId={workspaceId}
               onNavigate={onNavigate}
@@ -107,13 +128,15 @@ export function WorkspaceReviewList({
   );
 }
 
-function ReviewRow({
+function AttentionRow({
   agent,
+  kind,
   serverId,
   workspaceId,
   onNavigate,
 }: {
   agent: Agent;
+  kind: "review" | "needs-input";
   serverId: string;
   workspaceId: string;
   onNavigate?: () => void;
@@ -123,11 +146,17 @@ function ReviewRow({
   const review = getReviewStatus(agent.labels);
   const unread = agent.requiresAttention === true;
   const labels = [
+    kind === "needs-input" ? t("subthreads.state.needsInput") : null,
     review ? t(`manualStatus.${review}`) : null,
     unread ? t("subthreads.state.unread") : null,
   ]
     .filter(Boolean)
     .join(" · ");
+  const sinceMs = kind === "needs-input" ? needsInputSince(agent) : 0;
+  const since = sinceMs > 0 ? new Date(sinceMs) : null;
+  const rowLabel = since
+    ? `${title} · ${labels} · ${t("sidebar.needsInputSince", { time: formatMessageTimestamp(since) })}`
+    : `${title} · ${labels}`;
   const target = useMemo(
     () => ({ kind: "agent" as const, serverId, agentId: agent.id }),
     [agent.id, serverId],
@@ -160,7 +189,7 @@ function ReviewRow({
     tab,
     serverId,
     workspaceId,
-    menuTestIDBase: `review-${agent.id}`,
+    menuTestIDBase: `${kind}-${agent.id}`,
   });
   // Opening a review row does not read it by default, so its menus offer the explicit read.
   const readAction = useAgentReadAction({ serverId, agentId: agent.id, unread: false });
@@ -169,9 +198,9 @@ function ReviewRow({
       buildMarkReadMenuEntries({
         action: readAction,
         label: t("workspace.tabs.menu.markAsRead"),
-        menuTestIDBase: `review-${agent.id}`,
+        menuTestIDBase: `${kind}-${agent.id}`,
       }),
-    [agent.id, readAction, t],
+    [agent.id, kind, readAction, t],
   );
   const open = useCallback(() => {
     onNavigate?.();
@@ -195,13 +224,18 @@ function ReviewRow({
         <ContextMenuTrigger
           onPress={open}
           accessibilityRole="button"
-          accessibilityLabel={`${title} · ${labels}`}
+          accessibilityLabel={rowLabel}
           style={styles.row}
-          testID={`workspace-review-agent-${agent.id}`}
+          testID={`workspace-${kind}-agent-${agent.id}`}
         >
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.titleLine}>
+            <Text style={[styles.title, styles.titleText]} numberOfLines={1}>
+              {title}
+            </Text>
+            {since ? (
+              <NeedsInputTimestamp since={since} testID={`workspace-${kind}-time-${agent.id}`} />
+            ) : null}
+          </View>
           <Text style={styles.meta} numberOfLines={1}>
             {labels}
           </Text>
@@ -212,9 +246,12 @@ function ReviewRow({
       </ContextMenu>
       <DropdownMenu compactMode="sheet">
         <DropdownMenuTrigger
-          accessibilityLabel={t("sidebar.reviewActions", { title })}
+          accessibilityLabel={t(
+            kind === "needs-input" ? "sidebar.sessionActions" : "sidebar.reviewActions",
+            { title },
+          )}
           style={styles.actions}
-          testID={`workspace-review-actions-${agent.id}`}
+          testID={`workspace-${kind}-actions-${agent.id}`}
         >
           <Text style={styles.title}>⋯</Text>
         </DropdownMenuTrigger>
@@ -240,6 +277,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1],
     borderRadius: theme.borderRadius.sm,
   },
+  titleLine: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  titleText: { flex: 1, minWidth: 0 },
   title: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,

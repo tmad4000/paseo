@@ -20,6 +20,12 @@ export interface PanelDescriptor {
   titleState: "ready" | "loading";
   icon: ComponentType<PanelIconProps>;
   statusBucket: SidebarStateBucket | null;
+  /**
+   * Working right now, independent of `statusBucket` (which ranks needs_input above running), so
+   * a tab can show the running ring and the needs-input alert together. Omitted means
+   * `statusBucket === "running"`.
+   */
+  statusRunning?: boolean;
 }
 
 export interface PanelDescriptorContext {

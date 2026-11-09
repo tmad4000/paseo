@@ -1,11 +1,16 @@
-import { Text } from "react-native";
+import { Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
 import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useSessionStore } from "@/stores/session-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatMessageTimestamp } from "@/utils/time";
+import { newestNeedsInputSince, workspaceNeedsInputAgents } from "../workspace-review-model";
 
 export type { SidebarWorkspaceTrailing };
 
@@ -65,13 +70,63 @@ export function SidebarWorkspaceTrailingContent({
 }
 
 /**
- * Sorted by kickoff, the stamp shows when each session started so the column reads in the same
- * order as the list; every other sort keeps the last-active time.
+ * When the workspace's newest session needing input started needing it, in epoch ms; null when
+ * none does. Subscribes to the number alone, so other agent updates never repaint the row.
+ */
+function useWorkspaceNeedsInputSince(workspace: SidebarWorkspaceEntry): number | null {
+  const fromSessions = useSessionStore((state) =>
+    newestNeedsInputSince(
+      workspaceNeedsInputAgents(state.sessions[workspace.serverId]?.agents, workspace.workspaceId),
+    ),
+  );
+  if (fromSessions !== null) return fromSessions;
+  // The host's bucket can arrive before the session directory; it stamps when the bucket began.
+  return workspace.statusBucket === "needs_input"
+    ? (workspace.statusEnteredAt?.getTime() ?? null)
+    : null;
+}
+
+/**
+ * A workspace needing input shows when that started, so the stamp answers "how long has it been
+ * waiting on me". Otherwise, sorted by kickoff, the stamp shows when each session started so the
+ * column reads in the same order as the list; every other sort keeps the last-active time.
  */
 function WorkspaceTimestampForSort({ workspace }: { workspace: SidebarWorkspaceEntry }) {
   const sortedByStart = useSidebarViewStore((state) => state.sortMode === "started");
+  const needsInputSince = useWorkspaceNeedsInputSince(workspace);
+  if (needsInputSince !== null) return <NeedsInputTimestamp since={new Date(needsInputSince)} />;
   const at = (sortedByStart ? workspace.startedAt : null) ?? workspaceLastActiveAt(workspace);
   return at ? <WorkspaceTimestamp lastActiveAt={at} /> : null;
+}
+
+/** The compact stamp for a session or workspace waiting on input, labeled "Needing input since …". */
+export function NeedsInputTimestamp({
+  since,
+  testID = "sidebar-workspace-needs-input-timestamp",
+}: {
+  since: Date;
+  testID?: string;
+}) {
+  const { t } = useTranslation();
+  const label = t("sidebar.needsInputSince", { time: formatMessageTimestamp(since) });
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <View
+          style={styles.needsInput}
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={label}
+          testID={`${testID}-label`}
+        >
+          <WorkspaceTimestamp lastActiveAt={since} testID={testID} />
+        </View>
+      </TooltipTrigger>
+      <TooltipContent>
+        <Text style={styles.tooltip}>{label}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /**
@@ -79,10 +134,16 @@ function WorkspaceTimestampForSort({ workspace }: { workspace: SidebarWorkspaceE
  * re-renders the component that owns it — keeping that component down to a single `<Text>` is
  * what stops a minute tick from reaching the row, the list, or the diff stat next door.
  */
-function WorkspaceTimestamp({ lastActiveAt }: { lastActiveAt: Date }) {
+export function WorkspaceTimestamp({
+  lastActiveAt,
+  testID = "sidebar-workspace-timestamp",
+}: {
+  lastActiveAt: Date;
+  testID?: string;
+}) {
   const label = useCompactTimeAgo(lastActiveAt);
   return (
-    <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
+    <Text style={styles.timestamp} numberOfLines={1} testID={testID}>
       {label}
     </Text>
   );
@@ -101,5 +162,10 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     // Digits keep one width, so the column lines up down the list.
     fontVariant: ["tabular-nums"],
+  },
+  needsInput: { flexShrink: 0 },
+  tooltip: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
   },
 }));

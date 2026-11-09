@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, View, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react-native";
@@ -103,7 +104,7 @@ export function ProjectLeadingVisual({
 
 // The project icon (the lettered box) is what marks a row as a *project* rather than a
 // workspace, so it always stays and status annotates it instead of replacing it. Every
-// surfaced bucket lands in the identical corner badge — an amber alert glyph for needs_input,
+// surfaced bucket lands in the identical corner badge — a red alert glyph for needs_input,
 // a colored disc for the rest, nothing for done — so the badge reads as one fixed shell and
 // only its contents change.
 export function ProjectStatusIndicator({
@@ -113,6 +114,7 @@ export function ProjectStatusIndicator({
   statusBucket,
   backdrop,
   loading = false,
+  seen = false,
   testID,
 }: {
   iconDataUri: string | null;
@@ -122,6 +124,8 @@ export function ProjectStatusIndicator({
   /** The row's current background, so the status badge can knock out of it. */
   backdrop: SidebarSurfaceBackdrop;
   loading?: boolean;
+  /** Unread, but looked at on this device: the dot becomes a hollow ring. */
+  seen?: boolean;
   testID?: string;
 }) {
   const placeholderInitial = projectIconPlaceholderLabelFromDisplayName(displayName)
@@ -154,8 +158,74 @@ export function ProjectStatusIndicator({
             content={badgeContent}
             statusBucket={badgeBucket}
             backdrop={backdrop}
+            seen={seen}
           />
         )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A session row's leading visual in Sessions grouping: the chat's provider glyph carrying the
+ * same corner status badge a project icon does, so both kinds of row read status identically.
+ */
+export function SessionStatusIndicator({
+  children,
+  statusBucket,
+  running = false,
+  backdrop,
+  seen = false,
+  testID,
+}: {
+  /** The provider glyph the badge annotates. */
+  children: ReactNode;
+  statusBucket: SidebarStateBucket;
+  /**
+   * Working right now, independent of the bucket. A chat that is running and needs input shows
+   * both: the running ring in the corner and the needs-input alert at the top-left.
+   */
+  running?: boolean;
+  backdrop: SidebarSurfaceBackdrop;
+  /** Unread, but looked at on this device: the dot becomes a hollow ring. */
+  seen?: boolean;
+  testID?: string;
+}) {
+  const runningWithAlert = running && statusBucket === "needs_input";
+  const badgeBucket: SidebarStateBucket = runningWithAlert ? "running" : statusBucket;
+  const badgeContent = getProjectStatusBadgeContent(badgeBucket);
+  return (
+    <View
+      style={styles.projectLeadingVisualSlot}
+      testID={testID ?? `session-status-indicator-${statusBucket}`}
+    >
+      <View style={[styles.projectIconBox, styles.sessionIconBox]}>
+        {children}
+        {badgeContent === null ? null : (
+          <ProjectStatusBadge
+            content={badgeContent}
+            statusBucket={badgeBucket}
+            backdrop={backdrop}
+            seen={seen}
+          />
+        )}
+        {runningWithAlert ? (
+          <View
+            role="status"
+            accessibilityLabel={STATUS_BUCKET_LABELS.needs_input}
+            style={[
+              styles.statusBadge,
+              styles.statusBadgeTopLeft,
+              getStatusBadgeBackdropStyle(backdrop),
+            ]}
+            testID="session-status-needs-input-while-running"
+          >
+            <ThemedCircleAlert
+              size={STATUS_INDICATOR_ALERT_SIZE}
+              uniProps={needsInputColorMapping}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -165,10 +235,12 @@ function ProjectStatusBadge({
   content,
   statusBucket,
   backdrop,
+  seen,
 }: {
   content: ProjectStatusBadgeContent;
   statusBucket: SidebarStateBucket;
   backdrop: SidebarSurfaceBackdrop;
+  seen: boolean;
 }) {
   // Running skips the shell. The ring is wider than the 12pt shell and carries its own knockout,
   // so nesting it inside would clip it against the very thing that was meant to separate it from
@@ -195,7 +267,7 @@ function ProjectStatusBadge({
       {content.kind === "alert" ? (
         <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
       ) : (
-        <ProjectStatusDot bucket={content.bucket} />
+        <ProjectStatusDot bucket={content.bucket} seen={seen} />
       )}
     </View>
   );
@@ -214,9 +286,27 @@ function getStatusBadgeBackdropStyle(backdrop: SidebarSurfaceBackdrop): ViewStyl
   }
 }
 
-function ProjectStatusDot({ bucket }: { bucket: ProjectStatusBadgeDotBucket }) {
+function ProjectStatusDot({
+  bucket,
+  seen,
+}: {
+  bucket: ProjectStatusBadgeDotBucket;
+  seen: boolean;
+}) {
+  // Seen-not-read draws the same colour as a hollow ring, like the tab strip's icon badge.
+  if (seen && bucket !== "running") {
+    return (
+      <View
+        testID="project-status-dot"
+        dataSet={SEEN_DATA_SET}
+        style={bucket === "failed" ? styles.statusRingFailed : styles.statusRingAttention}
+      />
+    );
+  }
   return <View testID="project-status-dot" style={getStatusDotColorStyle(bucket)} />;
 }
+
+const SEEN_DATA_SET = { readState: "seen" } as const;
 
 function ProjectIcon({
   iconDataUri,
@@ -267,6 +357,15 @@ const styles = StyleSheet.create((theme) => {
       backgroundColor: getStatusDotColor({ theme, bucket }) ?? undefined,
     }) as const;
 
+  const statusRing = (bucket: ProjectStatusBadgeDotBucket) =>
+    ({
+      width: STATUS_INDICATOR_FILLED_DOT_SIZE,
+      height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+      borderRadius: theme.borderRadius.full,
+      borderWidth: 1.5,
+      borderColor: getStatusDotColor({ theme, bucket }) ?? undefined,
+    }) as const;
+
   return {
     // The slot is as tall as the title's line box, not as tall as the icon, and centers the
     // icon inside it. Rows lay their leading visual out with alignItems:flex-start, so a
@@ -284,6 +383,10 @@ const styles = StyleSheet.create((theme) => {
       position: "relative",
       width: theme.iconSize.md,
       height: theme.iconSize.md,
+    },
+    sessionIconBox: {
+      alignItems: "center",
+      justifyContent: "center",
     },
     projectIconFallbackText: {
       fontSize: 9,
@@ -303,6 +406,13 @@ const styles = StyleSheet.create((theme) => {
       justifyContent: "center",
       overflow: "hidden",
     },
+    // The needs-input alert's spot when the running ring already holds the bottom-right corner.
+    statusBadgeTopLeft: {
+      right: undefined,
+      bottom: undefined,
+      left: STATUS_BADGE_OFFSET,
+      top: STATUS_BADGE_OFFSET,
+    },
     // Same corner as the shell, re-centred for the wider ring.
     statusRingAnchor: {
       position: "absolute",
@@ -316,5 +426,7 @@ const styles = StyleSheet.create((theme) => {
     statusDotRunning: statusDot("running"),
     statusDotFailed: statusDot("failed"),
     statusDotAttention: statusDot("attention"),
+    statusRingFailed: statusRing("failed"),
+    statusRingAttention: statusRing("attention"),
   };
 });

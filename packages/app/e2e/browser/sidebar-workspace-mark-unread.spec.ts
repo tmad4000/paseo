@@ -9,7 +9,11 @@ import {
 } from "../support/helpers/mock-agent";
 import { enableReadOnOpen } from "../support/helpers/read-on-open";
 import { getServerId } from "../support/helpers/server-id";
-import { closeMobileAgentSidebar, openMobileAgentSidebar } from "../support/helpers/sidebar";
+import {
+  closeMobileAgentSidebar,
+  openMobileAgentSidebar,
+  selectSidebarStatusGrouping,
+} from "../support/helpers/sidebar";
 
 interface FinishedWorkspaces {
   subject: MockAgentWorkspace;
@@ -262,6 +266,13 @@ test("by default a chat stays unread until its sidebar or tab check marks it rea
     );
     // Like the row's kebab, the check is a labelled control inside the row's own button on web.
     await expect(check).toHaveAttribute("aria-label", "Mark main as read");
+    // A bare check says nothing on its own; hovering it explains what pressing it does.
+    await check.hover();
+    await expect(
+      page.getByText("Mark as read: clears this workspace's finished/error indicator", {
+        exact: true,
+      }),
+    ).toBeVisible();
     await page.screenshot({ path: "test-results/explicit-read-sidebar-check.png" });
     await check.click();
     await expectStatus(page, subject.workspaceId, "done");
@@ -659,4 +670,116 @@ test("compact inline review bounds its preview and opens the exact chat from its
   await expect(page.getByTestId("manual-status-ready")).toHaveAttribute("aria-checked", "true");
   await page.getByTestId("manual-status-in_review").click();
   await expect(page.getByTestId("manual-status-in_review")).toHaveAttribute("aria-checked", "true");
+});
+
+test("needs input expands to exact sessions in project and status grouping and keeps collapse", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject, other } = workspaces;
+  const sibling = await addFinishedAgent(subject);
+  await subject.client.updateAgent(subject.agentId, {
+    labels: { "paseo.manual-needs-input": "true" },
+  });
+  await subject.client.updateAgent(sibling.id, { labels: { "paseo.manual-needs-input": "true" } });
+  await openAgentRoute(page, other);
+  const list = page.getByTestId(
+    `workspace-needs-input-list-${getServerId()}-${subject.workspaceId}`,
+  );
+  const subjectRow = page.getByTestId(`workspace-needs-input-agent-${subject.agentId}`);
+  const siblingRow = page.getByTestId(`workspace-needs-input-agent-${sibling.id}`);
+  const toggle = list.getByRole("button", { name: "Needs input (2)", exact: true });
+  await expect(subjectRow).toContainText("Unread subject");
+  await expect(siblingRow).toContainText("Newest agent");
+  // Each session shows when it started needing input; the newest marker sorts first.
+  const rows = list.locator('[data-testid^="workspace-needs-input-agent-"]');
+  await expect(rows.first()).toHaveAttribute(
+    "data-testid",
+    `workspace-needs-input-agent-${sibling.id}`,
+  );
+  for (const id of [subject.agentId, sibling.id]) {
+    await expect(page.getByTestId(`workspace-needs-input-time-${id}`)).toHaveText(/\S/);
+    await expect(page.getByTestId(`workspace-needs-input-time-${id}-label`)).toHaveAttribute(
+      "aria-label",
+      /^Needing input since /,
+    );
+  }
+  // The workspace row's trailing time is the needs-input time, not its general activity.
+  const subjectWorkspaceRow = workspaceRow(page, subject.workspaceId).first();
+  await expect(
+    subjectWorkspaceRow.getByTestId("sidebar-workspace-needs-input-timestamp-label"),
+  ).toHaveAttribute("aria-label", /^Needing input since /);
+  await expect(subjectWorkspaceRow.getByTestId("sidebar-workspace-timestamp")).toHaveCount(0);
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(siblingRow).not.toBeVisible();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await selectSidebarStatusGrouping(page);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    subjectWorkspaceRow.getByTestId("sidebar-workspace-needs-input-timestamp-label"),
+  ).toHaveAttribute("aria-label", /^Needing input since /);
+  await toggle.click();
+  await siblingRow.click();
+  await expectSelectedAgent(page, sibling.id);
+  await expect(siblingRow).toContainText("Needs input");
+  await page.screenshot({ path: "test-results/needs-input-sessions-desktop.png" });
+  await subject.client.updateAgent(sibling.id, { labels: { "paseo.manual-needs-input": "false" } });
+  await expect(siblingRow).not.toBeVisible();
+  await expect(subjectRow).toBeVisible();
+  await expect(list.getByRole("button", { name: "Needs input (1)", exact: true })).toBeVisible();
+  await subject.client.sendAgentMessage(
+    sibling.id,
+    "Emit synthetic questions: two free-write questions.",
+  );
+  await expect(siblingRow).toBeVisible();
+  await siblingRow.click();
+  await expectSelectedAgent(page, sibling.id);
+  const pending = await subject.client.fetchAgent({ agentId: sibling.id });
+  expect(pending?.agent.pendingPermissions).toHaveLength(1);
+  await expect(siblingRow).toContainText("Needs input");
+  await expect(siblingRow).not.toContainText("(manual)");
+});
+
+test("compact needs input expands beyond three sessions and opens the chosen tab", async ({
+  page,
+  workspaces,
+}) => {
+  const { subject } = workspaces;
+  await subject.client.updateAgent(subject.agentId, {
+    labels: { "paseo.manual-needs-input": "true" },
+  });
+  const target = await addFinishedAgent(subject);
+  await subject.client.updateAgent(target.id, {
+    name: "Chosen input session",
+    labels: { "paseo.manual-needs-input": "true" },
+  });
+  await subject.client.sendAgentMessage(target.id, "Confirm exact input session navigation.");
+  await subject.client.waitForFinish(target.id, 20_000);
+  for (let index = 2; index <= 3; index++) {
+    const agent = await addFinishedAgent(subject);
+    await subject.client.updateAgent(agent.id, {
+      name: `Input session ${index}`,
+      labels: { "paseo.manual-needs-input": "true" },
+    });
+  }
+  await openCompactWorkspace(page, subject);
+  await selectSidebarStatusGrouping(page);
+  const list = page.getByTestId(
+    `workspace-needs-input-list-${getServerId()}-${subject.workspaceId}`,
+  );
+  const rows = list.locator('[data-testid^="workspace-needs-input-agent-"]');
+  await expect(rows).toHaveCount(3);
+  await list.getByRole("button", { name: "+1 more", exact: false }).click();
+  await expect(rows).toHaveCount(4);
+  await page.screenshot({ path: "test-results/needs-input-sessions-compact.png" });
+  await page.getByTestId(`workspace-needs-input-agent-${target.id}`).click();
+  await expect(
+    page.getByText("Confirm exact input session navigation.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("sidebar-sessions")).not.toBeInViewport();
+  await openMobileAgentSidebar(page);
+  await expect(page.getByTestId(`workspace-needs-input-agent-${target.id}`)).toBeVisible();
 });

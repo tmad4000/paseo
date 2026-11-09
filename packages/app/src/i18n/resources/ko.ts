@@ -130,6 +130,11 @@ export const ko: TranslationResources = {
     noReplyYet: "먼저 스레드의 답변을 기다리세요.",
     parentUnavailable: "메인 스레드를 더 이상 사용할 수 없습니다.",
   },
+  sidebarSessions: {
+    actions: "{{title}} 작업",
+    archive: "세션 보관",
+    open: "{{meta}}에서 {{title}} 열기",
+  },
   sessionPins: {
     title: "고정된 세션",
     pin: "세션 고정",
@@ -332,6 +337,7 @@ export const ko: TranslationResources = {
       groupByStatus: "상태별 그룹화",
       groupInOneList: "채팅을 하나의 목록으로 표시",
       showAllSessions: "모든 세션 보기",
+      groupAsSessions: "채팅을 세션으로 표시",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -898,6 +904,7 @@ export const ko: TranslationResources = {
       reply: "답장",
       forkMenu: "여기에서 채팅 분기",
       forkInNewTab: "새 탭으로 분기",
+      forkInSplitPane: "분할 창에서 포크",
       forkInNewWorkspace: "새 워크스페이스로 분기",
       forkUnavailable: "이를 사용하려면 호스트를 업데이트하세요.",
       forkMissingWorkspace: "이 에이전트는 워크스페이스에 속해 있지 않습니다.",
@@ -1177,6 +1184,12 @@ export const ko: TranslationResources = {
       loading: "불러오는 중...",
       modified: "저장되지 않은 변경사항",
       newActivity: "새 활동",
+      seenNotRead: "봤지만 읽지 않음",
+      agentRunning: "에이전트 실행 중",
+      needsInput: "입력 필요",
+      readLayerUnread: "읽지 않음",
+      seenLayerNotSeen: "마지막 활동 이후 보지 않음",
+      seenLayerSeen: "봤음",
       loadingAgentTitle: "에이전트 제목 불러오는 중",
       fallback: {
         newAgent: "새 에이전트",
@@ -1249,6 +1262,9 @@ export const ko: TranslationResources = {
         splitDown: "창을 아래로 분할",
         splitRightWithSession: "세션으로 오른쪽 분할…",
         splitDownWithSession: "세션으로 아래쪽 분할…",
+        dropSessionOtherHost:
+          "이 호스트의 세션만 여기에 놓을 수 있습니다. 여러 호스트를 함께 보려면 보기를 사용하세요.",
+        dropSessionNoSession: "이 워크스페이스에는 열 세션이 없습니다.",
         changes: "변경 사항",
         files: "파일",
         pullRequest: "풀 리퀘스트",
@@ -1699,6 +1715,9 @@ export const ko: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} 검토 작업",
+    needsInputSessions: "입력 필요 ({{count}})",
+    needsInputSince: "{{time}}부터 입력 필요",
+    sessionActions: "{{title}} 세션 작업",
     reviewSessions: "검토 ({{count}})",
     openTabs_one: "열린 탭 {{count}}개",
     openTabs: "열린 탭 {{count}}개",
@@ -1825,6 +1844,7 @@ export const ko: TranslationResources = {
         project: "프로젝트",
         status: "상태",
         list: "하나의 목록",
+        sessions: "세션",
         labels: "레이블",
       },
       titleSource: {
@@ -1942,6 +1962,14 @@ export const ko: TranslationResources = {
       status: {
         serviceRunning: "서비스 {{name}} 실행 중",
         serviceUnhealthy: "서비스 {{name}} 비정상",
+        indicator: {
+          loading: "시작 중",
+          running: "작업 중: 에이전트가 실행 중입니다",
+          needs_input: "확인 필요: 에이전트가 권한이나 답변을 기다리고 있습니다",
+          attention: "완료: 읽지 않은 새 출력이 있습니다",
+          failed: "오류: 에이전트가 오류로 중지되었습니다",
+          done: "유휴: 새 소식 없음",
+        },
         creating: "생성하는 중...",
       },
       checks: {
@@ -1955,6 +1983,7 @@ export const ko: TranslationResources = {
       actions: {
         markAsRead: "읽음으로 표시",
         markAsReadNamed: "{{name}} 읽음으로 표시",
+        markAsReadHint: "읽음으로 표시: 이 워크스페이스의 완료/오류 표시를 지웁니다",
         menu: "워크스페이스 작업",
         newWorkspace: "새 워크스페이스",
         showMore: "더 보기",
@@ -2968,6 +2997,12 @@ export const ko: TranslationResources = {
         label: "채팅을 열면 읽음으로 표시",
         description:
           "끄면 읽음으로 표시하거나 메시지를 보낼 때까지 채팅이 읽지 않음 상태로 유지됩니다",
+      },
+      sortTabsByActivity: {
+        section: "탭",
+        label: "최근 활동순으로 탭 정렬",
+        description:
+          "켜면 가장 최근에 활동한 채팅이 탭 줄의 맨 앞으로 이동합니다. 끄면 탭이 놓은 자리에 그대로 있습니다",
       },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",

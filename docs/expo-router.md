@@ -114,7 +114,7 @@ would discard chat drafts and expanded diff state despite retaining the IDs.
 The Expo Router stack is not the user-facing Back history. Workspace tab and
 pane focus, plus the compact/desktop explorer view, live in Zustand stores and
 do not create routes. `src/navigation/focus-history.ts` therefore owns the
-in-memory recency stack, while `focus-history-runtime.tsx` observes the active
+client-persisted recency stack, while `focus-history-runtime.tsx` observes the active
 route and those existing stores and restores through their normal actions.
 
 Keep the location observer at the app shell so workspace switches and app-wide
@@ -134,6 +134,12 @@ attention routing to open an unrelated session. This exception does not change
 resource equality or the allocation of fresh empty tabs. Regression coverage
 lives in `focus-history.test.ts` and `focus-history-runtime.test.ts`.
 
+Closing the final blank New tab leaves the empty workspace for the nearest useful
+Back-history visit, or `/sessions` when none remains. Other blank tabs and the
+`/new` flow are skipped. Forget the closed blank tab in both history directions;
+it has no resource identity to reopen. Closing a blank split pane still stays in
+the workspace and reveals its surviving sibling.
+
 The chevron beside each header Back/Forward arrow opens every retained entry in
 that direction (up to the focus-history model's 50-entry bound), nearest first.
 The arrow itself still moves one step. Right-click and long-press open the same
@@ -142,8 +148,17 @@ over either control for 350 ms previews the full menu without moving editor focu
 or dismissing the keyboard. Moving away closes the preview; activating the
 chevron promotes it to a keyboard-focused menu. A multi-step menu jump moves every
 skipped location to the opposite stack, so Forward retraces them in order. This
-focus history is in memory; the separate Recent sessions clock menu uses the
-persisted visit list and survives reload.
+focus history survives reloads and app restarts through AsyncStorage under
+`paseo:focus-history` (version 1), independently of the Recent sessions clock
+menu's persisted visit list. Both bounded stacks and the current location are
+saved; in-flight restores are not. Writes are serialized so a slow older save
+cannot overwrite newer focus. The app-shell observer waits for history and
+workspace-layout hydration before recording workspace focus. Its first
+observation of the restored tab reconciles launch-time pane/view defaults
+without adding a visit or discarding Forward; a different tab or route is a new
+visit. Invalid stored data starts an empty history; unavailable storage leaves
+navigation working in memory. Persistence is device-local and does not depend
+on daemon connectivity.
 
 A history row for a workspace location shows that workspace's open tab count
 with the same mark the sidebar row uses (`WorkspaceTabCountBadge`), so you can

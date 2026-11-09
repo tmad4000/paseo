@@ -50,6 +50,7 @@ export async function markAgentTabUnread(input: {
   const focusToken =
     focusedPane?.focusedTabId === tabId ? layoutStore.unfocusPane(workspaceKey) : null;
   try {
+    // Only the read layer changes: what this device has already seen stays seen.
     await client.markAgentUnread(workspaceId, agentId);
   } catch (error) {
     if (focusToken) {

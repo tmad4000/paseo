@@ -158,17 +158,65 @@ async function openThreadDraft(input: {
   if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
   const draftId = await input.prepareForkDraft();
   useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
-  const target = buildForkDraftTabTarget(input.draftSetup, draftId);
-  // Compact layouts have no side pane, and a main chat shown as a split from another workspace
-  // cannot host a draft of its own workspace here: open the thread in that workspace instead.
+  openDraftBeside({
+    serverId: input.serverId,
+    workspaceId: threadWorkspaceId,
+    workspaceKey,
+    layoutWorkspaceId: request.layoutWorkspaceId,
+    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+    isCompact: input.isCompact,
+  });
+}
+
+/** Fork in a split pane: the fork draft opens beside the chat, which stays open in its pane. */
+async function openSplitPaneDraft(input: {
+  serverId: string;
+  request: ForkAgentRequest;
+  draftSetup: WorkspaceDraftTabSetup | undefined;
+  prepareForkDraft: () => Promise<string>;
+  missingWorkspaceMessage: string;
+  isCompact: boolean;
+}): Promise<void> {
+  const { workspaceId, layoutWorkspaceId } = input.request;
+  if (!workspaceId) throw new Error(input.missingWorkspaceMessage);
+  const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId: input.serverId, workspaceId });
+  if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
+  const draftId = await input.prepareForkDraft();
+  openDraftBeside({
+    serverId: input.serverId,
+    workspaceId,
+    workspaceKey,
+    layoutWorkspaceId,
+    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+    isCompact: input.isCompact,
+  });
+}
+
+/**
+ * Open a fork or thread draft in a pane beside the chat. Compact layouts have no side pane, and a
+ * main chat shown as a split from another workspace cannot host a draft of its own workspace
+ * there: both open the draft as the visible tab of its own workspace instead.
+ */
+function openDraftBeside(input: {
+  serverId: string;
+  workspaceId: string;
+  workspaceKey: string;
+  layoutWorkspaceId?: string;
+  target: WorkspaceTabTarget;
+  isCompact: boolean;
+}): void {
   const shownElsewhere = Boolean(
-    request.layoutWorkspaceId && request.layoutWorkspaceId !== threadWorkspaceId,
+    input.layoutWorkspaceId && input.layoutWorkspaceId !== input.workspaceId,
   );
   if (input.isCompact || shownElsewhere) {
-    navigateToWorkspace({ serverId: input.serverId, workspaceId: threadWorkspaceId, target });
+    navigateToWorkspace({
+      serverId: input.serverId,
+      workspaceId: input.workspaceId,
+      target: input.target,
+    });
     return;
   }
-  openWorkspaceTargetBeside({ workspaceKey, target });
+  openWorkspaceTargetBeside({ workspaceKey: input.workspaceKey, target: input.target });
 }
 
 /**
@@ -223,6 +271,18 @@ export function useForkAgent(
           prepareForkDraft,
           missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
           failedMessage: t("message.actions.forkFailed"),
+          isCompact,
+        });
+        return;
+      }
+
+      if (target === "split") {
+        await openSplitPaneDraft({
+          serverId,
+          request,
+          draftSetup,
+          prepareForkDraft,
+          missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
           isCompact,
         });
         return;

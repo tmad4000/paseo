@@ -133,6 +133,11 @@ export const ptBR: TranslationResources = {
     noReplyYet: "Aguarde primeiro a resposta da conversa paralela.",
     parentUnavailable: "A conversa principal não está mais disponível.",
   },
+  sidebarSessions: {
+    actions: "Ações para {{title}}",
+    archive: "Arquivar sessão",
+    open: "Abrir {{title}} em {{meta}}",
+  },
   sessionPins: {
     title: "Sessões fixadas",
     pin: "Fixar sessão",
@@ -336,6 +341,7 @@ export const ptBR: TranslationResources = {
       groupByStatus: "Agrupar por status",
       groupInOneList: "Mostrar chats em uma única lista",
       showAllSessions: "Mostrar todas as sessões",
+      groupAsSessions: "Mostrar chats como sessões",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "trocar modelo mudar modelo definir modelo selecionar modelo",
       thinkingGroupLabel: "Raciocínio",
@@ -907,6 +913,7 @@ export const ptBR: TranslationResources = {
       reply: "Responder",
       forkMenu: "Bifurcar mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
+      forkInSplitPane: "Bifurcar em um painel dividido",
       forkInNewWorkspace: "Bifurcar em um novo workspace",
       forkUnavailable: "Atualize o host para usar isto.",
       forkMissingWorkspace: "Este agente não está em um workspace.",
@@ -1187,6 +1194,12 @@ export const ptBR: TranslationResources = {
       loading: "Carregando...",
       modified: "Alterações não salvas",
       newActivity: "Nova atividade",
+      seenNotRead: "Visto, não lido",
+      agentRunning: "Agente em execução",
+      needsInput: "Precisa de resposta",
+      readLayerUnread: "Não lido",
+      seenLayerNotSeen: "Não visto desde a última atividade",
+      seenLayerSeen: "Visto",
       loadingAgentTitle: "Carregando título do agente",
       fallback: {
         newAgent: "Novo agente",
@@ -1258,6 +1271,9 @@ export const ptBR: TranslationResources = {
         splitDown: "Dividir painel abaixo",
         splitRightWithSession: "Dividir à direita com sessão…",
         splitDownWithSession: "Dividir para baixo com sessão…",
+        dropSessionOtherHost:
+          "Somente sessões deste host podem ser soltas aqui. Use uma visualização para misturar hosts.",
+        dropSessionNoSession: "Esse espaço de trabalho não tem sessão para abrir.",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",
@@ -1724,6 +1740,9 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Ações de revisão para {{title}}",
+    needsInputSessions: "Precisa de intervenção ({{count}})",
+    needsInputSince: "Precisa de intervenção desde {{time}}",
+    sessionActions: "Ações da sessão {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} aba aberta",
     openTabs: "{{count}} abas abertas",
@@ -1850,6 +1869,7 @@ export const ptBR: TranslationResources = {
         project: "Projeto",
         status: "Status",
         list: "Lista única",
+        sessions: "Sessões",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -1967,6 +1987,14 @@ export const ptBR: TranslationResources = {
       status: {
         serviceRunning: "Serviço {{name}} em execução",
         serviceUnhealthy: "Serviço {{name}} com falha",
+        indicator: {
+          loading: "Iniciando",
+          running: "Trabalhando: um agente está em execução",
+          needs_input: "Precisa de você: um agente aguarda permissão ou resposta",
+          attention: "Concluído: há saída nova não lida",
+          failed: "Erro: um agente parou com um erro",
+          done: "Ocioso: nada novo",
+        },
         creating: "Criando...",
       },
       checks: {
@@ -1980,6 +2008,8 @@ export const ptBR: TranslationResources = {
       actions: {
         markAsRead: "Marcar como lido",
         markAsReadNamed: "Marcar {{name}} como lido",
+        markAsReadHint:
+          "Marcar como lido: limpa o indicador de concluído/erro deste espaço de trabalho",
         menu: "Ações do workspace",
         newWorkspace: "Novo workspace",
         showMore: "Mostrar mais",
@@ -2997,6 +3027,12 @@ export const ptBR: TranslationResources = {
         label: "Marcar chats como lidos ao abrir",
         description:
           "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
+      },
+      sortTabsByActivity: {
+        section: "Abas",
+        label: "Ordenar abas por atividade recente",
+        description:
+          "Quando ativado, o chat com a atividade mais recente vai para o início da fileira de abas. Quando desativado, as abas ficam onde você as colocou",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

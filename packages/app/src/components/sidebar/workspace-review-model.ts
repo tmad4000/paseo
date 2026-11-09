@@ -16,13 +16,26 @@ export type ReviewAgent = Pick<
   | "requiresAttention"
   | "attentionReason"
   | "messageActivity"
->;
+> &
+  Partial<Pick<Agent, "attentionTimestamp" | "lastActivityAt" | "updatedAt">>;
 
-function needsReview<T extends ReviewAgent>(agent: T, agents: ReadonlyMap<string, T>): boolean {
+type AttentionBucket = "attention" | "needs_input";
+
+function needsAttention<T extends ReviewAgent>(
+  agent: T,
+  agents: ReadonlyMap<string, T>,
+  bucket: AttentionBucket,
+): boolean {
   if (agent.archivedAt || !agent.workspaceId) return false;
   const review = getReviewStatus(agent.labels);
   const parent = agent.parentAgentId ? agents.get(agent.parentAgentId) : undefined;
-  if (!isWorkspaceRootAgent(agent, parent) && !shouldAutoOpenAgentTab(agent) && !review)
+  // A blocked child must be reachable even when it normally lives under its parent.
+  if (
+    bucket === "attention" &&
+    !isWorkspaceRootAgent(agent, parent) &&
+    !shouldAutoOpenAgentTab(agent) &&
+    !review
+  )
     return false;
   let status = agent.status;
   if (agent.turn.phase === "open") status = "running";
@@ -34,12 +47,14 @@ function needsReview<T extends ReviewAgent>(agent: T, agents: ReadonlyMap<string
       pendingPermissionCount: agent.pendingPermissions.length,
       requiresAttention: agent.requiresAttention,
       attentionReason: agent.attentionReason,
-    }) === "attention"
+    }) === bucket
   );
 }
 
 /** Index each immutable host directory once, rather than rescanning it for every workspace row. */
-export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
+export function createWorkspaceReviewSelector<T extends ReviewAgent>(
+  bucket: AttentionBucket = "attention",
+) {
   const cache = new WeakMap<ReadonlyMap<string, T>, ReadonlyMap<string, readonly T[]>>();
   const empty: readonly T[] = [];
   return (agents: ReadonlyMap<string, T> | undefined, workspaceId: string): readonly T[] => {
@@ -48,16 +63,14 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
     if (!index) {
       const next = new Map<string, T[]>();
       for (const agent of agents.values()) {
-        if (!agent.workspaceId || !needsReview(agent, agents)) continue;
+        if (!agent.workspaceId || !needsAttention(agent, agents, bucket)) continue;
         const rows = next.get(agent.workspaceId) ?? [];
         if (rows.length === 0) next.set(agent.workspaceId, rows);
         rows.push(agent);
       }
+      const time = bucket === "needs_input" ? needsInputSince : reviewReplyTime;
       for (const rows of next.values())
-        rows.sort(
-          (left, right) =>
-            reviewReplyTime(right) - reviewReplyTime(left) || left.id.localeCompare(right.id),
-        );
+        rows.sort((left, right) => time(right) - time(left) || left.id.localeCompare(right.id));
       index = next;
       cache.set(agents, index);
     }
@@ -66,6 +79,34 @@ export function createWorkspaceReviewSelector<T extends ReviewAgent>() {
 }
 
 export const workspaceReviewAgents = createWorkspaceReviewSelector<Agent>();
+export const workspaceNeedsInputAgents = createWorkspaceReviewSelector<Agent>("needs_input");
+
+function epoch(date: Date | null | undefined): number {
+  const time = date?.getTime() ?? Number.NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+/**
+ * When a session started needing input, in epoch ms (0 when unknown).
+ *
+ * A permission attention edge carries its own timestamp. Otherwise the session's last activity is
+ * the moment it blocked: the host stamps every live stream event, the permission request included,
+ * and a session waiting on someone emits nothing further. A manual Needs input marker stamps it too.
+ */
+export function needsInputSince(agent: ReviewAgent): number {
+  if (agent.attentionReason === "permission") {
+    const attention = epoch(agent.attentionTimestamp);
+    if (attention > 0) return attention;
+  }
+  return epoch(agent.lastActivityAt) || epoch(agent.updatedAt);
+}
+
+/** The newest needs-input start across a workspace's sessions, or null when none needs input. */
+export function newestNeedsInputSince(agents: readonly ReviewAgent[]): number | null {
+  // Rows are already sorted newest first.
+  const newest = agents[0];
+  return newest ? needsInputSince(newest) || null : null;
+}
 
 function reviewReplyTime(agent: ReviewAgent): number {
   const reply = Date.parse(agent.messageActivity?.lastAssistantMessageAt ?? "");
