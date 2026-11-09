@@ -1,6 +1,12 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import type { ExplorerTab, MobilePanelView } from "@/stores/panel-store";
+import {
+  FOCUS_HISTORY_STORAGE_KEY,
+  parseStoredFocusHistory,
+  type FocusHistoryStorage,
+} from "./focus-history-storage";
 
 export interface NavigationViewState {
   panel: MobilePanelView;
@@ -25,6 +31,7 @@ export interface RouteFocusLocation {
 export type NavigationFocusLocation = WorkspaceFocusLocation | RouteFocusLocation;
 
 export interface NavigationFocusHistorySnapshot {
+  hydrated: boolean;
   /** There is history that way and nothing is in flight; what the buttons show. */
   canGoBack: boolean;
   canGoForward: boolean;
@@ -103,17 +110,31 @@ interface PendingRestore {
   };
 }
 
+interface FocusHistoryOptions {
+  maxLength?: number;
+  storage?: FocusHistoryStorage;
+}
+
 /**
  * Browser-style focus history. `past` and `future` are stacks whose last entry is the
  * next Back and Forward target respectively. Moving through history keeps both stacks;
  * focusing anywhere new discards the forward branch, as a browser does.
  */
-export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
+export function createNavigationFocusHistory({
+  maxLength = MAX_HISTORY_LENGTH,
+  storage,
+}: FocusHistoryOptions = {}) {
   let current: NavigationFocusLocation | null = null;
   let past: NavigationFocusLocation[] = [];
   let future: NavigationFocusLocation[] = [];
   let pending: PendingRestore | null = null;
+  let hydrated = !storage;
+  let hydrationPromise: Promise<void> | null = null;
+  let writes = Promise.resolve();
+  let awaitingStartupObservation = false;
+  const beforeHydration: Array<() => void> = [];
   let snapshot: NavigationFocusHistorySnapshot = {
+    hydrated,
     canGoBack: false,
     canGoForward: false,
     current: null,
@@ -123,8 +144,9 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
   };
   const listeners = new Set<() => void>();
 
-  function publish(): void {
+  function publish(save = true): void {
     snapshot = {
+      hydrated,
       canGoBack: pending === null && past.length > 0,
       canGoForward: pending === null && future.length > 0,
       current,
@@ -132,6 +154,16 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       backEntries: past.toReversed(),
       forwardEntries: future.toReversed(),
     };
+    // Persist only confirmed focus. A restart midway through a Back/Forward
+    // navigation must retain the last location that actually landed.
+    if (save && hydrated && storage && !pending) {
+      const serialized = JSON.stringify({ version: 1, current, past, future });
+      writes = writes
+        .then(() => storage.write(serialized))
+        .catch((error: unknown) => {
+          console.warn("Failed to persist navigation focus history", error);
+        });
+    }
     for (const listener of listeners) {
       listener();
     }
@@ -148,9 +180,10 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     steps: number,
   ): NavigationFocusLocation | null {
     const source = direction === "back" ? past : future;
-    if (pending || !Number.isInteger(steps) || steps < 1 || steps > source.length) {
+    if (!hydrated || pending || !Number.isInteger(steps) || steps < 1 || steps > source.length) {
       return null;
     }
+    awaitingStartupObservation = false;
     const previous = { current, past, future };
     for (let step = 0; step < steps; step += 1) {
       if (direction === "back") {
@@ -200,7 +233,7 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     }
   }
 
-  return {
+  const history = {
     subscribe(listener: () => void): () => void {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -210,7 +243,56 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       return snapshot;
     },
 
+    hydrate(): Promise<void> {
+      if (hydrationPromise) return hydrationPromise;
+      if (!storage) return Promise.resolve();
+      hydrationPromise = storage
+        .read()
+        .then((stored) => {
+          const saved = parseStoredFocusHistory(stored);
+          if (!saved) return undefined;
+          current = saved.current;
+          past = saved.past.slice(-maxLength);
+          future = saved.future.slice(-maxLength);
+          awaitingStartupObservation = current !== null;
+          return undefined;
+        })
+        .catch((error: unknown) => {
+          console.warn("Failed to load navigation focus history", error);
+        })
+        .finally(() => {
+          hydrated = true;
+          for (const operation of beforeHydration.splice(0)) operation();
+          publish(false);
+        });
+      return hydrationPromise;
+    },
+
+    flushPersistence(): Promise<void> {
+      return writes;
+    },
+
     record(next: NavigationFocusLocation): void {
+      if (!hydrated) {
+        beforeHydration.push(() => history.record(next));
+        return;
+      }
+      if (awaitingStartupObservation) {
+        awaitingStartupObservation = false;
+        // The restored layout already focuses this tab. Panel defaults or a
+        // rebuilt pane ID on launch are not a new visit and must keep Forward.
+        const sameStartupTab =
+          current?.kind === "workspace" &&
+          next.kind === "workspace" &&
+          navigationFocusLocationsShareRoute(current, next) &&
+          current.tabId === next.tabId &&
+          targetsEqual(current.target, next.target);
+        if (sameStartupTab) {
+          current = next;
+          publish();
+          return;
+        }
+      }
       if (pending) {
         if (!navigationFocusLocationsShareRoute(next, pending.target)) {
           return;
@@ -238,6 +320,10 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
 
     /** Closed empty tabs have no resource to reopen. Remove their visits too. */
     forgetTab(serverId: string, workspaceId: string, tabId: string): void {
+      if (!hydrated) {
+        beforeHydration.push(() => history.forgetTab(serverId, workspaceId, tabId));
+        return;
+      }
       if (pending) {
         abandon(pending);
         pending = null;
@@ -283,6 +369,11 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
     },
 
     reset(): void {
+      if (!hydrated) {
+        beforeHydration.push(() => history.reset());
+        return;
+      }
+      awaitingStartupObservation = false;
       current = null;
       past = [];
       future = [];
@@ -290,8 +381,15 @@ export function createNavigationFocusHistory(maxLength = MAX_HISTORY_LENGTH) {
       publish();
     },
   };
+  return history;
 }
 
 export type NavigationFocusHistory = ReturnType<typeof createNavigationFocusHistory>;
 
-export const navigationFocusHistory = createNavigationFocusHistory();
+export const navigationFocusHistory = createNavigationFocusHistory({
+  storage: {
+    read: () => AsyncStorage.getItem(FOCUS_HISTORY_STORAGE_KEY),
+    write: (value) => AsyncStorage.setItem(FOCUS_HISTORY_STORAGE_KEY, value),
+  },
+});
+void navigationFocusHistory.hydrate();
