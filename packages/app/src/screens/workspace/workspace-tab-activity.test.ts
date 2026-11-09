@@ -171,7 +171,6 @@ describe("workspace tab activity", () => {
       viewingMarksRead: input.legacy ?? false,
       readThroughByAgentId: new Map(input.read ?? []),
       attentionAgentIds: new Set((input.attention ?? []).map(([id]) => id)),
-      attentionAtByAgentId: new Map(input.attention ?? []),
       seenThroughByAgentId: new Map(input.seen ?? []),
     });
     const at = (time: number) =>
@@ -215,23 +214,37 @@ describe("workspace tab activity", () => {
       expect(again.get("b")?.readState).toBe("new");
     });
 
-    it("goes back to new when the host stamps fresh attention (finish or Mark as unread)", () => {
-      const seenFinish = reconcileTabActivity(
+    it("keeps seen through a Mark as unread: read and seen are independent layers", () => {
+      // Seen through 20; the host then stamps fresh attention (Mark as unread) without new activity.
+      const seen = reconcileTabActivity(
         new Map(),
         tabs,
         at(20),
         onA,
-        policy({ seen: [["b", 25]], attention: [["b", 25]] }),
+        policy({ seen: [["b", 20]], attention: [["b", 25]] }),
       );
-      expect(seenFinish.get("b")?.readState).toBe("seen");
+      expect(seen.get("b")?.unread).toBe(true);
+      expect(seen.get("b")?.readState).toBe("seen");
       const markedUnread = reconcileTabActivity(
-        seenFinish,
+        seen,
         tabs,
         at(20),
         onA,
-        policy({ seen: [["b", 25]], attention: [["b", 40]] }),
+        policy({ seen: [["b", 20]], attention: [["b", 40]] }),
       );
-      expect(markedUnread.get("b")?.readState).toBe("new");
+      expect(markedUnread.get("b")?.unread).toBe(true);
+      expect(markedUnread.get("b")?.readState).toBe("seen");
+    });
+
+    it("unread by hand but never seen on this device stays new", () => {
+      const marked = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        onA,
+        policy({ attention: [["b", 40]] }),
+      );
+      expect(marked.get("b")?.readState).toBe("new");
     });
 
     it("shows a finish watched on screen as seen, not new, without a filled flash", () => {
@@ -307,10 +320,9 @@ describe("workspace tab activity", () => {
       expect(unread.has("c")).toBe(false);
     });
 
-    it("measures seen against the later of activity and attention", () => {
-      expect(agentSeenClock(10, undefined)).toBe(10);
-      expect(agentSeenClock(10, 30)).toBe(30);
-      expect(agentSeenClock(40, 30)).toBe(40);
+    it("measures seen against activity only", () => {
+      expect(agentSeenClock(10)).toBe(10);
+      expect(agentSeenClock(40)).toBe(40);
     });
   });
 

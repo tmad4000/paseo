@@ -1191,6 +1191,11 @@ export const ru: TranslationResources = {
       modified: "Несохранённые изменения",
       newActivity: "Новая активность",
       seenNotRead: "Просмотрено, не прочитано",
+      agentRunning: "Агент работает",
+      needsInput: "Нужен ответ",
+      readLayerUnread: "Не прочитано",
+      seenLayerNotSeen: "Не просмотрено после последней активности",
+      seenLayerSeen: "Просмотрено",
       loadingAgentTitle: "Загрузка названия агента",
       fallback: {
         newAgent: "Новый агент",

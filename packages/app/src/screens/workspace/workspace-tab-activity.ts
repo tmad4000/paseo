@@ -49,8 +49,6 @@ export interface TabReadPolicy {
    * callers that never show the seen level can leave it out.
    */
   seenThroughByAgentId?: ReadonlyMap<string, number>;
-  /** Attention timestamps of the agents in `attentionAgentIds`, part of the seen clock. */
-  attentionAtByAgentId?: ReadonlyMap<string, number>;
 }
 
 const LEGACY_TAB_READ_POLICY: TabReadPolicy = {
@@ -60,12 +58,13 @@ const LEGACY_TAB_READ_POLICY: TabReadPolicy = {
 };
 
 /**
- * What "seen through" is measured against: the later of the agent's last activity and its host
- * attention stamp. A turn finishing, or a "Mark as unread" from any device, moves it forward and
- * so turns a seen ring back into a filled badge.
+ * What "seen through" is measured against: the agent's last activity. Host attention is left
+ * out on purpose — read and seen are independent layers, so "Mark as unread" (which stamps fresh
+ * attention) brings back the read ring without erasing that this device has seen the chat. New
+ * activity, including a turn finishing, moves the clock forward and so does reset seen.
  */
-export function agentSeenClock(activityAt: number, attentionAt: number | undefined): number {
-  return Math.max(activityAt, attentionAt ?? 0);
+export function agentSeenClock(activityAt: number): number {
+  return activityAt;
 }
 
 function deriveTabReadState(input: {
@@ -82,8 +81,7 @@ function deriveTabReadState(input: {
   if (policy.viewingMarksRead) return "new";
   if (dwelledTabIds.has(tabId)) return "seen";
   const seenThrough = policy.seenThroughByAgentId?.get(agentId) ?? 0;
-  const clock = agentSeenClock(lastActivityAt, policy.attentionAtByAgentId?.get(agentId));
-  return seenThrough > 0 && seenThrough >= clock ? "seen" : "new";
+  return seenThrough > 0 && seenThrough >= agentSeenClock(lastActivityAt) ? "seen" : "new";
 }
 
 export function reconcileTabActivity(

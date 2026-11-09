@@ -1195,6 +1195,11 @@ export const ptBR: TranslationResources = {
       modified: "Alterações não salvas",
       newActivity: "Nova atividade",
       seenNotRead: "Visto, não lido",
+      agentRunning: "Agente em execução",
+      needsInput: "Precisa de resposta",
+      readLayerUnread: "Não lido",
+      seenLayerNotSeen: "Não visto desde a última atividade",
+      seenLayerSeen: "Visto",
       loadingAgentTitle: "Carregando título do agente",
       fallback: {
         newAgent: "Novo agente",

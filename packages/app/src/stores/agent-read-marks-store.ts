@@ -8,16 +8,15 @@ import { create } from "zustand";
  *
  * Next to it, the clock each agent was *seen* through: its tab sat on screen long enough to be
  * looked at (see `TAB_SEEN_DWELL_MS`). Seen is weaker than read — it only turns a tab's filled
- * "new activity" badge into a hollow ring and never clears host attention. The seen clock is the
- * later of the agent's activity and its attention timestamp (`agentSeenClock`), so a fresh
- * finish or a "Mark as unread" (which stamps new attention) makes the badge filled again.
+ * "new activity" dot off, leaving the hollow read ring, and never clears host attention. The seen
+ * clock is the agent's activity (`agentSeenClock`): new activity resets seen, while "Mark as
+ * unread" only restores the read ring and leaves seen alone.
  */
 interface AgentReadMarksState {
   readThroughByAgentKey: Map<string, number>;
   seenThroughByAgentKey: Map<string, number>;
   markReadThrough: (input: { serverId: string; agentId: string; activityAt: number }) => void;
   markSeenThrough: (input: { serverId: string; agentId: string; seenAt: number }) => void;
-  clearSeen: (input: { serverId: string; agentId: string }) => void;
 }
 
 export function agentReadMarkKey(serverId: string, agentId: string): string {
@@ -44,14 +43,6 @@ export const useAgentReadMarksStore = create<AgentReadMarksState>()((set) => ({
       if ((state.seenThroughByAgentKey.get(key) ?? 0) >= seenThrough) return state;
       const next = new Map(state.seenThroughByAgentKey);
       next.set(key, seenThrough);
-      return { seenThroughByAgentKey: next };
-    }),
-  clearSeen: ({ serverId, agentId }) =>
-    set((state) => {
-      const key = agentReadMarkKey(serverId, agentId);
-      if (!state.seenThroughByAgentKey.has(key)) return state;
-      const next = new Map(state.seenThroughByAgentKey);
-      next.delete(key);
       return { seenThroughByAgentKey: next };
     }),
 }));

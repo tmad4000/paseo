@@ -104,7 +104,7 @@ export function ProjectLeadingVisual({
 
 // The project icon (the lettered box) is what marks a row as a *project* rather than a
 // workspace, so it always stays and status annotates it instead of replacing it. Every
-// surfaced bucket lands in the identical corner badge — an amber alert glyph for needs_input,
+// surfaced bucket lands in the identical corner badge — a red alert glyph for needs_input,
 // a colored disc for the rest, nothing for done — so the badge reads as one fixed shell and
 // only its contents change.
 export function ProjectStatusIndicator({
@@ -173,6 +173,7 @@ export function ProjectStatusIndicator({
 export function SessionStatusIndicator({
   children,
   statusBucket,
+  running = false,
   backdrop,
   seen = false,
   testID,
@@ -180,12 +181,19 @@ export function SessionStatusIndicator({
   /** The provider glyph the badge annotates. */
   children: ReactNode;
   statusBucket: SidebarStateBucket;
+  /**
+   * Working right now, independent of the bucket. A chat that is running and needs input shows
+   * both: the running ring in the corner and the needs-input alert at the top-left.
+   */
+  running?: boolean;
   backdrop: SidebarSurfaceBackdrop;
   /** Unread, but looked at on this device: the dot becomes a hollow ring. */
   seen?: boolean;
   testID?: string;
 }) {
-  const badgeContent = getProjectStatusBadgeContent(statusBucket);
+  const runningWithAlert = running && statusBucket === "needs_input";
+  const badgeBucket: SidebarStateBucket = runningWithAlert ? "running" : statusBucket;
+  const badgeContent = getProjectStatusBadgeContent(badgeBucket);
   return (
     <View
       style={styles.projectLeadingVisualSlot}
@@ -196,11 +204,28 @@ export function SessionStatusIndicator({
         {badgeContent === null ? null : (
           <ProjectStatusBadge
             content={badgeContent}
-            statusBucket={statusBucket}
+            statusBucket={badgeBucket}
             backdrop={backdrop}
             seen={seen}
           />
         )}
+        {runningWithAlert ? (
+          <View
+            role="status"
+            accessibilityLabel={STATUS_BUCKET_LABELS.needs_input}
+            style={[
+              styles.statusBadge,
+              styles.statusBadgeTopLeft,
+              getStatusBadgeBackdropStyle(backdrop),
+            ]}
+            testID="session-status-needs-input-while-running"
+          >
+            <ThemedCircleAlert
+              size={STATUS_INDICATOR_ALERT_SIZE}
+              uniProps={needsInputColorMapping}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -380,6 +405,13 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
+    },
+    // The needs-input alert's spot when the running ring already holds the bottom-right corner.
+    statusBadgeTopLeft: {
+      right: undefined,
+      bottom: undefined,
+      left: STATUS_BADGE_OFFSET,
+      top: STATUS_BADGE_OFFSET,
     },
     // Same corner as the shell, re-centred for the wider ring.
     statusRingAnchor: {

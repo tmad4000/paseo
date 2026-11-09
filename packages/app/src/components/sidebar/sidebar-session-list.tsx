@@ -221,6 +221,7 @@ const SessionRow = memo(function SessionRow({
         >
           <SessionStatusIndicator
             statusBucket={row.statusBucket}
+            running={row.running}
             backdrop={backdrop}
             seen={seenNotRead}
           >

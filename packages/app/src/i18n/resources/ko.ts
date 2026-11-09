@@ -1185,6 +1185,11 @@ export const ko: TranslationResources = {
       modified: "저장되지 않은 변경사항",
       newActivity: "새 활동",
       seenNotRead: "봤지만 읽지 않음",
+      agentRunning: "에이전트 실행 중",
+      needsInput: "입력 필요",
+      readLayerUnread: "읽지 않음",
+      seenLayerNotSeen: "마지막 활동 이후 보지 않음",
+      seenLayerSeen: "봤음",
       loadingAgentTitle: "에이전트 제목 불러오는 중",
       fallback: {
         newAgent: "새 에이전트",

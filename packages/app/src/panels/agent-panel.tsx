@@ -394,6 +394,7 @@ function useAgentPanelDescriptor(
           labels: descriptorState.labels,
         })
       : null,
+    statusRunning: descriptorState.isTurnActive || descriptorState.status === "running",
   };
 }
 
