@@ -166,6 +166,11 @@ export function useCanNavigateForwardInFocusHistory(): boolean {
 }
 
 export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean }): void {
+  const hasHydratedFocusHistory = useSyncExternalStore(
+    navigationFocusHistory.subscribe,
+    () => navigationFocusHistory.getSnapshot().hydrated,
+    () => navigationFocusHistory.getSnapshot().hydrated,
+  );
   const pathname = usePathname();
   const isCompact = useIsCompactFormFactor();
   const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
@@ -190,7 +195,7 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
   );
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !hasHydratedFocusHistory) {
       return;
     }
     if (workspaceSelection) {
@@ -217,7 +222,15 @@ export function useNavigationFocusHistoryTracker({ enabled }: { enabled: boolean
     if (latestObservedLocation) {
       navigationFocusHistory.record(latestObservedLocation);
     }
-  }, [enabled, hasHydratedWorkspaceLayoutStore, layout, pathname, view, workspaceSelection]);
+  }, [
+    enabled,
+    hasHydratedFocusHistory,
+    hasHydratedWorkspaceLayoutStore,
+    layout,
+    pathname,
+    view,
+    workspaceSelection,
+  ]);
 }
 
 export function useNativeNavigationBackHandler({ enabled }: { enabled: boolean }): void {
