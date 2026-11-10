@@ -92,31 +92,41 @@ it("opens an already known session beside without a host request", async () => {
   );
 });
 it("rejects side opens across workspaces without changing the layout or route", async () => {
-  await expect(openSessionLink(href, "side", () => ({ serverId: "saved", workspaceId: "other" })))
-    .rejects.toEqual(new SessionLinkError("sideUnavailable"));
+  await expect(
+    openSessionLink(href, "side", () => ({ serverId: "saved", workspaceId: "other" })),
+  ).rejects.toEqual(new SessionLinkError("sideUnavailable"));
   expect(fixture.side).not.toHaveBeenCalled();
   expect(fixture.navigate).not.toHaveBeenCalled();
 });
-it.each(["unhydrated layout", "unknown workspace"])("rejects side opens with %s", async (condition) => {
-  fixture.hydrated = condition !== "unhydrated layout";
-  fixture.workspaceKnown = condition !== "unknown workspace";
-  await expect(openSessionLink(href, "side", active)).rejects.toEqual(new SessionLinkError("sideUnavailable"));
-  expect(fixture.side).not.toHaveBeenCalled();
-  expect(fixture.navigate).not.toHaveBeenCalled();
-});
+it.each(["unhydrated layout", "unknown workspace"])(
+  "rejects side opens with %s",
+  async (condition) => {
+    fixture.hydrated = condition !== "unhydrated layout";
+    fixture.workspaceKnown = condition !== "unknown workspace";
+    await expect(openSessionLink(href, "side", active)).rejects.toEqual(
+      new SessionLinkError("sideUnavailable"),
+    );
+    expect(fixture.side).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+  },
+);
 it("checks detail when the list record lacks a workspace", async () => {
   fixture.cached = { id: "session", workspaceId: null };
   fixture.detail = { id: "session", workspaceId: "workspace" };
   await openSessionLink(href);
   expect(fixture.fetchAgent).not.toHaveBeenCalled();
-  expect(fixture.navigate).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "workspace" }));
+  expect(fixture.navigate).toHaveBeenCalledWith(
+    expect.objectContaining({ workspaceId: "workspace" }),
+  );
 });
 it("fetches the exact agent when both cached records are unusable", async () => {
   fixture.cached = { id: "other", workspaceId: "workspace" };
   fixture.detail = { id: "session", workspaceId: " " };
   await openSessionLink(href);
   expect(fixture.fetchAgent).toHaveBeenCalledExactlyOnceWith({ agentId: "session" });
-  expect(fixture.navigate).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "workspace" }));
+  expect(fixture.navigate).toHaveBeenCalledWith(
+    expect.objectContaining({ workspaceId: "workspace" }),
+  );
 });
 it("does not connect or fetch for unknown hosts", async () => {
   fixture.known = false;
