@@ -54,6 +54,22 @@ In messages tier and find-or-start are unchanged. A row opens its chat in its ho
 does not mark it read; the row's check and menu do that, as review rows do. Keyboard workspace
 shortcuts number only the pinned workspaces in this mode.
 
+## Tabs grouping
+
+Tabs grouping lists every open tab (chats, terminals, files, browsers, plugin panels) instead of
+workspaces below the pinned section, in one headerless list across hosts. Rows come from this
+device's tab layouts (`packages/app/src/components/sidebar/sidebar-tabs.ts`), so the order is the
+sidebar's workspace order under the chosen sort, then each workspace's pane and tab order. Empty
+new-tab placeholders are left out. A row opens its workspace with that tab focused.
+
+Tab layouts live on the device, not the host. A workspace never opened on this device has no
+layout, so its unarchived top-level chats stand in for its tabs until you open it. Listing the
+tabs another device has open needs host-side layout sync, which does not exist yet.
+
+The find field keeps the workspaces it would keep in the other modes (names and tab titles) and
+lists all their tabs. Non-chat tab titles come from each panel's descriptor hook, which a pure
+builder cannot call, so the filter does not narrow to single tabs.
+
 ## Sessions needing input
 
 Workspace rows expose **Needs input (N)** with up to three exact session titles and an

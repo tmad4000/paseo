@@ -10,15 +10,17 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
  * How the sidebar arranges what sits below the pinned section: workspaces under project headers,
  * under status headers, or as one flat list in the chosen sort order (Codex's "In one list"),
  * where each row still carries its project icon, status badge and project name; or, in
- * `sessions`, one flat list of the chats themselves rather than their workspaces.
+ * `sessions`, one flat list of the chats themselves rather than their workspaces; or, in `tabs`,
+ * one flat list of every open tab (chats, terminals, files, browsers) across workspaces.
  */
-export type SidebarGroupMode = "project" | "status" | "list" | "sessions";
+export type SidebarGroupMode = "project" | "status" | "list" | "sessions" | "tabs";
 
 export const SIDEBAR_GROUP_MODES: readonly SidebarGroupMode[] = [
   "project",
   "status",
   "list",
   "sessions",
+  "tabs",
 ];
 
 /**
@@ -29,7 +31,7 @@ export type SidebarFilterScope = "names" | "messages";
 
 const SIDEBAR_VIEW_STORAGE_KEY = "sidebar-view";
 const LEGACY_SIDEBAR_GROUP_MODE_STORAGE_KEY = "sidebar-group-mode";
-const SIDEBAR_VIEW_STORE_VERSION = 8;
+const SIDEBAR_VIEW_STORE_VERSION = 9;
 
 /**
  * The key standing for "this workspace carries no labels at all".
@@ -115,7 +117,14 @@ interface SidebarViewPersistedState {
   mineOnly?: boolean;
 }
 
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "list", "sessions", "label"]);
+const PersistedSidebarGroupModeSchema = z.enum([
+  "project",
+  "status",
+  "list",
+  "sessions",
+  "tabs",
+  "label",
+]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
@@ -157,6 +166,11 @@ function readHostFilters(persistedState: SidebarViewStorageState): string[] {
   return legacyHostFilter ? [legacyHostFilter] : [];
 }
 
+// "label" was a grouping mode once; it and anything unknown fall back to project grouping.
+function readGroupMode(mode: SidebarViewStorageState["groupMode"]): SidebarGroupMode {
+  return mode && mode !== "label" ? mode : "project";
+}
+
 export function migrateSidebarViewState(persistedState: unknown): SidebarViewPersistedState {
   const result = SidebarViewPersistedStateSchema.safeParse(persistedState);
   if (!result.success) {
@@ -182,10 +196,7 @@ export function migrateSidebarViewState(persistedState: unknown): SidebarViewPer
   }
 
   return {
-    groupMode:
-      state.groupMode === "status" || state.groupMode === "list" || state.groupMode === "sessions"
-        ? state.groupMode
-        : "project",
+    groupMode: readGroupMode(state.groupMode),
     sortMode: state.sortMode ?? "recent",
     hostFilters: readHostFilters(state),
     projectFilters: state.projectFilters ?? [],

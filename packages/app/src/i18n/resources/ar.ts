@@ -338,6 +338,7 @@ export const ar: TranslationResources = {
       groupInOneList: "عرض المحادثات في قائمة واحدة",
       showAllSessions: "إظهار كل الجلسات",
       groupAsSessions: "عرض المحادثات كجلسات",
+      groupAsTabs: "عرض علامات التبويب المفتوحة في الشريط الجانبي",
       modelGroupLabel: "النموذج",
       modelSearchKeywords: "تبديل النموذج تغيير النموذج تعيين النموذج اختيار النموذج",
       thinkingGroupLabel: "التفكير",
@@ -1843,6 +1844,7 @@ export const ar: TranslationResources = {
         status: "الحالة",
         list: "قائمة واحدة",
         sessions: "الجلسات",
+        tabs: "علامات التبويب",
         labels: "التسميات",
       },
       titleSource: {

@@ -341,6 +341,7 @@ export const ja: TranslationResources = {
       groupInOneList: "チャットを1つのリストで表示",
       showAllSessions: "すべてのセッションを表示",
       groupAsSessions: "チャットをセッションとして表示",
+      groupAsTabs: "サイドバーに開いているタブを表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
       thinkingGroupLabel: "思考",
@@ -1861,6 +1862,7 @@ export const ja: TranslationResources = {
         status: "ステータス",
         list: "1つのリスト",
         sessions: "セッション",
+        tabs: "タブ",
         labels: "ラベル",
       },
       titleSource: {

@@ -347,3 +347,26 @@ it("keeps sessions mode across a migration", () => {
   expect(useSidebarViewStore.getState().groupMode).toBe("sessions");
   useSidebarViewStore.getState().setGroupMode("project");
 });
+
+it("keeps tabs mode across a save and a version migration", () => {
+  useSidebarViewStore.getState().setGroupMode("tabs");
+  const saved = useSidebarViewStore.persist
+    .getOptions()
+    .partialize?.(useSidebarViewStore.getState());
+  expect(migrateSidebarViewState(JSON.parse(JSON.stringify(saved))).groupMode).toBe("tabs");
+  useSidebarViewStore.getState().setGroupMode("project");
+});
+
+it("carries every older persisted grouping mode into the tabs-aware version", () => {
+  for (const mode of ["project", "status", "list", "sessions"] as const) {
+    expect(migrateSidebarViewState({ groupMode: mode, sortMode: "manual" })).toMatchObject({
+      groupMode: mode,
+      sortMode: "manual",
+    });
+  }
+  expect(migrateSidebarViewState({ groupMode: "tabs", mineOnly: true })).toMatchObject({
+    groupMode: "tabs",
+    mineOnly: true,
+  });
+  expect(migrateSidebarViewState({ groupMode: "bogus" }).groupMode).toBe("project");
+});

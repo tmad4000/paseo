@@ -23,6 +23,7 @@ import {
   Globe,
   List,
   MessagesSquare,
+  PanelTop,
   Server,
   Settings2,
   Tag,
@@ -94,6 +95,7 @@ const GROUPING_ICONS: Record<SidebarGroupMode, OptionIcon> = {
   status: withUnistyles(CircleDashed),
   list: withUnistyles(List),
   sessions: withUnistyles(MessagesSquare),
+  tabs: withUnistyles(PanelTop),
 };
 
 const TITLE_SOURCE_ICONS: Record<WorkspaceTitleSource, OptionIcon> = {
@@ -134,6 +136,7 @@ const GROUPING_LABEL_KEYS: Record<SidebarGroupMode, string> = {
   status: "sidebar.display.grouping.status",
   list: "sidebar.display.grouping.list",
   sessions: "sidebar.display.grouping.sessions",
+  tabs: "sidebar.display.grouping.tabs",
 };
 
 const TITLE_SOURCE_LABEL_KEYS: Record<WorkspaceTitleSource, string> = {

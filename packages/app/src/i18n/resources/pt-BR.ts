@@ -342,6 +342,7 @@ export const ptBR: TranslationResources = {
       groupInOneList: "Mostrar chats em uma única lista",
       showAllSessions: "Mostrar todas as sessões",
       groupAsSessions: "Mostrar chats como sessões",
+      groupAsTabs: "Mostrar abas abertas na barra lateral",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "trocar modelo mudar modelo definir modelo selecionar modelo",
       thinkingGroupLabel: "Raciocínio",
@@ -1880,6 +1881,7 @@ export const ptBR: TranslationResources = {
         status: "Status",
         list: "Lista única",
         sessions: "Sessões",
+        tabs: "Abas",
         labels: "Etiquetas",
       },
       titleSource: {

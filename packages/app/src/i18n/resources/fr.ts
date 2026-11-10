@@ -341,6 +341,7 @@ export const fr: TranslationResources = {
       groupInOneList: "Afficher les chats en une seule liste",
       showAllSessions: "Afficher toutes les sessions",
       groupAsSessions: "Afficher les chats en sessions",
+      groupAsTabs: "Afficher les onglets ouverts dans la barre latérale",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -1887,6 +1888,7 @@ export const fr: TranslationResources = {
         status: "Statut",
         list: "Une seule liste",
         sessions: "Sessions",
+        tabs: "Onglets",
         labels: "Libellés",
       },
       titleSource: {
