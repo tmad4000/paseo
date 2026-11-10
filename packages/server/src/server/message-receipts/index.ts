@@ -39,7 +39,10 @@ interface SendMessageInput {
 /** Owns message delivery receipts; creation is owned by CreationService. */
 export class MessageReceipts {
   private readonly pending = new Map<string, Promise<void>>();
-  /** Receipts whose dispatch this process started, so its in-memory timeline saw the outcome. */
+  /**
+   * Receipts left pending by a dispatch this process started, so its in-memory
+   * timeline saw the outcome. Cleared once the receipt is settled either way.
+   */
   private readonly dispatchedHere = new Set<string>();
   /** Bumped on every write so a caller never joins a scan that predates it. */
   private writeGeneration = 0;
@@ -205,6 +208,7 @@ export class MessageReceipts {
     } else {
       await this.mutate(() => rm(file, { force: true }));
     }
+    this.dispatchedHere.delete(key);
     return true;
   }
 
@@ -264,10 +268,12 @@ export class MessageReceipts {
       // may have reached the provider and stays guarded as outcome-unknown.
       if (isPromptNotSubmittedError(error)) {
         await this.mutate(() => rm(file, { force: true }));
+        this.dispatchedHere.delete(key);
       }
       throw error;
     }
     await this.write(file, { ...receipt, state: "completed" });
+    this.dispatchedHere.delete(key);
   }
 }
 
