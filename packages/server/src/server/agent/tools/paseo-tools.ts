@@ -55,6 +55,8 @@ import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
 import { expandUserPath, isSameOrDescendantPath, resolvePathFromBase } from "../../path-utils.js";
 import type { TerminalManager } from "../../../terminal/terminal-manager.js";
+import { encodeTerminalKeyInput } from "@getpaseo/protocol/terminal-key-input";
+import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import type { CreatePaseoWorktreeWorkflowFn } from "../../worktree-session.js";
 import type { ScheduleService } from "../../schedule/service.js";
 import {
@@ -135,7 +137,7 @@ export interface PaseoToolHostDependencies {
   github?: ForgeService;
   workspaceGitService?: Pick<
     WorkspaceGitService,
-    "getSnapshot" | "listWorktrees" | "resolveRepoRoot"
+    "getSnapshot" | "listWorktrees" | "resolveRepoRoot" | "invalidateWorktrees"
   >;
   findWorkspaceIdForCwd?: ArchiveDependencies["findWorkspaceIdForCwd"];
   listActiveWorkspaces?: ArchiveDependencies["listActiveWorkspaces"];
@@ -581,37 +583,44 @@ const TerminalSummarySchema = z.object({
   cwd: z.string(),
 });
 
-function resolveTerminalKeyToken(key: string, literal: boolean): string {
+interface TerminalKeyTokenInput {
+  key: string;
+  literal: boolean;
+  preamble: string;
+}
+
+function resolveTerminalKeyToken({ key, literal, preamble }: TerminalKeyTokenInput): string {
   if (literal) {
     return key;
   }
 
-  switch (key) {
-    case "Enter":
-      return "\r";
-    case "Tab":
-      return "\t";
-    case "Escape":
-      return "\u001b";
-    case "Space":
-      return " ";
-    case "BSpace":
-      return "\u007f";
-    case "C-c":
-      return "\u0003";
-    case "C-d":
-      return "\u0004";
-    case "C-z":
-      return "\u001a";
-    case "C-l":
-      return "\u000c";
-    case "C-a":
-      return "\u0001";
-    case "C-e":
-      return "\u0005";
-    default:
-      return key;
+  const match = /^((?:[CMS]-)*)(.+)$/.exec(key);
+  if (!match) {
+    return key;
   }
+  const [, modifiers, token] = match;
+  const aliases: Record<string, string> = {
+    Up: "ArrowUp",
+    Down: "ArrowDown",
+    Left: "ArrowLeft",
+    Right: "ArrowRight",
+    BSpace: "Backspace",
+    Space: " ",
+  };
+  const inputMode = new TerminalInputModeTracker();
+  inputMode.feed(preamble);
+  const encodedKey = Object.hasOwn(aliases, token) ? aliases[token] : token;
+  return (
+    encodeTerminalKeyInput(
+      {
+        key: encodedKey,
+        ctrl: modifiers.includes("C-"),
+        alt: modifiers.includes("M-"),
+        shift: modifiers.includes("S-"),
+      },
+      { inputMode: inputMode.getState() },
+    ) || key
+  );
 }
 
 export function createPaseoToolCatalog(options: PaseoToolHostDependencies): PaseoToolCatalog {
@@ -3371,7 +3380,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "send_terminal_keys",
     {
       title: "Send terminal keys",
-      description: "Send literal text or special key tokens to a terminal session.",
+      description:
+        "Send text or a key token: Enter, Tab, Escape, Space, BSpace, Up, Down, Left, Right, Home, End, Insert, Delete, PageUp, PageDown, or F1-F12. Combine C- (Ctrl), M- (Alt), and S- (Shift) prefixes, e.g. C-r, S-Tab, or C-M-Left. Set literal=true to send the text unchanged.",
       inputSchema: {
         terminalId: z.string(),
         keys: z.string(),
@@ -3393,7 +3403,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
 
       terminal.send({
         type: "input",
-        data: resolveTerminalKeyToken(keys, literal),
+        data: resolveTerminalKeyToken({
+          key: keys,
+          literal,
+          preamble: terminal.getReplayPreamble(),
+        }),
       });
 
       return {
