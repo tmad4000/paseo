@@ -23,6 +23,7 @@ import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-m
 import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
 import {
   type ServerInfoStatusPayload,
+  type ScriptStatusUpdateMessage,
   type SessionOutboundMessage,
   type WorkspaceSetupSnapshot,
   type WSHelloMessage,
@@ -1048,6 +1049,12 @@ export class VoiceAssistantWebSocketServer {
     }
   }
 
+  public publishScriptStatusUpdate(message: ScriptStatusUpdateMessage): void {
+    for (const session of this.listSessions()) {
+      session.emitServerMessage(message);
+    }
+  }
+
   public publishSpeechReadiness(readiness: SpeechReadinessSnapshot | null): void {
     this.updateServerCapabilities(buildServerCapabilities({ readiness }));
   }
@@ -1542,6 +1549,7 @@ export class VoiceAssistantWebSocketServer {
           ),
         );
       },
+      publishScriptStatusUpdate: (message) => this.publishScriptStatusUpdate(message),
       downloadTokenStore: this.downloadTokenStore,
       pushNotifications: this.pushNotifications,
       paseoHome: this.paseoHome,
