@@ -501,6 +501,7 @@ completed), or a terminal error before any outcome was captured. It is hidden
 while a turn is starting/running and a newer outcome retires an old notice. Pins,
 asks, ordinary discussion of limits and tool HTTP 429 errors do not trigger it.
 The original provider notice remains visible, including any reset time it supplied.
+The neutral alert style keeps its heading readable in both light and dark themes.
 
 Choose a different provider/model and **Prepare handoff**. This uses the existing
 host `agentForkContext` capability and model picker to open a continuation draft

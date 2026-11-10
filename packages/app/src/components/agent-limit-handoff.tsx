@@ -92,7 +92,7 @@ export function AgentLimitHandoff({
         <Alert
           title={t("agentPanel.limitHandoff.title")}
           description={notice.message}
-          variant="warning"
+          variant="default"
         >
           <View style={styles.body}>
             <Text style={styles.description}>{t("agentPanel.limitHandoff.description")}</Text>
