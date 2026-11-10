@@ -2037,6 +2037,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2108,6 +2109,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2184,6 +2186,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2260,6 +2263,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
       workspaceGitService: {
         getSnapshot: vi.fn(async () => null),
         listWorktrees: vi.fn(async () => []),
+        invalidateWorktrees: () => {},
       },
       agentManager: {
         listAgents: () => [],
