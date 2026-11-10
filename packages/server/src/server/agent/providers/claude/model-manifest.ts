@@ -58,9 +58,20 @@ export const CLAUDE_MODEL_MANIFEST = [
     supportsFastMode: true,
   },
   {
+    id: "claude-fable-5-2",
+    label: "Fable 5.2",
+    description: "Fable 5.2 · Most powerful model",
+    // Upstream (getpaseo #9233) gates on 2.1.321; Fable 5.2 runs on 2.1.319 here (code-6cm).
+    minimumClaudeCodeVersion: "2.1.319",
+    defaultThinkingOptionId: "medium",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsFastMode: true,
+  },
+  {
     id: "claude-fable-5-1",
     label: "Fable 5.1",
-    description: "Fable 5.1 · Most powerful model",
+    description: "Fable 5.1 · Previous release",
     contextWindowMaxTokens: 1_000_000,
     effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
   },
