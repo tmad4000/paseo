@@ -326,8 +326,21 @@ jobs:
       - name: Build app dependencies
         run: npm run build:app-deps
 
+      - name: Verify provider-limit handoff in Chromium
+        timeout-minutes: 3
+        run: npm run test --workspace=@getpaseo/app -- src/components/agent-limit-handoff.browser.test.tsx --bail=1
+
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
+
+      - name: Upload handoff visual checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: limit-handoff-visual-checks
+          path: packages/app/.vitest-screenshots/limit-handoff-*.png
+          if-no-files-found: ignore
+          include-hidden-files: true
 
   sdk-tests:
     name: sdk-tests

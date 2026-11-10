@@ -26,6 +26,7 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
+import { AgentLimitHandoff } from "@/components/agent-limit-handoff";
 import { CompanionFeed } from "@/companion-stream/feed";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { ComposerDock } from "@/composer/dock";
@@ -1395,6 +1396,16 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const dockContent = (
     <View style={styles.contentContainer}>
       {streamContent}
+      {hasActiveComposer ? (
+        <AgentLimitHandoff
+          serverId={serverId}
+          workspaceId={workspaceId}
+          agentId={agentId}
+          agent={effectiveAgent}
+          entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
+          toast={toastApi}
+        />
+      ) : null}
 
       {showHistorySyncError ? (
         <TimelineSyncErrorCallout isRetrying={isRetryingHistorySync} onRetry={retryTimelineSync} />

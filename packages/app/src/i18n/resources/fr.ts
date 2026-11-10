@@ -549,6 +549,16 @@ export const fr: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Cet agent a atteint sa limite",
+      description:
+        "Choisissez un autre agent. Un brouillon de reprise inclura l’historique de ce chat dans le même espace de travail ; vérifiez-le, puis envoyez-le pour continuer.",
+      chooseAnother: "Choisissez un autre fournisseur pour ce transfert.",
+      prepare: "Préparer le transfert",
+      preparing: "Préparation…",
+      noAlternatives:
+        "Aucun autre fournisseur n’est disponible sur cet hôte. Activez-en un dans ses paramètres ou attendez la réinitialisation de la limite.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
