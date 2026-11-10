@@ -1202,6 +1202,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
   private closed = false;
+  private runtimeDead = false;
   private readonly closeController = new AbortController();
   private readonly pendingExtensionHydrations = new Set<Promise<void>>();
   // Pi publishes the terminal before acknowledging abort. Autonomous runs have no
@@ -1266,6 +1267,9 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async startTurn(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<StartTurnResult> {
+    if (this.runtimeDead) {
+      throw new Error("Pi process exited. Reload agent before sending another message.");
+    }
     if (this.activeTurnId) {
       throw new Error("A Pi turn is already active");
     }
@@ -2123,6 +2127,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private handleProcessExit(error: string): void {
+    this.runtimeDead = true;
     this.rejectAllExtensionResults(new Error(error));
     this.interruptingTurn = null;
     if (!this.activeTurnId && !this.activeTurnStarted) {
