@@ -336,6 +336,7 @@ export const zhCN: TranslationResources = {
       groupInOneList: "以单一列表显示聊天",
       showAllSessions: "显示所有会话",
       groupAsSessions: "以会话显示聊天",
+      groupAsTabs: "在侧边栏显示打开的标签页",
       modelGroupLabel: "模型",
       modelSearchKeywords: "切换模型 更改模型 设置模型 选择模型",
       thinkingGroupLabel: "思考",
@@ -1826,6 +1827,7 @@ export const zhCN: TranslationResources = {
         status: "状态",
         list: "单一列表",
         sessions: "会话",
+        tabs: "标签页",
         labels: "标签",
       },
       titleSource: {

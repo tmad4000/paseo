@@ -338,6 +338,7 @@ export const ko: TranslationResources = {
       groupInOneList: "채팅을 하나의 목록으로 표시",
       showAllSessions: "모든 세션 보기",
       groupAsSessions: "채팅을 세션으로 표시",
+      groupAsTabs: "사이드바에 열린 탭 표시",
       modelGroupLabel: "모델",
       modelSearchKeywords: "모델 전환 모델 변경 모델 설정 모델 선택",
       thinkingGroupLabel: "추론",
@@ -1855,6 +1856,7 @@ export const ko: TranslationResources = {
         status: "상태",
         list: "하나의 목록",
         sessions: "세션",
+        tabs: "탭",
         labels: "레이블",
       },
       titleSource: {

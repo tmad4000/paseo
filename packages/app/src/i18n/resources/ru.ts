@@ -341,6 +341,7 @@ export const ru: TranslationResources = {
       groupInOneList: "Показывать чаты одним списком",
       showAllSessions: "Показать все сессии",
       groupAsSessions: "Показывать чаты как сеансы",
+      groupAsTabs: "Показывать открытые вкладки в боковой панели",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -1865,6 +1866,7 @@ export const ru: TranslationResources = {
         status: "Статус",
         list: "Один список",
         sessions: "Сеансы",
+        tabs: "Вкладки",
         labels: "Метки",
       },
       titleSource: {

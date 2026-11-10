@@ -96,6 +96,7 @@ import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
+import type { SidebarTabRow } from "@/components/sidebar/sidebar-tabs";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import {
   SidebarWorkspaceContextMenu,
@@ -2045,12 +2046,16 @@ export function SidebarWorkspaceList({
   // see and falls back to "all projects" when nothing matches, so it either keeps at least one
   // project or is not applied at all — it can narrow this list but never empty it.
   // Sessions grouping filters chats, not workspaces, so its rows decide whether anything matched.
-  const { sessionRows } = useSidebarModel();
+  const { sessionRows, tabRows } = useSidebarModel();
   const sessionsMode = groupMode === "sessions";
+  const tabsMode = groupMode === "tabs";
+  let visibleRowCount = projects.length;
+  if (sessionsMode) visibleRowCount = sessionRows.length;
+  else if (tabsMode) visibleRowCount = tabRows.length;
   const sidebarFilterEmpty =
     (hasActiveLabelFilter || hasActiveSearchFilter) &&
     hasProjectsBeforeFilter &&
-    (sessionsMode ? sessionRows.length === 0 : projects.length === 0);
+    visibleRowCount === 0;
 
   // Project mode is the one that keeps its project headers; every other grouping mode is a flat
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
@@ -2072,6 +2077,7 @@ export function SidebarWorkspaceList({
         sidebarFilterEmpty={sidebarFilterEmpty}
         searchActive={hasActiveSearchFilter}
         sessionRows={sessionsMode ? sessionRows : undefined}
+        tabRows={tabsMode ? tabRows : undefined}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
       />
@@ -2127,6 +2133,7 @@ function SidebarGroupedModeList({
   sidebarFilterEmpty,
   searchActive,
   sessionRows,
+  tabRows,
   parentGestureRef,
   dragGestureHostActive,
 }: {
@@ -2144,6 +2151,7 @@ function SidebarGroupedModeList({
   sidebarFilterEmpty: boolean;
   searchActive: boolean;
   sessionRows?: readonly SidebarSessionRow[];
+  tabRows?: readonly SidebarTabRow[];
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }) {
@@ -2173,6 +2181,7 @@ function SidebarGroupedModeList({
       sidebarFilterEmpty={sidebarFilterEmpty}
       searchActive={searchActive}
       sessionRows={sessionRows}
+      tabRows={tabRows}
       parentGestureRef={parentGestureRef}
       dragGestureHostActive={dragGestureHostActive}
     />

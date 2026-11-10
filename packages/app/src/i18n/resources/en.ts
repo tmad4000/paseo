@@ -334,6 +334,7 @@ export const en = {
       groupInOneList: "Show chats in one list",
       showAllSessions: "Show all sessions",
       groupAsSessions: "Show chats as sessions",
+      groupAsTabs: "Show open tabs in the sidebar",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -1855,6 +1856,7 @@ export const en = {
         status: "Status",
         list: "One list",
         sessions: "Sessions",
+        tabs: "Tabs",
         labels: "Labels",
       },
       titleSource: {

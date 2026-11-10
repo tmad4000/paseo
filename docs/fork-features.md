@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Sidebar Tabs grouping — pfork-ly4
+
+`sidebar-tabs-grouping`: Display → Grouping offers **Tabs** beside Project, Status, One list and
+Sessions. The sidebar then lists every open tab (chats, terminals, files, browsers) across
+workspaces and hosts as flat rows: tab icon with the agent running/attention marks, tab title, and
+project · workspace (· host when several) underneath. Host, project, label and Mine filters apply;
+a row opens its workspace with that tab focused. A workspace never opened on this device lists its
+top-level chats instead, because tab layouts are per device
+([sidebar sorting](sidebar-sorting.md#tabs-grouping)). Unit coverage:
+`components/sidebar/sidebar-tabs.test.ts`, `stores/sidebar-view-store.test.ts`. Source on
+`feat/pfork-ly4-sidebar-tabs-mode`; not installed.
+
 ## Queued-message save shortcut — pspin-cnm
 
 `queued-edit-save-shortcut`: in a queued-message editor, Mod+Enter commits through the same

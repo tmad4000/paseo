@@ -56,6 +56,8 @@ import {
 } from "./sidebar-filter-context";
 import { useSidebarFilterRequestStore } from "./sidebar-filter-request";
 import { buildSidebarSessionRows, type SidebarSessionRow } from "./sidebar-sessions";
+import { buildSidebarTabRows, type SidebarTabRow } from "./sidebar-tabs";
+import { useWorkspaceLayoutStore, type WorkspaceLayout } from "@/stores/workspace-layout-store";
 import { pickUniqueSessionIdMatch, type SessionTarget } from "./find-or-start";
 import {
   hasAuthoritativeWorkspaceLabelCatalog,
@@ -91,6 +93,8 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   workspaceGroups: SidebarWorkspaceGroup[];
   /** Sessions mode's rows: every visible top-level chat in the chosen sort. Empty in other modes. */
   sessionRows: readonly SidebarSessionRow[];
+  /** Tabs mode's rows: every open tab in the visible workspaces. Empty in other modes. */
+  tabRows: readonly SidebarTabRow[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
   /** View keys of pinned and Default projects, which lead `projects` in every sort mode. */
@@ -104,6 +108,37 @@ const SidebarModelContext = createContext<SidebarModel | null>(null);
 
 const NO_AGENT_MAPS: ReadonlyArray<ReadonlyMap<string, Agent> | undefined> = [];
 const NO_SESSION_ROWS: readonly SidebarSessionRow[] = [];
+const NO_TAB_ROWS: readonly SidebarTabRow[] = [];
+const NO_LAYOUTS: Readonly<Record<string, WorkspaceLayout | undefined>> = {};
+
+/**
+ * Tabs mode's rows. Reads the layouts and agent directories only while that mode is on, so the
+ * other modes pay nothing for it.
+ */
+function useSidebarTabRows(input: {
+  enabled: boolean;
+  serverIds: readonly string[];
+  workspaces: readonly SidebarWorkspaceEntry[];
+}): readonly SidebarTabRow[] {
+  const { enabled, serverIds, workspaces } = input;
+  const layoutByWorkspace = useWorkspaceLayoutStore((state) =>
+    enabled ? state.layoutByWorkspace : NO_LAYOUTS,
+  );
+  const agentMaps = useStoreWithEqualityFn(
+    useSessionStore,
+    (state) =>
+      enabled ? serverIds.map((serverId) => state.sessions[serverId]?.agents) : NO_AGENT_MAPS,
+    shallow,
+  );
+  return useMemo(() => {
+    if (!enabled) return NO_TAB_ROWS;
+    return buildSidebarTabRows({
+      hosts: serverIds.map((serverId, index) => ({ serverId, agents: agentMaps[index] })),
+      workspaces,
+      layoutByWorkspace,
+    });
+  }, [agentMaps, enabled, layoutByWorkspace, serverIds, workspaces]);
+}
 
 /**
  * Sessions mode's rows. Reads the agent directories only while that mode is on, so the other
@@ -306,6 +341,24 @@ export function SidebarModelProvider({
       }),
     );
   }, [groupMode, list.projects, scopedWorkspaces, sortMode]);
+  // Tabs mode cannot match tab titles outside the panels' own descriptor hooks, so it keeps the
+  // workspaces the text query kept (names and tab titles) and lists all of their tabs.
+  const tabWorkspaces = useMemo(() => {
+    if (groupMode !== "tabs") return scopedWorkspaces;
+    const filtered = [...filteredWorkspaceEntriesByKey.values()];
+    if (sortMode !== "manual") return filtered;
+    return list.projects.flatMap((project) =>
+      project.workspaces.flatMap((workspace) => {
+        const entry = filteredWorkspaceEntriesByKey.get(workspace.workspaceKey);
+        return entry ? [entry] : [];
+      }),
+    );
+  }, [filteredWorkspaceEntriesByKey, groupMode, list.projects, scopedWorkspaces, sortMode]);
+  const tabRows = useSidebarTabRows({
+    enabled: groupMode === "tabs",
+    serverIds: list.serverIds,
+    workspaces: tabWorkspaces,
+  });
   const sessionRows = useSidebarSessionRows({
     enabled: groupMode === "sessions",
     serverIds: list.serverIds,
@@ -422,6 +475,7 @@ export function SidebarModelProvider({
       mineHiddenCount,
       workspaceGroups: projection.workspaceGroups,
       sessionRows,
+      tabRows,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
       pinnedProjectViewKeys: pinOrdered.pinnedViewKeys,
@@ -445,6 +499,7 @@ export function SidebarModelProvider({
       pinOrdered.pinnedViewKeys,
       projection,
       sessionRows,
+      tabRows,
       toggleProjectCollapsed,
       filteredWorkspaceEntriesByKey,
     ],
