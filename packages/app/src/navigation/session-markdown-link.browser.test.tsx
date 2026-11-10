@@ -137,11 +137,11 @@ test("real href, ordinary click and keyboard Enter open the session once", async
   const link = page.getByRole("link", { name: "Visit session" });
   await expect.element(link).toHaveAttribute("href", href);
   await link.click();
-  expect(fixture.open).toHaveBeenLastCalledWith(href, "current");
+  expect(fixture.open).toHaveBeenLastCalledWith(href, "current", expect.any(Function));
   fixture.open.mockClear();
   (container.querySelector("a") as HTMLAnchorElement).focus();
   await userEvent.keyboard("{Enter}");
-  expect(fixture.open).toHaveBeenCalledExactlyOnceWith(href, "current");
+  expect(fixture.open).toHaveBeenCalledExactlyOnceWith(href, "current", expect.any(Function));
 });
 test("Cmd, Ctrl and middle click open a supported desktop window", async () => {
   const link = page.getByRole("link", { name: "Visit session" });
@@ -149,18 +149,18 @@ test("Cmd, Ctrl and middle click open a supported desktop window", async () => {
   await link.click({ modifiers: ["Control"] });
   await link.click({ button: "middle" });
   expect(fixture.open.mock.calls).toEqual([
-    [href, "window"],
-    [href, "window"],
-    [href, "window"],
+    [href, "window", expect.any(Function)],
+    [href, "window", expect.any(Function)],
+    [href, "window", expect.any(Function)],
   ]);
 });
 test("browser modifier click opens beside; Shift requests a window explicitly", async () => {
   fixture.window = false;
   await render();
   await page.getByRole("link", { name: "Visit session" }).click({ modifiers: ["Control"] });
-  expect(fixture.open).toHaveBeenLastCalledWith(href, "side");
+  expect(fixture.open).toHaveBeenLastCalledWith(href, "side", expect.any(Function));
   await page.getByRole("link", { name: "Visit session" }).click({ modifiers: ["Shift"] });
-  expect(fixture.open).toHaveBeenLastCalledWith(href, "window");
+  expect(fixture.open).toHaveBeenLastCalledWith(href, "window", expect.any(Function));
 });
 for (const compact of [false, true])
   test(`right-click menu preserves Save to Stream and Copy link (compact=${compact})`, async () => {
@@ -174,7 +174,7 @@ for (const compact of [false, true])
     await expect.element(page.getByText("Copy link", { exact: true })).not.toBeInTheDocument();
     await page.getByRole("link", { name: "Visit session" }).click({ button: "right" });
     await page.getByText("Open session", { exact: true }).click();
-    expect(fixture.open).toHaveBeenLastCalledWith(href, "current");
+    expect(fixture.open).toHaveBeenLastCalledWith(href, "current", expect.any(Function));
     await expect.element(page.getByText("Copy link", { exact: true })).not.toBeInTheDocument();
     await page.getByRole("link", { name: "Visit session" }).click({ button: "right" });
     await page.getByText("Save message to Stream", { exact: true }).click();
