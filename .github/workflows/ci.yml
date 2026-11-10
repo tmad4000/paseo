@@ -326,6 +326,9 @@ jobs:
       - name: Build app dependencies
         run: npm run build:app-deps
 
+      - name: Verify provider-limit handoff in Chromium
+        run: npm run test --workspace=@getpaseo/app -- src/components/agent-limit-handoff.browser.test.tsx --bail=1
+
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
 
