@@ -6,6 +6,7 @@ export type SessionLinkFailure =
   | "unknownHost"
   | "unavailable"
   | "notFound"
+  | "sideUnavailable"
   | "windowUnavailable";
 
 export class SessionLinkError extends Error {

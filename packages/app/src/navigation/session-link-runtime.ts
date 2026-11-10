@@ -1,9 +1,9 @@
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { navigateToWorkspace, type ActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { getDesktopHost } from "@/desktop/host";
-import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
+import { normalizeWorkspaceOpaqueId, resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import {
   openSessionLinkWithPorts,
   SessionLinkError,
@@ -22,16 +22,19 @@ export function canOpenSessionWindow(): boolean {
 export async function openSessionLink(
   href: string,
   disposition: SessionLinkDisposition = "current",
+  getActiveWorkspace?: () => ActiveWorkspaceSelection | null,
 ): Promise<void> {
   const runtime = getHostRuntimeStore();
   const desktop = getDesktopHost();
+  const origin = getActiveWorkspace?.();
   return openSessionLinkWithPorts(href, disposition, {
     isKnownHost: (serverId) => runtime.getHosts().some((host) => host.serverId === serverId),
     resolveAgent: async ({ serverId, agentId }) => {
       const session = useSessionStore.getState().sessions[serverId];
-      const cached = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
-      if (cached)
-        return { id: cached.id, workspaceId: normalizeWorkspaceOpaqueId(cached.workspaceId) };
+      for (const cached of [session?.agents.get(agentId), session?.agentDetails.get(agentId)]) {
+        const workspaceId = normalizeWorkspaceOpaqueId(cached?.workspaceId);
+        if (cached?.id === agentId && workspaceId) return { id: cached.id, workspaceId };
+      }
       const snapshot = runtime.getSnapshot(serverId);
       if (!snapshot?.client || snapshot.connectionStatus !== "online")
         throw new SessionLinkError("unavailable");
@@ -41,13 +44,23 @@ export async function openSessionLink(
       return { id: agent.id, workspaceId: normalizeWorkspaceOpaqueId(agent.workspaceId) };
     },
     navigate: ({ serverId, agentId, workspaceId }, placement) => {
+      if (placement === "side") {
+        const active = getActiveWorkspace?.();
+        const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+        if (
+          !origin || !active || origin.serverId !== serverId || active.serverId !== serverId ||
+          origin.workspaceId !== workspaceId || active.workspaceId !== workspaceId ||
+          !useWorkspaceLayoutStore.persist.hasHydrated() ||
+          !resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId })
+        ) throw new SessionLinkError("sideUnavailable");
+      }
       const paneId =
         placement === "side"
           ? useWorkspaceLayoutStore
               .getState()
               .ensureSidePane(`${serverId}:${workspaceId}`, { focus: true })
           : null;
-      if (placement === "side" && !paneId) throw new SessionLinkError("unavailable");
+      if (placement === "side" && !paneId) throw new SessionLinkError("sideUnavailable");
       navigateToWorkspace({
         serverId,
         workspaceId,
