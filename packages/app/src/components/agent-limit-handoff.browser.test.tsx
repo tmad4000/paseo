@@ -8,24 +8,18 @@ void i18n;
 
 const state = vi.hoisted(() => ({ fork: vi.fn() }));
 vi.mock("@/hooks/use-fork-agent", () => ({ useForkAgent: () => state.fork }));
-vi.mock("@/runtime/host-features", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/runtime/host-features")>()),
-  useHostFeature: () => true,
-}));
-vi.mock("@/runtime/host-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/runtime/host-runtime")>()),
-  useHostRuntimeIsConnected: () => true,
-}));
-vi.mock("@/panels/pane-context", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/panels/pane-context")>()),
+// Profiles are not offered by this callout. Keep their editor/runtime barrel out
+// of this isolated fixture while exercising the real model picker and controls.
+vi.mock("@/agent-profiles", () => ({ AgentProfileGlyph: () => null }));
+vi.mock("@/runtime/host-features", () => ({ useHostFeature: () => true }));
+vi.mock("@/runtime/host-runtime", () => ({ useHostRuntimeIsConnected: () => true }));
+vi.mock("@/panels/pane-context", () => ({
   usePaneContext: () => ({ layoutWorkspaceId: "fixture" }),
 }));
-vi.mock("react-native-safe-area-context", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("react-native-safe-area-context")>()),
+vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
-vi.mock("@/hooks/use-providers-snapshot", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/hooks/use-providers-snapshot")>()),
+vi.mock("@/hooks/use-providers-snapshot", () => ({
   useProvidersSnapshot: () => ({
     supportsSnapshot: true,
     isLoading: false,
