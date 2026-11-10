@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { MessageReceipts } from "./index.js";
+import { STEER_REJECTED_MESSAGE, steerRejectedError } from "../agent/prompt-not-submitted.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -241,4 +242,62 @@ test("settling refuses receipts that are not pending or still in flight", async 
   await sending;
   expect(await requests.settleStalePending("agent", "live", "absent")).toBe(false);
   expect(await requests.get("agent", "live")).toBe("completed");
+});
+
+test("a refused strict steer clears its receipt and the same message id can be retried", async () => {
+  const { requests, directory } = await fixture();
+  let deliveries = 0;
+  const input = {
+    agentId: "agent",
+    messageId: "steer",
+    request: { text: "while you work" },
+    send: async () => {
+      throw steerRejectedError();
+    },
+  };
+  await expect(requests.send(input)).rejects.toThrow(STEER_REJECTED_MESSAGE);
+  expect(await new MessageReceipts(directory).get("agent", "steer")).toBe("absent");
+  await expect(requests.send(input)).rejects.toThrow(STEER_REJECTED_MESSAGE);
+  await new MessageReceipts(directory).send({
+    ...input,
+    send: async () => {
+      deliveries++;
+    },
+  });
+  expect(deliveries).toBe(1);
+  expect(await requests.get("agent", "steer")).toBe("completed");
+});
+
+test("a steer refused because the turn changed is also retryable", async () => {
+  const { requests } = await fixture();
+  const input = { agentId: "agent", messageId: "raced", request: {} };
+  await expect(
+    requests.send({
+      ...input,
+      send: async () => {
+        throw steerRejectedError("Active turn changed before steering could be delivered");
+      },
+    }),
+  ).rejects.toThrow("Active turn changed");
+  expect(await requests.get(input.agentId, input.messageId)).toBe("absent");
+});
+
+test("an uncoded error after dispatch stays outcome-unknown until settled", async () => {
+  const { requests, directory } = await fixture();
+  const input = {
+    agentId: "agent",
+    messageId: "maybe",
+    request: {},
+    send: async () => {
+      throw new Error("Provider submission outcome unknown: run start timed out");
+    },
+  };
+  await expect(requests.send(input)).rejects.toThrow("timed out");
+  const reopened = new MessageReceipts(directory);
+  await expect(reopened.send({ ...input, send: async () => {} })).rejects.toThrow(
+    "agent_request_outcome_unknown",
+  );
+  expect(await reopened.settleStalePending("agent", "maybe", "absent")).toBe(true);
+  await reopened.send({ ...input, send: async () => {} });
+  expect(await reopened.get("agent", "maybe")).toBe("completed");
 });

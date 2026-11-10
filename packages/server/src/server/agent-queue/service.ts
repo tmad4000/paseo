@@ -131,6 +131,12 @@ export interface AgentQueueServiceOptions {
    * the same sendPromptToAgent the send_agent_message_request handler uses.
    */
   sendPrompt?: (input: SendQueuedPromptInput) => Promise<unknown>;
+  /**
+   * Whether the agent's timeline already holds this queued item (matched by the
+   * id the drain passes as clientMessageId). Lets an explicit Send now settle a
+   * receipt whose earlier dispatch ended without a confirmed outcome.
+   */
+  isDelivered?: (agentId: string, item: StoredQueuedMessage) => boolean;
 }
 
 export type AgentQueueAgentController = Pick<AgentManager, "subscribe" | "getAgent"> &
@@ -147,6 +153,7 @@ export class AgentQueueService {
   private readonly agentStorage: AgentStorage;
   private readonly logger: Logger;
   private readonly sendPrompt: (input: SendQueuedPromptInput) => Promise<unknown>;
+  private readonly isDelivered: ((agentId: string, item: StoredQueuedMessage) => boolean) | null;
   private receipts: MessageReceipts | null = null;
 
   private readonly listeners = new Set<AgentQueueMutationListener>();
@@ -164,6 +171,7 @@ export class AgentQueueService {
     this.agentManager = options.agentManager;
     this.agentStorage = options.agentStorage;
     this.logger = options.logger.child({ module: "agent", component: "agent-queue" });
+    this.isDelivered = options.isDelivered ?? null;
     this.sendPrompt =
       options.sendPrompt ??
       (async (input) => {
@@ -524,7 +532,8 @@ export class AgentQueueService {
     const item = queue.items.find((candidate) => candidate.id === itemId);
     if (!item) throw new Error("This message is no longer queued.");
     const { prompt, request } = this.receiptRequest(item);
-    const state = await receipts.get(agentId, itemId, request);
+    let state = await receipts.get(agentId, itemId, request);
+    if (state === "pending") state = await this.settleOrphanedReceipt(agentId, item, receipts);
     if (state === "pending") throw new Error("agent_request_outcome_unknown");
     if (state === "removed") throw new Error("This queued message was cancelled.");
     if (state === "absent") {
@@ -703,6 +712,41 @@ export class AgentQueueService {
       "Recovered stalled queue head",
     );
     return { itemId: head.id, outcome: delivered ? "delivered" : "resend" };
+  }
+
+  /**
+   * Send now on an item whose receipt is still `pending`: an earlier dispatch
+   * ended without a confirmed outcome (for example the daemon restarted
+   * mid-submit, or the run start timed out). The user is asking for this exact
+   * message, so look for it in the agent's timeline instead of refusing forever.
+   *
+   * Only settles when nothing can still be carrying the earlier attempt: this
+   * daemon has no send in flight for it, the agent is loaded with its provider
+   * history, and it has no active or reserved run. Present in the timeline →
+   * `completed` (it is then dropped from the queue); absent → `absent` (sent
+   * again now). Anything less certain stays `pending`.
+   */
+  private async settleOrphanedReceipt(
+    agentId: string,
+    item: StoredQueuedMessage,
+    receipts: MessageReceipts,
+  ): Promise<"absent" | "pending" | "completed" | "removed"> {
+    if (!this.isDelivered) return "pending";
+    const agent = this.agentManager.getAgent(agentId);
+    if (!agent || !agent.historyPrimed) return "pending";
+    if (agent.lifecycle !== "idle" && agent.lifecycle !== "error") return "pending";
+    if (agent.activeTurnId || agent.activeForegroundTurnId) return "pending";
+    if (this.agentManager.hasInFlightRun?.(agentId) !== false) return "pending";
+    const delivered = this.isDelivered(agentId, item);
+    const outcome = delivered ? "completed" : "absent";
+    if (!(await receipts.settleStalePending(agentId, item.id, outcome))) {
+      return receipts.get(agentId, item.id);
+    }
+    this.logger.info(
+      { agentId, itemId: item.id, outcome: delivered ? "delivered" : "resend" },
+      "Settled an unconfirmed queued message on Send now",
+    );
+    return outcome;
   }
 
   /** Removes every queued item through the normal remove path; claimed items stay. */

@@ -464,6 +464,10 @@ export const en = {
       queueEditFailed: "Failed to edit queued message",
       steerRequiresUpdatedHost:
         "Update this Paseo host to steer without interrupting its active turn.",
+      steerRefusedStillQueued:
+        "The agent can't take a message mid-turn right now. It's still queued and will send when the turn ends.",
+      queuedOutcomeUnknown:
+        "Paseo couldn't confirm whether this message reached the agent, so it won't resend it on its own. Try Send now again once the agent is idle, or restart the agent.",
       failedToCreateAgent: "Failed to create agent",
       noHostSelected: "No host selected",
       initialPromptRequired: "Initial prompt is required",

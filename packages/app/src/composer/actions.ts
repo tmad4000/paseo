@@ -374,6 +374,26 @@ export type SendQueuedComposerMessageNowResult =
   | { status: "submitted" }
   | { status: "failed"; errorMessage: string };
 
+/**
+ * Send now on a queued message uses strict steering. When the host refuses the
+ * steer, nothing was delivered and the message is still queued for the end of
+ * the turn; say so instead of showing the host's internal wording. An
+ * unconfirmed outcome is explained the same way.
+ */
+export function queuedSendNowErrorMessage(error: unknown, fallback?: string): string {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message.includes("cannot accept a steer") ||
+    message.includes("Active turn changed before steering")
+  ) {
+    return i18n.t("composer.errors.steerRefusedStillQueued");
+  }
+  if (message.includes("agent_request_outcome_unknown")) {
+    return i18n.t("composer.errors.queuedOutcomeUnknown");
+  }
+  return message || (fallback ?? i18n.t("composer.errors.failedToSend"));
+}
+
 export async function sendQueuedComposerMessageNow(
   input: SendQueuedComposerMessageNowInput,
 ): Promise<SendQueuedComposerMessageNowResult> {
@@ -398,10 +418,7 @@ export async function sendQueuedComposerMessageNow(
     });
     return {
       status: "failed",
-      errorMessage:
-        error instanceof Error
-          ? error.message
-          : (input.failedToSendMessage ?? i18n.t("composer.errors.failedToSend")),
+      errorMessage: queuedSendNowErrorMessage(error, input.failedToSendMessage),
     };
   }
 }

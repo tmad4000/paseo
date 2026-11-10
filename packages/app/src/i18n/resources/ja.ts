@@ -473,6 +473,10 @@ export const ja: TranslationResources = {
       queueEditFailed: "キューのメッセージを編集できませんでした",
       steerRequiresUpdatedHost:
         "実行中のターンを中断せずに誘導するには、この Paseo ホストを更新してください。",
+      steerRefusedStillQueued:
+        "エージェントは現在ターンの途中でメッセージを受け取れません。メッセージはキューに残り、ターン終了時に送信されます。",
+      queuedOutcomeUnknown:
+        "このメッセージがエージェントに届いたか Paseo で確認できなかったため、自動では再送しません。エージェントがアイドルになってから「今すぐ送信」をもう一度試すか、エージェントを再起動してください。",
       failedToCreateAgent: "エージェントの作成に失敗しました",
       noHostSelected: "ホストが選択されていません",
       initialPromptRequired: "初期プロンプトが必要です",

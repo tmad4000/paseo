@@ -468,6 +468,10 @@ export const ar: TranslationResources = {
       queueReorderFailed: "تعذرت إعادة ترتيب الرسائل. حاول مجددًا.",
       queueEditFailed: "تعذّر تعديل الرسالة في قائمة الانتظار",
       steerRequiresUpdatedHost: "حدّث مضيف Paseo للتوجيه دون مقاطعة المهمة الجارية.",
+      steerRefusedStillQueued:
+        "لا يستطيع الوكيل استلام رسالة أثناء الدور الحالي. ستبقى الرسالة في قائمة الانتظار وتُرسل عند انتهاء الدور.",
+      queuedOutcomeUnknown:
+        "تعذّر على Paseo التأكد من وصول هذه الرسالة إلى الوكيل، لذا لن يعيد إرسالها تلقائيًا. أعد المحاولة بـ«إرسال الآن» عندما يصبح الوكيل خاملًا، أو أعد تشغيل الوكيل.",
       failedToCreateAgent: "فشل في إنشاء الوكيل",
       noHostSelected: "لم يتم تحديد مضيف",
       initialPromptRequired: "مطلوب موجه الأولي",
