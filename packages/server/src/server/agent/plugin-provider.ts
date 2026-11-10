@@ -1130,9 +1130,10 @@ class PluginAgentSession implements AgentSession {
         : { outputSchema: toJsonValue(options.outputSchema, "output schema") }),
       clearPendingPermissions: options.clearPendingPermissions,
     });
+    // The plugin already received the prompt; any other answer leaves its fate unknown.
     return result.type === "steer" && result.turnId === options.expectedTurnId
       ? { status: "accepted" }
-      : { status: "unavailable" };
+      : { status: "unavailable", deliveryUnknown: true };
   }
 
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {

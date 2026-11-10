@@ -728,6 +728,38 @@ test("a refused strict steer is marked as never submitted, so receipts can retry
   }
 });
 
+function steerOnlyController(result: { status: "unavailable"; deliveryUnknown?: true }) {
+  return {
+    getAgent: () => ({ activeTurnId: "turn-1", activeForegroundTurnId: "turn-1" }),
+    tryRunOutOfBand: () => false,
+    hasInFlightRun: () => true,
+    steerAgentRun: async () => result,
+  } as unknown as Parameters<typeof startAgentRun>[0];
+}
+
+test("a steer the provider never received is retryable; one it may hold is not", async () => {
+  const options = { replaceRunning: false, activeTurnBehavior: "steer_only" as const };
+  const refused = await startAgentRun(
+    steerOnlyController({ status: "unavailable" }),
+    "agent",
+    "steer",
+    createTestLogger(),
+    options,
+  ).catch((error: unknown) => error);
+  expect(isPromptNotSubmittedError(refused)).toBe(true);
+
+  const ambiguous = await startAgentRun(
+    steerOnlyController({ status: "unavailable", deliveryUnknown: true }),
+    "agent",
+    "steer",
+    createTestLogger(),
+    options,
+  ).catch((error: unknown) => error);
+  expect(ambiguous).toBeInstanceOf(Error);
+  expect(isPromptNotSubmittedError(ambiguous)).toBe(false);
+  expect((ambiguous as Error).message).toContain("outcome unknown");
+});
+
 test("queue reservation preserves a pending permission without a foreground run", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "queued-permission-reservation-"));
   const client = new SlowStartAgentClient(null);

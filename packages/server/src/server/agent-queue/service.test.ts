@@ -832,6 +832,25 @@ describe("AgentQueueService", () => {
     expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
   });
 
+  test("Send now leaves an unconfirmed receipt from an earlier daemon process to Restart agent", async () => {
+    const receiptsDir = join(dir, "agent-requests");
+    harness.service.setMessageReceipts(new MessageReceipts(receiptsDir));
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    harness.failSends(new Error("connection lost"));
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("connection lost");
+    harness.failSends(null);
+
+    // A restarted daemon reads the same receipt directory with fresh in-memory state.
+    harness.service.setMessageReceipts(new MessageReceipts(receiptsDir));
+    harness.agents.lifecycle = "idle";
+    harness.agents.historyPrimed = true;
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      "agent_request_outcome_unknown",
+    );
+    expect(harness.attempts).toHaveLength(1);
+  });
+
   test("Send now completes an unconfirmed message the agent's timeline already shows", async () => {
     const receipts = new MessageReceipts(join(dir, "agent-requests"));
     harness.service.setMessageReceipts(receipts);

@@ -720,9 +720,9 @@ export class AgentQueueService {
    * mid-submit, or the run start timed out). The user is asking for this exact
    * message, so look for it in the agent's timeline instead of refusing forever.
    *
-   * Only settles when nothing can still be carrying the earlier attempt: this
-   * daemon has no send in flight for it, the agent is loaded with its provider
-   * history, and it has no active or reserved run. Present in the timeline →
+   * Only settles when nothing can still be carrying the earlier attempt and this
+   * process saw it end: this daemon dispatched it and has no send in flight for it,
+   * the agent is loaded with its history, and it has no active or reserved run. Present in the timeline →
    * `completed` (it is then dropped from the queue); absent → `absent` (sent
    * again now). Anything less certain stays `pending`.
    */
@@ -732,6 +732,9 @@ export class AgentQueueService {
     receipts: MessageReceipts,
   ): Promise<"absent" | "pending" | "completed" | "removed"> {
     if (!this.isDelivered) return "pending";
+    // An earlier daemon process may have crashed after provider acceptance but before
+    // the timeline persisted; Restart agent reloads the session before settling those.
+    if (!receipts.dispatchedByThisProcess(agentId, item.id)) return "pending";
     const agent = this.agentManager.getAgent(agentId);
     if (!agent || !agent.historyPrimed) return "pending";
     if (agent.lifecycle !== "idle" && agent.lifecycle !== "error") return "pending";

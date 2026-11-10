@@ -71,6 +71,12 @@ async function steerOrReplaceActiveRun(
     if (result.status === "accepted") {
       return { disposition: "steered" };
     }
+    if (result.deliveryUnknown) {
+      // The provider already holds the prompt; keep the receipt guarded as outcome-unknown.
+      throw new Error(
+        "Provider submission outcome unknown: the active turn changed during steering",
+      );
+    }
     throw steerRejectedError();
   }
   if (options?.activeTurnBehavior !== "steer") {

@@ -96,6 +96,8 @@ export class FakePiSession implements PiRuntimeSession {
   readonly prompts: Array<{ message: string; imageCount: number }> = [];
   readonly steerCalls: Array<{ message: string; imageCount: number }> = [];
   steerError: Error | null = null;
+  /** Runs after Pi has accepted a steer into its queue, before steer() returns. */
+  afterSteerQueued: (() => Promise<void> | void) | null = null;
   readonly controlRequests: string[] = [];
   clearQueueError: Error | null = null;
   clearQueueCompletion: Promise<void> | null = null;
@@ -217,6 +219,7 @@ export class FakePiSession implements PiRuntimeSession {
     if (this.steerError) {
       throw this.steerError;
     }
+    await this.afterSteerQueued?.();
   }
 
   async clearQueue(): Promise<void> {
