@@ -316,4 +316,6 @@ test("only the process that dispatched a pending receipt reports owning it", asy
   await expect(requests.send(input)).rejects.toThrow("connection lost");
   expect(requests.dispatchedByThisProcess("agent", "owned")).toBe(true);
   expect(new MessageReceipts(directory).dispatchedByThisProcess("agent", "owned")).toBe(false);
+  expect(await requests.settleStalePending("agent", "owned", "absent")).toBe(true);
+  expect(requests.dispatchedByThisProcess("agent", "owned")).toBe(false);
 });

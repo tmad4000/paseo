@@ -915,9 +915,14 @@ describe("queuedSendNowErrorMessage", () => {
   });
 
   it("explains an unconfirmed outcome instead of showing the raw code", () => {
-    expect(queuedSendNowErrorMessage(new Error("agent_request_outcome_unknown"))).toBe(
-      i18n.t("composer.errors.queuedOutcomeUnknown"),
-    );
+    for (const message of [
+      "agent_request_outcome_unknown",
+      "Provider submission outcome unknown: the active turn changed during steering",
+    ]) {
+      expect(queuedSendNowErrorMessage(new Error(message))).toBe(
+        i18n.t("composer.errors.queuedOutcomeUnknown"),
+      );
+    }
   });
 
   it("passes other errors through and falls back for non-errors", () => {

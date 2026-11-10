@@ -375,10 +375,11 @@ export type SendQueuedComposerMessageNowResult =
   | { status: "failed"; errorMessage: string };
 
 /**
- * Send now on a queued message uses strict steering. These host messages are
- * only sent for a steer refused before the provider received it, so the message
- * is still queued for the end of the turn; say so instead of showing the host's
- * internal wording. An unconfirmed outcome is explained the same way.
+ * Send now on a queued message uses strict steering. The refusal messages below
+ * are only sent for a steer refused before the provider received it, so the
+ * message is still queued for the end of the turn; say so instead of showing the
+ * host's internal wording. An unconfirmed outcome (the provider may hold the
+ * message) gets its own explanation.
  */
 export function queuedSendNowErrorMessage(error: unknown, fallback?: string): string {
   const message = error instanceof Error ? error.message : "";
@@ -388,7 +389,10 @@ export function queuedSendNowErrorMessage(error: unknown, fallback?: string): st
   ) {
     return i18n.t("composer.errors.steerRefusedStillQueued");
   }
-  if (message.includes("agent_request_outcome_unknown")) {
+  if (
+    message.includes("agent_request_outcome_unknown") ||
+    message.includes("Provider submission outcome unknown")
+  ) {
     return i18n.t("composer.errors.queuedOutcomeUnknown");
   }
   return message || (fallback ?? i18n.t("composer.errors.failedToSend"));
