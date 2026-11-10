@@ -336,6 +336,7 @@ jobs:
           name: limit-handoff-visual-checks
           path: packages/app/.vitest-screenshots/limit-handoff-*.png
           if-no-files-found: ignore
+          include-hidden-files: true
 
   sdk-tests:
     name: sdk-tests

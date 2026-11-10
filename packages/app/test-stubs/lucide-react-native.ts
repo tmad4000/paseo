@@ -116,3 +116,23 @@ export const Upload = StubIcon;
 export const Wrench = StubIcon;
 export const X = StubIcon;
 export const XCircle = StubIcon;
+
+// The real model picker also loads the profile glyph registry.
+export const BookOpen = StubIcon;
+export const Boxes = StubIcon;
+export const Bug = StubIcon;
+export const Cloud = StubIcon;
+export const Code = StubIcon;
+export const Compass = StubIcon;
+export const Cpu = StubIcon;
+export const Database = StubIcon;
+export const Feather = StubIcon;
+export const FlaskConical = StubIcon;
+export const Hammer = StubIcon;
+export const Microscope = StubIcon;
+export const Package = StubIcon;
+export const Palette = StubIcon;
+export const Rocket = StubIcon;
+export const Shield = StubIcon;
+export const Sparkles = StubIcon;
+export const TestTube = StubIcon;
