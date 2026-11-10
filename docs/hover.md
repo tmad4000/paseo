@@ -2,6 +2,12 @@
 
 Read this before writing any hover code. Every hover regression we ship is one of the three failure modes below, and every one of them is solved by the same canonical pattern. The pattern is hardwon — it survived every other shape we tried — so copy it, don't reinvent it.
 
+## Shortcut discovery
+
+Show a control's keyboard shortcut in its tooltip, using the shared `Shortcut` badge and the
+current binding. Shortcut hints open immediately on hover (`delayDuration={0}`, the default)
+and keyboard focus. Keep disabled actions disabled and keep touch controls usable without hover.
+
 ## The pattern
 
 The canonical implementation lives in `packages/app/src/components/sidebar-workspace-list.tsx`, in the workspace row (around line 1369). When in doubt, open that file and copy the shape.
