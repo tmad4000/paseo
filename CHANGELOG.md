@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.10.0-beta.25 - 2026-11-09
+
+This release supersedes the uninstalled desktop beta.24 candidate and also contains everything listed under 0.10.0-beta.24 below.
+
+### Added
+
+- Prepare a continuation handoff when an agent reaches its provider usage limit ([#188](https://github.com/tmad4000/paseo/pull/188))
+- Drag sidebar sessions into right or down splits ([#167](https://github.com/tmad4000/paseo/pull/167))
+- Open exact sessions from expandable Needs input workspace rows ([#177](https://github.com/tmad4000/paseo/pull/177))
+- Open chat Find on mobile ([#91](https://github.com/tmad4000/paseo/pull/91))
+- Fork conversations into a split pane, and split right or down from the New Tab (+) menu ([#182](https://github.com/tmad4000/paseo/pull/182), [#181](https://github.com/tmad4000/paseo/pull/181))
+- Keep each session's task checklist visible from its snapshot and show unfinished task progress in the sidebar ([#187](https://github.com/tmad4000/paseo/pull/187))
+
+### Improved
+
+- Distinguish seen from read, preserve seen when marking unread, and show running plus needs-input status together ([#178](https://github.com/tmad4000/paseo/pull/178), [#186](https://github.com/tmad4000/paseo/pull/186))
+- Show when a session started needing input ([#179](https://github.com/tmad4000/paseo/pull/179))
+- Explain sidebar row icons with tooltips and hide single-tab counts ([#165](https://github.com/tmad4000/paseo/pull/165))
+
+### Fixed
+
+- Annotate read-only and Stream MCP tools for Codex's tool-approval classification ([#184](https://github.com/tmad4000/paseo/pull/184))
+- Preserve Back and Forward focus history across restarts ([#185](https://github.com/tmad4000/paseo/pull/185))
+- Close the final blank tab without leaving an unreachable history entry ([#183](https://github.com/tmad4000/paseo/pull/183))
+- Keep the Answers pane scrollable ([#180](https://github.com/tmad4000/paseo/pull/180))
+
 ## 0.10.0-beta.24 - 2026-11-05
 
 ### Added
