@@ -22,6 +22,15 @@ top-level chats instead, because tab layouts are per device
 `components/sidebar/sidebar-tabs.test.ts`, `stores/sidebar-view-store.test.ts`. Source on
 `feat/pfork-ly4-sidebar-tabs-mode`; not installed.
 
+## Queued-message save shortcut — pspin-cnm
+
+`queued-edit-save-shortcut`: in a queued-message editor, Mod+Enter commits through the same
+Save action (including removing an emptied text-only message). Plain Enter stays multiline;
+IME composition and modified Shift/Alt combinations do not commit. A detached edit never
+queues a new message through this shortcut. Save shows its platform-specific chord immediately
+on hover; shared toolbar and sidebar shortcut hints also open immediately. Source acceptance:
+`e2e/browser/composer-attachments.spec.ts`; installation follows the normal beta release.
+
 ## Session task checklist — pspin-tg2
 
 `session-task-checklist`: each chat's own plan (Claude TodoWrite/TaskCreate/TaskUpdate/TaskList,
