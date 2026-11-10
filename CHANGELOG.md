@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0-beta.26 - 2026-11-10
+
+Hotfix on 0.10.0-beta.25: same source plus one fix.
+
+### Fixed
+
+- Send now during an active turn that cannot take a steer no longer strands the queued message at "agent request outcome unknown". The message stays queued and sends when the turn ends, Send now can be retried, and an unconfirmed delivery can be settled from the agent's timeline once the agent is idle ([#194](https://github.com/tmad4000/paseo/pull/194))
+
 ## 0.10.0-beta.25 - 2026-11-09
 
 This release supersedes the uninstalled desktop beta.24 candidate and also contains everything listed under 0.10.0-beta.24 below.
