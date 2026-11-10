@@ -595,6 +595,36 @@ describe("PluginAgentClientRegistry", () => {
     await expect.poll(harness.closeCount).toBe(1);
     expect(harness.inputs.map((input) => input.type)).toContain("session.close");
   });
+
+  test("marks a steer the plugin received but did not apply to the turn as delivery-unknown", async () => {
+    const harness = createProviderHarness({
+      capabilities: [...CAPABILITIES, "prompt.steer"],
+      handleInput: async (input, emit) => {
+        if (input.type !== "session.prompt") return false;
+        emit({
+          type: "session.prompt_result",
+          sessionId: input.sessionId,
+          clientMessageId: input.prompt.clientMessageId,
+          result: { type: "turn", turnId: "turn-2" },
+        });
+        return true;
+      },
+    });
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const session = await registry.clients()[harness.registration.id]!.createSession({
+      provider: harness.registration.id,
+      cwd: "/tmp",
+    });
+    try {
+      await expect(
+        session.steerActiveTurn!("follow up", { expectedTurnId: "turn-1" }),
+      ).resolves.toEqual({ status: "unavailable", deliveryUnknown: true });
+    } finally {
+      await session.close();
+      registry.replace([]);
+    }
+  });
 });
 
 type RequestKind = "session.open" | "catalog" | "session.configure" | "session.prompt";

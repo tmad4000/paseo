@@ -301,3 +301,19 @@ test("an uncoded error after dispatch stays outcome-unknown until settled", asyn
   await reopened.send({ ...input, send: async () => {} });
   expect(await reopened.get("agent", "maybe")).toBe("completed");
 });
+
+test("only the process that dispatched a pending receipt reports owning it", async () => {
+  const { requests, directory } = await fixture();
+  const input = {
+    agentId: "agent",
+    messageId: "owned",
+    request: {},
+    send: async () => {
+      throw new Error("connection lost");
+    },
+  };
+  expect(requests.dispatchedByThisProcess("agent", "owned")).toBe(false);
+  await expect(requests.send(input)).rejects.toThrow("connection lost");
+  expect(requests.dispatchedByThisProcess("agent", "owned")).toBe(true);
+  expect(new MessageReceipts(directory).dispatchedByThisProcess("agent", "owned")).toBe(false);
+});

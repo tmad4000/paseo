@@ -39,6 +39,8 @@ interface SendMessageInput {
 /** Owns message delivery receipts; creation is owned by CreationService. */
 export class MessageReceipts {
   private readonly pending = new Map<string, Promise<void>>();
+  /** Receipts whose dispatch this process started, so its in-memory timeline saw the outcome. */
+  private readonly dispatchedHere = new Set<string>();
   /** Bumped on every write so a caller never joins a scan that predates it. */
   private writeGeneration = 0;
   private inflightScan: { generation: number; records: Promise<Receipt[]> } | null = null;
@@ -206,6 +208,15 @@ export class MessageReceipts {
     return true;
   }
 
+  /**
+   * True when this process wrote the pending receipt and attempted the dispatch. A
+   * receipt left by an earlier daemon process may belong to a prompt the provider
+   * accepted just before a crash, before the timeline was persisted.
+   */
+  dispatchedByThisProcess(agentId: string, messageId: string): boolean {
+    return this.dispatchedHere.has(digest(["send", agentId, messageId]));
+  }
+
   send(input: SendMessageInput): Promise<void> {
     // Preserve the existing on-disk identity and shape across daemon upgrades.
     const key = digest(["send", input.agentId, input.messageId]);
@@ -243,6 +254,7 @@ export class MessageReceipts {
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.write(file, { ...receipt, state: "pending" });
+    this.dispatchedHere.add(key);
     try {
       await input.send();
     } catch (error) {

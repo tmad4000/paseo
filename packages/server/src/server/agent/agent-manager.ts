@@ -3098,7 +3098,12 @@ export class AgentManager {
     // An unavailable answer is only safe to fall back from while this admission
     // still owns the active turn. Never let an A admission replace a later B.
     if (result.status === "unavailable" && agent.activeTurnId !== expectedTurnId) {
-      // The provider answered "unavailable", so nothing was delivered; the caller may retry.
+      // Only a refusal before provider handoff proves nothing was delivered.
+      if (result.deliveryUnknown) {
+        throw new Error(
+          "Provider submission outcome unknown: the active turn changed during steering",
+        );
+      }
       throw steerRejectedError("Active turn changed before steering could be delivered");
     }
     return result;
