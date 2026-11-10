@@ -254,9 +254,9 @@ test.describe("Composer attachments", () => {
     }
   });
 
-  test("editing a queued message preserves its attachments and queue position", async ({
+  test("queued edit save shortcut preserves attachments, queue position, and multiline input", async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(120_000);
     const agent = await startRunningMockAgent(page, {
       prefix: "attach-queue-edit-",
@@ -284,7 +284,29 @@ test.describe("Composer attachments", () => {
       const queuedEditor = page.getByRole("textbox", { name: "Edit queued message" });
       await expect(queuedEditor).toHaveValue("Original queued text");
       await queuedEditor.fill("Revised queued text");
-      await page.getByRole("button", { name: "Save queued message" }).click();
+      await queuedEditor.press("Enter");
+      await queuedEditor.press("Shift+Enter");
+      await expect(queuedEditor).toHaveValue("Revised queued text\n\n");
+      await queuedEditor.dispatchEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        ctrlKey: true,
+        isComposing: true,
+        keyCode: 229,
+      });
+      await expect(queuedEditor).toBeVisible();
+      expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text).toBe(
+        "Original queued text",
+      );
+      await queuedEditor.fill("Revised queued text");
+      const saveButton = page.getByRole("button", { name: "Save queued message" });
+      await saveButton.hover();
+      const saveHint = page.getByTestId("queued-message-save-tooltip");
+      await expect(saveHint).toBeVisible();
+      await expect(saveHint).toContainText("Save queued message");
+      await expect(saveHint).toContainText(/⌘⏎|Ctrl\+⏎/);
+      await page.screenshot({ path: testInfo.outputPath("queued-save-shortcut.png") });
+      await queuedEditor.press("Control+Enter");
       await expect(queuedEditor).toHaveCount(0);
       await expectComposerDraft(page, "");
 
@@ -295,6 +317,18 @@ test.describe("Composer attachments", () => {
         "Second queued text",
       ]);
       expect(after.items[0]?.images).toEqual(before.items[0]?.images);
+
+      // The same desktop editor also receives Command from macOS.
+      await page.getByRole("button", { name: "Edit queued message" }).first().click();
+      await queuedEditor.fill("Saved with Command");
+      await queuedEditor.press("Meta+Enter");
+      await expect(queuedEditor).toHaveCount(0);
+      await expect
+        .poll(
+          async () => (await agent.client.listQueuedAgentMessages(agent.agentId)).items[0]?.text,
+        )
+        .toBe("Saved with Command");
+      await expectComposerDraft(page, "");
     } finally {
       await agent.cleanup();
     }

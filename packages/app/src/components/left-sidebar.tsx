@@ -324,7 +324,7 @@ function FooterIconButton({
   buttonRef?: RefObject<View | null>;
 }) {
   return (
-    <Tooltip delayDuration={300}>
+    <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
         <Pressable
           ref={buttonRef}
@@ -370,7 +370,7 @@ function FooterAddProjectButton({
   theme: SidebarTheme;
 }) {
   return (
-    <Tooltip delayDuration={300}>
+    <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
         <Pressable
           style={footerAddProjectButtonStyle}

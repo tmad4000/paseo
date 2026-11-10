@@ -12,6 +12,8 @@ import {
   Text,
   StyleSheet as RNStyleSheet,
   type PressableStateCallbackType,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from "react-native";
 import {
   EditingTextInput as TextInput,
@@ -1275,7 +1277,32 @@ function QueuedMessageRow({
   const commitFromUI = useCallback(() => {
     void handleSave("commit").catch(() => {});
   }, [handleSave]);
+  const handleEditKeyPress = useCallback(
+    (
+      event: NativeSyntheticEvent<
+        TextInputKeyPressEventData & {
+          metaKey?: boolean;
+          ctrlKey?: boolean;
+          shiftKey?: boolean;
+          altKey?: boolean;
+          isComposing?: boolean;
+          keyCode?: number;
+          repeat?: boolean;
+        }
+      >,
+    ) => {
+      const key = event.nativeEvent;
+      if (!isWeb || detached || key.isComposing || key.keyCode === 229) return;
+      if (key.key !== "Enter" || !(key.metaKey || key.ctrlKey) || key.shiftKey || key.altKey)
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!key.repeat) commitFromUI();
+    },
+    [commitFromUI, detached],
+  );
   const removesOnSave = !draft.trim() && item.attachments.length === 0;
+  const commitLabel = removesOnSave ? removeLabel : saveLabel;
   const removeFromUI = useCallback(() => {
     void handleRemove().catch(() => {});
   }, [handleRemove]);
@@ -1302,6 +1329,7 @@ function QueuedMessageRow({
           initialValue={draft}
           onChangeText={preserveDraft}
           onBlur={saveFromUI}
+          onKeyPress={handleEditKeyPress}
           multiline
           autoFocus
           editable={!isSaving}
@@ -1345,26 +1373,36 @@ function QueuedMessageRow({
             >
               <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
             </Pressable>
-            <Pressable
-              onPress={commitFromUI}
-              disabled={isSaving}
-              style={[
-                styles.queueEditTextButton,
-                removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={removesOnSave ? removeLabel : saveLabel}
-            >
-              <Text
-                style={
-                  removesOnSave
-                    ? styles.queueEditRemoveButtonLabel
-                    : styles.queueEditSaveButtonLabel
-                }
-              >
-                {removesOnSave ? removeLabel : saveLabel}
-              </Text>
-            </Pressable>
+            <Tooltip enabledOnDesktop enabledOnMobile={false}>
+              <TooltipTrigger asChild>
+                <Pressable
+                  onPress={commitFromUI}
+                  disabled={isSaving}
+                  style={[
+                    styles.queueEditTextButton,
+                    removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={commitLabel}
+                >
+                  <Text
+                    style={
+                      removesOnSave
+                        ? styles.queueEditRemoveButtonLabel
+                        : styles.queueEditSaveButtonLabel
+                    }
+                  >
+                    {commitLabel}
+                  </Text>
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent testID="queued-message-save-tooltip">
+                <View style={styles.tooltipRow}>
+                  <Text style={styles.tooltipText}>{commitLabel}</Text>
+                  <Shortcut keys={["mod", "Enter"]} />
+                </View>
+              </TooltipContent>
+            </Tooltip>
           </View>
         )}
       </View>
