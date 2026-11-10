@@ -343,6 +343,7 @@ export const es: TranslationResources = {
       groupInOneList: "Mostrar chats en una sola lista",
       showAllSessions: "Mostrar todas las sesiones",
       groupAsSessions: "Mostrar chats como sesiones",
+      groupAsTabs: "Mostrar pestañas abiertas en la barra lateral",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -1891,6 +1892,7 @@ export const es: TranslationResources = {
         status: "Estado",
         list: "Una sola lista",
         sessions: "Sesiones",
+        tabs: "Pestañas",
         labels: "Etiquetas",
       },
       titleSource: {

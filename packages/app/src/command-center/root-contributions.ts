@@ -9,12 +9,14 @@ export interface GroupingCommandCenterSource {
     groupByStatus: string;
     groupInOneList: string;
     groupAsSessions: string;
+    groupAsTabs: string;
   };
   icons: {
     project?: CommandCenterIcon;
     status?: CommandCenterIcon;
     list?: CommandCenterIcon;
     sessions?: CommandCenterIcon;
+    tabs?: CommandCenterIcon;
   };
   setGroupMode(mode: SidebarGroupMode): void;
 }
@@ -24,6 +26,7 @@ const GROUPING_TITLE_KEYS: Record<SidebarGroupMode, keyof GroupingCommandCenterS
   status: "groupByStatus",
   list: "groupInOneList",
   sessions: "groupAsSessions",
+  tabs: "groupAsTabs",
 };
 
 // Shared words find every grouping entry; each entry's own words find only it, so typing "list"
@@ -34,6 +37,7 @@ const GROUPING_KEYWORDS: Record<SidebarGroupMode, readonly string[]> = {
   status: ["status", "state"],
   list: ["list", "one list", "flat", "ungrouped", "recent", "activity"],
   sessions: ["sessions", "session", "chats", "conversations", "agents"],
+  tabs: ["tabs", "tab", "terminals", "files", "browsers", "open"],
 };
 
 // One entry per mode you are not in, so none of them can ever read as a no-op. Each keeps an id
