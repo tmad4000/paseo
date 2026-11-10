@@ -721,19 +721,12 @@ async function getTrackedDiffTextForPath(input: {
   cwd: string;
   refsForDiff: CheckoutDiffRefs;
   path: string;
-  oldPath?: string;
   ignoreWhitespace: boolean;
 }): Promise<{ path: string; text: string; truncated: boolean }> {
-  const paths = input.oldPath ? [input.oldPath, input.path] : [input.path];
   const result = await runGitCommand(
     buildGitDiffArgs({
       ignoreWhitespace: input.ignoreWhitespace,
-      extra: [
-        ...(input.oldPath ? ["--diff-filter=RC"] : []),
-        ...getCheckoutDiffRefArgs(input.refsForDiff),
-        "--",
-        ...paths.map((path) => `:(literal)${path}`),
-      ],
+      extra: [...getCheckoutDiffRefArgs(input.refsForDiff), "--", `:(literal)${input.path}`],
     }),
     {
       cwd: input.cwd,
@@ -742,22 +735,9 @@ async function getTrackedDiffTextForPath(input: {
     },
   );
 
-  // A source path can participate in another rename/copy in the same request.
-  // Return only the requested destination; the filter keeps source edits out of its budget.
-  let text = result.stdout;
-  if (input.oldPath && !result.truncated) {
-    text = result.stdout
-      .split(/(?=^diff --git )/m)
-      .filter((section) => {
-        const hunkStart = section.indexOf("\n@@ ");
-        const header = hunkStart < 0 ? section : section.slice(0, hunkStart);
-        return parseDiff(header)[0]?.path === input.path;
-      })
-      .join("");
-  }
   return {
     path: input.path,
-    text,
+    text: result.stdout,
     truncated: result.truncated,
   };
 }
@@ -3334,29 +3314,26 @@ async function processTrackedChanges(
 
   let trackedDiffText = "";
   let trackedDiffBytes = 0;
-  const oldPathByPath = new Map(
-    trackedChanges
-      .filter((change) => change.oldPath)
-      .map((change) => [change.path, change.oldPath]),
+  const renamedPaths = new Set(
+    trackedChanges.filter((change) => change.oldPath).map((change) => change.path),
   );
   for (let start = 0; start < trackedDiffPaths.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const paths = trackedDiffPaths.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
-    // Rename/copy detection needs both paths.
+    // Keep rename/copy path filtering identical to the existing per-file command.
     const ordinary = await getTrackedDiffTexts({
       cwd,
       refsForDiff,
-      paths: paths.filter((path) => !oldPathByPath.has(path)),
+      paths: paths.filter((path) => !renamedPaths.has(path)),
       ignoreWhitespace,
     });
     const renamed = await Promise.all(
       paths
-        .filter((path) => oldPathByPath.has(path))
+        .filter((path) => renamedPaths.has(path))
         .map((path) =>
           getTrackedDiffTextForPath({
             cwd,
             refsForDiff,
             path,
-            oldPath: oldPathByPath.get(path),
             ignoreWhitespace,
           }),
         ),
@@ -3553,13 +3530,13 @@ export async function commitAll(cwd: string, message: string): Promise<void> {
 }
 
 export async function discardChanges(cwd: string, pathspecs: string[]): Promise<void> {
-  const worktreeRoot = await requireGitWorktreeRoot(cwd);
+  await requireGitRepo(cwd);
   if (pathspecs.length === 0) {
     return;
   }
   try {
     await runGitCommand(["--literal-pathspecs", "reset", "-q", "HEAD", "--", ...pathspecs], {
-      cwd: worktreeRoot,
+      cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
   } catch {
@@ -3567,7 +3544,7 @@ export async function discardChanges(cwd: string, pathspecs: string[]): Promise<
     await runGitCommand(
       ["--literal-pathspecs", "rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", ...pathspecs],
       {
-        cwd: worktreeRoot,
+        cwd,
         timeout: DISCARD_CHANGES_TIMEOUT_MS,
       },
     );
@@ -3579,7 +3556,7 @@ export async function discardChanges(cwd: string, pathspecs: string[]): Promise<
   const status = await runGitCommand(
     ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--", ...pathspecs],
     {
-      cwd: worktreeRoot,
+      cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     },
   );
@@ -3605,13 +3582,13 @@ export async function discardChanges(cwd: string, pathspecs: string[]): Promise<
   }
   if (tracked.length > 0) {
     await runGitCommand(["--literal-pathspecs", "checkout", "-q", "--", ...tracked], {
-      cwd: worktreeRoot,
+      cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
   }
   if (untracked.length > 0) {
     await runGitCommand(["--literal-pathspecs", "clean", "-fd", "-q", "--", ...untracked], {
-      cwd: worktreeRoot,
+      cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
   }

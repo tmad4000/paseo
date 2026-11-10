@@ -1480,15 +1480,11 @@ class PluginAgentSession implements AgentSession {
       }
       return;
     }
-    if (event.type === "session.turn") {
+    if (event.type === "session.turn" && event.state !== "started") {
       this.publish({
         type: "provider_subagent",
         provider: this.provider,
-        event: {
-          type: "upsert",
-          id: childId,
-          status: event.state === "started" ? "running" : event.state,
-        },
+        event: { type: "upsert", id: childId, status: event.state },
       });
       return;
     }

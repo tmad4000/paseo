@@ -3429,50 +3429,6 @@ describe("create_agent MCP tool", () => {
     );
   });
 
-  it("notifies the caller when a created child finishes its initial turn before the turn start returns", async () => {
-    const workdir = await mkdtemp(join(tmpdir(), "mcp-create-fast-child-"));
-    const storage = new AgentStorage(join(workdir, "agents"), logger);
-    const parentClient = new HeldTurnAgentClient("claude", false);
-    const childClient = new HeldTurnAgentClient("codex", false, { finishTurnsDuringStart: true });
-    const agentManager = new AgentManager({
-      clients: { claude: parentClient, codex: childClient },
-      registry: storage,
-      logger,
-    });
-
-    try {
-      const parent = await agentManager.createAgent(
-        { provider: "claude", cwd: existingCwd },
-        undefined,
-        { workspaceId: "wks_parent" },
-      );
-      const server = await createAgentMcpServer({
-        agentManager,
-        agentStorage: storage,
-        callerAgentId: parent.id,
-        providerSnapshotManager: createOpenCodeManager().manager,
-        logger,
-      });
-
-      const response = await invokeToolWithParsedInput(registeredTool(server, "create_agent"), {
-        ...subagentCurrentWorkspace(),
-        title: "Fast Child",
-        provider: "codex/gpt-5.4",
-        initialPrompt: "Finish immediately",
-      });
-      const childId = z.object({ agentId: z.string() }).parse(response.structuredContent).agentId;
-
-      await vi.waitFor(() => {
-        const parentPrompts = parentClient.sessions[0]!.prompts;
-        expect(parentPrompts).toHaveLength(1);
-        expect(parentPrompts[0]).toContain(childId);
-        expect(parentPrompts[0]).toContain("finished");
-      });
-    } finally {
-      await removeAgentStateDir(agentManager, storage, workdir);
-    }
-  });
-
   it("creates detached caller agents without a parent label", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
@@ -3945,11 +3901,6 @@ const HELD_TURN_CAPABILITIES = {
   supportsToolInvocations: false,
 } as const;
 
-interface HeldTurnOptions {
-  /** Run the whole turn before the turn-start request returns. */
-  finishTurnsDuringStart?: boolean;
-}
-
 /**
  * Provider session that records every prompt it receives. With `holdTurns`, a started
  * turn stays running until `finishTurn()` so a caller's bounded wait can run out first.
@@ -3964,7 +3915,6 @@ class HeldTurnAgentSession implements AgentSession {
   constructor(
     readonly provider: AgentProvider,
     private readonly holdTurns: boolean,
-    private readonly options: HeldTurnOptions = {},
   ) {}
 
   async run(): Promise<AgentRunResult> {
@@ -3974,13 +3924,6 @@ class HeldTurnAgentSession implements AgentSession {
   async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
     this.prompts.push(typeof prompt === "string" ? prompt : JSON.stringify(prompt));
     const turnId = randomUUID();
-    if (this.options.finishTurnsDuringStart) {
-      // The whole turn runs before the turn-start request returns, as a provider whose
-      // start acknowledgment arrives together with the turn's completion does.
-      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
-      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
-      return { turnId };
-    }
     this.activeTurnId = turnId;
     setTimeout(() => {
       this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
@@ -4063,7 +4006,6 @@ class HeldTurnAgentClient implements AgentClient {
   constructor(
     readonly provider: AgentProvider,
     private readonly holdTurns: boolean,
-    private readonly options: HeldTurnOptions = {},
   ) {}
 
   async isAvailable(): Promise<boolean> {
@@ -4071,7 +4013,7 @@ class HeldTurnAgentClient implements AgentClient {
   }
 
   async createSession(): Promise<AgentSession> {
-    const session = new HeldTurnAgentSession(this.provider, this.holdTurns, this.options);
+    const session = new HeldTurnAgentSession(this.provider, this.holdTurns);
     this.sessions.push(session);
     return session;
   }

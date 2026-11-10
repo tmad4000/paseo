@@ -143,18 +143,11 @@ export class PluginService {
     const config = this.configStore.get();
     this.globalStartsBlocked = config.pluginsEnabled !== true;
     if (config.pluginsEnabled === true) {
-      let earlierPublished: Promise<unknown> = Promise.resolve();
-      await Promise.all(
-        Object.entries(config.plugins ?? {})
-          .filter(([, source]) => source.enabled !== false)
-          .map(async ([pluginId]) => {
-            const publishTurn = earlierPublished;
-            const starting = this.startConfigured(pluginId, publishTurn);
-            earlierPublished = Promise.all([publishTurn, starting]);
-            await starting;
-            this.notify(pluginId);
-          }),
-      );
+      for (const [pluginId, source] of Object.entries(config.plugins ?? {})) {
+        if (source.enabled === false) continue;
+        await this.startConfigured(pluginId);
+        this.notify(pluginId);
+      }
     }
     this.configStore.onFieldChange("pluginsEnabled", (value) => {
       this.handleGlobalSwitch(value === true);
@@ -456,12 +449,12 @@ export class PluginService {
     }).catch((error) => this.logger.error({ err: error }, "Failed to enable plugins"));
   }
 
-  private async startConfigured(pluginId: string, publishTurn?: Promise<unknown>): Promise<void> {
+  private async startConfigured(pluginId: string): Promise<void> {
     const source = this.configStore.get().plugins?.[pluginId];
     if (!source || source.enabled === false || !this.canPublish(pluginId)) return;
     this.errors.delete(pluginId);
     try {
-      await this.startPlugin(pluginId, source.path, publishTurn);
+      await this.startPlugin(pluginId, source.path);
     } catch (error) {
       if (this.canPublish(pluginId)) this.recordFailure(pluginId, error);
     }
@@ -489,13 +482,8 @@ export class PluginService {
     );
   }
 
-  private async startPlugin(
-    pluginId: string,
-    sourcePath: string,
-    publishTurn?: Promise<unknown>,
-  ): Promise<void> {
+  private async startPlugin(pluginId: string, sourcePath: string): Promise<void> {
     await this.runtime.startPlugin(pluginId, sourcePath, () => this.canPublish(pluginId));
-    await publishTurn;
     try {
       await this.publishProviderRegistrations(pluginId, sourcePath);
     } catch (error) {

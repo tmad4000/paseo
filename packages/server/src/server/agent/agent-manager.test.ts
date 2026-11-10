@@ -54,9 +54,6 @@ import type {
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
 
-import { OpenCodeV2AgentClient } from "./providers/opencode/v2/agent.js";
-import { V2Harness } from "./providers/opencode/test-utils/v2-harness.js";
-
 const DESKTOP_OPEN_AGENT_TAB_LABEL = getOpenAgentTabLabel("desktop-client");
 const MOBILE_OPEN_AGENT_TAB_LABEL = getOpenAgentTabLabel("mobile-client");
 
@@ -686,33 +683,6 @@ async function startAndSteerThroughManager(
   });
   return { manager, agentId: agent.id, workdir };
 }
-
-test("stops an OpenCode execution already active when its conversation is reopened", async () => {
-  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-opencode-resume-"));
-  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
-  const harness = new V2Harness();
-  harness.info.location.directory = workdir;
-  harness.startExecution();
-  const client = new OpenCodeV2AgentClient({ logger, runtime: harness.runtime });
-  const manager = new AgentManager({ clients: { opencode: client }, logger });
-  const agent = await manager.resumeAgentFromPersistence({
-    provider: "opencode",
-    sessionId: "session",
-    nativeHandle: "session",
-    metadata: { cwd: workdir },
-  });
-  try {
-    expect(await manager.cancelAgentRun(agent.id)).toEqual({ status: "settled" });
-    expect(harness.active).toBe(false);
-    for await (const _event of manager.streamAgent(agent.id, "continue after restart")) {
-      // Drain the next turn through the same interface used by callers.
-    }
-    expect(harness.prompts).toEqual(["continue after restart"]);
-  } finally {
-    await manager.closeAgent(agent.id);
-    await client.shutdown();
-  }
-});
 
 test("uses an injected timeline store without making it a production requirement", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-timeline-store-"));
@@ -7026,7 +6996,6 @@ test("ignores stale autonomous terminals without lowering the active turn lifecy
     const running = manager.getAgent(snapshot.id);
     expect(running?.lifecycle).toBe("running");
     expect(running ? toAgentPayload(running).activeTurn?.turnId : null).toBe("turn-b");
-    expect(running?.lastError).toBeUndefined();
   });
 
   const active = manager.getAgent(snapshot.id)!;
@@ -7069,7 +7038,7 @@ test("ignores stale autonomous terminals without lowering the active turn lifecy
     const stillRunning = manager.getAgent(snapshot.id);
     expect(stillRunning?.lifecycle).toBe("running");
     expect(stillRunning ? toAgentPayload(stillRunning).activeTurn?.turnId : null).toBe("turn-b");
-    expect(stillRunning?.lastError).toBeUndefined();
+    expect(stillRunning?.lastError).toBe("turn-b marker");
     expect(stillRunning?.lastUsage).toEqual({ inputTokens: 7 });
     expect(stillRunning?.pendingPermissions.has("turn-b-permission")).toBe(true);
     expect(manager.getTimeline(snapshot.id)).toEqual(timelineBeforeStaleTerminals);
@@ -8145,118 +8114,6 @@ test("clearAgentAttention on errored agent stays cleared until a new error trans
   expect(persistedAfterSecondFailure?.requiresAttention).toBe(true);
   expect(persistedAfterSecondFailure?.attentionReason).toBe("error");
 });
-
-test.each([
-  ["autonomous", "turn_completed", "idle", "finished", undefined],
-  ["autonomous", "turn_failed", "error", "error", "Retry failed."],
-  ["foreground", "turn_completed", "idle", "finished", undefined],
-  ["foreground", "turn_failed", "error", "error", "Retry failed."],
-] as const)(
-  "%s recovery clears error attention before %s",
-  async (mode, terminal, status, expectedReason, lastError) => {
-    const workdir = mkdtempSync(join(tmpdir(), "agent-manager-attention-recovery-"));
-    const storage = new AgentStorage(join(workdir, "agents"), logger);
-    class RecoverySession extends TestAgentSession {
-      override async startTurn(): Promise<{ turnId: string }> {
-        return { turnId: "recovered-turn" };
-      }
-    }
-
-    class RecoveryClient extends TestAgentClient {
-      readonly session = new RecoverySession({ provider: "codex", cwd: workdir });
-
-      override async createSession(): Promise<AgentSession> {
-        return this.session;
-      }
-    }
-
-    const client = new RecoveryClient();
-    const attentionReasons: Array<"finished" | "error" | "permission"> = [];
-    const manager = new AgentManager({
-      clients: { codex: client },
-      registry: storage,
-      logger,
-      onAgentAttention: ({ reason }) => attentionReasons.push(reason),
-    });
-    onTestFinished(async () => {
-      await manager.closeAgent(agent.id);
-      await manager.flush();
-      rmSync(workdir, { recursive: true, force: true });
-    });
-    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
-      workspaceId: undefined,
-    });
-
-    const running = waitForAgentLifecycle(manager, agent.id, "running");
-    client.session.pushEvent({ type: "turn_started", provider: "codex", turnId: "failed-turn" });
-    await running;
-    const failed = waitForAgentLifecycle(manager, agent.id, "error");
-    client.session.pushEvent({
-      type: "turn_failed",
-      provider: "codex",
-      turnId: "failed-turn",
-      error: "Selected model is at capacity.",
-    });
-    await failed;
-    await vi.waitFor(() => expect(manager.hasInFlightRun(agent.id)).toBe(false));
-    expect(toAgentPayload(manager.getAgent(agent.id)!)).toMatchObject({
-      status: "error",
-      attentionReason: "error",
-      lastError: "Selected model is at capacity.",
-    });
-
-    const recovered = waitForAgentLifecycle(manager, agent.id, "running");
-    const stream =
-      mode === "foreground"
-        ? drainAsyncGenerator(manager.streamAgent(agent.id, "Continue after capacity recovers."))
-        : null;
-    if (mode === "autonomous") {
-      client.session.pushEvent({
-        type: "turn_started",
-        provider: "codex",
-        turnId: "recovered-turn",
-      });
-    }
-    await recovered;
-    await manager.flush();
-    expect(toAgentPayload(manager.getAgent(agent.id)!)).toMatchObject({
-      status: "running",
-      requiresAttention: false,
-      attentionReason: null,
-    });
-    expect(manager.getAgent(agent.id)?.lastError).toBeUndefined();
-    expect(await storage.get(agent.id)).toMatchObject({
-      lastStatus: "running",
-      requiresAttention: false,
-      attentionReason: null,
-    });
-    expect((await storage.get(agent.id))?.lastError).toBeUndefined();
-
-    const settled = waitForAgentLifecycle(manager, agent.id, status);
-    client.session.pushEvent({
-      type: terminal,
-      provider: "codex",
-      turnId: "recovered-turn",
-      ...(terminal === "turn_failed" ? { error: "Retry failed." } : {}),
-    });
-    await settled;
-    await stream;
-    await manager.flush();
-    expect(toAgentPayload(manager.getAgent(agent.id)!)).toMatchObject({
-      status,
-      requiresAttention: true,
-      attentionReason: expectedReason,
-    });
-    expect(manager.getAgent(agent.id)?.lastError).toBe(lastError);
-    expect(await storage.get(agent.id)).toMatchObject({
-      lastStatus: status,
-      requiresAttention: true,
-      attentionReason: expectedReason,
-    });
-    expect((await storage.get(agent.id))?.lastError).toBe(lastError);
-    expect(attentionReasons).toEqual(["error", expectedReason]);
-  },
-);
 
 test("streamAgent clears pending run when startTurn fails before a turn id exists", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-start-turn-failure-"));

@@ -314,14 +314,6 @@ const ACP_CLOSE_REQUEST_TIMEOUT_MS = 2_000;
 const ACP_IMPORT_HISTORY_LOAD_TIMEOUT_MS = 30_000;
 const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 
-/**
- * An ACP agent publishes its slash-command inventory incrementally. Wait this
- * long without another batch before treating the inventory as complete. MiniMax
- * publishes its skills about 350ms after its built-in commands.
- */
-const COMMAND_INVENTORY_QUIET_MS = 600;
-const COMMAND_INVENTORY_POLL_MS = 25;
-
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
     type: error instanceof Error ? error.name : typeof error,
@@ -1709,7 +1701,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private sessionId: string | null = null;
   private currentMode: string | null = null;
   private availableModes: AgentMode[];
-  private sessionModeState: SessionStateResponse["modes"] = null;
   private currentModel: string | null = null;
   private availableModels: AvailableACPModel[] | null = null;
   private thinkingOptionId: string | null = null;
@@ -1717,8 +1708,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private lastActivityAt: string | null = null;
   private configOptions: SessionConfigOption[] = [];
   private cachedCommands: AgentSlashCommand[] = [];
-  /** When the last command batch arrived; null while nothing has been published. */
-  private commandsUpdatedAt: number | null = null;
+  private commandsReadyDeferred: { promise: Promise<void>; resolve: () => void } | null = null;
   private commandsReadySettled = false;
   private waitForInitialCommands: boolean;
   private initialCommandsWaitTimeoutMs: number;
@@ -1997,39 +1987,58 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     ];
   }
 
-  private settleCommandsReady(): void {
-    this.commandsReadySettled = true;
+  private ensureCommandsReadyDeferred(): void {
+    if (this.commandsReadyDeferred || this.commandsReadySettled || this.cachedCommands.length > 0) {
+      return;
+    }
+
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    this.commandsReadyDeferred = { promise, resolve };
   }
 
-  /**
-   * Providers publish their command inventory incrementally. MiniMax sends its
-   * built-in commands twice, then a third batch about 350ms later that merges in
-   * every discovered skill. Returning after the first batch loses the skills.
-   *
-   * Wait for the inventory to go quiet rather than for the first batch. The
-   * quiet window must exceed the gap between a provider's own batches; 600ms
-   * covers MiniMax with margin. `initialCommandsWaitTimeoutMs` still bounds the
-   * whole wait for providers that publish once or never publish at all.
-   */
-  private async waitForCommandsToSettle(): Promise<void> {
-    const deadline = Date.now() + this.initialCommandsWaitTimeoutMs;
-    while (!this.commandsReadySettled && !this.closed) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) return;
-      const quietFor = this.commandsUpdatedAt === null ? 0 : Date.now() - this.commandsUpdatedAt;
-      if (quietFor >= COMMAND_INVENTORY_QUIET_MS) return;
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, Math.min(remaining, COMMAND_INVENTORY_POLL_MS)),
-      );
+  private settleCommandsReady(): void {
+    if (this.commandsReadySettled) {
+      return;
+    }
+    this.commandsReadySettled = true;
+    this.commandsReadyDeferred?.resolve();
+    this.commandsReadyDeferred = null;
+  }
+
+  private async waitForCommandsReady(): Promise<void> {
+    const deferred = this.commandsReadyDeferred;
+    if (!deferred) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        deferred.promise,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, this.initialCommandsWaitTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
   }
 
   async listCommands(): Promise<AgentSlashCommand[]> {
-    if (this.commandsReadySettled || this.closed || !this.waitForInitialCommands) {
+    if (this.cachedCommands.length > 0) {
+      return this.cachedCommands;
+    }
+    if (!this.waitForInitialCommands || this.closed) {
       return this.cachedCommands;
     }
 
-    await this.waitForCommandsToSettle();
+    this.ensureCommandsReadyDeferred();
+    await this.waitForCommandsReady();
     this.settleCommandsReady();
     return this.cachedCommands;
   }
@@ -2039,7 +2048,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error("ACP session not initialized");
     }
 
-    const selection = this.resolveModeSelection(modeId);
+    const selection = resolveACPModeSelection({
+      modeId,
+      availableModes: this.availableModes,
+      configOptions: this.configOptions,
+    });
     await this.setModeWithSelection({ modeId, selection });
   }
 
@@ -2064,7 +2077,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       if (providerResult.configOptions) {
         this.configOptions = this.transformConfigOptions(providerResult.configOptions);
       }
-      this.availableModes = this.modesFromConfig().modes;
+      this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
       this.pushEvent({
         type: "mode_changed",
         provider: this.provider,
@@ -2142,7 +2155,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       requestedValue: modeId,
       label: "mode",
     });
-    this.availableModes = this.modesFromConfig().modes;
+    this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
     this.pushEvent({
       type: "mode_changed",
       provider: this.provider,
@@ -2621,12 +2634,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  // Cache an asynchronously-delivered slash-command batch from a provider that
-  // supplies an extensionCommandsParser (e.g. a vendor extension notification).
-  // An empty batch is the provider saying it has no commands, so it settles the
-  // waiter immediately instead of letting it wait out the quiet window. An
-  // optional sessionId scopes the batch to this session; notifications
-  // addressed to a different session are ignored.
+  // Cache an asynchronously-delivered slash-command batch and unblock any
+  // listCommands() call that is waiting on the initial batch. Used when a
+  // provider supplies an extensionCommandsParser whose result arrives after
+  // session/new (e.g. via a vendor extension notification). The ready gate is
+  // always settled — even for an empty batch — so a provider that legitimately
+  // reports no commands does not leave listCommands() blocked for the full
+  // initial-commands timeout. An optional sessionId scopes the batch to this
+  // session; notifications addressed to a different session are ignored.
   private applyResolvedCommands(
     commands: AgentSlashCommand[],
     options?: { sessionId?: string },
@@ -2640,13 +2655,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     if (commands.length > 0) {
-      this.commandsUpdatedAt = Date.now();
       this.cachedCommands = commands;
-      // A non-empty batch may be followed by more. Let the quiet window decide
-      // when the inventory is complete rather than settling here; an empty
-      // batch is the provider saying it has nothing, which must still unblock
-      // the waiter immediately.
-      return;
     }
     this.settleCommandsReady();
   }
@@ -2860,7 +2869,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       : response;
 
     this.configOptions = this.transformConfigOptions(transformed.configOptions ?? []);
-    this.sessionModeState = transformed.modes ?? null;
 
     const modeInfo = deriveModesFromACP(this.defaultModes, transformed.modes, this.configOptions);
     this.availableModes = modeInfo.modes;
@@ -2886,7 +2894,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private async applyConfiguredOverrides(): Promise<void> {
     const configuredModeId = this.config.modeId;
     if (configuredModeId && configuredModeId !== this.currentMode) {
-      const selection = this.resolveModeSelection(configuredModeId);
+      const selection = resolveACPModeSelection({
+        modeId: configuredModeId,
+        availableModes: this.availableModes,
+        configOptions: this.configOptions,
+      });
       await this.setModeWithSelection({ modeId: configuredModeId, selection });
     }
     const configuredModelId = this.config.model;
@@ -3025,19 +3037,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleUsageUpdate(update);
         return pendingUserEvents;
       case "available_commands_update":
-        this.commandsUpdatedAt = Date.now();
         this.cachedCommands = update.availableCommands.map((command) => ({
           name: command.name,
           description: command.description,
           argumentHint: "",
           kind: "command",
         }));
-        // An empty batch means the agent has no commands and would otherwise
-        // wait out the whole quiet window. A non-empty batch may be one of
-        // several, so completion belongs to the quiet window.
-        if (update.availableCommands.length === 0) {
-          this.settleCommandsReady();
-        }
+        this.settleCommandsReady();
         return pendingUserEvents;
       default:
         return pendingUserEvents;
@@ -3145,37 +3151,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentMode = this.transformModeId(update.currentModeId);
   }
 
-  private modesFromConfig() {
-    let modes = this.sessionModeState;
-    if (modes) {
-      let currentModeId = this.currentMode ?? modes.currentModeId;
-      const configMode = findSelectConfigOption({
-        configOptions: this.configOptions,
-        category: "mode",
-      });
-      // Copilot config updates name real modes; Hermes config values are a separate policy namespace.
-      if (configMode && modes.availableModes.some((mode) => mode.id === configMode.currentValue)) {
-        currentModeId = configMode.currentValue;
-      }
-      modes = { ...modes, currentModeId };
-    }
-    return deriveModesFromACP(this.defaultModes, modes, this.configOptions);
-  }
-
-  private resolveModeSelection(modeId: string): ACPModeSelection {
-    const hasSessionModes = Boolean(this.sessionModeState?.availableModes.length);
-    const modeConfig = findSelectConfigOption({
-      configOptions: this.configOptions,
-      category: "mode",
-    });
-    const configOnly = !hasSessionModes && modeConfig !== null;
-    const availableModes = configOnly ? [] : this.availableModes;
-    return resolveACPModeSelection({ modeId, availableModes, configOptions: this.configOptions });
-  }
-
   private handleConfigOptionUpdate(update: ConfigOptionUpdate): AgentStreamEvent[] {
     this.configOptions = this.transformConfigOptions(update.configOptions);
-    const modeInfo = this.modesFromConfig();
+    const modeInfo = deriveModesFromACP(this.defaultModes, null, this.configOptions);
     const nextMode = modeInfo.currentModeId;
     const nextModel = deriveCurrentConfigValue(this.configOptions, "model");
     const nextThinkingOptionId = deriveCurrentConfigValue(this.configOptions, "thought_level");
