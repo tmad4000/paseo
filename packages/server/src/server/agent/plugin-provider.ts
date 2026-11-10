@@ -533,6 +533,7 @@ class ProviderRuntimeSession {
     string,
     Deferred<Extract<ProviderEvent, { type: "session.prompt_result" }>>
   >();
+  private readonly activeTurnIds = new Set<string>();
   private terminal = false;
   config: ProviderConfigState = { models: [], modes: [], thinkingOptions: [], settings: [] };
   commands: Array<{ name: string; description: string; argumentHint?: string }> = [];
@@ -677,6 +678,7 @@ class ProviderRuntimeSession {
       return;
     }
     if (event.type === "session.prompt_result") {
+      if (event.result.type === "turn") this.activeTurnIds.add(event.result.turnId);
       this.prompts.get(event.clientMessageId)?.resolve(event);
       return;
     }
@@ -695,14 +697,16 @@ class ProviderRuntimeSession {
   }
 
   connectionClosed(error = new Error("Provider connection closed")): void {
-    if (!this.terminal) {
-      this.terminal = true;
+    // Closing fails only an interrupted turn. An idle session goes stale, and its next prompt
+    // reopens it from persistence.
+    if (!this.terminal && this.activeTurnIds.size > 0) {
       this.publish({
         type: "session.runtime_failed",
         sessionId: this.id,
         error: { message: error.message },
       });
     }
+    this.terminal = true;
     this.rejectPending(error);
   }
 
@@ -726,6 +730,10 @@ class ProviderRuntimeSession {
   }
 
   private publish(event: ProviderEvent): void {
+    if (event.type === "session.turn") {
+      if (event.state === "started") this.activeTurnIds.add(event.turnId);
+      else this.activeTurnIds.delete(event.turnId);
+    }
     if (event.type === "session.config") this.config = event.config;
     if (event.type === "session.commands") this.commands = [...event.commands];
     if (event.type === "session.persistence" && this.restoration === "core") {
