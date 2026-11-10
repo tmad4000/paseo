@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "最初のメッセージ",
     loading: "最初のメッセージを読み込み中…",

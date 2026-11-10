@@ -1,3 +1,5 @@
+import { isSessionLink } from "@/navigation/session-link";
+import { openSessionLink } from "@/navigation/session-link-runtime";
 import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -92,6 +94,7 @@ export function useFileLink(source: AssistantFileLinkSource): UseFileLinkResult 
         context,
         queryClient,
         formatNoFileFoundMessage: (token) => t("common.errors.noFileFound", { token }),
+        sessionLinkErrorMessage: t("sessionLinks.errors.unavailable"),
       });
     },
   );
@@ -159,8 +162,15 @@ function openAssistantFileLink(input: {
   context: AssistantFileLinkResolverContextValue;
   queryClient: ReturnType<typeof useQueryClient>;
   formatNoFileFoundMessage: (token: string) => string;
+  sessionLinkErrorMessage: string;
 }): void {
   const capturedConfig = input.context.configRef.current;
+  if (isSessionLink(input.source.href)) {
+    void openSessionLink(input.source.href).catch(() =>
+      capturedConfig.toast?.error(input.sessionLinkErrorMessage),
+    );
+    return;
+  }
   const capturedResolution = classifyForResolution(input.source, {
     workspaceRoot: capturedConfig.workspaceRoot,
   });

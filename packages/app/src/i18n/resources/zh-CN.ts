@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "第一条消息",
     loading: "正在加载第一条消息…",

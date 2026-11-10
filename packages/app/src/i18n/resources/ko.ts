@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "첫 메시지",
     loading: "첫 메시지 불러오는 중…",

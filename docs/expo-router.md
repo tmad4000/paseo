@@ -290,3 +290,22 @@ Before landing route changes:
 - [ ] Did `useLocalSearchParams()` lose a required param? Fix the route tree.
 - [ ] Did native show a blank screen without a crash? Suspect route ownership
       before stores, themes, or rendering.
+
+### Session links rendered in chat
+
+Chat session links (`paseo-fork://h/<server>/agent/<agent>`, plus legacy `paseo://`)
+use the protocol agent deep-link parser and the saved host registry. They never pass
+through the HTTP/HTTPS external opener. A known cached agent or an exact target-host
+lookup supplies the workspace; unknown hosts, missing agents and offline cold lookups
+show an error without creating connections or changing host authentication.
+
+The inline web link retains its real href and native anchor keyboard behavior. Click
+or Enter opens the session; Cmd/Ctrl/middle click uses the desktop new-window bridge
+when present, otherwise the ordinary side pane. Shift-click explicitly requests a
+window and explains if unavailable. The message context menu offers Open session,
+Open session beside (wide layouts), Open session in new window when supported, and
+Copy link alongside Save to Stream. On native, long-press the message to find its
+session links; native text spans keep their existing selection and tap handling.
+
+Source tracked by `pspin-b2k`; source changes alone do not establish release or installed
+native interaction receipts.
