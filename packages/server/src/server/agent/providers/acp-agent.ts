@@ -1709,6 +1709,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private sessionId: string | null = null;
   private currentMode: string | null = null;
   private availableModes: AgentMode[];
+  private sessionModeState: SessionStateResponse["modes"] = null;
   private currentModel: string | null = null;
   private availableModels: AvailableACPModel[] | null = null;
   private thinkingOptionId: string | null = null;
@@ -2038,11 +2039,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error("ACP session not initialized");
     }
 
-    const selection = resolveACPModeSelection({
-      modeId,
-      availableModes: this.availableModes,
-      configOptions: this.configOptions,
-    });
+    const selection = this.resolveModeSelection(modeId);
     await this.setModeWithSelection({ modeId, selection });
   }
 
@@ -2067,7 +2064,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       if (providerResult.configOptions) {
         this.configOptions = this.transformConfigOptions(providerResult.configOptions);
       }
-      this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
+      this.availableModes = this.modesFromConfig().modes;
       this.pushEvent({
         type: "mode_changed",
         provider: this.provider,
@@ -2145,7 +2142,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       requestedValue: modeId,
       label: "mode",
     });
-    this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
+    this.availableModes = this.modesFromConfig().modes;
     this.pushEvent({
       type: "mode_changed",
       provider: this.provider,
@@ -2863,6 +2860,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       : response;
 
     this.configOptions = this.transformConfigOptions(transformed.configOptions ?? []);
+    this.sessionModeState = transformed.modes ?? null;
 
     const modeInfo = deriveModesFromACP(this.defaultModes, transformed.modes, this.configOptions);
     this.availableModes = modeInfo.modes;
@@ -2888,11 +2886,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private async applyConfiguredOverrides(): Promise<void> {
     const configuredModeId = this.config.modeId;
     if (configuredModeId && configuredModeId !== this.currentMode) {
-      const selection = resolveACPModeSelection({
-        modeId: configuredModeId,
-        availableModes: this.availableModes,
-        configOptions: this.configOptions,
-      });
+      const selection = this.resolveModeSelection(configuredModeId);
       await this.setModeWithSelection({ modeId: configuredModeId, selection });
     }
     const configuredModelId = this.config.model;
@@ -3151,9 +3145,37 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentMode = this.transformModeId(update.currentModeId);
   }
 
+  private modesFromConfig() {
+    let modes = this.sessionModeState;
+    if (modes) {
+      let currentModeId = this.currentMode ?? modes.currentModeId;
+      const configMode = findSelectConfigOption({
+        configOptions: this.configOptions,
+        category: "mode",
+      });
+      // Copilot config updates name real modes; Hermes config values are a separate policy namespace.
+      if (configMode && modes.availableModes.some((mode) => mode.id === configMode.currentValue)) {
+        currentModeId = configMode.currentValue;
+      }
+      modes = { ...modes, currentModeId };
+    }
+    return deriveModesFromACP(this.defaultModes, modes, this.configOptions);
+  }
+
+  private resolveModeSelection(modeId: string): ACPModeSelection {
+    const hasSessionModes = Boolean(this.sessionModeState?.availableModes.length);
+    const modeConfig = findSelectConfigOption({
+      configOptions: this.configOptions,
+      category: "mode",
+    });
+    const configOnly = !hasSessionModes && modeConfig !== null;
+    const availableModes = configOnly ? [] : this.availableModes;
+    return resolveACPModeSelection({ modeId, availableModes, configOptions: this.configOptions });
+  }
+
   private handleConfigOptionUpdate(update: ConfigOptionUpdate): AgentStreamEvent[] {
     this.configOptions = this.transformConfigOptions(update.configOptions);
-    const modeInfo = deriveModesFromACP(this.defaultModes, null, this.configOptions);
+    const modeInfo = this.modesFromConfig();
     const nextMode = modeInfo.currentModeId;
     const nextModel = deriveCurrentConfigValue(this.configOptions, "model");
     const nextThinkingOptionId = deriveCurrentConfigValue(this.configOptions, "thought_level");
