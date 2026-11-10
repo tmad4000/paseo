@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import {
   AgentMessageRejectedError,
   DaemonConnectionError,
@@ -46,6 +47,7 @@ import {
   removeComposerAttachmentAtIndex,
   reorderQueuedComposerMessagesLocally,
   sendQueuedComposerMessageNow,
+  queuedSendNowErrorMessage,
   takeQueuedComposerMessage,
   toggleForgeAttachment,
   toggleForgeAttachmentFromPicker,
@@ -897,6 +899,35 @@ describe("updateQueuedComposerMessage", () => {
       text: "revised draft",
       attachments: [{ kind: "image", metadata: image }, review],
     });
+  });
+});
+
+describe("queuedSendNowErrorMessage", () => {
+  it("explains a refused strict steer as still queued for the end of the turn", () => {
+    for (const message of [
+      "The active turn cannot accept a steer. It was not interrupted.",
+      "Active turn changed before steering could be delivered",
+    ]) {
+      expect(queuedSendNowErrorMessage(new Error(message))).toBe(
+        i18n.t("composer.errors.steerRefusedStillQueued"),
+      );
+    }
+  });
+
+  it("explains an unconfirmed outcome instead of showing the raw code", () => {
+    for (const message of [
+      "agent_request_outcome_unknown",
+      "Provider submission outcome unknown: the active turn changed during steering",
+    ]) {
+      expect(queuedSendNowErrorMessage(new Error(message))).toBe(
+        i18n.t("composer.errors.queuedOutcomeUnknown"),
+      );
+    }
+  });
+
+  it("passes other errors through and falls back for non-errors", () => {
+    expect(queuedSendNowErrorMessage(new Error("network down"))).toBe("network down");
+    expect(queuedSendNowErrorMessage("nope", "fallback")).toBe("fallback");
   });
 });
 

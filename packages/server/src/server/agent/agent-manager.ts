@@ -136,6 +136,7 @@ import {
 import { AgentArtifactCollector } from "./artifacts/collector.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { extractAttention } from "../persistence-hooks.js";
+import { steerRejectedError } from "./prompt-not-submitted.js";
 
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
@@ -3100,7 +3101,13 @@ export class AgentManager {
     // An unavailable answer is only safe to fall back from while this admission
     // still owns the active turn. Never let an A admission replace a later B.
     if (result.status === "unavailable" && agent.activeTurnId !== expectedTurnId) {
-      throw new Error("Active turn changed before steering could be delivered");
+      // Only a refusal before provider handoff proves nothing was delivered.
+      if (result.deliveryUnknown) {
+        throw new Error(
+          "Provider submission outcome unknown: the active turn changed during steering",
+        );
+      }
+      throw steerRejectedError("Active turn changed before steering could be delivered");
     }
     return result;
   }

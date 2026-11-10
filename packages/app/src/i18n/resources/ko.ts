@@ -470,6 +470,10 @@ export const ko: TranslationResources = {
       queueEditFailed: "대기 메시지를 편집하지 못했습니다",
       steerRequiresUpdatedHost:
         "진행 중인 작업을 중단하지 않고 지시하려면 이 Paseo 호스트를 업데이트하세요.",
+      steerRefusedStillQueued:
+        "에이전트가 지금은 턴 도중에 메시지를 받을 수 없습니다. 메시지는 대기열에 남아 있으며 턴이 끝나면 전송됩니다.",
+      queuedOutcomeUnknown:
+        "Paseo가 이 메시지가 에이전트에 도달했는지 확인하지 못해 자동으로 다시 보내지 않습니다. 에이전트가 유휴 상태가 되면 지금 보내기를 다시 시도하거나 에이전트를 다시 시작하세요.",
       failedToCreateAgent: "에이전트를 생성하지 못했습니다",
       noHostSelected: "선택된 호스트가 없습니다",
       initialPromptRequired: "초기 프롬프트가 필요합니다",

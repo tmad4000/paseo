@@ -88,6 +88,7 @@ import {
   queueComposerMessageOnServer,
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
+  queuedSendNowErrorMessage,
   updateQueuedComposerMessage,
   removeQueuedComposerMessageLocally,
   reorderQueuedComposerMessagesLocally,
@@ -3109,7 +3110,7 @@ function ComposerContentImpl({
           const snapshot = await client.sendQueuedAgentMessageNow(agentId, id);
           applyAgentQueueSnapshot(serverId, snapshot);
         } catch (error) {
-          setSendError(error instanceof Error ? error.message : t("composer.errors.failedToSend"));
+          setSendError(queuedSendNowErrorMessage(error, t("composer.errors.failedToSend")));
         }
         return;
       }

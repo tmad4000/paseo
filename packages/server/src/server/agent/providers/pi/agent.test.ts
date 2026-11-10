@@ -2417,6 +2417,18 @@ describe("PiRpcAgentSession steering", () => {
     );
   });
 
+  test("marks a steer Pi already queued as delivery-unknown when the turn ends meanwhile", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    const { turnId } = await session.startTurn("run");
+    fakeSession.afterSteerQueued = () => session.close();
+
+    const result = await session.steerActiveTurn("steer", { expectedTurnId: turnId });
+
+    expect(result).toEqual({ status: "unavailable", deliveryUnknown: true });
+    expect(fakeSession.steerCalls).toEqual([{ message: "steer", imageCount: 0 }]);
+  });
+
   test("denies pending permissions that block an accepted steer", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();

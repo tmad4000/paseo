@@ -226,7 +226,14 @@ export interface AgentSteerOptions extends AgentRunOptions {
   clearPendingPermissions?: boolean;
 }
 
-export type SteerResult = { status: "accepted" } | { status: "unavailable" };
+/**
+ * `unavailable` means the active turn did not take the steer. Set `deliveryUnknown`
+ * when the prompt had already been handed to the provider before that answer (it may
+ * still be processed), so callers must not treat it as never submitted.
+ */
+export type SteerResult =
+  | { status: "accepted" }
+  | { status: "unavailable"; deliveryUnknown?: true };
 
 export interface SteerActiveTurnOptions extends AgentSteerOptions {
   expectedTurnId: string;

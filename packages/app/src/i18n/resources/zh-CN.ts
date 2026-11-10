@@ -461,6 +461,10 @@ export const zhCN: TranslationResources = {
       queueReorderFailed: "无法重新排序消息。请重试。",
       queueEditFailed: "编辑排队消息失败",
       steerRequiresUpdatedHost: "请更新此 Paseo 主机，以便在不中断当前任务的情况下引导消息。",
+      steerRefusedStillQueued:
+        "智能体在当前回合进行中无法接收消息。消息仍在队列中，将在回合结束时发送。",
+      queuedOutcomeUnknown:
+        "Paseo 无法确认此消息是否已送达智能体，因此不会自动重新发送。请在智能体空闲后再次尝试“立即发送”，或重启智能体。",
       failedToCreateAgent: "创建 Agent 失败",
       noHostSelected: "未选择 Host",
       initialPromptRequired: "初始 prompt 必填",
