@@ -308,6 +308,3 @@ window and explains if unavailable. The message context menu offers Open session
 Open session beside (wide layouts), Open session in new window when supported, and
 Copy link alongside Save to Stream. On native, long-press the message to find its
 session links; native text spans keep their existing selection and tap handling.
-
-Source tracked by `pspin-b2k`; source changes alone do not establish release or installed
-native interaction receipts.

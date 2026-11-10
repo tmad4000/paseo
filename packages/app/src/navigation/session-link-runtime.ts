@@ -1,9 +1,15 @@
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { navigateToWorkspace, type ActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import {
+  navigateToWorkspace,
+  type ActiveWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { getDesktopHost } from "@/desktop/host";
-import { normalizeWorkspaceOpaqueId, resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
+import {
+  normalizeWorkspaceOpaqueId,
+  resolveWorkspaceMapKeyByIdentity,
+} from "@/utils/workspace-identity";
 import {
   openSessionLinkWithPorts,
   SessionLinkError,
@@ -48,11 +54,16 @@ export async function openSessionLink(
         const active = getActiveWorkspace?.();
         const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
         if (
-          !origin || !active || origin.serverId !== serverId || active.serverId !== serverId ||
-          origin.workspaceId !== workspaceId || active.workspaceId !== workspaceId ||
+          !origin ||
+          !active ||
+          origin.serverId !== serverId ||
+          active.serverId !== serverId ||
+          origin.workspaceId !== workspaceId ||
+          active.workspaceId !== workspaceId ||
           !useWorkspaceLayoutStore.persist.hasHydrated() ||
           !resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId })
-        ) throw new SessionLinkError("sideUnavailable");
+        )
+          throw new SessionLinkError("sideUnavailable");
       }
       const paneId =
         placement === "side"

@@ -10,7 +10,8 @@ export const en = {
       unknownHost: "This session link points to a host that is not saved here.",
       unavailable: "Unable to open this session. Check the host connection and try again.",
       notFound: "This session was not found on the linked host.",
-      sideUnavailable: "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+      sideUnavailable:
+        "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
       windowUnavailable:
         "New windows are unavailable here. Use Open session or Open session beside.",
       copy: "Unable to copy this link.",
