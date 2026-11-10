@@ -4,6 +4,7 @@ import path from "node:path";
 import pLimit from "p-limit";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "../atomic-file.js";
+import { isPromptNotSubmittedError } from "../agent/prompt-not-submitted.js";
 
 const ReceiptSchema = z.object({
   fingerprint: z.string(),
@@ -245,13 +246,11 @@ export class MessageReceipts {
     try {
       await input.send();
     } catch (error) {
-      // A competing run rejected the synchronous reservation before provider dispatch.
-      // This is the only post-receipt error safe to retry automatically.
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        (error.code === "AGENT_RUN_BUSY" || error.code === "AGENT_PROMPT_NOT_SUBMITTED")
-      ) {
+      // Errors that prove the provider never received the prompt (a lost run
+      // reservation, failed preparation, a refused steer) leave nothing to
+      // deduplicate, so the same message id may be sent again. Anything else
+      // may have reached the provider and stays guarded as outcome-unknown.
+      if (isPromptNotSubmittedError(error)) {
         await this.mutate(() => rm(file, { force: true }));
       }
       throw error;

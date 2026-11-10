@@ -474,6 +474,10 @@ export const es: TranslationResources = {
       queueEditFailed: "No se pudo editar el mensaje en cola",
       steerRequiresUpdatedHost:
         "Actualiza este host de Paseo para dirigir el mensaje sin interrumpir el turno activo.",
+      steerRefusedStillQueued:
+        "El agente no puede recibir un mensaje a mitad de turno ahora. Sigue en cola y se enviará cuando termine el turno.",
+      queuedOutcomeUnknown:
+        "Paseo no pudo confirmar si este mensaje llegó al agente, así que no lo reenviará por sí solo. Vuelve a probar Enviar ahora cuando el agente esté inactivo, o reinicia el agente.",
       failedToCreateAgent: "No se pudo crear el agente",
       noHostSelected: "Ningún anfitrión seleccionado",
       initialPromptRequired: "Se requiere aviso inicial",

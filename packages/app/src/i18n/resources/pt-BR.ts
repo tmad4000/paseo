@@ -473,6 +473,10 @@ export const ptBR: TranslationResources = {
       queueEditFailed: "Falha ao editar mensagem na fila",
       steerRequiresUpdatedHost:
         "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",
+      steerRefusedStillQueued:
+        "O agente não pode receber uma mensagem no meio do turno agora. Ela continua na fila e será enviada quando o turno terminar.",
+      queuedOutcomeUnknown:
+        "O Paseo não conseguiu confirmar se esta mensagem chegou ao agente, então não vai reenviá-la sozinho. Tente Enviar agora de novo quando o agente estiver ocioso ou reinicie o agente.",
       failedToCreateAgent: "Falha ao criar agente",
       noHostSelected: "Nenhum host selecionado",
       initialPromptRequired: "O prompt inicial é obrigatório",

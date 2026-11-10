@@ -474,6 +474,10 @@ export const fr: TranslationResources = {
       queueEditFailed: "Impossible de modifier le message en file d’attente",
       steerRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour orienter le message sans interrompre le tour actif.",
+      steerRefusedStillQueued:
+        "L'agent ne peut pas recevoir de message en cours de tour pour l'instant. Il reste en file d'attente et sera envoyé à la fin du tour.",
+      queuedOutcomeUnknown:
+        "Paseo n'a pas pu confirmer que ce message a atteint l'agent ; il ne le renverra donc pas de lui-même. Réessayez Envoyer maintenant quand l'agent est inactif, ou redémarrez l'agent.",
       failedToCreateAgent: "Échec de la création de l'agent",
       noHostSelected: "Aucun hôte sélectionné",
       initialPromptRequired: "Une invite initiale est requise",

@@ -154,6 +154,7 @@ import {
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { AgentQueueService } from "./agent-queue/service.js";
+import { timelineHasQueuedMessage } from "./agent/restart-agent.js";
 import { AgentQueueStore } from "./agent-queue/store.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
@@ -1390,6 +1391,8 @@ export async function createPaseoDaemon(
     agentManager,
     agentStorage,
     logger,
+    isDelivered: (agentId, item) =>
+      timelineHasQueuedMessage(agentManager.getTimeline(agentId), item),
   });
   agentQueueService.start();
   logger.info({ elapsed: elapsed() }, "Agent message queue initialized");
