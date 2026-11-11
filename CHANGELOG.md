@@ -2,7 +2,7 @@
 
 ## 0.10.0-beta.27 - 2026-11-11
 
-This release includes the uninstalled beta.25 candidate below.
+This release includes the uninstalled [beta.25 candidate](https://github.com/tmad4000/paseo/blob/main/CHANGELOG.md#0100-beta25---2026-11-09).
 
 ### Added
 
