@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0-beta.27 - 2026-11-11
+
+This hotfix includes the uninstalled beta.25 candidate below.
+
+### Fixed
+
+- Keep large agent directories from disconnecting mobile clients through the relay ([#196](https://github.com/tmad4000/paseo/pull/196))
+
 ## 0.10.0-beta.25 - 2026-11-09
 
 This release supersedes the uninstalled desktop beta.24 candidate and also contains everything listed under 0.10.0-beta.24 below.
