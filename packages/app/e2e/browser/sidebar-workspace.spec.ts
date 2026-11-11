@@ -252,6 +252,34 @@ async function cacheWorkspaces(page: Page, workspaceIds: string[]): Promise<void
   await gotoAppShell(page);
   await expectSidebarWorkspaces(page, workspaceIds);
   await expect.poll(() => readCachedRowIds(page, "workspace")).toEqual(workspaceIds);
+  await expect
+    .poll(() =>
+      page.evaluate(async (serverId) => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("paseo-replica-row-store");
+          request.onsuccess = () => resolve(request.result);
+          request.addEventListener("error", () => reject(request.error));
+        });
+        try {
+          return await new Promise<boolean>((resolve, reject) => {
+            const request = database.transaction("rows").objectStore("rows").getAll();
+            request.onsuccess = () => {
+              const checkpoint = request.result.find(
+                (row: { serverId: string; kind: string }) =>
+                  row.serverId === serverId && row.kind === "checkpoint",
+              );
+              const stored = checkpoint ? JSON.parse(checkpoint.payload) : null;
+              const cursors = stored?.version === 1 ? stored.cursors : stored;
+              resolve(Boolean(cursors?.workspaces?.generation));
+            };
+            request.addEventListener("error", () => reject(request.error));
+          });
+        } finally {
+          database.close();
+        }
+      }, getServerId()),
+    )
+    .toBe(true);
 }
 
 async function reopenDamagedCacheBeforeHostResponds(
@@ -296,6 +324,9 @@ test.describe("Sidebar workspace list", () => {
   }, testInfo) => {
     const project = await seedWorkspace({ repoPrefix: "directory-cache-recovery-" });
     try {
+      // Exercise the retained sync implementation even while the host advertises
+      // the paginated compatibility path by default.
+      await overrideServerInfoFeatures(page, { directorySync: true });
       const siblingId = await createPinnedSiblingWorkspace(project);
       const ids = [project.workspaceId, siblingId].sort();
       await test.step("cache both workspaces", () => cacheWorkspaces(page, ids));

@@ -999,6 +999,29 @@ describe("DirectorySync session readiness", () => {
     directory.dispose();
   });
 
+  it("uses paginated agent reads when the daemon disables directory sync", async () => {
+    const serverId = "agent-directory-sync-disabled";
+    const { client, directory } = createDirectory(serverId);
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, client as unknown as DaemonClient, 1);
+    store.updateSessionServerInfo(serverId, {
+      serverId,
+      hostname: null,
+      version: "test",
+      features: { directorySync: false, workspaceMultiplicity: true },
+    });
+
+    await directory.refreshAgents({ subscribe: {}, page: { limit: 200 } });
+
+    expect(client.lastAgentOptions).toEqual({
+      scope: "active",
+      sort: [{ key: "updated_at", direction: "desc" }],
+      subscribe: {},
+      page: { limit: 200 },
+    });
+    directory.dispose();
+  });
+
   it("waits for workspace capability metadata before choosing the workspace protocol", async () => {
     const serverId = "workspace-metadata";
     const { client, directory } = createDirectory(serverId);
