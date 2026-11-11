@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0-beta.27 - 2026-11-11
+
+This release includes the uninstalled beta.25 candidate below.
+
+### Added
+
+- Group open tabs in the sidebar with the Tabs view ([#192](https://github.com/tmad4000/paseo/pull/192))
+- Use Claude Fable 5.2 when supported by Claude Code ([#191](https://github.com/tmad4000/paseo/pull/191))
+
+### Improved
+
+- Save queued-message edits with Command+Enter or Ctrl+Enter ([#190](https://github.com/tmad4000/paseo/pull/190))
+- Include upstream fixes for agent providers, the daemon, CLI, and desktop shell ([#193](https://github.com/tmad4000/paseo/pull/193))
+
+### Fixed
+
+- Keep large agent directories from disconnecting mobile clients through the relay ([#196](https://github.com/tmad4000/paseo/pull/196))
+- Keep a refused Send now action from stranding a queued message ([#194](https://github.com/tmad4000/paseo/pull/194))
+
 ## 0.10.0-beta.25 - 2026-11-09
 
 This release supersedes the uninstalled desktop beta.24 candidate and also contains everything listed under 0.10.0-beta.24 below.
