@@ -1904,8 +1904,10 @@ export class VoiceAssistantWebSocketServer {
         workspaceRequestReceipts: true,
         creationLifecycle: true,
         hubAgentRpc: true,
-        // COMPAT(directorySync): added in v0.3.x, remove gate after 2027-02-12.
-        directorySync: true,
+        // Temporarily use the paginated compatibility path: directory sync snapshots
+        // are unbounded and can exceed the encrypted relay's frame limit. Restore
+        // this capability once sync snapshots support bounded transfer (pspin-a9r).
+        directorySync: false,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
