@@ -16,7 +16,7 @@ import {
   getReviewStatus,
   MANUAL_NEEDS_INPUT_LABEL,
 } from "@getpaseo/protocol/agent-labels";
-import { SortablePager } from "./pagination/sortable-pager.js";
+import { CursorError, SortablePager } from "./pagination/sortable-pager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "./workspace-registry.js";
 import { resolveProjectDisplayName } from "./workspace-registry.js";
 import {
@@ -64,6 +64,43 @@ type FetchWorkspacesResponsePayload = Extract<
 type FetchWorkspacesResponseEntry = FetchWorkspacesResponsePayload["entries"][number];
 type FetchWorkspacesResponsePageInfo = FetchWorkspacesResponsePayload["pageInfo"];
 type WorkspaceProjectDescriptor = FetchWorkspacesResponsePayload["emptyProjects"][number];
+
+const WORKSPACE_SYNC_CURSOR_PREFIX = "workspace-sync-page:";
+
+function decodeWorkspaceSyncCursor(
+  token: string | undefined,
+  sort: FetchWorkspacesRequestSort[],
+): { workspaceCursor: string | null; workspacesDone: boolean; projectCursor: string | null } {
+  if (!token?.startsWith(WORKSPACE_SYNC_CURSOR_PREFIX)) {
+    return { workspaceCursor: token ?? null, workspacesDone: false, projectCursor: null };
+  }
+  try {
+    const cursor: unknown = JSON.parse(
+      Buffer.from(token.slice(WORKSPACE_SYNC_CURSOR_PREFIX.length), "base64url").toString(),
+    );
+    if (
+      !cursor ||
+      typeof cursor !== "object" ||
+      !("workspaceCursor" in cursor) ||
+      !("workspacesDone" in cursor) ||
+      !("projectCursor" in cursor) ||
+      !("sort" in cursor) ||
+      (cursor.workspaceCursor !== null && typeof cursor.workspaceCursor !== "string") ||
+      typeof cursor.workspacesDone !== "boolean" ||
+      (cursor.projectCursor !== null && typeof cursor.projectCursor !== "string") ||
+      JSON.stringify(cursor.sort) !== JSON.stringify(sort)
+    ) {
+      throw new Error();
+    }
+    return {
+      workspaceCursor: cursor.workspaceCursor,
+      workspacesDone: cursor.workspacesDone,
+      projectCursor: cursor.projectCursor,
+    };
+  } catch {
+    throw new CursorError("Invalid workspaces cursor");
+  }
+}
 
 export type WorkspaceUpdatesFilter = FetchWorkspacesRequestFilter;
 
@@ -662,30 +699,46 @@ export class WorkspaceDirectory {
     const filteredCount = entries.length;
     entries.sort((left, right) => this.pager.compare(left, right, sort));
 
-    const cursorToken = request.page?.cursor;
-    if (cursorToken) {
-      const cursor = this.pager.decode(cursorToken, sort);
+    const { workspaceCursor, workspacesDone, projectCursor } = decodeWorkspaceSyncCursor(
+      request.page?.cursor,
+      sort,
+    );
+    if (workspaceCursor) {
+      const cursor = this.pager.decode(workspaceCursor, sort);
       entries = entries.filter(
         (workspace) => this.pager.compareWithCursor(workspace, cursor, sort) > 0,
       );
     }
+    if (workspacesDone) entries = [];
 
     const limit = request.page?.limit ?? 200;
     const pagedEntries = entries.slice(0, limit);
-    const hasMore = entries.length > limit;
-    const nextCursor =
-      hasMore && pagedEntries.length > 0
+    const workspacesHaveMore = entries.length > limit;
+    const nextWorkspaceCursor =
+      workspacesHaveMore && pagedEntries.length > 0
         ? this.pager.encode(pagedEntries[pagedEntries.length - 1], sort)
         : null;
-
-    // Project parents with no active workspaces ride only on the first page so
-    // the sidebar can render them without duplicating them across pagination.
     const projectIdFilter = filter?.projectId?.trim();
-    const emptyProjects = cursorToken
-      ? []
-      : (await this.listEmptyProjects()).filter(
-          (project) => !projectIdFilter || project.projectId === projectIdFilter,
-        );
+    const remainingProjects = (await this.listEmptyProjects())
+      .filter((project) => !projectIdFilter || project.projectId === projectIdFilter)
+      .sort((a, b) => a.projectId.localeCompare(b.projectId))
+      .filter(
+        (project) => projectCursor === null || project.projectId.localeCompare(projectCursor) > 0,
+      );
+    const emptyProjects = remainingProjects.slice(0, limit);
+    const projectsHaveMore = remainingProjects.length > limit;
+    const hasMore = workspacesHaveMore || projectsHaveMore;
+    const nextCursor = hasMore
+      ? WORKSPACE_SYNC_CURSOR_PREFIX +
+        Buffer.from(
+          JSON.stringify({
+            workspaceCursor: nextWorkspaceCursor,
+            workspacesDone: !workspacesHaveMore,
+            projectCursor: emptyProjects.at(-1)?.projectId ?? projectCursor,
+            sort,
+          }),
+        ).toString("base64url")
+      : nextWorkspaceCursor;
 
     this.deps.logger.debug(
       {

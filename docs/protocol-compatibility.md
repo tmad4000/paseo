@@ -94,6 +94,22 @@ A shim that exists for old-app or old-daemon support carries a comment naming it
 
 When a tag's condition is met, delete the shim and the tag in the same change.
 
+## Directory snapshots
+
+The daemon advertises `directorySync=false`. Clients can retain a stale sync
+capability across reconnects, so agent and workspace fetches carrying `sync`
+still receive paginated snapshots and ordinary subscription updates. Follow
+every `pageInfo.nextCursor` to retrieve the complete snapshot; an unbounded
+agent snapshot can exceed the relay frame limit.
+
+Workspace requests use workspace pagination for empty project parents as
+well as workspaces. Clients must follow `pageInfo.nextCursor` even when a page
+has no workspace entries. The protocol does not identify clients that consume
+`project.list`, so the daemon cannot omit these parents based on that feature.
+Released clients treat one `project.list.response` as the complete project list.
+That response has no continuation contract and can exceed the relay frame limit;
+truncating or splitting it would hide projects from those clients.
+
 ## QA
 
 Tests don't fully cover compatibility. If you touched `packages/protocol`, say in the pull request why an older app still parses your message and why an older daemon still satisfies your app. See [qa.md](qa.md).

@@ -7010,6 +7010,11 @@ export class Session {
   private async handleFetchAgents(
     request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
   ): Promise<void> {
+    // Some clients retain a previously advertised sync capability across a
+    // reconnect. This daemon advertises directorySync=false: honor paging even
+    // when those clients send a stale sync cursor, rather than producing an
+    // unbounded snapshot that exceeds the relay's frame limit.
+    const pagedRequest = request.sync ? { ...request, sync: undefined } : request;
     const owner = request.subscribe
       ? this.delivery.begin("agents", request.subscribe.subscriptionId, (id) => {
           this.agentUpdates.clearSubscription(id);
@@ -7024,7 +7029,7 @@ export class Session {
           isProviderVisible: (provider) =>
             this.delivery.forSource(owner.source, () => this.isProviderVisibleToClient(provider)),
           filter: request.filter,
-          syncEnabled: Boolean(request.sync),
+          syncEnabled: false,
           emit: (message) => {
             if (message.type === "agent_update") owner.emit(message);
           },
@@ -7032,9 +7037,7 @@ export class Session {
         this.refreshObservationProducers();
       }
 
-      const payload = request.sync
-        ? await this.readAgentDirectorySync(request)
-        : await this.listFetchAgentsEntries(request);
+      const payload = await this.listFetchAgentsEntries(pagedRequest);
       const snapshotUpdatedAtByAgentId = new Map<string, number>();
       for (const entry of payload.entries) {
         const parsedUpdatedAt = Date.parse(entry.agent.updatedAt);
@@ -7146,6 +7149,28 @@ export class Session {
     }
   }
 
+  private async seedWorkspaceSubscriptionVisibility(
+    subscription: WorkspaceUpdatesSubscriptionState,
+    filter: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>["filter"],
+  ): Promise<void> {
+    const projectIdFilter = filter?.projectId?.trim();
+    const descriptors = await this.workspaceDirectory.listDescriptors();
+    for (const workspace of descriptors) {
+      if (
+        this.matchesWorkspaceFilter({ workspace, filter: subscription.filter }) &&
+        !subscription.lastEmittedByWorkspaceId.has(workspace.id)
+      ) {
+        subscription.lastEmittedByWorkspaceId.set(workspace.id, { kind: "upsert", workspace });
+      }
+    }
+    const projects = await this.workspaceDirectory.listEmptyProjects();
+    for (const project of projects) {
+      if (!projectIdFilter || project.projectId === projectIdFilter) {
+        subscription.visibleEmptyProjectIds?.add(project.projectId);
+      }
+    }
+  }
+
   private async handleFetchWorkspacesRequest(
     request: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>,
   ): Promise<void> {
@@ -7161,7 +7186,7 @@ export class Session {
       ? {
           subscriptionId: owner.id,
           owner,
-          syncEnabled: Boolean(request.sync),
+          syncEnabled: false,
           filter: request.filter,
           isBootstrapping: true,
           pendingUpdatesByWorkspaceId: new Map(),
@@ -7184,9 +7209,10 @@ export class Session {
         },
         "fetch_workspaces_request_received",
       );
-      const payload = request.sync
-        ? await this.readWorkspaceDirectorySync(request)
-        : await this.listFetchWorkspacesEntries(request);
+      if (subscription) {
+        await this.seedWorkspaceSubscriptionVisibility(subscription, request.filter);
+      }
+      const payload = await this.listFetchWorkspacesEntries(request);
 
       this.sessionLogger.debug(
         {
@@ -7405,37 +7431,6 @@ export class Session {
     } catch (error) {
       this.emitWorkspaceLabelError(request, error);
     }
-  }
-
-  private async readAgentDirectorySync(
-    request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
-  ) {
-    if (request.scope !== "active" || request.filter) {
-      throw new SessionRequestError(
-        "invalid_request",
-        "Sequenced agent directory reads require scope=active and no filter.",
-      );
-    }
-    const snapshot = await this.listFetchAgentsEntries({
-      ...request,
-      page: { limit: Number.MAX_SAFE_INTEGER },
-    });
-    return this.directorySync.synchronizeAgents(snapshot.entries, request.sync ?? {});
-  }
-
-  private async readWorkspaceDirectorySync(
-    request: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>,
-  ) {
-    if (request.filter) {
-      throw new SessionRequestError(
-        "invalid_request",
-        "Sequenced workspace directory reads do not support filters.",
-      );
-    }
-    return this.directorySync.synchronizeWorkspaces(
-      await this.workspaceDirectory.listDescriptors(),
-      request.sync ?? {},
-    );
   }
 
   // Build the bootstrap snapshot used by `flushBootstrappedWorkspaceUpdates`
