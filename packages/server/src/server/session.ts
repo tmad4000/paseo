@@ -7189,6 +7189,15 @@ export class Session {
       );
       if (subscription) {
         const projectIdFilter = request.filter?.projectId?.trim();
+        const descriptors = await this.workspaceDirectory.listDescriptors();
+        for (const workspace of descriptors) {
+          if (
+            this.matchesWorkspaceFilter({ workspace, filter: subscription.filter }) &&
+            !subscription.lastEmittedByWorkspaceId.has(workspace.id)
+          ) {
+            subscription.lastEmittedByWorkspaceId.set(workspace.id, { kind: "upsert", workspace });
+          }
+        }
         const projects = await this.workspaceDirectory.listEmptyProjects();
         for (const project of projects) {
           if (!projectIdFilter || project.projectId === projectIdFilter) {

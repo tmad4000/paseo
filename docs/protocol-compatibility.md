@@ -102,4 +102,6 @@ Workspace requests use workspace pagination for empty project parents as
 well as workspaces. Clients must follow `pageInfo.nextCursor` even when a page
 has no workspace entries. The protocol does not identify clients that consume
 `project.list`, so the daemon cannot omit these parents based on that feature.
-The existing project-list response itself has no pagination contract.
+Released clients treat one `project.list.response` as the complete project list.
+That response has no continuation contract and can exceed the relay frame limit;
+truncating or splitting it would hide projects from those clients.

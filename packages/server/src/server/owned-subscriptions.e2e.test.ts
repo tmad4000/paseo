@@ -289,6 +289,7 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
       expect(workspaceResponse.pageInfo.hasMore).toBe(i < 2);
       workspaceSubscription ??= workspaceResponse.subscriptionId;
     }
+    const laterWorkspaceId = workspaceIds.slice(1).find((id) => id !== workspaces[2]!.id)!;
     expect(agentIds.sort()).toEqual(agents.map((agent) => agent.id).sort());
     expect(workspaceIds.sort()).toEqual(workspaces.map((workspace) => workspace.id).sort());
     expect(agentSubscription).toEqual(expect.any(String));
@@ -320,6 +321,30 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
               id: workspaces[2]!.id,
               name: "Updated workspace",
             }),
+          }),
+        ]),
+      );
+    await peer.request({
+      type: "archive_workspace_request",
+      requestId: "archive-later",
+      workspaceId: laterWorkspaceId,
+    });
+    await expect
+      .poll(
+        () =>
+          peer!.frames.flatMap((frame) =>
+            frame.type === "session" && frame.message.type === "workspace_update"
+              ? [frame.message.payload]
+              : [],
+          ),
+        { timeout: 5000 },
+      )
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subscriptionId: workspaceSubscription,
+            kind: "remove",
+            id: laterWorkspaceId,
           }),
         ]),
       );
