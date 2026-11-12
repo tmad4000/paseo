@@ -163,6 +163,80 @@ describe("selectable approval text", () => {
     expect(links[0].getAttribute("href")).toBe("https://example.org/help");
   });
 
+  it.each([
+    { key: "{Enter}", selection: "body" },
+    { key: " ", selection: "body" },
+    { key: "{Enter}", selection: "header" },
+    { key: " ", selection: "header" },
+    { key: "{Enter}", selection: "other" },
+    { key: " ", selection: "other" },
+  ] as const)(
+    "toggles plans with $key while $selection text is selected",
+    async ({ key, selection }) => {
+      const view = render(
+        <>
+          <p data-testid="other">Unrelated text</p>
+          <PlanCard title="Review plan" text="Plan body" />
+        </>,
+      );
+      const header = view.getByRole("button", { name: "Review plan" });
+      const targets = {
+        header,
+        body: view.getByText("Plan body"),
+        other: view.getByTestId("other"),
+      };
+      act(() => header.focus());
+      expect(select(targets[selection])).not.toBe("");
+      await act(async () => {
+        await userEvent.keyboard(key);
+      });
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(view.queryByText("Plan body")).toBeNull();
+      await act(async () => {
+        await userEvent.keyboard(key);
+      });
+      expect(header.getAttribute("aria-expanded")).toBe("true");
+      expect(view.getByText("Plan body").textContent).toBe("Plan body");
+    },
+  );
+
+  it("toggles plans on pointer clicks with an unrelated selection", () => {
+    const view = render(
+      <>
+        <p data-testid="other">Unrelated text</p>
+        <PlanCard title="Review plan" text="Plan body" />
+      </>,
+    );
+    const header = view.getByRole("button", { name: "Review plan" });
+    select(view.getByTestId("other"));
+    act(() =>
+      header.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    act(() =>
+      header.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps the plan expanded when a pointer selection ends on its selectable title", () => {
+    const view = render(<PlanCard title="Review plan" text="Plan body" />);
+    const header = view.getByRole("button", { name: "Review plan" });
+    const title = view.getByText("Review plan");
+    expect(getComputedStyle(title).userSelect).toBe("text");
+    expect(select(title)).toBe("Review plan");
+    act(() =>
+      header.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(window.getSelection()?.toString()).toBe("Review plan");
+    window.getSelection()?.removeAllRanges();
+    act(() =>
+      header.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("keeps question links separate from selecting an answer or submitting approval", () => {
     const onRespond = vi.fn();
     const open = vi.spyOn(window, "open").mockReturnValue(null);

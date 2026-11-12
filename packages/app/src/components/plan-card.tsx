@@ -3,6 +3,7 @@ import {
   Pressable,
   Text,
   View,
+  type GestureResponderEvent,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -251,8 +252,22 @@ function PlanCardContent({
     () => (isWeb ? ({ "aria-expanded": expanded } as const) : null),
     [expanded],
   );
-  const toggleExpanded = useCallback(() => {
-    if (isWeb && !window.getSelection()?.isCollapsed) return;
+  const toggleExpanded = useCallback((event: GestureResponderEvent) => {
+    if (
+      isWeb &&
+      event.nativeEvent instanceof MouseEvent &&
+      event.nativeEvent.detail > 0 &&
+      event.currentTarget instanceof Node
+    ) {
+      const selection = window.getSelection();
+      if (
+        selection &&
+        !selection.isCollapsed &&
+        selection.rangeCount > 0 &&
+        selection.getRangeAt(0).intersectsNode(event.currentTarget)
+      )
+        return;
+    }
     setExpanded((value) => !value);
   }, []);
   const containerStyle = useMemo(

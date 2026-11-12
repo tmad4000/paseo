@@ -17,7 +17,9 @@ plain tool details are selectable. Explicit HTTP(S) URLs open through the existi
 opener; copying retains the original text, including command quotes and query strings. Opening
 a question-option link must not select the option or submit an answer. Plan cards also linkify
 bare URLs in prose, code spans, and code blocks without decoding URL labels. Keyboard activation
-and unrelated text selections still allow links to open; selection-drag clicks do not. Source prepared, not installed; regression coverage:
+and unrelated text selections still allow links to open; selection-drag clicks do not. Plan headers
+toggle with Enter and Space even while text is selected; selecting a title does not toggle it.
+Source prepared, not installed; regression coverage:
 `components/selectable-link-text.browser.test.tsx`.
 
 ## Sidebar Tabs grouping — pfork-ly4
