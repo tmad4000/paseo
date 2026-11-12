@@ -24,6 +24,7 @@ import { extensionFromPath, highlightToKeyedLines } from "@/utils/highlight-cach
 import { HighlightedLines } from "./highlighted-content";
 import { DiffViewer } from "./diff-viewer";
 import { getCodeInsets } from "./code-insets";
+import { SelectableLinkText } from "./selectable-link-text";
 import { isWeb } from "@/constants/platform";
 
 const ScrollView = isWeb ? RNScrollView : GHScrollView;
@@ -173,11 +174,11 @@ function ShellDetailSection({ command, output, ds }: ShellDetailProps) {
             contentContainerStyle={styles.codeHorizontalContent}
           >
             <View style={styles.codeLine} dataSet={CODE_SURFACE_DATASET}>
-              <Text selectable style={styles.scrollText}>
+              <SelectableLinkText style={styles.scrollText}>
                 <Text style={styles.shellPrompt}>$ </Text>
                 {normalizedCommand}
                 {hasOutput ? `\n\n${commandOutput}` : ""}
-              </Text>
+              </SelectableLinkText>
             </View>
           </ScrollView>
         </ScrollView>
@@ -217,9 +218,9 @@ function WorktreeSetupDetailSection({
             contentContainerStyle={styles.codeHorizontalContent}
           >
             <View style={styles.codeLine} dataSet={CODE_SURFACE_DATASET}>
-              <Text selectable style={styles.scrollText}>
+              <SelectableLinkText style={styles.scrollText}>
                 {hasLog ? setupLog : `Preparing worktree ${branchName} at ${worktreePath}`}
-              </Text>
+              </SelectableLinkText>
             </View>
           </ScrollView>
         </ScrollView>
@@ -299,13 +300,13 @@ function parseSubAgentLog(log: string): ParsedSubAgentLog {
 function SubAgentActionRow({ action }: { action: SubAgentActivityRow }) {
   return (
     <View style={styles.subAgentActionRow}>
-      <Text selectable style={styles.subAgentActionTool}>
+      <SelectableLinkText style={styles.subAgentActionTool}>
         {formatSubAgentToolName(action.toolName)}
-      </Text>
+      </SelectableLinkText>
       {action.summary ? (
-        <Text selectable style={styles.subAgentActionSummary}>
+        <SelectableLinkText style={styles.subAgentActionSummary}>
           {action.summary}
-        </Text>
+        </SelectableLinkText>
       ) : null}
     </View>
   );
@@ -334,18 +335,10 @@ function SubAgentLogText({
   hasActions: boolean;
 }) {
   if (activityLog.length > 0) {
-    return (
-      <Text selectable style={styles.scrollText}>
-        {activityLog}
-      </Text>
-    );
+    return <SelectableLinkText style={styles.scrollText}>{activityLog}</SelectableLinkText>;
   }
   if (!hasActions) {
-    return (
-      <Text selectable style={styles.scrollText}>
-        {fallbackHeader}
-      </Text>
-    );
+    return <SelectableLinkText style={styles.scrollText}>{fallbackHeader}</SelectableLinkText>;
   }
   return null;
 }
@@ -382,9 +375,9 @@ function SubAgentDetailSection({
           >
             <View style={styles.codeLine} dataSet={CODE_SURFACE_DATASET}>
               {childSessionId ? (
-                <Text selectable style={styles.subAgentSessionText}>
+                <SelectableLinkText style={styles.subAgentSessionText}>
                   session {childSessionId}
-                </Text>
+                </SelectableLinkText>
               ) : null}
               {hasActions ? (
                 <View style={styles.subAgentActions}>
@@ -458,9 +451,9 @@ function ScrollableTextSection({
         {keyedLines ? (
           <HighlightedLines lines={keyedLines} startLine={startLine} />
         ) : (
-          <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+          <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
             {content}
-          </Text>
+          </SelectableLinkText>
         )}
       </ScrollView>
     </ScrollView>
@@ -485,9 +478,9 @@ function FetchDetailSection({ url, result, ds }: FetchDetailProps) {
         showsVerticalScrollIndicator
       >
         <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
-          <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+          <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
             {result ? `${url}\n\n${result}` : url}
-          </Text>
+          </SelectableLinkText>
         </ScrollView>
       </ScrollView>
     </View>
@@ -503,9 +496,7 @@ function ScrollablePlainTextSection({ text, ds }: { text: string; ds: DetailStyl
         nestedScrollEnabled
         showsVerticalScrollIndicator
       >
-        <Text selectable style={styles.plainText}>
-          {text}
-        </Text>
+        <SelectableLinkText style={styles.plainText}>{text}</SelectableLinkText>
       </ScrollView>
     </View>
   );
@@ -531,9 +522,9 @@ function buildSearchSections(detail: SearchDetail, ds: DetailStyles): ReactNode[
           showsVerticalScrollIndicator
         >
           <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
-            <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+            <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
               {detail.content}
-            </Text>
+            </SelectableLinkText>
           </ScrollView>
         </ScrollView>
       </View>,
@@ -542,27 +533,27 @@ function buildSearchSections(detail: SearchDetail, ds: DetailStyles): ReactNode[
   if (detail.filePaths && detail.filePaths.length > 0) {
     out.push(
       <View key="search-files" style={styles.section}>
-        <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+        <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
           {detail.filePaths.join("\n")}
-        </Text>
+        </SelectableLinkText>
       </View>,
     );
   }
   if (detail.webResults && detail.webResults.length > 0) {
     out.push(
       <View key="search-web-results" style={styles.section}>
-        <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+        <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
           {detail.webResults.map((entry) => `${entry.title}\n${entry.url}`).join("\n\n")}
-        </Text>
+        </SelectableLinkText>
       </View>,
     );
   }
   if (detail.annotations && detail.annotations.length > 0) {
     out.push(
       <View key="search-annotations" style={styles.section}>
-        <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+        <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
           {detail.annotations.join("\n\n")}
-        </Text>
+        </SelectableLinkText>
       </View>,
     );
   }
@@ -621,9 +612,9 @@ function buildUnknownSections(detail: UnknownDetail, ds: DetailStyles, t: TFunct
           contentContainerStyle={styles.jsonContent}
           showsHorizontalScrollIndicator={true}
         >
-          <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+          <SelectableLinkText style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
             {value}
-          </Text>
+          </SelectableLinkText>
         </ScrollView>
       </View>,
     );
@@ -636,17 +627,13 @@ function PaseoDetailSection({ section }: { section: PaseoToolDetailSection }) {
     <View style={styles.paseoSection}>
       <Text style={styles.paseoSectionTitle}>{section.title}</Text>
       {section.kind === "prose" ? (
-        <Text selectable style={styles.paseoProse}>
-          {section.text}
-        </Text>
+        <SelectableLinkText style={styles.paseoProse}>{section.text}</SelectableLinkText>
       ) : (
         <View style={styles.paseoFields}>
           {section.fields.map((field) => (
             <View key={field.label} style={styles.paseoFieldRow}>
               <Text style={styles.paseoFieldLabel}>{field.label}</Text>
-              <Text selectable style={styles.paseoFieldValue}>
-                {field.value}
-              </Text>
+              <SelectableLinkText style={styles.paseoFieldValue}>{field.value}</SelectableLinkText>
             </View>
           ))}
         </View>
