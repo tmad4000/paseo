@@ -7201,6 +7201,15 @@ export class Session {
         },
         "fetch_workspaces_request_received",
       );
+      if (subscription) {
+        const projectIdFilter = request.filter?.projectId?.trim();
+        const projects = await this.workspaceDirectory.listEmptyProjects();
+        for (const project of projects) {
+          if (!projectIdFilter || project.projectId === projectIdFilter) {
+            subscription.visibleEmptyProjectIds?.add(project.projectId);
+          }
+        }
+      }
       const payload = await this.listFetchWorkspacesEntries(request);
 
       this.sessionLogger.debug(

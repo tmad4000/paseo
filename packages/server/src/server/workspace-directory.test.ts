@@ -752,7 +752,7 @@ test("a manual marker on a child tab contributes to its workspace", async () => 
   await expect(workspace.workspaceStatus()).resolves.toBe("needs_input");
 });
 
-test("pages empty projects alongside stale sync workspace requests", async () => {
+test.each([false, true])("pages empty projects with sync=%s", async (sync) => {
   const projects: PersistedProjectRecord[] = Array.from({ length: 231 }, (_, index) => ({
     projectId: `project-${String(index).padStart(3, "0")}`,
     rootPath: `/projects/${index}`,
@@ -782,7 +782,7 @@ test("pages empty projects alongside stale sync workspace requests", async () =>
       type: "fetch_workspaces_request",
       requestId: `page-${i}`,
       page: { limit: 60, ...(cursor ? { cursor } : {}) },
-      ...(i === 0 ? { sync: {} } : {}),
+      ...(i === 0 && sync ? { sync: {} } : {}),
     });
     expect(page.entries).toEqual([]);
     expect(page.emptyProjects).toHaveLength(i === 3 ? 51 : 60);

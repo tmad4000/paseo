@@ -4055,6 +4055,65 @@ test("project.remove.request archives active workspaces and removes the project 
   });
 });
 
+test.each([false, true])(
+  "removes later-page empty projects from subscriptions with sync=%s",
+  async (sync) => {
+    const emitted: SessionOutboundMessage[] = [];
+    const session = createSessionForWorkspaceTests({
+      onMessage: (message) => emitted.push(message),
+    });
+    const records = ["a", "b"].map((id) =>
+      createPersistedProjectRecord({
+        projectId: id,
+        rootPath: `/tmp/${id}`,
+        kind: "non_git",
+        displayName: id,
+        createdAt: "2026-03-01T12:00:00.000Z",
+        updatedAt: "2026-03-01T12:00:00.000Z",
+      }),
+    );
+    const projects = new Map(records.map((project) => [project.projectId, project]));
+    session.projectRegistry.get = async (id: string) => projects.get(id) ?? null;
+    session.projectRegistry.list = async () => Array.from(projects.values());
+    session.projectRegistry.remove = async (id: string) => {
+      projects.delete(id);
+    };
+    session.workspaceRegistry.list = async () => [];
+    session.workspaceRegistry.get = async () => null;
+    await session.handleMessage({
+      type: "fetch_workspaces_request",
+      requestId: "first",
+      page: { limit: 1 },
+      subscribe: { subscriptionId: "sub" },
+      ...(sync ? { sync: {} } : {}),
+    });
+    const first = findByType(emitted, "fetch_workspaces_response")!.payload;
+    expect(first.emptyProjects.map((project) => project.projectId)).toEqual(["a"]);
+    expect(first.pageInfo.hasMore).toBe(true);
+    await session.handleMessage({
+      type: "fetch_workspaces_request",
+      requestId: "second",
+      page: { limit: 1, cursor: first.pageInfo.nextCursor! },
+      ...(sync ? { sync: {} } : {}),
+    });
+    const second = filterByType(emitted, "fetch_workspaces_response").at(-1)!.payload;
+    expect(second.emptyProjects.map((project) => project.projectId)).toEqual(["b"]);
+    expect(second.pageInfo.hasMore).toBe(false);
+    await session.handleMessage({
+      type: "project.remove.request",
+      requestId: "remove",
+      projectId: "b",
+    });
+    expect(filterByType(emitted, "workspace_update")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ kind: "remove", removedProjectId: "b" }),
+        }),
+      ]),
+    );
+  },
+);
+
 test("project.remove.request removes an already-empty project", async () => {
   const emitted: SessionOutboundMessage[] = [];
   const session = createSessionForWorkspaceTests({
