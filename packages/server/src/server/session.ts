@@ -7178,7 +7178,7 @@ export class Session {
       ? {
           subscriptionId: owner.id,
           owner,
-          syncEnabled: Boolean(request.sync),
+          syncEnabled: false,
           filter: request.filter,
           isBootstrapping: true,
           pendingUpdatesByWorkspaceId: new Map(),
@@ -7201,9 +7201,7 @@ export class Session {
         },
         "fetch_workspaces_request_received",
       );
-      const payload = request.sync
-        ? await this.readWorkspaceDirectorySync(request)
-        : await this.listFetchWorkspacesEntries(request);
+      const payload = await this.listFetchWorkspacesEntries(request);
 
       this.sessionLogger.debug(
         {
@@ -7422,21 +7420,6 @@ export class Session {
     } catch (error) {
       this.emitWorkspaceLabelError(request, error);
     }
-  }
-
-  private async readWorkspaceDirectorySync(
-    request: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>,
-  ) {
-    if (request.filter) {
-      throw new SessionRequestError(
-        "invalid_request",
-        "Sequenced workspace directory reads do not support filters.",
-      );
-    }
-    return this.directorySync.synchronizeWorkspaces(
-      await this.workspaceDirectory.listDescriptors(),
-      request.sync ?? {},
-    );
   }
 
   // Build the bootstrap snapshot used by `flushBootstrappedWorkspaceUpdates`

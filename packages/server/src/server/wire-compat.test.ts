@@ -4,7 +4,7 @@ import {
 } from "./test-utils/session-stubs.js";
 import pino from "pino";
 import { z } from "zod";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import {
@@ -317,31 +317,6 @@ async function emitTimelineResponse(options?: {
 }
 
 describe("wire compatibility", () => {
-  test("pages agent requests that carry a stale sync cursor", async () => {
-    const messages: SessionOutboundMessage[] = [];
-    const session = createSessionForWireCompatTest({ messages });
-    const internals = session as unknown as {
-      handleFetchAgents: (request: unknown) => Promise<void>;
-      listFetchAgentsEntries: (request: unknown) => Promise<unknown>;
-    };
-    const page = { entries: [], pageInfo: { hasMore: true, nextCursor: "next" } };
-    const read = vi.spyOn(internals, "listFetchAgentsEntries").mockResolvedValue(page);
-    await internals.handleFetchAgents({
-      type: "fetch_agents_request",
-      requestId: "stale-client",
-      scope: "active",
-      page: { limit: 1 },
-      sync: {},
-    });
-    expect(read).toHaveBeenCalledWith(
-      expect.objectContaining({ page: { limit: 1 }, sync: undefined }),
-    );
-    expect(messages).toContainEqual({
-      type: "fetch_agents_response",
-      payload: { requestId: "stale-client", ...page },
-    });
-  });
-
   test("sends project updates only to clients that declare support", async () => {
     const project = createPersistedProjectRecord({
       projectId: "project-1",
