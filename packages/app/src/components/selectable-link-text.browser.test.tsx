@@ -128,14 +128,14 @@ describe("selectable approval text", () => {
     "preserves encoded command URLs in plan %s",
     (kind) => {
       const command = 'curl "https://example.com/a%20b?x=%2F&y=%25" --name="x"';
-      const text =
-        kind === "inline"
-          ? `\`${command}\``
-          : kind === "fence"
-            ? `\`\`\`sh\n${command}\n\`\`\``
-            : kind === "indented"
-              ? `    ${command}`
-              : command;
+      let text = command;
+      if (kind === "inline") {
+        text = `\`${command}\``;
+      } else if (kind === "fence") {
+        text = `\`\`\`sh\n${command}\n\`\`\``;
+      } else if (kind === "indented") {
+        text = `    ${command}`;
+      }
       const open = vi.spyOn(window, "open").mockReturnValue(null);
       const view = render(<PlanCard text={text} testID="plan" />);
       const body = view.getByTestId("plan").lastElementChild!;
