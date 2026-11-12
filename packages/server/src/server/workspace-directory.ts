@@ -664,7 +664,6 @@ export class WorkspaceDirectory {
 
     const cursorToken = request.page?.cursor;
     const prefix = "workspace-sync-page:";
-    const combined = Boolean(request.sync) || Boolean(cursorToken?.startsWith(prefix));
     let workspaceCursor: string | null = cursorToken ?? null;
     let workspacesDone = false;
     let projectCursor: string | null = null;
@@ -709,35 +708,26 @@ export class WorkspaceDirectory {
         ? this.pager.encode(pagedEntries[pagedEntries.length - 1], sort)
         : null;
     const projectIdFilter = filter?.projectId?.trim();
-    const allEmptyProjects =
-      combined || !cursorToken
-        ? (await this.listEmptyProjects()).filter(
-            (project) => !projectIdFilter || project.projectId === projectIdFilter,
-          )
-        : [];
-    const remainingProjects = combined
-      ? allEmptyProjects
-          .sort((a, b) => a.projectId.localeCompare(b.projectId))
-          .filter(
-            (project) =>
-              projectCursor === null || project.projectId.localeCompare(projectCursor) > 0,
-          )
-      : allEmptyProjects;
-    const emptyProjects = combined ? remainingProjects.slice(0, limit) : remainingProjects;
-    const projectsHaveMore = combined && remainingProjects.length > limit;
+    const remainingProjects = (await this.listEmptyProjects())
+      .filter((project) => !projectIdFilter || project.projectId === projectIdFilter)
+      .sort((a, b) => a.projectId.localeCompare(b.projectId))
+      .filter(
+        (project) => projectCursor === null || project.projectId.localeCompare(projectCursor) > 0,
+      );
+    const emptyProjects = remainingProjects.slice(0, limit);
+    const projectsHaveMore = remainingProjects.length > limit;
     const hasMore = workspacesHaveMore || projectsHaveMore;
-    const nextCursor =
-      combined && hasMore
-        ? prefix +
-          Buffer.from(
-            JSON.stringify({
-              workspaceCursor: nextWorkspaceCursor,
-              workspacesDone: !workspacesHaveMore,
-              projectCursor: emptyProjects.at(-1)?.projectId ?? projectCursor,
-              sort,
-            }),
-          ).toString("base64url")
-        : nextWorkspaceCursor;
+    const nextCursor = hasMore
+      ? prefix +
+        Buffer.from(
+          JSON.stringify({
+            workspaceCursor: nextWorkspaceCursor,
+            workspacesDone: !workspacesHaveMore,
+            projectCursor: emptyProjects.at(-1)?.projectId ?? projectCursor,
+            sort,
+          }),
+        ).toString("base64url")
+      : nextWorkspaceCursor;
 
     this.deps.logger.debug(
       {
