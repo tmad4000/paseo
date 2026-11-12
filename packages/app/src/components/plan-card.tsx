@@ -10,7 +10,7 @@ import {
 import { type ASTNode } from "react-native-markdown-display";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { SelectableLinkText, SelectableTextLink } from "./selectable-link-text";
+import { linkifyLiteralText, SelectableLinkText, SelectableTextLink } from "./selectable-link-text";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { ChevronRight } from "lucide-react-native";
 import { isWeb } from "@/constants/platform";
@@ -20,6 +20,8 @@ import { createMarkdownParser } from "@/utils/markdown-parser";
 
 // Keep literal command text while making bare URLs in approval plans actionable.
 const planMarkdownParser = createMarkdownParser({ linkify: true });
+planMarkdownParser.normalizeLinkText = (text) => text;
+planMarkdownParser.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
 
 type MarkdownRuleStyles = Record<string, TextStyle & ViewStyle & { [key: string]: unknown }>;
 
@@ -117,7 +119,7 @@ function createPlanMarkdownRules() {
         inheritedStyle={inheritedStyles}
         ruleStyle={styles.code_block}
       >
-        {node.content}
+        {linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     fence: (
@@ -128,13 +130,13 @@ function createPlanMarkdownRules() {
       inheritedStyles: TextStyle = {},
     ) => (
       <MarkdownInlineText key={node.key} inheritedStyle={inheritedStyles} ruleStyle={styles.fence}>
-        {node.content}
+        {linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     code_inline: (
       node: ASTNode,
       _children: ReactNode[],
-      _parent: ASTNode[],
+      parent: ASTNode[],
       styles: MarkdownRuleStyles,
       inheritedStyles: TextStyle = {},
     ) => (
@@ -143,7 +145,9 @@ function createPlanMarkdownRules() {
         inheritedStyle={inheritedStyles}
         ruleStyle={styles.code_inline}
       >
-        {node.content}
+        {parent.some((ancestor) => ancestor.type === "link")
+          ? node.content
+          : linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     bullet_list: (

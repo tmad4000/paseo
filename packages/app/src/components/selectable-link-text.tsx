@@ -31,9 +31,15 @@ export function SelectableTextLink({ href, children }: { href: string; children:
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      // A selection drag ending on a link is a copy gesture, not a request to open it.
       const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) return;
+      if (
+        event.detail > 0 &&
+        selection &&
+        !selection.isCollapsed &&
+        selection.rangeCount > 0 &&
+        selection.getRangeAt(0).intersectsNode(event.currentTarget)
+      )
+        return;
       openLink(href);
     },
     [href],
@@ -64,7 +70,7 @@ export function SelectableTextLink({ href, children }: { href: string; children:
   );
 }
 
-function linkifyText(text: string): ReactNode {
+export function linkifyLiteralText(text: string): ReactNode {
   const matches = linkifier.match(text)?.filter((match) => isHttpUrl(match.url));
   if (!matches?.length) return text;
   const parts: ReactNode[] = [];
@@ -86,7 +92,9 @@ function linkifyText(text: string): ReactNode {
 export function SelectableLinkText({ children, ...props }: TextProps) {
   const content = useMemo(
     () =>
-      Children.map(children, (child) => (typeof child === "string" ? linkifyText(child) : child)),
+      Children.map(children, (child) =>
+        typeof child === "string" ? linkifyLiteralText(child) : child,
+      ),
     [children],
   );
   return (

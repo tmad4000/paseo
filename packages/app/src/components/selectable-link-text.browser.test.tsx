@@ -4,8 +4,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { within } from "@testing-library/dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { SelectableLinkText } from "./selectable-link-text";
 import { QuestionFormCard } from "./question-form-card";
+import { PlanCard } from "./plan-card";
 import { i18n as testI18n } from "@/i18n/i18next";
 
 void testI18n;
@@ -78,9 +80,87 @@ describe("selectable approval text", () => {
     expect(parentAction).not.toHaveBeenCalled();
     open.mockClear();
     select(container);
-    act(() => view.getByRole("link").click());
+    act(() =>
+      view
+        .getByRole("link")
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
     expect(open).not.toHaveBeenCalled();
     expect(parentAction).not.toHaveBeenCalled();
+  });
+
+  it("opens a focused link with Enter while its text remains selected", async () => {
+    const parentAction = vi.fn();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const view = render(
+      <div onClick={parentAction}>
+        <SelectableLinkText>Go to https://example.com/auth</SelectableLinkText>
+      </div>,
+    );
+    const link = view.getByRole("link");
+    link.focus();
+    expect(select(link)).toBe("https://example.com/auth");
+    await act(async () => {
+      await userEvent.keyboard("{Enter}");
+    });
+    expect(open).toHaveBeenCalledWith("https://example.com/auth", "_blank", "noopener,noreferrer");
+    expect(parentAction).not.toHaveBeenCalled();
+  });
+
+  it("opens pointer clicks when selection is outside the link", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const view = render(
+      <>
+        <p data-testid="other">Other selected text</p>
+        <SelectableLinkText>Go to https://example.com/auth</SelectableLinkText>
+      </>,
+    );
+    select(view.getByTestId("other"));
+    act(() =>
+      view
+        .getByRole("link")
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })),
+    );
+    expect(open).toHaveBeenCalledWith("https://example.com/auth", "_blank", "noopener,noreferrer");
+  });
+
+  it.each(["prose", "inline", "fence", "indented"])(
+    "preserves encoded command URLs in plan %s",
+    (kind) => {
+      const command = 'curl "https://example.com/a%20b?x=%2F&y=%25" --name="x"';
+      const text =
+        kind === "inline"
+          ? `\`${command}\``
+          : kind === "fence"
+            ? `\`\`\`sh\n${command}\n\`\`\``
+            : kind === "indented"
+              ? `    ${command}`
+              : command;
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const view = render(<PlanCard text={text} testID="plan" />);
+      const body = view.getByTestId("plan").lastElementChild!;
+      expect(body.textContent?.trimEnd()).toBe(command);
+      expect(select(body).trimEnd()).toBe(command);
+      const link = view.getByRole("link", { name: "https://example.com/a%20b?x=%2F&y=%25" });
+      expect(link.getAttribute("href")).toBe("https://example.com/a%20b?x=%2F&y=%25");
+      window.getSelection()?.removeAllRanges();
+      act(() => link.click());
+      expect(open).toHaveBeenCalledWith(
+        "https://example.com/a%20b?x=%2F&y=%25",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    },
+  );
+
+  it("retains explicit markdown link destinations around code labels", () => {
+    const view = render(
+      <PlanCard text="[`https://example.com/a%20b`](https://example.org/help)" />,
+    );
+    const links = view.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toBe("https://example.com/a%20b");
+    expect(links[0].getAttribute("href")).toBe("https://example.org/help");
   });
 
   it("keeps question links separate from selecting an answer or submitting approval", () => {
