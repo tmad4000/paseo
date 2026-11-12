@@ -16,7 +16,7 @@ import {
   getReviewStatus,
   MANUAL_NEEDS_INPUT_LABEL,
 } from "@getpaseo/protocol/agent-labels";
-import { SortablePager } from "./pagination/sortable-pager.js";
+import { CursorError, SortablePager } from "./pagination/sortable-pager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "./workspace-registry.js";
 import { resolveProjectDisplayName } from "./workspace-registry.js";
 import {
@@ -64,6 +64,43 @@ type FetchWorkspacesResponsePayload = Extract<
 type FetchWorkspacesResponseEntry = FetchWorkspacesResponsePayload["entries"][number];
 type FetchWorkspacesResponsePageInfo = FetchWorkspacesResponsePayload["pageInfo"];
 type WorkspaceProjectDescriptor = FetchWorkspacesResponsePayload["emptyProjects"][number];
+
+const WORKSPACE_SYNC_CURSOR_PREFIX = "workspace-sync-page:";
+
+function decodeWorkspaceSyncCursor(
+  token: string | undefined,
+  sort: FetchWorkspacesRequestSort[],
+): { workspaceCursor: string | null; workspacesDone: boolean; projectCursor: string | null } {
+  if (!token?.startsWith(WORKSPACE_SYNC_CURSOR_PREFIX)) {
+    return { workspaceCursor: token ?? null, workspacesDone: false, projectCursor: null };
+  }
+  try {
+    const cursor: unknown = JSON.parse(
+      Buffer.from(token.slice(WORKSPACE_SYNC_CURSOR_PREFIX.length), "base64url").toString(),
+    );
+    if (
+      !cursor ||
+      typeof cursor !== "object" ||
+      !("workspaceCursor" in cursor) ||
+      !("workspacesDone" in cursor) ||
+      !("projectCursor" in cursor) ||
+      !("sort" in cursor) ||
+      (cursor.workspaceCursor !== null && typeof cursor.workspaceCursor !== "string") ||
+      typeof cursor.workspacesDone !== "boolean" ||
+      (cursor.projectCursor !== null && typeof cursor.projectCursor !== "string") ||
+      JSON.stringify(cursor.sort) !== JSON.stringify(sort)
+    ) {
+      throw new Error();
+    }
+    return {
+      workspaceCursor: cursor.workspaceCursor,
+      workspacesDone: cursor.workspacesDone,
+      projectCursor: cursor.projectCursor,
+    };
+  } catch {
+    throw new CursorError("Invalid workspaces cursor");
+  }
+}
 
 export type WorkspaceUpdatesFilter = FetchWorkspacesRequestFilter;
 
@@ -662,36 +699,10 @@ export class WorkspaceDirectory {
     const filteredCount = entries.length;
     entries.sort((left, right) => this.pager.compare(left, right, sort));
 
-    const cursorToken = request.page?.cursor;
-    const prefix = "workspace-sync-page:";
-    let workspaceCursor: string | null = cursorToken ?? null;
-    let workspacesDone = false;
-    let projectCursor: string | null = null;
-    if (cursorToken?.startsWith(prefix)) {
-      try {
-        const cursor: unknown = JSON.parse(
-          Buffer.from(cursorToken.slice(prefix.length), "base64url").toString(),
-        );
-        if (
-          !cursor ||
-          typeof cursor !== "object" ||
-          !("workspaceCursor" in cursor) ||
-          !("workspacesDone" in cursor) ||
-          !("projectCursor" in cursor) ||
-          !("sort" in cursor) ||
-          (cursor.workspaceCursor !== null && typeof cursor.workspaceCursor !== "string") ||
-          typeof cursor.workspacesDone !== "boolean" ||
-          (cursor.projectCursor !== null && typeof cursor.projectCursor !== "string") ||
-          JSON.stringify(cursor.sort) !== JSON.stringify(sort)
-        )
-          throw new Error();
-        workspaceCursor = cursor.workspaceCursor;
-        workspacesDone = cursor.workspacesDone;
-        projectCursor = cursor.projectCursor;
-      } catch {
-        throw new CursorError("Invalid workspaces cursor");
-      }
-    }
+    const { workspaceCursor, workspacesDone, projectCursor } = decodeWorkspaceSyncCursor(
+      request.page?.cursor,
+      sort,
+    );
     if (workspaceCursor) {
       const cursor = this.pager.decode(workspaceCursor, sort);
       entries = entries.filter(
@@ -718,7 +729,7 @@ export class WorkspaceDirectory {
     const projectsHaveMore = remainingProjects.length > limit;
     const hasMore = workspacesHaveMore || projectsHaveMore;
     const nextCursor = hasMore
-      ? prefix +
+      ? WORKSPACE_SYNC_CURSOR_PREFIX +
         Buffer.from(
           JSON.stringify({
             workspaceCursor: nextWorkspaceCursor,

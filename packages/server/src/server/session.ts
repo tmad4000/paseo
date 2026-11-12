@@ -7163,6 +7163,28 @@ export class Session {
     }
   }
 
+  private async seedWorkspaceSubscriptionVisibility(
+    subscription: WorkspaceUpdatesSubscriptionState,
+    filter: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>["filter"],
+  ): Promise<void> {
+    const projectIdFilter = filter?.projectId?.trim();
+    const descriptors = await this.workspaceDirectory.listDescriptors();
+    for (const workspace of descriptors) {
+      if (
+        this.matchesWorkspaceFilter({ workspace, filter: subscription.filter }) &&
+        !subscription.lastEmittedByWorkspaceId.has(workspace.id)
+      ) {
+        subscription.lastEmittedByWorkspaceId.set(workspace.id, { kind: "upsert", workspace });
+      }
+    }
+    const projects = await this.workspaceDirectory.listEmptyProjects();
+    for (const project of projects) {
+      if (!projectIdFilter || project.projectId === projectIdFilter) {
+        subscription.visibleEmptyProjectIds?.add(project.projectId);
+      }
+    }
+  }
+
   private async handleFetchWorkspacesRequest(
     request: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>,
   ): Promise<void> {
@@ -7202,22 +7224,7 @@ export class Session {
         "fetch_workspaces_request_received",
       );
       if (subscription) {
-        const projectIdFilter = request.filter?.projectId?.trim();
-        const descriptors = await this.workspaceDirectory.listDescriptors();
-        for (const workspace of descriptors) {
-          if (
-            this.matchesWorkspaceFilter({ workspace, filter: subscription.filter }) &&
-            !subscription.lastEmittedByWorkspaceId.has(workspace.id)
-          ) {
-            subscription.lastEmittedByWorkspaceId.set(workspace.id, { kind: "upsert", workspace });
-          }
-        }
-        const projects = await this.workspaceDirectory.listEmptyProjects();
-        for (const project of projects) {
-          if (!projectIdFilter || project.projectId === projectIdFilter) {
-            subscription.visibleEmptyProjectIds?.add(project.projectId);
-          }
-        }
+        await this.seedWorkspaceSubscriptionVisibility(subscription, request.filter);
       }
       const payload = await this.listFetchWorkspacesEntries(request);
 
