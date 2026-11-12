@@ -751,3 +751,45 @@ test("a manual marker on a child tab contributes to its workspace", async () => 
   });
   await expect(workspace.workspaceStatus()).resolves.toBe("needs_input");
 });
+
+test("pages empty projects alongside stale sync workspace requests", async () => {
+  const projects: PersistedProjectRecord[] = Array.from({ length: 231 }, (_, index) => ({
+    projectId: `project-${String(index).padStart(3, "0")}`,
+    rootPath: `/projects/${index}`,
+    kind: "non_git",
+    displayName: `Project ${index}`,
+    customName: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    archivedAt: null,
+  }));
+  const directory = new WorkspaceDirectory({
+    logger: createTestLogger(),
+    projectRegistry: { list: async () => projects },
+    workspaceRegistry: { list: async () => [] },
+    listAgentPayloads: async () => [],
+    listProviderSubagentActivity: async () => [],
+    listTerminalActivityContributions: async () => [],
+    isProviderVisibleToClient: () => true,
+    buildWorkspaceDescriptor: async () => {
+      throw new Error("Unexpected workspace");
+    },
+  });
+  const collected: string[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 4; i++) {
+    const page = await directory.listFetchEntries({
+      type: "fetch_workspaces_request",
+      requestId: `page-${i}`,
+      page: { limit: 60, ...(cursor ? { cursor } : {}) },
+      ...(i === 0 ? { sync: {} } : {}),
+    });
+    expect(page.entries).toEqual([]);
+    expect(page.emptyProjects).toHaveLength(i === 3 ? 51 : 60);
+    expect(page.pageInfo.hasMore).toBe(i < 3);
+    collected.push(...page.emptyProjects.map((project) => project.projectId));
+    cursor = page.pageInfo.nextCursor;
+  }
+  expect(cursor).toBeNull();
+  expect(collected).toEqual(projects.map((project) => project.projectId));
+});

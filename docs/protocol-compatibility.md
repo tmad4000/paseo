@@ -97,3 +97,9 @@ When a tag's condition is met, delete the shim and the tag in the same change.
 ## QA
 
 Tests don't fully cover compatibility. If you touched `packages/protocol`, say in the pull request why an older app still parses your message and why an older daemon still satisfies your app. See [qa.md](qa.md).
+
+Stale workspace sync requests use workspace pagination for empty project parents as
+well as workspaces. Clients must follow `pageInfo.nextCursor` even when a page
+has no workspace entries. The protocol does not identify clients that consume
+`project.list`, so the daemon cannot omit these parents based on that feature.
+The existing project-list response itself has no pagination contract.
