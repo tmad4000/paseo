@@ -244,6 +244,16 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
     peer = await SubscriptionPeer.connect(daemon.port, "stale-directory-sync");
     const agentIds: string[] = [];
     const workspaceIds: string[] = [];
+    const emptyProjectIds: string[] = [];
+    await peer.request({ type: "fetch_workspaces_request", requestId: "workspace-baseline" });
+    const baseline = peer.frames.flatMap((frame) =>
+      frame.type === "session" &&
+      frame.message.type === "fetch_workspaces_response" &&
+      frame.message.payload.requestId === "workspace-baseline"
+        ? [frame.message.payload]
+        : [],
+    )[0]!;
+    expect(baseline.pageInfo.hasMore).toBe(false);
     let agentCursor: string | null = null;
     let workspaceCursor: string | null = null;
     let agentSubscription: string | undefined;
@@ -268,7 +278,8 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
       agentCursor = agentResponse.pageInfo.nextCursor;
       expect(agentResponse.pageInfo.hasMore).toBe(i < 2);
       agentSubscription ??= agentResponse.subscriptionId;
-
+    }
+    for (let i = 0; i < 20; i++) {
       await peer.request({
         type: "fetch_workspaces_request",
         requestId: `workspaces-${i}`,
@@ -283,15 +294,26 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
           ? [frame.message.payload]
           : [],
       )[0]!;
-      expect(workspaceResponse.entries).toHaveLength(1);
-      workspaceIds.push(workspaceResponse.entries[0]!.id);
+      expect(workspaceResponse.entries.length).toBeLessThanOrEqual(1);
+      workspaceIds.push(...workspaceResponse.entries.map((workspace) => workspace.id));
+      emptyProjectIds.push(...workspaceResponse.emptyProjects.map((project) => project.projectId));
       workspaceCursor = workspaceResponse.pageInfo.nextCursor;
-      expect(workspaceResponse.pageInfo.hasMore).toBe(i < 2);
       workspaceSubscription ??= workspaceResponse.subscriptionId;
+      expect(workspaceResponse.pageInfo.hasMore).toBe(workspaceCursor !== null);
+      if (!workspaceCursor) break;
     }
-    const laterWorkspaceId = workspaceIds.slice(1).find((id) => id !== workspaces[2]!.id)!;
+    expect(workspaceCursor).toBeNull();
+    expect(emptyProjectIds.sort()).toEqual(
+      baseline.emptyProjects.map((project) => project.projectId).sort(),
+    );
+    const laterWorkspaceId = workspaceIds.slice(1).find((id) => id !== workspaces[2]!.id);
+    expect(laterWorkspaceId).toEqual(expect.any(String));
     expect(agentIds.sort()).toEqual(agents.map((agent) => agent.id).sort());
-    expect(workspaceIds.sort()).toEqual(workspaces.map((workspace) => workspace.id).sort());
+    expect(new Set(workspaceIds).size).toBe(workspaceIds.length);
+    expect(workspaceIds).toEqual(
+      expect.arrayContaining(workspaces.map((workspace) => workspace.id)),
+    );
+    expect(workspaceIds.sort()).toEqual(baseline.entries.map((workspace) => workspace.id).sort());
     expect(agentSubscription).toEqual(expect.any(String));
     expect(workspaceSubscription).toEqual(expect.any(String));
     await admin.updateAgent(agents[2]!.id, { name: "Updated agent" });
@@ -327,7 +349,7 @@ test("stale directory sync requests page snapshots and retain subscriptions", as
     await peer.request({
       type: "archive_workspace_request",
       requestId: "archive-later",
-      workspaceId: laterWorkspaceId,
+      workspaceId: laterWorkspaceId!,
     });
     await expect
       .poll(
