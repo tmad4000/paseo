@@ -41,10 +41,8 @@ export interface ArchiveDependencies {
   // the archive target, not status/ownership.
   findWorkspaceIdForCwd: (cwd: string) => Promise<string | null>;
   getWorkspace?: (workspaceId: string) => Promise<PersistedWorkspaceRecord | null>;
-  // Active (non-archived) workspaces, used to decide whether the workspace being
-  // archived is the last reference to its backing worktree directory, and to
-  // break a same-cwd tie in favor of the worktree-kind record when archiving by
-  // path (no explicit workspaceId).
+  // Active workspace references also break a same-cwd tie in favor of the
+  // worktree-kind record when archiving by path (no explicit workspaceId).
   listActiveWorkspaces: () => Promise<ActiveWorkspaceRef[]>;
   archiveWorkspaceRecord: (workspaceId: string) => Promise<void>;
   emitWorkspaceUpdatesForWorkspaceIds: (workspaceIds: Iterable<string>) => Promise<void>;
@@ -118,9 +116,7 @@ export async function resolveWorkspaceIdAtPath(
   return dependencies.findWorkspaceIdForCwd(targetPath);
 }
 
-// Resolves the in-scope record set, tears each down
-// (agents + terminals + record), then removes the backing directory iff it is
-// Paseo-owned AND no active workspace still references it.
+// Backing-directory retention rules: docs/move-chat-workspace.md.
 export async function archiveByScope(
   dependencies: ArchiveDependencies,
   request: ArchiveByScopeRequest,
@@ -516,9 +512,8 @@ export async function archiveWorkspaceContents(
   return archivedAgents;
 }
 
-// True when, after archiving
-// the in-scope records, no active workspace still points at targetDir. Derived
-// from records each call — no stored counter.
+// Derive retention from current records on each call, without a stored counter.
+// Retention rules: docs/move-chat-workspace.md.
 async function isDirectoryUnreferenced(
   activeWorkspaces: ActiveWorkspaceRef[],
   targetDir: string,

@@ -18,7 +18,9 @@ pending approvals, modes and runtime capabilities visible after a live move, ret
 blocks before publishing a workspace backed by an untrusted directory or its aliases, rejecting
 stale placement during interactive and background archive/removal races, retaining committed
 placement after write failures and retries, and preventing source
-archive from removing a moved chat's directory even after its destination workspace is background-archived. Source prepared, not installed; regressions:
+archive from removing a moved chat's directory even after its destination workspace is background-archived.
+Merged in [#205](https://github.com/tmad4000/paseo/pull/205) and included in the beta.30 candidate;
+builds and installation pending. Regressions:
 `agent/workspace-move.test.ts`, `agent/agent-manager.test.ts`, `agent/agent-storage.test.ts`,
 `session.workspaces.test.ts`,
 `session/workspace-provisioning/workspace-provisioning-service.test.ts`,
