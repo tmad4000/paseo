@@ -97,3 +97,21 @@ test("renders the bare control when there is no label or the tooltip is disabled
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(document.body.textContent).not.toContain("Workspace actions");
 });
+
+test("a press that disables the tooltip mid-delay does not leave it to reappear later", async () => {
+  const render = (disabled: boolean) =>
+    root.render(
+      <IconTooltip label="Workspace actions" disabled={disabled}>
+        <IconButton onPress={noop} testID="kebab" />
+      </IconTooltip>,
+    );
+  await act(async () => render(false));
+  await page.getByTestId("kebab").hover();
+  // The menu opens before the 300ms hover delay elapses, disabling the tooltip.
+  await act(async () => render(true));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  // The menu closes while the pointer is still over the trigger.
+  await act(async () => render(false));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(document.body.textContent).not.toContain("Workspace actions");
+});
