@@ -10,6 +10,17 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Move chats to workspaces — pspin-5qh
+
+`move-chat-workspace`: [Move to workspace](move-chat-workspace.md) preserves chat identity and
+execution directory across Asides, new and existing destinations. Acceptance includes keeping
+pending approvals, modes and runtime capabilities visible after a live move, retaining automation
+blocks before publishing a workspace backed by an untrusted directory, and preventing source
+archive from removing a moved chat's directory. Source prepared, not installed; regressions:
+`agent/workspace-move.test.ts`, `session.workspaces.test.ts`,
+`session/workspace-provisioning/workspace-provisioning-service.test.ts`,
+`workspace-archive-service.test.ts` and browser `move-chat-workspace.spec.ts`.
+
 ## Approval card text — pspin-sqj
 
 `approval-card-text`: Permission titles/descriptions, question prompts/options, plan text, and

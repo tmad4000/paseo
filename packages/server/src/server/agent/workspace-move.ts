@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { areEquivalentPaths } from "../../utils/path.js";
 import type { AgentWorkspaceMoveRequestSchema } from "@getpaseo/protocol/messages";
 import type { AgentManager } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
@@ -106,7 +107,10 @@ async function createDestination(
     cwd,
     title,
     projectId,
-    { workspaceId },
+    {
+      workspaceId,
+      untrustedSource: areEquivalentPaths(cwd, source.cwd) ? source.untrustedSource : undefined,
+    },
   );
   workspace = { ...created, labels };
   if (destination.kind === "new") {

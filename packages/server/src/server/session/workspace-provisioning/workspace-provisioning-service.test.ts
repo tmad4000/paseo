@@ -1,4 +1,5 @@
 import os from "node:os";
+import { assertWorkspaceAutomationAllowedForWorkspace } from "../../workspace-automation-gate.js";
 import path from "node:path";
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from "node:fs";
 
@@ -506,6 +507,34 @@ test("resolveOrCreateWorkspaceIdForCreateAgent creates a titled workspace when n
   const created = await workspaceRegistry.get(id);
   expect(created?.cwd).toBe(dir);
   expect(created?.title).toBe("My Title");
+});
+
+test("createWorkspaceForDirectory blocks automation from its first publication", async () => {
+  const untrustedSource = {
+    kind: "change_request" as const,
+    forge: "github",
+    number: 42,
+    headRepository: "contributor/repo",
+  };
+  const upsert = workspaceRegistry.upsert.bind(workspaceRegistry);
+  const publications: Array<Parameters<WorkspaceRegistry["upsert"]>[0]> = [];
+  workspaceRegistry.upsert = async (workspace, context) => {
+    publications.push(workspace);
+    await upsert(workspace, context);
+    await expect(
+      assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, workspace.workspaceId),
+    ).rejects.toThrow("Scripts are blocked");
+  };
+  const created = await provisioning.createWorkspaceForDirectory(
+    path.join(tmpDir, "untrusted"),
+    "Asides",
+    undefined,
+    { untrustedSource },
+  );
+  expect(publications).toEqual([created]);
+  expect((await workspaceRegistry.get(created.workspaceId))?.untrustedSource).toEqual(
+    untrustedSource,
+  );
 });
 
 test("createWorkspaceForDirectory always mints a fresh workspace even when one already occupies the cwd", async () => {

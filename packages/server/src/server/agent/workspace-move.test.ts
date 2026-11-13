@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { assertWorkspaceAutomationAllowedForWorkspace } from "../workspace-automation-gate.js";
 import type { MoveAgentWorkspaceDependencies } from "./workspace-move.js";
 import { moveAgentWorkspace, ASIDES_WORKSPACE_LABEL } from "./workspace-move.js";
 import {
@@ -87,6 +88,7 @@ function harness() {
           cwd,
           projectId: projectId ?? "project",
           title: title ?? null,
+          ...(context?.untrustedSource ? { untrustedSource: context.untrustedSource } : {}),
         };
         workspaces.set(value.workspaceId, value);
         return value;
@@ -152,6 +154,72 @@ describe("move chat workspace", () => {
     h.agent.workspaceId = "source";
     expect((await moveAgentWorkspace(h.deps, request)).title).toBe("Misc");
     expect(h.creates()).toBe(1);
+  });
+  test.each(["asides", "new"] as const)(
+    "preserves automation restrictions when %s shares the source directory",
+    async (kind) => {
+      const h = harness();
+      const source = h.workspaces.get("source")!;
+      const untrustedSource = {
+        kind: "change_request" as const,
+        forge: "github",
+        number: 42,
+        headRepository: "contributor/repo",
+      };
+      h.workspaces.set("source", { ...source, untrustedSource });
+      const create = h.deps.workspaceProvisioning.createWorkspaceForDirectory;
+      let firstPublished: PersistedWorkspaceRecord | null = null;
+      h.deps.workspaceProvisioning.createWorkspaceForDirectory = async (...args) => {
+        const created = await create(...args);
+        firstPublished = created;
+        await expect(
+          assertWorkspaceAutomationAllowedForWorkspace(
+            h.deps.workspaceRegistry,
+            created.workspaceId,
+          ),
+        ).rejects.toThrow("Scripts are blocked");
+        return created;
+      };
+      const destination =
+        kind === "new" ? { kind, title: "Aside", workspaceId: "wks_0000000000000001" } : { kind };
+      const moved = await moveAgentWorkspace(h.deps, {
+        agentId: "chat",
+        expectedWorkspaceId: "source",
+        destination,
+      });
+      expect(firstPublished).toMatchObject({ cwd: source.cwd, untrustedSource });
+      expect(moved.untrustedSource).toEqual(untrustedSource);
+      await expect(
+        assertWorkspaceAutomationAllowedForWorkspace(h.deps.workspaceRegistry, moved.workspaceId),
+      ).rejects.toThrow("Scripts are blocked");
+    },
+  );
+  test("Asides uses a separate Default directory without inheriting the source block", async () => {
+    const h = harness();
+    h.workspaces.set("source", {
+      ...workspace("source"),
+      untrustedSource: {
+        kind: "change_request",
+        forge: "github",
+        number: 42,
+        headRepository: "contributor/repo",
+      },
+    });
+    const project = await h.deps.projectRegistry.get("project");
+    if (!project) throw new Error("Missing project fixture");
+    h.deps.projectRegistry.list = async () => [
+      { ...project, rootPath: "/default", defaultAt: "2026-11-13T00:00:00Z" },
+    ];
+    const moved = await moveAgentWorkspace(h.deps, {
+      agentId: "chat",
+      expectedWorkspaceId: "source",
+      destination: { kind: "asides" },
+    });
+    expect(moved.cwd).toBe("/default");
+    expect(moved.untrustedSource).toBeUndefined();
+    await expect(
+      assertWorkspaceAutomationAllowedForWorkspace(h.deps.workspaceRegistry, moved.workspaceId),
+    ).resolves.toBeUndefined();
   });
   test("rejects an archived target and a stale source without moving the chat", async () => {
     const h = harness();

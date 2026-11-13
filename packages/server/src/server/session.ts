@@ -3747,8 +3747,15 @@ export class Session {
         },
         msg,
       );
-      const record = await this.agentStorage.get(msg.agentId);
-      const agent = record ? await this.agentUpdates.emitStoredRecord(record) : null;
+      const live = this.agentManager.getAgent(msg.agentId);
+      let agent: AgentSnapshotPayload | null = null;
+      if (live) {
+        await this.agentUpdates.forwardLiveAgent(live);
+        agent = await this.buildAgentPayload(live);
+      } else {
+        const record = await this.agentStorage.get(msg.agentId);
+        if (record) agent = await this.agentUpdates.emitStoredRecord(record);
+      }
       await Promise.all([
         this.emitWorkspaceUpdateForWorkspaceId(msg.expectedWorkspaceId),
         this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId),
