@@ -40,15 +40,14 @@ async function move(
 ): Promise<PersistedWorkspaceRecord> {
   const stored = await deps.agentStorage.get(input.agentId);
   const agent = deps.agentManager.getAgent(input.agentId) ?? stored;
-  if (!agent || stored?.archivedAt) throw new Error("Chat is unavailable or archived");
+  if (!stored || !agent || stored.archivedAt) throw new Error("Chat is unavailable or archived");
   const source = await deps.workspaceRegistry.get(input.expectedWorkspaceId);
   if (!source || source.archivedAt) throw new Error("Source workspace is unavailable");
   const destination = input.destination;
   let workspace = await findDestination(deps, input);
   // A retry after a lost response must reuse the acknowledged destination.
-  if (workspace && agent.workspaceId === workspace.workspaceId && !workspace.archivedAt)
-    return workspace;
-  if (agent.workspaceId !== input.expectedWorkspaceId)
+  const isRetry = workspace !== null && agent.workspaceId === workspace.workspaceId;
+  if (agent.workspaceId !== input.expectedWorkspaceId && !isRetry)
     throw new Error("Chat has already moved. Reopen its tab and try again.");
   if (destination.kind === "existing" && !workspace)
     throw new Error("Destination workspace was not found");
@@ -61,10 +60,11 @@ async function move(
     expectedWorkspaceId: input.expectedWorkspaceId,
     workspaceRegistry: deps.workspaceRegistry,
   });
-  await deps.workspaceRegistry.update(source.workspaceId, (record) => ({
-    ...record,
-    updatedAt: new Date().toISOString(),
-  }));
+  if (!isRetry)
+    await deps.workspaceRegistry.update(source.workspaceId, (record) => ({
+      ...record,
+      updatedAt: new Date().toISOString(),
+    }));
   return workspace;
 }
 

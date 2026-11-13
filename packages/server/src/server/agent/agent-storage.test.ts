@@ -1,3 +1,4 @@
+import { writeJsonFileAtomic } from "../atomic-file.js";
 import { describe, expect, test, beforeEach, afterEach } from "vitest";
 import os from "node:os";
 import path from "node:path";
@@ -133,6 +134,14 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
   };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 describe("AgentStorage", () => {
   let tmpDir: string;
   let storagePath: string;
@@ -167,6 +176,114 @@ describe("AgentStorage", () => {
       role: "orchestrator",
       "paseo.session-pinned-at": "",
     });
+  });
+
+  test("failed placement writes retain committed cache and disk state while queued writes and retries recover", async () => {
+    let failNext = false;
+    const entered = deferred();
+    const release = deferred();
+    storage = new AgentStorage(storagePath, logger, {
+      writeRecord: async (filePath, record) => {
+        if (failNext) {
+          failNext = false;
+          entered.resolve();
+          await release.promise;
+          throw new Error("Injected disk failure");
+        }
+        await writeJsonFileAtomic(filePath, record);
+      },
+    });
+    const agent = createManagedAgent({ id: "placement-failure", workspaceId: "source" });
+    await storage.applySnapshot(agent);
+    failNext = true;
+    const moving = storage.applySnapshot(
+      { ...agent, workspaceId: "destination" },
+      { workspaceId: "destination" },
+    );
+    const rejected = expect(moving).rejects.toThrow("Injected disk failure");
+    await entered.promise;
+    const queued = storage.applySnapshot(agent);
+    try {
+      expect((await storage.get(agent.id))?.workspaceId).toBe("source");
+      expect((await new AgentStorage(storagePath, logger).get(agent.id))?.workspaceId).toBe(
+        "source",
+      );
+    } finally {
+      release.resolve();
+    }
+    await Promise.all([rejected, queued]);
+    expect((await storage.get(agent.id))?.workspaceId).toBe("source");
+    await storage.applySnapshot(
+      { ...agent, workspaceId: "destination" },
+      { workspaceId: "destination" },
+    );
+    await storage.applySnapshot({ ...agent, currentModeId: "build" });
+    await storage.setTitle(agent.id, "Retained title");
+    expect(await storage.get(agent.id)).toMatchObject({
+      workspaceId: "destination",
+      lastModeId: "build",
+      title: "Retained title",
+    });
+    expect(await new AgentStorage(storagePath, logger).get(agent.id)).toMatchObject({
+      workspaceId: "destination",
+      lastModeId: "build",
+      title: "Retained title",
+    });
+  });
+
+  test("uncommitted placement inputs and read snapshots cannot mutate the committed cache", async () => {
+    const entered = deferred();
+    const release = deferred();
+    let pause = false;
+    storage = new AgentStorage(storagePath, logger, {
+      writeRecord: async (filePath, record) => {
+        if (pause) {
+          pause = false;
+          entered.resolve();
+          await release.promise;
+        }
+        await writeJsonFileAtomic(filePath, record);
+      },
+    });
+    const agent = createManagedAgent({
+      id: "cache-placement",
+      provider: "codex",
+      workspaceId: "source",
+      persistence: { provider: "codex", sessionId: "cache-session" },
+    });
+    await storage.applySnapshot(agent);
+    const before = await storage.get(agent.id);
+    if (!before) throw new Error("Missing persisted agent");
+    const input = { ...before, workspaceId: "destination" };
+    pause = true;
+    const writing = storage.upsert(input);
+    await entered.promise;
+    try {
+      input.workspaceId = "uncommitted-input";
+      const snapshots = [
+        await storage.get(agent.id),
+        ...(await storage.list()),
+        ...(await storage.listByWorkspace("source")),
+        ...(await storage.listByProviderSession("codex", "cache-session")),
+      ];
+      expect(snapshots).toHaveLength(4);
+      for (const snapshot of snapshots) {
+        if (!snapshot) throw new Error("Missing read snapshot");
+        snapshot.workspaceId = "uncommitted-cache";
+      }
+      expect((await storage.get(agent.id))?.workspaceId).toBe("source");
+      expect((await new AgentStorage(storagePath, logger).get(agent.id))?.workspaceId).toBe(
+        "source",
+      );
+    } finally {
+      release.resolve();
+    }
+    await writing;
+    input.workspaceId = "mutated-after-commit";
+    expect((await storage.get(agent.id))?.workspaceId).toBe("destination");
+    expect((await new AgentStorage(storagePath, logger).get(agent.id))?.workspaceId).toBe(
+      "destination",
+    );
   });
 
   test("applySnapshot persists configs and snapshot metadata", async () => {

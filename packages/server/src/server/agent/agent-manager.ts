@@ -101,7 +101,7 @@ import {
   toAgentTaskSnapshot,
 } from "./agent-task-snapshot.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
-import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import type { StoredAgentRecord, AgentStorage, AgentSnapshotOptions } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -1624,7 +1624,7 @@ export class AgentManager {
       {
         reason: "resume",
         purpose,
-        workspaceId: options?.workspaceId ?? null,
+        workspaceId: options?.workspaceId ?? record?.workspaceId ?? null,
       },
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
@@ -1637,6 +1637,7 @@ export class AgentManager {
     await this.requireExternalMcpSupport(session, storedConfig);
     return this.registerSession(session, storedConfig, resolvedAgentId, {
       ...options,
+      workspaceId: options?.workspaceId ?? record?.workspaceId,
       persistence: handle,
       restoring: true,
     });
@@ -2540,30 +2541,38 @@ export class AgentManager {
       runWorkspaceMutation(input.workspaceRegistry, async () => {
         const stored = await this.requireRegistry().get(agentId);
         const agent = this.getAgent(agentId) ?? stored;
-        if (!agent || stored?.archivedAt) throw new Error("Chat is unavailable or archived");
-        if (agent.workspaceId !== input.expectedWorkspaceId)
+        if (!stored || !agent || stored.archivedAt)
+          throw new Error("Chat is unavailable or archived");
+        const isCommittedRetry =
+          stored.workspaceId === input.workspaceId && agent.workspaceId === input.workspaceId;
+        if (
+          !isCommittedRetry &&
+          (agent.workspaceId !== input.expectedWorkspaceId ||
+            stored.workspaceId !== input.expectedWorkspaceId)
+        )
           throw new Error("Chat has already moved. Reopen its tab and try again.");
         const source = await input.workspaceRegistry.get(input.expectedWorkspaceId);
         if (!source || source.archivedAt) throw new Error("Source workspace is unavailable");
         const destination = await input.workspaceRegistry.get(input.workspaceId);
         if (!destination || destination.archivedAt)
           throw new Error("Destination workspace is unavailable or archived");
-        await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
+        if (!isCommittedRetry)
+          await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
       }),
     );
   }
 
   private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {
     const agent = this.agents.get(agentId);
-    if (!agent) {
-      return;
-    }
-    if (agent.workspaceId === workspaceId) {
-      return;
-    }
+    if (!agent) return;
+    const next = { ...agent, workspaceId };
+    this.touchUpdatedAt(next);
+    await this.persistSnapshot(next, { workspaceId });
+    const stored = await this.requireRegistry().get(agentId);
+    if (stored?.workspaceId !== workspaceId)
+      throw new Error("Workspace placement was not persisted");
     agent.workspaceId = workspaceId;
-    this.touchUpdatedAt(agent);
-    await this.persistSnapshot(agent);
+    if (agent.updatedAt.getTime() < next.updatedAt.getTime()) agent.updatedAt = next.updatedAt;
     this.emitState(agent, { persist: false });
   }
 
@@ -3898,6 +3907,11 @@ export class AgentManager {
         options?.initialTitle ?? null,
       );
 
+      const workspaceId = await this.resolveRegistrationWorkspaceId(
+        resolvedAgentId,
+        options?.workspaceId,
+      );
+      const registrationOptions = { ...options, workspaceId };
       const now = new Date();
       const { durableTimelineHasRows } = await this.initializeAgentTimelineForRegister({
         agentId: resolvedAgentId,
@@ -3911,7 +3925,7 @@ export class AgentManager {
         config,
         now,
         durableTimelineHasRows,
-        options,
+        options: registrationOptions,
       });
 
       // Read history before publishing the agent: a provider failure must leave the
@@ -3943,6 +3957,7 @@ export class AgentManager {
       this.assertAgentRegistrationActive(managed);
       await this.persistSnapshot(managed, {
         title: initialPersistedTitle,
+        workspaceId: managed.workspaceId,
       });
       this.assertAgentRegistrationActive(managed);
       if (!options?.publishWhenReady) {
@@ -4322,6 +4337,13 @@ export class AgentManager {
     );
   }
 
+  private async resolveRegistrationWorkspaceId(
+    agentId: string,
+    workspaceId?: string,
+  ): Promise<string | undefined> {
+    return workspaceId ?? (await this.registry?.get(agentId))?.workspaceId;
+  }
+
   private async resolveInitialPersistedTitle(
     agentId: string,
     config: AgentSessionConfig,
@@ -4340,7 +4362,7 @@ export class AgentManager {
 
   private async persistSnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: AgentSnapshotOptions,
   ): Promise<void> {
     if (!this.registry) {
       return;

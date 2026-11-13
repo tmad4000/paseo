@@ -16,9 +16,11 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 execution directory across Asides, new and existing destinations. Acceptance includes keeping
 pending approvals, modes and runtime capabilities visible after a live move, retaining automation
 blocks before publishing a workspace backed by an untrusted directory or its aliases, rejecting
-stale placement during interactive and background archive/removal races, and preventing source
+stale placement during interactive and background archive/removal races, retaining committed
+placement after write failures and retries, and preventing source
 archive from removing a moved chat's directory even after its destination workspace is background-archived. Source prepared, not installed; regressions:
-`agent/workspace-move.test.ts`, `agent/agent-manager.test.ts`, `session.workspaces.test.ts`,
+`agent/workspace-move.test.ts`, `agent/agent-manager.test.ts`, `agent/agent-storage.test.ts`,
+`session.workspaces.test.ts`,
 `session/workspace-provisioning/workspace-provisioning-service.test.ts`,
 `workspace-archive-service.test.ts`, `workspace-registry.test.ts` and browser `move-chat-workspace.spec.ts`.
 
