@@ -16,6 +16,13 @@ test("moves an aside through the tab menu, preserves the chat and reuses Asides"
       workspaceId: workspace.workspaceId,
       title: "An unrelated aside",
     });
+    const prompt = "Keep this aside: emit 1 coalesced agent stream updates";
+    await workspace.client.sendAgentMessage(agent.id, prompt);
+    await workspace.client.waitForFinish(agent.id, 30_000);
+    const before = await workspace.client.fetchAgentTimeline(agent.id);
+    expect(
+      before.entries.some(({ item }) => item.type === "user_message" && item.text === prompt),
+    ).toBe(true);
     await page.goto(buildHostAgentDetailRoute(getServerId(), agent.id, agent.workspaceId));
     await page.waitForURL(
       (url) => url.pathname.includes("/workspace/") && !url.searchParams.has("open"),
@@ -33,6 +40,8 @@ test("moves an aside through the tab menu, preserves the chat and reuses Asides"
     await expectWorkspaceTabHidden(page, agent.id);
     const moved = await workspace.client.fetchAgent({ agentId: agent.id });
     expect(moved?.agent.id).toBe(agent.id);
+    const after = await workspace.client.fetchAgentTimeline(agent.id);
+    expect(after.entries).toEqual(before.entries);
     expect(moved?.agent.cwd).toBe(workspace.repoPath);
     expect(moved?.agent.archivedAt).toBeNull();
     const destinationId = moved?.agent.workspaceId;
@@ -103,6 +112,7 @@ test("creates an individual workspace through the compact tab menu", async ({ pa
     await expect(page.getByTestId("move-chat-dialog")).toBeVisible();
     await page.getByTestId("move-chat-destination").click();
     await page.getByText("New workspace…", { exact: true }).click();
+    await expect(page.getByText("Shared catch-all on this host", { exact: true })).toBeHidden();
     await page.getByTestId("move-chat-name").fill("An independent topic");
     await page.screenshot({ path: "test-results/move-chat-compact.png" });
     await page.getByTestId("move-chat-submit").click();
