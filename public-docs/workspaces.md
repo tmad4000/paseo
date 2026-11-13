@@ -44,7 +44,7 @@ Every workspace has an isolation mode:
 - **Local** uses an existing directory, such as your main checkout. Use it when sessions should share the files already on disk.
 - **Worktree** creates or opens a managed git worktree. Use it when a task needs its own directory and branch.
 
-The workspace is the product concept; a git worktree is one way to isolate its files. More than one workspace can refer to the same managed worktree, and Paseo removes that worktree after its last workspace is archived.
+The workspace is the product concept; a git worktree is one way to isolate its files. More than one workspace can refer to the same managed worktree. See [Git worktrees](/docs/worktrees) for its lifecycle.
 
 ## Creating a workspace
 
