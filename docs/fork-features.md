@@ -17,7 +17,7 @@ execution directory across Asides, new and existing destinations. Acceptance inc
 pending approvals, modes and runtime capabilities visible after a live move, retaining automation
 blocks before publishing a workspace backed by an untrusted directory or its aliases, rejecting
 stale placement during interactive and background archive/removal races, and preventing source
-archive from removing a moved chat's directory. Source prepared, not installed; regressions:
+archive from removing a moved chat's directory even after its destination workspace is background-archived. Source prepared, not installed; regressions:
 `agent/workspace-move.test.ts`, `agent/agent-manager.test.ts`, `session.workspaces.test.ts`,
 `session/workspace-provisioning/workspace-provisioning-service.test.ts`,
 `workspace-archive-service.test.ts`, `workspace-registry.test.ts` and browser `move-chat-workspace.spec.ts`.

@@ -35,7 +35,7 @@ export interface ArchiveDependencies {
   github: ForgeService;
   workspaceGitService: Pick<WorkspaceGitService, "getSnapshot" | "invalidateWorktrees">;
   agentManager: Pick<AgentManager, "listAgents" | "getAgent" | "archiveAgent" | "archiveSnapshot">;
-  agentStorage: Pick<AgentStorage, "listByWorkspace">;
+  agentStorage: Pick<AgentStorage, "list" | "listByWorkspace">;
   // Resolves the worktree at a path to its workspaceId for archive-by-path. The
   // path uniquely identifies a worktree workspace; this is a directory lookup for
   // the archive target, not status/ownership.
@@ -531,11 +531,9 @@ async function isDirectoryUnreferenced(
     if (archivedWorkspaceIds.has(workspace.workspaceId)) continue;
     const backingDirectory = await resolveWorkspaceBackingDirectory(workspace, dependencies);
     if (matchesTarget(backingDirectory.path)) return false;
-    const agents = await dependencies.agentStorage.listByWorkspace(workspace.workspaceId);
-    if (agents.some((agent) => !agent.archivedAt && isRealpathInsideRoot(target, agent.cwd)))
-      return false;
   }
-  return true;
+  const agents = await dependencies.agentStorage.list();
+  return !agents.some((agent) => !agent.archivedAt && isRealpathInsideRoot(target, agent.cwd));
 }
 
 export async function killTerminalsForWorkspace(

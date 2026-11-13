@@ -8,8 +8,17 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ForgeService } from "../services/forge-service.js";
 import { createRealpathAwarePathMatcher } from "../utils/path.js";
 import { createWorktree, type WorktreeConfig } from "../utils/worktree.js";
-import type { ManagedAgent } from "./agent/agent-manager.js";
-import type { AgentStorage, StoredAgentRecord } from "./agent/agent-storage.js";
+import { AgentManager, type ManagedAgent } from "./agent/agent-manager.js";
+import { moveAgentWorkspace } from "./agent/workspace-move.js";
+import {
+  FileBackedWorkspaceRegistry,
+  FileBackedProjectRegistry,
+  createPersistedWorkspaceRecord,
+  createPersistedProjectRecord,
+} from "./workspace-registry.js";
+import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
+import { createNoopWorkspaceGitService } from "./test-utils/workspace-git-service-stub.js";
+import { AgentStorage, type StoredAgentRecord } from "./agent/agent-storage.js";
 import type { WorkspaceGitService } from "./workspace-git-service.js";
 import {
   archiveByScope,
@@ -155,8 +164,9 @@ function createArchiveDeps(input: ArchiveDepsInput): ArchiveTestDependencies {
       }),
     },
     agentStorage: {
-      listByWorkspace: async (): Promise<StoredAgentRecord[]> => [],
-    } as Pick<AgentStorage, "listByWorkspace">,
+      list: async () => [],
+      listByWorkspace: async () => [],
+    },
     findWorkspaceIdForCwd: input.findWorkspaceIdForCwd ?? vi.fn(async () => null),
     listActiveWorkspaces: async () =>
       active.filter((workspace) => !archivedWorkspaceIds.has(workspace.workspaceId)),
@@ -612,22 +622,19 @@ describe("archiveByScope", () => {
       mainRepoRoot: null,
     };
     const deps = createArchiveDeps({ paseoHome, activeWorkspaces: [source, asides] });
-    deps.agentStorage.listByWorkspace = async (id) =>
-      id === "asides"
-        ? [
-            {
-              id: "moved",
-              provider: "codex",
-              cwd: worktree.worktreePath,
-              workspaceId: "asides",
-              labels: {},
-              lastStatus: "closed",
-              createdAt: "",
-              updatedAt: "",
-              archivedAt: null,
-            },
-          ]
-        : [];
+    const moved: StoredAgentRecord = {
+      id: "moved",
+      provider: "codex",
+      cwd: worktree.worktreePath,
+      workspaceId: "asides",
+      labels: {},
+      lastStatus: "closed",
+      createdAt: "",
+      updatedAt: "",
+      archivedAt: null,
+    };
+    deps.agentStorage.list = async () => [moved];
+    deps.agentStorage.listByWorkspace = async (id) => (id === moved.workspaceId ? [moved] : []);
     const result = await archiveByScope(deps, {
       scope: { kind: "workspace", workspaceId: "source" },
       requestId: "moved-aside",
@@ -635,6 +642,193 @@ describe("archiveByScope", () => {
     expect(result.removedDirectory).toBe(false);
     expect(existsSync(worktree.worktreePath)).toBe(true);
     expect(deps.archivedAgentIds).not.toContain("moved");
+  });
+
+  test.each(["archived", "removed"] as const)(
+    "keeps a moved chat's execution directory after its destination is %s until the chat is archived",
+    async (destinationState) => {
+      const { tempDir, repoDir } = createGitRepo();
+      const paseoHome = path.join(tempDir, ".paseo");
+      const worktree = await createPaseoOwnedWorktree(repoDir, paseoHome, "retained-chat-cwd");
+      const logger = createLogger();
+      const workspaceRegistry = new FileBackedWorkspaceRegistry(
+        path.join(tempDir, "workspaces.json"),
+        logger,
+      );
+      const projectRegistry = new FileBackedProjectRegistry(
+        path.join(tempDir, "projects.json"),
+        logger,
+      );
+      const timestamp = "2026-11-13T00:00:00.000Z";
+      const source = createPersistedWorkspaceRecord({
+        workspaceId: "source",
+        projectId: "project",
+        cwd: worktree.worktreePath,
+        kind: "worktree",
+        displayName: "Source",
+        branch: worktree.branchName,
+        worktreeRoot: worktree.worktreePath,
+        mainRepoRoot: repoDir,
+        isPaseoOwnedWorktree: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      const destination = createPersistedWorkspaceRecord({
+        workspaceId: "destination",
+        projectId: source.projectId,
+        cwd: path.join(repoDir, "destination"),
+        kind: "directory",
+        displayName: "Destination",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      mkdirSync(destination.cwd);
+      await workspaceRegistry.upsert(source);
+      await workspaceRegistry.upsert(destination);
+      await projectRegistry.upsert(
+        createPersistedProjectRecord({
+          projectId: source.projectId,
+          rootPath: repoDir,
+          kind: "git",
+          displayName: "Project",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      );
+      const agentStorage = new AgentStorage(path.join(paseoHome, "agents"), logger);
+      const agent: StoredAgentRecord = {
+        id: "moved-chat",
+        provider: "codex",
+        workspaceId: source.workspaceId,
+        cwd: source.cwd,
+        labels: {},
+        lastStatus: "closed",
+        persistence: { provider: "codex", sessionId: "retained-session" },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        archivedAt: null,
+      };
+      await agentStorage.upsert(agent);
+      const agentManager = new AgentManager({ clients: {}, registry: agentStorage, logger });
+      await moveAgentWorkspace(
+        {
+          agentManager,
+          agentStorage,
+          workspaceRegistry,
+          projectRegistry,
+          workspaceProvisioning: {
+            createWorkspaceForDirectory: async () => {
+              throw new Error("Unexpected workspace creation");
+            },
+          },
+        },
+        {
+          agentId: agent.id,
+          expectedWorkspaceId: source.workspaceId,
+          destination: { kind: "existing", workspaceId: destination.workspaceId },
+        },
+      );
+      const moved = await agentStorage.get(agent.id);
+      expect(moved).toMatchObject({
+        cwd: source.cwd,
+        workspaceId: destination.workspaceId,
+        archivedAt: null,
+        persistence: agent.persistence,
+      });
+      rmSync(destination.cwd, { recursive: true });
+      const reconciliation = new WorkspaceReconciliationService({
+        workspaceRegistry,
+        projectRegistry,
+        logger,
+        workspaceGitService: createNoopWorkspaceGitService({
+          getCheckout: async (cwd) => ({
+            cwd,
+            isGit: true,
+            currentBranch: cwd === source.cwd ? worktree.branchName : "main",
+            remoteUrl: null,
+            worktreeRoot: cwd === source.cwd ? source.cwd : repoDir,
+            mainRepoRoot: cwd === source.cwd ? repoDir : null,
+            isPaseoOwnedWorktree: cwd === source.cwd,
+          }),
+        }),
+      });
+      const reconciled = await reconciliation.runOnce();
+      expect(reconciled.changesApplied).toContainEqual(
+        expect.objectContaining({
+          kind: "workspace_archived",
+          workspaceId: destination.workspaceId,
+          reason: "directory_missing",
+        }),
+      );
+      expect((await workspaceRegistry.get(source.workspaceId))?.isPaseoOwnedWorktree).toBe(true);
+      expect((await workspaceRegistry.get(destination.workspaceId))?.archivedAt).toEqual(
+        expect.any(String),
+      );
+      expect(await agentStorage.get(agent.id)).toEqual(moved);
+      if (destinationState === "removed") await workspaceRegistry.remove(destination.workspaceId);
+      function isActive(workspace: Awaited<ReturnType<typeof workspaceRegistry.list>>[number]) {
+        return !workspace.archivedAt;
+      }
+      async function listActiveWorkspaces() {
+        return (await workspaceRegistry.list()).filter(isActive);
+      }
+      const deps: ArchiveDependencies = {
+        ...createArchiveDeps({ paseoHome, activeWorkspaces: [] }),
+        agentManager,
+        agentStorage,
+        getWorkspace: (id) => workspaceRegistry.get(id),
+        listActiveWorkspaces,
+        archiveWorkspaceRecord: (id) => workspaceRegistry.archive(id, new Date().toISOString()),
+      };
+      const kept = await archiveByScope(deps, {
+        scope: { kind: "workspace", workspaceId: source.workspaceId },
+        requestId: "keep-moved-cwd",
+      });
+      expect(kept).toMatchObject({
+        archivedAgentIds: [],
+        archivedWorkspaceIds: [source.workspaceId],
+        removedDirectory: false,
+      });
+      expect(existsSync(source.cwd)).toBe(true);
+      expect(await agentStorage.get(agent.id)).toEqual(moved);
+      await agentManager.archiveSnapshot(agent.id, new Date().toISOString());
+      expect((await agentStorage.get(agent.id))?.archivedAt).toEqual(expect.any(String));
+      const removed = await archiveByScope(deps, {
+        scope: { kind: "workspace", workspaceId: source.workspaceId },
+        requestId: "remove-after-chat-archive",
+      });
+      expect(removed.removedDirectory).toBe(true);
+      expect(existsSync(source.cwd)).toBe(false);
+    },
+  );
+
+  test("keeps the execution directory when the authoritative agent inventory cannot be read", async () => {
+    const { tempDir, repoDir } = createGitRepo();
+    const paseoHome = path.join(tempDir, ".paseo");
+    const worktree = await createPaseoOwnedWorktree(repoDir, paseoHome, "inventory-error");
+    const deps = createArchiveDeps({
+      paseoHome,
+      activeWorkspaces: [
+        {
+          workspaceId: "source",
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          mainRepoRoot: repoDir,
+          isPaseoOwnedWorktree: true,
+        },
+      ],
+    });
+    deps.agentStorage.list = async () => {
+      throw new Error("Agent inventory unavailable");
+    };
+    await expect(
+      archiveByScope(deps, {
+        scope: { kind: "workspace", workspaceId: "source" },
+        requestId: "inventory-error",
+      }),
+    ).rejects.toThrow("Agent inventory unavailable");
+    expect(existsSync(worktree.worktreePath)).toBe(true);
   });
 
   test("workspace scope with unknown workspace id is a clean no-op", async () => {
@@ -809,16 +1003,45 @@ describe("archiveByScope", () => {
         return {};
       }),
     };
+    const storedRecords: StoredAgentRecord[] = [
+      {
+        id: targetStoredAgentId,
+        workspaceId: targetWorkspaceId,
+        cwd: worktree.worktreePath,
+        provider: "codex",
+        labels: {},
+        lastStatus: "closed",
+        createdAt: "",
+        updatedAt: "",
+        archivedAt: null,
+      },
+      {
+        id: otherStoredAgentId,
+        workspaceId: otherWorkspaceId,
+        cwd: repoDir,
+        provider: "codex",
+        labels: {},
+        lastStatus: "closed",
+        createdAt: "",
+        updatedAt: "",
+        archivedAt: null,
+      },
+    ];
+    const storedByWorkspace = new Map(
+      storedRecords.map((record) => [record.workspaceId, [record]]),
+    );
+    const storedById = new Map(storedRecords.map((record) => [record.id, record]));
     deps.agentStorage = {
-      listByWorkspace: async (workspaceId: string) =>
-        workspaceId === targetWorkspaceId
-          ? ([
-              { id: targetStoredAgentId, workspaceId: targetWorkspaceId, archivedAt: null },
-            ] as StoredAgentRecord[])
-          : ([
-              { id: otherStoredAgentId, workspaceId: otherWorkspaceId, archivedAt: null },
-            ] as StoredAgentRecord[]),
-    } as Pick<AgentStorage, "listByWorkspace">;
+      list: async () => storedRecords,
+      listByWorkspace: async (id) => storedByWorkspace.get(id) ?? [],
+    };
+    deps.agentManager.archiveSnapshot = vi.fn(async (id, archivedAt) => {
+      const record = storedById.get(id);
+      if (!record) throw new Error("Snapshot not found");
+      record.archivedAt = archivedAt;
+      deps.archivedSnapshotIds.push(id);
+      return record;
+    });
 
     const result = await archiveByScope(deps, {
       scope: { kind: "workspace", workspaceId: targetWorkspaceId },
@@ -845,18 +1068,31 @@ describe("archiveByScope", () => {
       paseoHome,
       activeWorkspaces: [{ workspaceId, cwd: repoDir, kind: "local_checkout" }],
     });
+    const record: StoredAgentRecord = {
+      id: agentId,
+      workspaceId,
+      cwd: repoDir,
+      provider: "codex",
+      labels: {},
+      lastStatus: "closed",
+      createdAt: "",
+      updatedAt: "",
+      archivedAt: null,
+    };
     deps.agentManager = {
       listAgents: () => [{ id: agentId, workspaceId }] as ManagedAgent[],
       getAgent: () => null,
       archiveAgent: vi.fn(async () => ({ archivedAt: new Date().toISOString() })),
-      archiveSnapshot: vi.fn(async (id: string) => {
+      archiveSnapshot: vi.fn(async (id: string, archivedAt: string) => {
+        record.archivedAt = archivedAt;
         deps.archivedSnapshotIds.push(id);
-        return {};
+        return record;
       }),
     };
     deps.agentStorage = {
-      list: async () => [{ id: agentId, workspaceId, archivedAt: null }] as StoredAgentRecord[],
-    } as Pick<AgentStorage, "list">;
+      list: async () => [record],
+      listByWorkspace: async (id) => (id === workspaceId ? [record] : []),
+    };
 
     const result = await archiveByScope(deps, {
       scope: { kind: "workspace", workspaceId },

@@ -174,6 +174,7 @@ function archiveHarness(h: ReturnType<typeof harness>) {
   const deps: ArchiveDependencies = {
     agentManager: manager,
     agentStorage: {
+      list: async () => [{ ...h.record, workspaceId: h.agent.workspaceId }],
       listByWorkspace: async (id) =>
         h.agent.workspaceId === id ? [{ ...h.record, workspaceId: id }] : [],
     },
