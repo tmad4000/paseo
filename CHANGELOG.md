@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0-beta.30 - 2026-11-13
+
+### Added
+
+- Move a chat tab to a shared Asides workspace, a new workspace, or an existing workspace while preserving its identity, history, original working directory, and Stream ([#205](https://github.com/tmad4000/paseo/pull/205))
+
+This release also includes the approval-card copying and literal URL fixes prepared for beta.29.
+
 ## 0.10.0-beta.29 - 2026-11-13
 
 ### Fixed
