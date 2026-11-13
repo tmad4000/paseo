@@ -1007,6 +1007,7 @@ export const zhCN: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "正在加载 workspace",
       connecting: "正在连接",

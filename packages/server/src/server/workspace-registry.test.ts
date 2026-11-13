@@ -66,6 +66,31 @@ describe("workspace registries", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  test("workspace archive observers can update the registry after the write boundary is released", async () => {
+    const record = createPersistedWorkspaceRecord({
+      workspaceId: "observed",
+      projectId: "project",
+      cwd: tmpDir,
+      kind: "directory",
+      displayName: "Observed",
+      createdAt: "2026-11-13T00:00:00Z",
+      updatedAt: "2026-11-13T00:00:00Z",
+    });
+    function markObserved(current: typeof record) {
+      return { ...current, title: "Archive observed" };
+    }
+    await workspaceRegistry.upsert(record);
+    workspaceRegistry.subscribeToMutations(async (mutation) => {
+      if (mutation.kind === "archive")
+        await workspaceRegistry.update(record.workspaceId, markObserved);
+    });
+    await workspaceRegistry.archive(record.workspaceId, "2026-11-13T01:00:00Z");
+    expect(await workspaceRegistry.get(record.workspaceId)).toMatchObject({
+      archivedAt: "2026-11-13T01:00:00Z",
+      title: "Archive observed",
+    });
+  });
+
   test("creates, updates, archives, deletes, and lists project records", async () => {
     await projectRegistry.initialize();
     await projectRegistry.upsert(

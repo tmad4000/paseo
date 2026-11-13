@@ -1024,6 +1024,7 @@ export const ru: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Загрузка рабочего пространства",
       connecting: "Подключение",

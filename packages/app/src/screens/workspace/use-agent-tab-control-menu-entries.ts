@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from "zustand/react/shallow";
 import { getIsElectron } from "@/constants/platform";
+import { openMoveChat } from "@/workspace/move-chat";
 import { useToast } from "@/contexts/toast-context";
 import { getDesktopHost } from "@/desktop/host";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
@@ -54,6 +55,7 @@ export function useAgentTabControlMenuEntries(input: {
   const serverId = tab.scope?.serverId ?? input.serverId;
   const agentId = tab.target.kind === "agent" ? tab.target.agentId : null;
   const restartSupported = useHostFeature(serverId, "agentRestart");
+  const moveSupported = useHostFeature(serverId, "agentWorkspaceMove");
   const queueDrainSupported = useHostFeature(serverId, "queueDrain");
   const queueSendNowSupported = useHostFeature(serverId, "queueSendNow");
   const agentState = useSessionStore(
@@ -61,6 +63,9 @@ export function useAgentTabControlMenuEntries(input: {
       const agent = agentId ? state.sessions[serverId]?.agents?.get(agentId) : undefined;
       return {
         exists: !!agent,
+        workspaceId: agent?.workspaceId ?? null,
+        title: agent?.title ?? "",
+        cwd: agent?.cwd ?? "",
         status: agent?.status ?? "idle",
         modes: agent?.availableModes ?? null,
         currentModeId: agent?.currentModeId ?? null,
@@ -185,7 +190,7 @@ export function useAgentTabControlMenuEntries(input: {
 
   return useMemo(() => {
     if (!agentId || !agentState.exists) return [];
-    return buildAgentTabControlMenuEntries({
+    const entries = buildAgentTabControlMenuEntries({
       state: {
         agentId,
         status: agentState.status,
@@ -203,8 +208,30 @@ export function useAgentTabControlMenuEntries(input: {
       labels,
       menuTestIDBase,
     });
+    if (moveSupported && agentState.workspaceId) {
+      const sourceWorkspaceId = agentState.workspaceId;
+      entries.unshift({
+        kind: "item",
+        key: "move-workspace",
+        label: t("workspace.moveChat.menu"),
+        icon: "layout-panel-left",
+        testID: `${menuTestIDBase}-move-workspace`,
+        onSelect: () =>
+          openMoveChat({
+            serverId,
+            agentId,
+            sourceWorkspaceId,
+            title: agentState.title,
+            cwd: agentState.cwd,
+          }),
+      });
+    }
+    return entries;
   }, [
     actions,
+    moveSupported,
+    serverId,
+    t,
     agentId,
     agentState,
     labels,

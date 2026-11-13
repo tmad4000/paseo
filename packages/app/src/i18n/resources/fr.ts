@@ -1030,6 +1030,7 @@ export const fr: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Chargement de l'espace de travail",
       connecting: "De liaison",

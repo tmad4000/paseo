@@ -1699,6 +1699,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private connection: ClientSideConnection | null = null;
   private agentCapabilities: ACPAgentCapabilities | null = null;
   private sessionId: string | null = null;
+  private pendingSessionUpdates: SessionNotification[] | null = null;
   private currentMode: string | null = null;
   private availableModes: AgentMode[];
   private currentModel: string | null = null;
@@ -1768,6 +1769,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.connection = spawned.connection;
       this.agentCapabilities = spawned.initialize.agentCapabilities ?? null;
 
+      this.pendingSessionUpdates = [];
       const response = await this.runACPRequest(() =>
         this.connection!.newSession({
           cwd: this.config.cwd,
@@ -1777,6 +1779,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.sessionId = response.sessionId;
       this.bootstrapThreadEventPending = true;
       this.applySessionState(response);
+      const pendingSessionUpdates = this.pendingSessionUpdates;
+      this.pendingSessionUpdates = null;
+      for (const notification of pendingSessionUpdates) {
+        this.applySessionUpdate(notification);
+      }
       await this.applyConfiguredOverrides();
     } catch (error) {
       await this.closeAfterInitializationFailure(error);
@@ -2475,6 +2482,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
     this.closed = true;
+    this.pendingSessionUpdates = null;
 
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     this.settleCommandsReady();
@@ -2571,6 +2579,16 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async sessionUpdate(params: SessionNotification): Promise<void> {
+    // The response and its first update can share a pipe read; the SDK may
+    // dispatch the update before newSession() resumes with the session ID.
+    if (this.pendingSessionUpdates !== null) {
+      this.pendingSessionUpdates.push(params);
+      return;
+    }
+    this.applySessionUpdate(params);
+  }
+
+  private applySessionUpdate(params: SessionNotification): void {
     this.logger.trace(
       {
         agentId: this.agentId,

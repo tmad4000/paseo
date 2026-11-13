@@ -1032,6 +1032,7 @@ export const es: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Cargando espacio de trabajo",
       connecting: "Conectando",

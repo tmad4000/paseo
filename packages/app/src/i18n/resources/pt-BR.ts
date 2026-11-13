@@ -1030,6 +1030,7 @@ export const ptBR: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Carregando workspace",
       connecting: "Conectando",

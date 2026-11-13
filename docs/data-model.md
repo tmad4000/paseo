@@ -80,6 +80,11 @@ The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` b
 
 Each agent is stored as a separate JSON file, grouped by project directory.
 
+Provider snapshots can arrive after a lifecycle change, so they retain established workspace
+ownership. Creation, restore and placement changes supply `workspaceId` explicitly in snapshot
+options. Read snapshots do not grant write access to cached placement; only a successful atomic
+record write makes a new placement authoritative.
+
 | Field                | Type                                     | Description                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`                 | `string`                                 | UUID, primary key                                                                                                                                                                                                                                                                                                                                                                   |

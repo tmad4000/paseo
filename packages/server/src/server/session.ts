@@ -82,6 +82,8 @@ import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
 } from "./agent/create-agent-title.js";
+import { moveAgentWorkspace } from "./agent/workspace-move.js";
+import { runWorkspaceMutation } from "./workspace-mutations.js";
 import { respondToAgentPermission } from "./agent/permission-response.js";
 import { resolveUiTabOpenCommand } from "./ui-commands.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
@@ -2852,6 +2854,7 @@ export class Session {
   }
 
   private dispatchAgentRelationshipMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (msg.type === "agent.workspace.move.request") return this.handleAgentWorkspaceMove(msg);
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
@@ -3731,6 +3734,55 @@ export class Session {
     };
   }
 
+  private async handleAgentWorkspaceMove(
+    msg: Extract<SessionInboundMessage, { type: "agent.workspace.move.request" }>,
+  ): Promise<void> {
+    try {
+      const workspace = await moveAgentWorkspace(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          workspaceRegistry: this.workspaceRegistry,
+          projectRegistry: this.projectRegistry,
+          workspaceProvisioning: this.workspaceProvisioning,
+        },
+        msg,
+      );
+      const live = this.agentManager.getAgent(msg.agentId);
+      let agent: AgentSnapshotPayload | null = null;
+      if (live) {
+        await this.agentUpdates.forwardLiveAgent(live);
+        agent = await this.buildAgentPayload(live);
+      } else {
+        const record = await this.agentStorage.get(msg.agentId);
+        if (record) agent = await this.agentUpdates.emitStoredRecord(record);
+      }
+      await Promise.all([
+        this.emitWorkspaceUpdateForWorkspaceId(msg.expectedWorkspaceId),
+        this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId),
+      ]);
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: {
+          requestId: msg.requestId,
+          agent,
+          workspace: await this.describeWorkspaceRecord(workspace),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: {
+          requestId: msg.requestId,
+          agent: null,
+          workspace: null,
+          error: getErrorMessage(error),
+        },
+      });
+    }
+  }
+
   private async handleUpdateAgentRequest(
     agentId: string,
     name: string | undefined,
@@ -4060,70 +4112,72 @@ export class Session {
     this.sessionLogger.info({ projectId, requestId }, "session: project.remove.request");
 
     try {
-      const project = await this.projectRegistry.get(projectId);
-      const resolvedProjectId = project?.projectId ?? projectId;
-      const projectWorkspaces = (await this.workspaceRegistry.list()).filter(
-        (workspace) => workspace.projectId === resolvedProjectId,
-      );
-      const activeWorkspaceIds = projectWorkspaces
-        .filter((workspace) => !workspace.archivedAt)
-        .map((workspace) => workspace.workspaceId);
+      await runWorkspaceMutation(this.agentManager, async () => {
+        const project = await this.projectRegistry.get(projectId);
+        const resolvedProjectId = project?.projectId ?? projectId;
+        const projectWorkspaces = (await this.workspaceRegistry.list()).filter(
+          (workspace) => workspace.projectId === resolvedProjectId,
+        );
+        const activeWorkspaceIds = projectWorkspaces
+          .filter((workspace) => !workspace.archivedAt)
+          .map((workspace) => workspace.workspaceId);
 
-      if (activeWorkspaceIds.length > 0) {
-        this.markWorkspaceArchiving(activeWorkspaceIds, new Date().toISOString());
-        await this.emitWorkspaceUpdatesForWorkspaceIds(activeWorkspaceIds);
-      }
-
-      const removedWorkspaceIds: string[] = [];
-      try {
-        for (const workspaceId of activeWorkspaceIds) {
-          await archiveWorkspaceContents(
-            {
-              agentManager: this.agentManager,
-              agentStorage: this.agentStorage,
-              killTerminalsForWorkspace: (id) =>
-                this.terminalController.killTerminalsForWorkspace(id),
-              sessionLogger: this.sessionLogger,
-            },
-            workspaceId,
-          );
-          await this.archiveWorkspaceRecord(workspaceId);
-          removedWorkspaceIds.push(workspaceId);
-        }
-
-        await this.projectRegistry.remove(resolvedProjectId);
-        await removeProjectCustomIcon({
-          paseoHome: this.paseoHome,
-          projectId: resolvedProjectId,
-        }).catch((error) => {
-          this.sessionLogger.warn(
-            { err: error, projectId: resolvedProjectId },
-            "Failed to clean up removed project icon",
-          );
-        });
-      } finally {
         if (activeWorkspaceIds.length > 0) {
-          this.clearWorkspaceArchiving(activeWorkspaceIds);
+          this.markWorkspaceArchiving(activeWorkspaceIds, new Date().toISOString());
+          await this.emitWorkspaceUpdatesForWorkspaceIds(activeWorkspaceIds);
         }
-      }
 
-      const updateIds =
-        removedWorkspaceIds.length > 0
-          ? removedWorkspaceIds
-          : [projectWorkspaces[0]?.workspaceId ?? projectId];
-      await this.emitWorkspaceUpdatesForWorkspaceIds(updateIds, {
-        removedProjectId: projectId,
-      });
+        const removedWorkspaceIds: string[] = [];
+        try {
+          for (const workspaceId of activeWorkspaceIds) {
+            await archiveWorkspaceContents(
+              {
+                agentManager: this.agentManager,
+                agentStorage: this.agentStorage,
+                killTerminalsForWorkspace: (id) =>
+                  this.terminalController.killTerminalsForWorkspace(id),
+                sessionLogger: this.sessionLogger,
+              },
+              workspaceId,
+            );
+            await this.archiveWorkspaceRecord(workspaceId);
+            removedWorkspaceIds.push(workspaceId);
+          }
 
-      this.emit({
-        type: "project.remove.response",
-        payload: {
-          requestId,
-          projectId,
-          accepted: true,
-          removedWorkspaceIds,
-          error: null,
-        },
+          await this.projectRegistry.remove(resolvedProjectId);
+          await removeProjectCustomIcon({
+            paseoHome: this.paseoHome,
+            projectId: resolvedProjectId,
+          }).catch((error) => {
+            this.sessionLogger.warn(
+              { err: error, projectId: resolvedProjectId },
+              "Failed to clean up removed project icon",
+            );
+          });
+        } finally {
+          if (activeWorkspaceIds.length > 0) {
+            this.clearWorkspaceArchiving(activeWorkspaceIds);
+          }
+        }
+
+        const updateIds =
+          removedWorkspaceIds.length > 0
+            ? removedWorkspaceIds
+            : [projectWorkspaces[0]?.workspaceId ?? projectId];
+        await this.emitWorkspaceUpdatesForWorkspaceIds(updateIds, {
+          removedProjectId: projectId,
+        });
+
+        this.emit({
+          type: "project.remove.response",
+          payload: {
+            requestId,
+            projectId,
+            accepted: true,
+            removedWorkspaceIds,
+            error: null,
+          },
+        });
       });
     } catch (error) {
       this.sessionLogger.error(

@@ -63,7 +63,11 @@ export interface WorkspaceProvisioningService {
     cwd: string,
     title?: string | null,
     projectId?: string,
-    context?: { expectsInitialAgent?: boolean; workspaceId?: string },
+    context?: {
+      expectsInitialAgent?: boolean;
+      workspaceId?: string;
+      untrustedSource?: UntrustedWorkspaceSource;
+    },
   ): Promise<PersistedWorkspaceRecord>;
   createWorkspaceForWorktree(
     input: CreateWorktreeWorkspaceInput,
@@ -219,7 +223,11 @@ export function createWorkspaceProvisioningService(deps: {
     cwd: string,
     title?: string | null,
     projectId?: string,
-    context?: { expectsInitialAgent?: boolean; workspaceId?: string },
+    context?: {
+      expectsInitialAgent?: boolean;
+      workspaceId?: string;
+      untrustedSource?: UntrustedWorkspaceSource;
+    },
   ): Promise<PersistedWorkspaceRecord> {
     const normalizedCwd = resolve(cwd);
     const checkout = await workspaceGitService.getCheckout(normalizedCwd);
@@ -230,6 +238,7 @@ export function createWorkspaceProvisioningService(deps: {
     const timestamp = new Date().toISOString();
     const workspace = createPersistedWorkspaceRecord({
       workspaceId: context?.workspaceId ?? generateWorkspaceId(),
+      ...(context?.untrustedSource ? { untrustedSource: context.untrustedSource } : {}),
       projectId: project.projectId,
       ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
       title: title?.trim() || null,

@@ -3323,6 +3323,21 @@ export class DaemonClient {
     return { addedOrUpdated: payload.addedOrUpdated, total: payload.total };
   }
 
+  async moveAgentToWorkspace(
+    input: Omit<
+      Extract<SessionInboundMessage, { type: "agent.workspace.move.request" }>,
+      "type" | "requestId"
+    >,
+  ): Promise<CorrelatedResponsePayload<"agent.workspace.move.response">> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "agent.workspace.move.request", ...input },
+      responseType: "agent.workspace.move.response",
+    });
+    if (payload.error || !payload.workspace)
+      throw new Error(payload.error ?? "Unable to move chat");
+    return payload;
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string | null> },

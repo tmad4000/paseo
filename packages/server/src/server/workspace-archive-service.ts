@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { runWorkspaceMutation } from "./workspace-mutations.js";
 
 import type { Logger } from "pino";
 
@@ -18,7 +19,7 @@ import type {
   WorkspaceArchiveContext,
   WorkspaceRegistry,
 } from "./workspace-registry.js";
-import { createRealpathAwarePathMatcher } from "../utils/path.js";
+import { isRealpathInsideRoot, createRealpathAwarePathMatcher } from "../utils/path.js";
 import { runWithGitCommandPriority } from "../utils/run-git-command.js";
 import { WorkspaceAutomationBlockedError } from "./workspace-automation-gate.js";
 
@@ -34,7 +35,7 @@ export interface ArchiveDependencies {
   github: ForgeService;
   workspaceGitService: Pick<WorkspaceGitService, "getSnapshot" | "invalidateWorktrees">;
   agentManager: Pick<AgentManager, "listAgents" | "getAgent" | "archiveAgent" | "archiveSnapshot">;
-  agentStorage: Pick<AgentStorage, "listByWorkspace">;
+  agentStorage: Pick<AgentStorage, "list" | "listByWorkspace">;
   // Resolves the worktree at a path to its workspaceId for archive-by-path. The
   // path uniquely identifies a worktree workspace; this is a directory lookup for
   // the archive target, not status/ownership.
@@ -124,7 +125,9 @@ export async function archiveByScope(
   dependencies: ArchiveDependencies,
   request: ArchiveByScopeRequest,
 ): Promise<ArchiveResult> {
-  return runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request));
+  return runWorkspaceMutation(dependencies.agentManager, () =>
+    runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request)),
+  );
 }
 
 async function archiveByScopeWithPriority(
@@ -520,7 +523,7 @@ async function isDirectoryUnreferenced(
   activeWorkspaces: ActiveWorkspaceRef[],
   targetDir: string,
   archivedWorkspaceIds: ReadonlySet<string>,
-  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot">,
+  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot" | "agentStorage">,
 ): Promise<boolean> {
   const target = resolve(targetDir);
   const matchesTarget = createRealpathAwarePathMatcher(target);
@@ -529,7 +532,8 @@ async function isDirectoryUnreferenced(
     const backingDirectory = await resolveWorkspaceBackingDirectory(workspace, dependencies);
     if (matchesTarget(backingDirectory.path)) return false;
   }
-  return true;
+  const agents = await dependencies.agentStorage.list();
+  return !agents.some((agent) => !agent.archivedAt && isRealpathInsideRoot(target, agent.cwd));
 }
 
 export async function killTerminalsForWorkspace(
