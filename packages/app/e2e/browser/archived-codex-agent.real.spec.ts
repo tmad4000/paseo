@@ -14,13 +14,6 @@ import type { SeedDaemonClient } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 
-interface TimelineClient extends SeedDaemonClient {
-  fetchAgentTimeline(
-    agentId: string,
-    options: { direction: "tail"; projection: "projected"; limit: number },
-  ): Promise<unknown>;
-}
-
 const INITIAL_PROMPT = "Reply with exactly CODEX_ARCHIVE_TIMELINE_SENTINEL and nothing else.";
 const INITIAL_REPLY = "CODEX_ARCHIVE_TIMELINE_SENTINEL";
 const FOLLOW_UP_PROMPT = "Reply with exactly CODEX_UNARCHIVED_SENTINEL and nothing else.";
@@ -63,9 +56,8 @@ test.describe("archived Codex agent recovery", () => {
         )
         .not.toBeNull();
 
-      const timelineClient = handle.client as TimelineClient;
       await expect(
-        timelineClient.fetchAgentTimeline(handle.agentId, {
+        handle.client.fetchAgentTimeline(handle.agentId, {
           direction: "tail",
           projection: "projected",
           limit: 100,
