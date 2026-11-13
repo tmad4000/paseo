@@ -1,11 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { canOpenSessionWindow, openSessionLink } from "./session-link-runtime";
 import { SessionLinkError } from "./session-link";
+import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 const fixture = vi.hoisted(() => ({
   supportsAgentWindow: true,
   sourcePane: "main",
   focusedPane: "main",
   sourceVisible: true,
+  sourceTarget: { kind: "agent", agentId: "origin-session" } as WorkspaceTabTarget,
   known: true,
   online: true,
   cached: null as { id: string; workspaceId: string | null } | null,
@@ -62,7 +64,7 @@ vi.mock("@/stores/workspace-layout-store", () => ({
             kind: "pane",
             pane: {
               id: fixture.sourcePane,
-              tabs: [{ tabId: "source" }],
+              tabs: [{ tabId: "source", target: fixture.sourceTarget }],
               focusedTabId: fixture.sourceVisible ? "source" : "other",
             },
           },
@@ -96,6 +98,7 @@ beforeEach(() => {
   fixture.sourcePane = "main";
   fixture.focusedPane = "main";
   fixture.sourceVisible = true;
+  fixture.sourceTarget = { kind: "agent", agentId: "origin-session" };
   fixture.known = true;
   fixture.online = true;
   fixture.cached = null;
@@ -239,6 +242,53 @@ it("does not navigate beside a source that is no longer visible", async () => {
   expect(fixture.side).not.toHaveBeenCalled();
   expect(fixture.navigate).not.toHaveBeenCalled();
 });
+
+it.each(["main", "right"])(
+  "rejects a self-link from a sole source tab when global focus is %s",
+  async (focusedPane) => {
+    fixture.sourceTarget = { kind: "agent", agentId: "session" };
+    fixture.focusedPane = focusedPane;
+    await expect(openSessionLink(href, "side", active)).rejects.toEqual(
+      new SessionLinkError("sideUnavailable"),
+    );
+    expect(fixture.side).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(fixture.window).not.toHaveBeenCalled();
+  },
+);
+
+it("rechecks the source resource after awaiting the linked agent", async () => {
+  let resolveAgent!: (value: { agent: { id: string; workspaceId: string } }) => void;
+  fixture.fetchAgent.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveAgent = resolve;
+    }),
+  );
+  const opening = openSessionLink(href, "side", active);
+  fixture.sourceTarget = { kind: "agent", agentId: "session" };
+  resolveAgent({ agent: { id: "session", workspaceId: "workspace" } });
+  await expect(opening).rejects.toEqual(new SessionLinkError("sideUnavailable"));
+  expect(fixture.side).not.toHaveBeenCalled();
+  expect(fixture.navigate).not.toHaveBeenCalled();
+});
+
+it.each(["current", "window"] as const)(
+  "keeps ordinary self-link %s opens available",
+  async (disposition) => {
+    fixture.sourceTarget = { kind: "agent", agentId: "session" };
+    await openSessionLink(href, disposition, active);
+    expect(fixture.side).not.toHaveBeenCalled();
+    if (disposition === "current") {
+      expect(fixture.navigate).toHaveBeenCalledWith(
+        expect.objectContaining({ placement: { mode: "focused" } }),
+      );
+    } else {
+      expect(fixture.window).toHaveBeenCalledExactlyOnceWith({
+        agent: { serverId: "saved", agentId: "session" },
+      });
+    }
+  },
+);
 
 it.each(["compact", "focusMode", "paneSplits"] as const)(
   "preserves the source when simultaneous panes are unavailable through %s",

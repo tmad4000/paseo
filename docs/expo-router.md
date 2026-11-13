@@ -308,7 +308,8 @@ workspace and the layout supports simultaneous panes. Compact layouts and deskto
 Focus mode reject side requests without changing the layout. These checks run again
 after resolving the target. The originating tab identifies its pane independently of global focus;
 opening beside never replaces that chat, including when it is already in the side
-pane. Unsupported side requests explain that the user can open the session
+pane. A link to the originating session also rejects side placement before changing
+the layout. Unsupported side requests explain that the user can open the session
 normally or in a supported new window. Shift-click explicitly requests a
 window and explains if unavailable. The message context menu offers Open session,
 Open session beside (wide layouts), Open session in new window when supported, and

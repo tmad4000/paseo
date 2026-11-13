@@ -1,7 +1,7 @@
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { findPaneContainingTab } from "@/stores/workspace-layout-actions";
+import { collectAllTabs, findPaneContainingTab } from "@/stores/workspace-layout-actions";
 import {
   navigateToWorkspace,
   type ActiveWorkspaceSelection,
@@ -72,6 +72,10 @@ export async function openSessionLink(
         const layout = store.layoutByWorkspace[workspaceKey];
         const sourcePane =
           origin && layout ? findPaneContainingTab(layout.root, origin.tabId) : null;
+        const sourceTab =
+          origin && layout
+            ? collectAllTabs(layout.root).find((tab) => tab.tabId === origin.tabId)
+            : null;
         const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
         if (
           !isOriginInWorkspace(origin, serverId, workspaceId) ||
@@ -80,6 +84,8 @@ export async function openSessionLink(
           !supportsDesktopPaneSplits() ||
           usePanelStore.getState().desktop.focusModeEnabled ||
           active.tabId !== origin.tabId ||
+          !sourceTab ||
+          (sourceTab.target.kind === "agent" && sourceTab.target.agentId === agentId) ||
           !sourcePane ||
           sourcePane.hidden === true ||
           sourcePane.focusedTabId !== origin.tabId ||
