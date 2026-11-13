@@ -4,15 +4,15 @@
 
 ### Fixed
 
-- Select and copy approval-card text, and open literal URLs without losing encoded characters ([#200](https://github.com/tmad4000/paseo/pull/200)).
-- Keep large and legacy directory snapshots within relay frame limits ([#198](https://github.com/tmad4000/paseo/pull/198)); includes the previously shipped beta.27 relay hotfix.
+- Select and copy approval-card text, and open literal URLs without losing encoded characters ([#200](https://github.com/tmad4000/paseo/pull/200))
+- Keep large and legacy directory snapshots within relay frame limits ([#198](https://github.com/tmad4000/paseo/pull/198)); includes the previously shipped beta.27 relay hotfix
 
 ### Improved
 
-- Add accessible tooltips to icon controls ([#201](https://github.com/tmad4000/paseo/pull/201)).
-- Navigate directly to a chat from session links.
+- Add accessible tooltips to icon controls ([#201](https://github.com/tmad4000/paseo/pull/201))
+- Navigate directly to a chat from session links
 
-This release is built from canonical main and supersedes the uninstalled beta.28 candidate.
+This release supersedes the uninstalled beta.28 candidate.
 
 ## 0.10.0-beta.25 - 2026-11-09
 
