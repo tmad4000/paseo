@@ -1,3 +1,6 @@
+import { useAssistantLinkPress } from "@/assistant-file-links/link-press-context";
+import { isSessionLink } from "@/navigation/session-link";
+import { SessionMarkdownLink } from "@/navigation/session-markdown-link";
 import React, {
   useCallback,
   useEffect,
@@ -408,6 +411,7 @@ export function MarkdownInheritedText({
   accessibilityRole,
   children,
 }: MarkdownInheritedTextProps) {
+  const linkPress = useAssistantLinkPress();
   const style = useMemo(
     () => [inheritedStyles, textStyle, overrideStyle],
     [inheritedStyles, textStyle, overrideStyle],
@@ -415,8 +419,8 @@ export function MarkdownInheritedText({
   return (
     <MarkdownTextSpan
       monoSurface={monoSurface}
-      onPress={onPress}
-      accessibilityRole={accessibilityRole}
+      onPress={onPress ?? linkPress?.onPress}
+      accessibilityRole={accessibilityRole ?? linkPress?.accessibilityRole}
       style={style}
     >
       {children}
@@ -466,6 +470,14 @@ function SharedMarkdownLink({
     void openExternalUrl(href);
   }, [href, onLinkPress]);
   const style = useMemo(() => [inheritedStyles, linkStyle], [inheritedStyles, linkStyle]);
+
+  if (isSessionLink(href)) {
+    return (
+      <SessionMarkdownLink href={href} style={style}>
+        {children}
+      </SessionMarkdownLink>
+    );
+  }
 
   if (!isNative) {
     return (

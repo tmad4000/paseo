@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "الرسالة الأولى",
     loading: "جارٍ تحميل الرسالة الأولى…",

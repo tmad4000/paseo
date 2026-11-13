@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "Premier message",
     loading: "Chargement du premier message…",

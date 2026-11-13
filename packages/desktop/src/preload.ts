@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     },
   },
   window: {
+    supportsAgentTarget: true,
     openNew: (options?: {
       pendingOpenProjectPath?: string | null;
       agent?: { serverId: string; agentId: string } | null;

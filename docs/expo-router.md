@@ -191,12 +191,13 @@ targets.
 
 - Notifications carry `serverId`, `workspaceId`, and `agentId`. Route them
   directly to the workspace with the agent open intent.
-- Agent URLs carry only `serverId` and `agentId`. Route them through
+- Agent URLs received outside chat carry only `serverId` and `agentId`. Route them through
   `/h/[serverId]/agent/[agentId]`; that route waits for the named host, resolves
   the agent's workspace from the host, and then opens the agent there.
 
 Both paths converge on `navigateToAgent()`. Do not make notification routing
 guess a workspace, and do not add a workspace to the stable agent URL format.
+For activation inside chat, see [session links rendered in chat](#session-links-rendered-in-chat).
 
 ## Copied workspace and tab links
 
@@ -210,6 +211,35 @@ desktop uses `paseo-fork://h/...` rather than its internal renderer origin.
 Desktop's navigation inbox handles both session and workspace targets, including
 links received before a window is ready. These are navigation links for devices
 already paired to the host, not invitations or public shares.
+
+## Session links rendered in chat
+
+Chat session links (`paseo-fork://h/<server>/agent/<agent>`, plus legacy `paseo://`)
+use the protocol agent deep-link parser and the saved host registry. They never pass
+through the HTTP/HTTPS external opener or change its allowlist. A known cached agent
+or an exact target-host lookup supplies the workspace; malformed links, unknown hosts,
+missing agents and offline cold lookups show an error without creating connections or
+changing host authentication.
+
+The inline web link retains its real href and native anchor keyboard behavior. Click
+or Enter opens the session in the current window. Cmd/Ctrl/middle click requests a
+new window only when `window.supportsAgentTarget === true` and `openNew` is available.
+The `agentNavigation.ready` handshake predates targeted windows and does not establish
+support. Without window support, these gestures request the ordinary side pane.
+Shift-click explicitly requests a window and explains if unavailable.
+
+Side requests require the target's workspace to be active and hydrated, simultaneous
+panes to be supported, and the source tab to remain visible. Compact layouts, desktop
+Focus mode, self-links and requests originating in the remembered side pane reject
+side placement without changing the layout. The originating tab identifies its pane
+independently of global focus, including for an unfocused context menu. These checks
+run again after resolving the target. Unsupported side requests explain that the user
+can open the session normally or in a supported new window.
+
+Right-click the link for Open session, Open session beside (wide layouts), Open session
+in new window, and Copy link alongside Save to Stream. An unsupported window action is
+disabled and directs the user to Open session. On native, long-press the message to find
+its session links; native text spans keep their existing selection and tap handling.
 
 ## Params
 
