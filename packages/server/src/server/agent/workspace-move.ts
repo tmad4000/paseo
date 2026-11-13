@@ -59,6 +59,7 @@ async function move(
   await deps.agentManager.moveAgentToWorkspace(input.agentId, {
     workspaceId: workspace.workspaceId,
     expectedWorkspaceId: input.expectedWorkspaceId,
+    workspaceRegistry: deps.workspaceRegistry,
   });
   await deps.workspaceRegistry.update(source.workspaceId, (record) => ({
     ...record,
@@ -118,8 +119,12 @@ async function createDestination(
       autoArchivedChangeRequestUrl: null,
     };
   }
-  await deps.workspaceRegistry.upsert(workspace);
-  return workspace;
+  const saved = await deps.workspaceRegistry.update(created.workspaceId, (current) => {
+    if (current.archivedAt) throw new Error("Destination workspace is unavailable or archived");
+    return workspace;
+  });
+  if (!saved) throw new Error("Destination workspace is unavailable or archived");
+  return saved;
 }
 
 async function findDestination(

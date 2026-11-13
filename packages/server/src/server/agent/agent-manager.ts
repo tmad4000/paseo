@@ -1,3 +1,5 @@
+import type { WorkspaceRegistry } from "../workspace-registry.js";
+import { runWorkspaceMutation } from "../workspace-mutations.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -647,6 +649,12 @@ function limitAgentStreamEventContent(event: AgentStreamEvent): AgentStreamEvent
 interface WriteLabelsResult {
   record: StoredAgentRecord | null;
   live: boolean;
+}
+
+interface AgentWorkspaceMoveInput {
+  workspaceId: string;
+  expectedWorkspaceId: string;
+  workspaceRegistry: Pick<WorkspaceRegistry, "get">;
 }
 
 interface AgentMetadataPatch {
@@ -2527,18 +2535,22 @@ export class AgentManager {
     if (!updated.internal) this.dispatchStoredAgentState(updated);
   }
 
-  async moveAgentToWorkspace(
-    agentId: string,
-    input: { workspaceId: string; expectedWorkspaceId: string },
-  ): Promise<void> {
-    return this.runLifecycleMutation(agentId, async () => {
-      const stored = await this.requireRegistry().get(agentId);
-      const agent = this.getAgent(agentId) ?? stored;
-      if (!agent || stored?.archivedAt) throw new Error("Chat is unavailable or archived");
-      if (agent.workspaceId !== input.expectedWorkspaceId)
-        throw new Error("Chat has already moved. Reopen its tab and try again.");
-      await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
-    });
+  async moveAgentToWorkspace(agentId: string, input: AgentWorkspaceMoveInput): Promise<void> {
+    return this.runLifecycleMutation(agentId, () =>
+      runWorkspaceMutation(input.workspaceRegistry, async () => {
+        const stored = await this.requireRegistry().get(agentId);
+        const agent = this.getAgent(agentId) ?? stored;
+        if (!agent || stored?.archivedAt) throw new Error("Chat is unavailable or archived");
+        if (agent.workspaceId !== input.expectedWorkspaceId)
+          throw new Error("Chat has already moved. Reopen its tab and try again.");
+        const source = await input.workspaceRegistry.get(input.expectedWorkspaceId);
+        if (!source || source.archivedAt) throw new Error("Source workspace is unavailable");
+        const destination = await input.workspaceRegistry.get(input.workspaceId);
+        if (!destination || destination.archivedAt)
+          throw new Error("Destination workspace is unavailable or archived");
+        await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
+      }),
+    );
   }
 
   private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {

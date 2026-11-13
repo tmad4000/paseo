@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import type { Logger } from "pino";
 import { z } from "zod";
 
+import { runWorkspaceMutation } from "./workspace-mutations.js";
 import { writeJsonFileAtomic } from "./atomic-file.js";
 import { areEquivalentPaths } from "../utils/path.js";
 import {
@@ -197,6 +198,13 @@ export interface WorkspaceRegistry {
 
 type RegistryRecord = PersistedProjectRecord | PersistedWorkspaceRecord;
 
+interface RegistryMutationHooks<TRecord, TResult> {
+  forcePersist?: (result: TResult) => boolean;
+  beforeWrite?: (records: readonly TRecord[]) => Promise<void>;
+  afterWrite?: () => Promise<void>;
+  afterCommit?: () => void;
+}
+
 class FileBackedRegistry<TRecord extends RegistryRecord> {
   private readonly filePath: string;
   protected readonly logger: Logger;
@@ -339,12 +347,7 @@ class FileBackedRegistry<TRecord extends RegistryRecord> {
 
   protected async mutateCache<TResult>(
     updater: (records: Map<string, TRecord>) => TResult,
-    hooks?: {
-      forcePersist?: (result: TResult) => boolean;
-      beforeWrite?: (records: readonly TRecord[]) => Promise<void>;
-      afterWrite?: () => Promise<void>;
-      afterCommit?: () => void;
-    },
+    hooks?: RegistryMutationHooks<TRecord, TResult>,
   ): Promise<TResult> {
     const previous = this.mutationQueue;
     let release!: () => void;
@@ -595,6 +598,13 @@ export class FileBackedWorkspaceRegistry
       component: "workspaces",
       writeRecords: options?.writeRecords,
     });
+  }
+
+  protected override mutateCache<TResult>(
+    updater: (records: Map<string, PersistedWorkspaceRecord>) => TResult,
+    hooks?: RegistryMutationHooks<PersistedWorkspaceRecord, TResult>,
+  ): Promise<TResult> {
+    return runWorkspaceMutation(this, () => super.mutateCache(updater, hooks));
   }
 
   subscribeToMutations(

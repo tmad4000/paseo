@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, test } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { writeJsonFileAtomic } from "../atomic-file.js";
+import { createWorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as flushTasks } from "node:timers/promises";
@@ -7,11 +9,19 @@ import { archiveByScope, type ArchiveDependencies } from "../workspace-archive-s
 import { createNoopWorkspaceGitService } from "../test-utils/workspace-git-service-stub.js";
 
 import { assertWorkspaceAutomationAllowedForWorkspace } from "../workspace-automation-gate.js";
-import type { StoredAgentRecord } from "./agent-storage.js";
-import type { MoveAgentWorkspaceDependencies } from "./workspace-move.js";
+import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
+import { AgentManager } from "./agent-manager.js";
+import { createTestLogger } from "../../test-utils/test-logger.js";
+import { WorkspaceReconciliationService } from "../workspace-reconciliation-service.js";
+import { runWorktreeSetupInBackground } from "../worktree-session.js";
+import { archivePersistedWorkspaceRecord } from "../workspace-archive-service.js";
+import type { MoveAgentWorkspaceDependencies, MoveAgentWorkspaceInput } from "./workspace-move.js";
 import { moveAgentWorkspace, ASIDES_WORKSPACE_LABEL } from "./workspace-move.js";
 import {
   createPersistedWorkspaceRecord,
+  createPersistedProjectRecord,
+  FileBackedWorkspaceRegistry,
+  FileBackedProjectRegistry,
   type PersistedWorkspaceRecord,
   type WorkspaceRegistry,
 } from "../workspace-registry.js";
@@ -183,6 +193,76 @@ function archiveHarness(h: ReturnType<typeof harness>) {
     killTerminalsForWorkspace: async () => {},
   };
   return { deps, events };
+}
+
+async function persistedMoveHarness() {
+  const root = mkdtempSync(join(tmpdir(), "move-background-"));
+  cleanupPaths.push(root);
+  const logger = createTestLogger();
+  const workspaceWrites: PersistedWorkspaceRecord[][] = [];
+  const workspaceRegistry = new FileBackedWorkspaceRegistry(join(root, "workspaces.json"), logger, {
+    writeRecords: async (filePath, records) => {
+      workspaceWrites.push([...records]);
+      await writeJsonFileAtomic(filePath, records);
+    },
+  });
+  const projectRegistry = new FileBackedProjectRegistry(join(root, "projects.json"), logger);
+  const source = {
+    ...workspace("source"),
+    cwd: join(root, "source"),
+    kind: "directory" as const,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
+  };
+  const destination = { ...source, workspaceId: "destination", cwd: join(root, "destination") };
+  mkdirSync(source.cwd);
+  mkdirSync(destination.cwd);
+  await workspaceRegistry.upsert(source);
+  await workspaceRegistry.upsert(destination);
+  await projectRegistry.upsert(
+    createPersistedProjectRecord({
+      projectId: source.projectId,
+      rootPath: root,
+      kind: "non_git",
+      displayName: "Project",
+      createdAt: source.createdAt,
+      updatedAt: source.updatedAt,
+    }),
+  );
+  const agentStorage = new AgentStorage(join(root, "agents"), logger);
+  const stub = harness();
+  const record: StoredAgentRecord = {
+    ...stub.record,
+    cwd: source.cwd,
+    persistence: { provider: "codex", sessionId: "retained-session" },
+    labels: { "paseo.parent-agent-id": "parent" },
+  };
+  await agentStorage.upsert(record);
+  const agentManager = new AgentManager({ clients: {}, registry: agentStorage, logger });
+  const deps: MoveAgentWorkspaceDependencies = {
+    workspaceRegistry,
+    projectRegistry,
+    agentStorage,
+    agentManager,
+    workspaceProvisioning: stub.deps.workspaceProvisioning,
+  };
+  const input: MoveAgentWorkspaceInput = {
+    agentId: record.id,
+    expectedWorkspaceId: source.workspaceId,
+    destination: { kind: "existing", workspaceId: destination.workspaceId },
+  };
+  return {
+    deps,
+    input,
+    source,
+    destination,
+    agentManager,
+    agentStorage,
+    workspaceRegistry,
+    projectRegistry,
+    logger,
+    workspaceWrites,
+  };
 }
 
 describe("move chat workspace", () => {
@@ -403,6 +483,193 @@ describe("move chat workspace", () => {
       await Promise.all([archiving, rejected]);
       expect(h.agent.workspaceId).toBe("source");
       expect(archive.events).not.toContain("move-chat");
+    },
+  );
+
+  test.each([
+    ["reconciliation", "source"],
+    ["reconciliation", "destination"],
+    ["setup failure", "source"],
+    ["setup failure", "destination"],
+    ["removal", "source"],
+    ["removal", "destination"],
+  ] as const)(
+    "rejects placement after background %s affects %s while waiting for the lifecycle lane",
+    async (background, targetId) => {
+      const h = await persistedMoveHarness();
+      const entered = deferred();
+      const release = deferred();
+      const waiting = deferred();
+      const blocking = h.agentManager.runLifecycleMutation(h.input.agentId, async () => {
+        entered.resolve();
+        await release.promise;
+      });
+      await entered.promise;
+      const move = h.agentManager.moveAgentToWorkspace.bind(h.agentManager);
+      vi.spyOn(h.agentManager, "moveAgentToWorkspace").mockImplementation((id, input) => {
+        const result = move(id, input);
+        waiting.resolve();
+        return result;
+      });
+      const before = await h.agentStorage.get(h.input.agentId);
+      const moving = moveAgentWorkspace(h.deps, h.input);
+      const rejected = expect(moving).rejects.toThrow(
+        targetId === "source"
+          ? "Source workspace is unavailable"
+          : "Destination workspace is unavailable or archived",
+      );
+      await waiting.promise;
+      const target = targetId === "source" ? h.source : h.destination;
+      try {
+        if (background === "reconciliation") {
+          rmSync(target.cwd, { recursive: true });
+          const reconciliation = new WorkspaceReconciliationService({
+            workspaceRegistry: h.workspaceRegistry,
+            projectRegistry: h.projectRegistry,
+            logger: h.logger,
+            workspaceGitService: createNoopWorkspaceGitService(),
+          });
+          const result = await reconciliation.runOnce();
+          expect(result.changesApplied).toContainEqual(
+            expect.objectContaining({
+              kind: "workspace_archived",
+              workspaceId: targetId,
+              reason: "directory_missing",
+            }),
+          );
+        } else if (background === "setup failure") {
+          writeFileSync(join(target.cwd, "paseo.json"), "{ invalid json");
+          const statuses: string[] = [];
+          await runWorktreeSetupInBackground(
+            {
+              emitWorkspaceUpdateForWorkspaceId: async () => {},
+              cacheWorkspaceSetupSnapshot: (_id, snapshot) => {
+                statuses.push(snapshot.status);
+              },
+              emit: () => {},
+              sessionLogger: h.logger,
+              terminalManager: null,
+              archiveWorkspaceRecord: async (workspaceId) => {
+                await archivePersistedWorkspaceRecord({
+                  workspaceRegistry: h.workspaceRegistry,
+                  workspaceId,
+                });
+              },
+            },
+            {
+              requestCwd: target.cwd,
+              repoRoot: target.cwd,
+              workspaceId: targetId,
+              worktree: { branchName: "topic", worktreePath: target.cwd },
+              shouldBootstrap: true,
+              slug: "topic",
+              worktreePath: target.cwd,
+            },
+          );
+          expect(statuses).toEqual(["running", "failed"]);
+        } else {
+          await h.workspaceRegistry.remove(targetId);
+        }
+        if (background === "removal") expect(await h.workspaceRegistry.get(targetId)).toBeNull();
+        else
+          expect((await h.workspaceRegistry.get(targetId))?.archivedAt).toEqual(expect.any(String));
+      } finally {
+        release.resolve();
+      }
+      await Promise.all([blocking, rejected]);
+      expect(await h.agentStorage.get(h.input.agentId)).toEqual(before);
+    },
+  );
+
+  test.each(["archive", "remove", "update", "upsert"] as const)(
+    "registry %s waits until a placement commit releases the write boundary",
+    async (mutation) => {
+      const h = await persistedMoveHarness();
+      const entered = deferred();
+      const release = deferred();
+      const events: string[] = [];
+      const upsert = h.agentStorage.upsert.bind(h.agentStorage);
+      vi.spyOn(h.agentStorage, "upsert").mockImplementation(async (record) => {
+        if (record.workspaceId === h.destination.workspaceId) {
+          entered.resolve();
+          await release.promise;
+        }
+        await upsert(record);
+        events.push("placement");
+      });
+      const moving = moveAgentWorkspace(h.deps, h.input);
+      await entered.promise;
+      const archived = { ...h.destination, archivedAt: "2026-11-13T01:00:00Z" };
+      const operations = {
+        archive: () => h.workspaceRegistry.archive(archived.workspaceId, archived.archivedAt),
+        remove: () => h.workspaceRegistry.remove(archived.workspaceId),
+        update: () => h.workspaceRegistry.update(archived.workspaceId, () => archived),
+        upsert: () => h.workspaceRegistry.upsert(archived),
+      };
+      const writesBeforeMutation = h.workspaceWrites.length;
+      const changing = operations[mutation]().then(() => {
+        events.push("workspace");
+        return undefined;
+      });
+      try {
+        await flushTasks();
+        expect(events).toEqual([]);
+        expect(h.workspaceWrites).toHaveLength(writesBeforeMutation);
+      } finally {
+        release.resolve();
+      }
+      await Promise.all([moving, changing]);
+      expect(events).toEqual(["placement", "workspace"]);
+      expect((await h.agentStorage.get(h.input.agentId))?.workspaceId).toBe(
+        h.destination.workspaceId,
+      );
+    },
+  );
+
+  test.each(["archive", "remove"] as const)(
+    "does not republish a new destination after background %s",
+    async (mutation) => {
+      const h = await persistedMoveHarness();
+      const entered = deferred();
+      const release = deferred();
+      const workspaceId = "wks_0000000000000002";
+      const provisioning = createWorkspaceProvisioningService({
+        workspaceRegistry: h.workspaceRegistry,
+        projectRegistry: h.projectRegistry,
+        workspaceGitService: createNoopWorkspaceGitService(),
+        isDirectory: async () => true,
+        logger: h.logger,
+      });
+      h.deps.workspaceProvisioning = {
+        createWorkspaceForDirectory: async (...args) => {
+          const created = await provisioning.createWorkspaceForDirectory(...args);
+          entered.resolve();
+          await release.promise;
+          return created;
+        },
+      };
+      const moving = moveAgentWorkspace(h.deps, {
+        ...h.input,
+        destination: { kind: "new", title: "New", workspaceId },
+      });
+      const rejected = expect(moving).rejects.toThrow(
+        "Destination workspace is unavailable or archived",
+      );
+      await entered.promise;
+      try {
+        if (mutation === "archive")
+          await h.workspaceRegistry.archive(workspaceId, "2026-11-13T01:00:00Z");
+        else await h.workspaceRegistry.remove(workspaceId);
+      } finally {
+        release.resolve();
+      }
+      await rejected;
+      if (mutation === "archive")
+        expect((await h.workspaceRegistry.get(workspaceId))?.archivedAt).toBe(
+          "2026-11-13T01:00:00Z",
+        );
+      else expect(await h.workspaceRegistry.get(workspaceId)).toBeNull();
+      expect((await h.agentStorage.get(h.input.agentId))?.workspaceId).toBe(h.source.workspaceId);
     },
   );
 

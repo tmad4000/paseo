@@ -1,3 +1,4 @@
+import { createPersistedWorkspaceRecord, type WorkspaceRegistry } from "../workspace-registry.js";
 import { describe, expect, test, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -194,6 +195,21 @@ class RecordingTimelineStore implements AgentTimelineStore {
       this.memory.initialize(agentId, { rows });
     }
   }
+}
+
+function placementWorkspaceRegistry(cwd: string): Pick<WorkspaceRegistry, "get"> {
+  return {
+    get: async (workspaceId) =>
+      createPersistedWorkspaceRecord({
+        workspaceId,
+        projectId: "project",
+        cwd,
+        kind: "directory",
+        displayName: workspaceId,
+        createdAt: "2026-11-13T00:00:00.000Z",
+        updatedAt: "2026-11-13T00:00:00.000Z",
+      }),
+  };
 }
 
 function createFeature(args: { id: string; label: string; value: boolean }): AgentFeature {
@@ -4929,6 +4945,7 @@ test.each([true, false])(
     await entered.promise;
     const archiving = manager.archiveSnapshot(agent.id, "2026-11-13T00:00:00.000Z");
     const moving = manager.moveAgentToWorkspace(agent.id, {
+      workspaceRegistry: placementWorkspaceRegistry(workdir),
       expectedWorkspaceId: "source",
       workspaceId: "destination",
     });
@@ -4968,6 +4985,7 @@ test("workspace placement rechecks ownership after queued metadata changes", asy
   await entered.promise;
   const first = manager.updateAgentMetadata(agent.id, { workspaceId: "other" });
   const moving = manager.moveAgentToWorkspace(agent.id, {
+    workspaceRegistry: placementWorkspaceRegistry(workdir),
     expectedWorkspaceId: "source",
     workspaceId: "destination",
   });
@@ -5008,6 +5026,7 @@ test.each([true, false])(
     live?.pendingPermissions.set(permission.id, permission);
     try {
       await manager.moveAgentToWorkspace(agent.id, {
+        workspaceRegistry: placementWorkspaceRegistry(workdir),
         expectedWorkspaceId: "source",
         workspaceId: "destination",
       });
