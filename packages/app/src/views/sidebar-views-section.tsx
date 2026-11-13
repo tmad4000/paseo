@@ -8,6 +8,7 @@ import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useViewsStore } from "@/stores/views-store";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildViewRoute } from "@/utils/host-routes";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 
 const ThemedPlus = withUnistyles(Plus);
 const mutedColorMapping = (theme: Theme) => ({
@@ -38,15 +39,17 @@ export function SidebarViewsSection() {
     <View style={styles.section} testID="sidebar-views-section">
       <View style={styles.header}>
         <Text style={styles.title}>{t("views.sidebar.title")}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("views.sidebar.newView")}
-          onPress={createView}
-          testID="sidebar-new-view"
-          style={addButtonStyle}
-        >
-          <ThemedPlus size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
-        </Pressable>
+        <IconTooltip label={t("views.sidebar.newView")} wrap={false}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("views.sidebar.newView")}
+            onPress={createView}
+            testID="sidebar-new-view"
+            style={addButtonStyle}
+          >
+            <ThemedPlus size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+          </Pressable>
+        </IconTooltip>
       </View>
       {views.map((view) => (
         <SidebarViewRow

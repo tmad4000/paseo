@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,7 @@ import {
   iconButtonChromeStyle,
 } from "@/components/ui/icon-button-chrome";
 import { TerminalProfileIcon } from "@/components/terminal-profile-icon";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import {
   getTerminalProfileIcon,
@@ -242,16 +243,23 @@ export function WorkspaceHeaderMenuDesktop(
   props: WorkspaceHeaderWorkspaceActions & WorkspaceHeaderTabActions,
 ) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        testID="workspace-header-menu-trigger"
-        style={workspaceHeaderMenuButtonStyle}
-        accessibilityRole="button"
-        accessibilityLabel={t("workspace.header.actions.workspaceActions")}
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <IconTooltip
+        label={t("workspace.header.actions.workspaceActions")}
+        disabled={open}
+        wrap={false}
       >
-        <WorkspaceHeaderMenuTriggerIcon />
-      </DropdownMenuTrigger>
+        <DropdownMenuTrigger
+          testID="workspace-header-menu-trigger"
+          style={workspaceHeaderMenuButtonStyle}
+          accessibilityRole="button"
+          accessibilityLabel={t("workspace.header.actions.workspaceActions")}
+        >
+          <WorkspaceHeaderMenuTriggerIcon />
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="start" width={220} testID="workspace-header-menu">
         <WorkspaceHeaderTabActionItems {...props} />
         <WorkspaceHeaderWorkspaceActionItems {...props} />

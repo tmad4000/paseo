@@ -4,6 +4,7 @@ import { Code, Maximize2, Workflow } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { ZoomableViewport } from "@/components/zoomable-viewport";
 import type { Theme } from "@/styles/theme";
 import type { MarkdownFenceRendererProps } from "../types";
@@ -105,20 +106,23 @@ function MermaidFenceHostImpl({
             textStyle={sourceTextStyle}
           />
           {showSource && canShowDiagram ? (
-            <Pressable
-              accessibilityLabel={t("message.diagram.viewDiagram")}
-              accessibilityRole="button"
-              hitSlop={4}
-              onPress={showDiagramPress}
-              style={controlStyles.sourceButton}
-            >
-              {({ hovered }) => (
-                <Workflow
-                  size={14}
-                  color={hovered ? controlStyles.iconHovered.color : controlStyles.icon.color}
-                />
-              )}
-            </Pressable>
+            // Absolutely positioned, so the Pressable itself is the hover target.
+            <IconTooltip label={t("message.diagram.viewDiagram")} wrap={false}>
+              <Pressable
+                accessibilityLabel={t("message.diagram.viewDiagram")}
+                accessibilityRole="button"
+                hitSlop={4}
+                onPress={showDiagramPress}
+                style={controlStyles.sourceButton}
+              >
+                {({ hovered }) => (
+                  <Workflow
+                    size={14}
+                    color={hovered ? controlStyles.iconHovered.color : controlStyles.icon.color}
+                  />
+                )}
+              </Pressable>
+            </IconTooltip>
           ) : null}
         </View>
       ) : null}

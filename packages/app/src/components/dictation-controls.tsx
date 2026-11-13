@@ -1,4 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useMemo } from "react";
 import { View, Text, Pressable } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -89,44 +90,52 @@ export function DictationControls({
       </View>
       <Text style={timerTextStyle}>{formatDuration(duration)}</Text>
       <View style={styles.actionGroup}>
-        <Pressable
-          onPress={handleCancel}
-          disabled={actionsDisabled && !isFailed}
-          accessibilityLabel={t("message.dictation.cancel")}
-          style={cancelButtonStyle}
-        >
-          <X size={theme.iconSize.sm} color={theme.colors.foreground} />
-        </Pressable>
+        <IconTooltip label={t("message.dictation.cancel")} wrap={false}>
+          <Pressable
+            onPress={handleCancel}
+            disabled={actionsDisabled && !isFailed}
+            accessibilityLabel={t("message.dictation.cancel")}
+            style={cancelButtonStyle}
+          >
+            <X size={theme.iconSize.sm} color={theme.colors.foreground} />
+          </Pressable>
+        </IconTooltip>
         {actionsDisabled ? (
           <View style={styles.loadingContainer}>
             <LoadingSpinner size="small" color={theme.colors.foreground} />
           </View>
         ) : null}
         {!actionsDisabled && isFailed ? (
-          <Pressable
-            onPress={onRetry}
-            accessibilityLabel={t("message.dictation.retry")}
-            style={[styles.actionButton, styles.actionButtonConfirm]}
-          >
-            <RefreshCcw size={theme.iconSize.sm} color={theme.colors.surface0} />
-          </Pressable>
+          <IconTooltip label={t("message.dictation.retry")} wrap={false}>
+            <Pressable
+              onPress={onRetry}
+              accessibilityLabel={t("message.dictation.retry")}
+              style={[styles.actionButton, styles.actionButtonConfirm]}
+            >
+              <RefreshCcw size={theme.iconSize.sm} color={theme.colors.surface0} />
+            </Pressable>
+          </IconTooltip>
         ) : null}
         {!actionsDisabled && !isFailed ? (
           <>
-            <Pressable
-              onPress={onAccept}
-              accessibilityLabel={t("message.dictation.insert")}
-              style={[styles.actionButton, styles.actionButtonSecondary]}
-            >
-              <Check size={theme.iconSize.sm} color={theme.colors.foreground} />
-            </Pressable>
-            <Pressable
-              onPress={onAcceptAndSend}
-              accessibilityLabel={t("message.dictation.insertAndSend")}
-              style={[styles.actionButton, styles.actionButtonConfirm]}
-            >
-              <ArrowUp size={theme.iconSize.sm} color={theme.colors.surface0} />
-            </Pressable>
+            <IconTooltip label={t("message.dictation.insert")} wrap={false}>
+              <Pressable
+                onPress={onAccept}
+                accessibilityLabel={t("message.dictation.insert")}
+                style={[styles.actionButton, styles.actionButtonSecondary]}
+              >
+                <Check size={theme.iconSize.sm} color={theme.colors.foreground} />
+              </Pressable>
+            </IconTooltip>
+            <IconTooltip label={t("message.dictation.insertAndSend")} wrap={false}>
+              <Pressable
+                onPress={onAcceptAndSend}
+                accessibilityLabel={t("message.dictation.insertAndSend")}
+                style={[styles.actionButton, styles.actionButtonConfirm]}
+              >
+                <ArrowUp size={theme.iconSize.sm} color={theme.colors.surface0} />
+              </Pressable>
+            </IconTooltip>
           </>
         ) : null}
       </View>
@@ -189,15 +198,17 @@ export function DictationOverlay({
 
   return (
     <View style={containerStyle}>
-      <Pressable
-        onPress={handleCancel}
-        disabled={actionsDisabled && !isFailed}
-        accessibilityRole="button"
-        accessibilityLabel={t("message.dictation.cancel")}
-        style={overlayCancelButtonStyle}
-      >
-        <X size={theme.iconSize.lg} color={theme.colors.accentForeground} strokeWidth={2.5} />
-      </Pressable>
+      <IconTooltip label={t("message.dictation.cancel")} wrap={false}>
+        <Pressable
+          onPress={handleCancel}
+          disabled={actionsDisabled && !isFailed}
+          accessibilityRole="button"
+          accessibilityLabel={t("message.dictation.cancel")}
+          style={overlayCancelButtonStyle}
+        >
+          <X size={theme.iconSize.lg} color={theme.colors.accentForeground} strokeWidth={2.5} />
+        </Pressable>
+      </IconTooltip>
 
       <View style={overlayStyles.centerContainer}>
         <View style={overlayStyles.meterRow}>
@@ -226,37 +237,43 @@ export function DictationOverlay({
           </View>
         ) : null}
         {!actionsDisabled && isFailed ? (
-          <Pressable
-            onPress={onRetry}
-            accessibilityRole="button"
-            accessibilityLabel={t("message.dictation.retry")}
-            style={overlayRetryButtonStyle}
-          >
-            <RefreshCcw size={theme.iconSize.lg} color={theme.colors.accent} strokeWidth={2.5} />
-          </Pressable>
+          <IconTooltip label={t("message.dictation.retry")} wrap={false}>
+            <Pressable
+              onPress={onRetry}
+              accessibilityRole="button"
+              accessibilityLabel={t("message.dictation.retry")}
+              style={overlayRetryButtonStyle}
+            >
+              <RefreshCcw size={theme.iconSize.lg} color={theme.colors.accent} strokeWidth={2.5} />
+            </Pressable>
+          </IconTooltip>
         ) : null}
         {!actionsDisabled && !isFailed ? (
           <>
-            <Pressable
-              onPress={onAccept}
-              accessibilityRole="button"
-              accessibilityLabel={t("message.dictation.insert")}
-              style={[overlayStyles.actionButton, OVERLAY_ACCEPT_BUTTON_BG]}
-            >
-              <Pencil
-                size={theme.iconSize.lg}
-                color={theme.colors.accentForeground}
-                strokeWidth={2.5}
-              />
-            </Pressable>
-            <Pressable
-              onPress={onAcceptAndSend}
-              accessibilityRole="button"
-              accessibilityLabel={t("message.dictation.insertAndSend")}
-              style={overlayConfirmButtonStyle}
-            >
-              <ArrowUp size={theme.iconSize.lg} color={theme.colors.accent} strokeWidth={2.5} />
-            </Pressable>
+            <IconTooltip label={t("message.dictation.insert")} wrap={false}>
+              <Pressable
+                onPress={onAccept}
+                accessibilityRole="button"
+                accessibilityLabel={t("message.dictation.insert")}
+                style={[overlayStyles.actionButton, OVERLAY_ACCEPT_BUTTON_BG]}
+              >
+                <Pencil
+                  size={theme.iconSize.lg}
+                  color={theme.colors.accentForeground}
+                  strokeWidth={2.5}
+                />
+              </Pressable>
+            </IconTooltip>
+            <IconTooltip label={t("message.dictation.insertAndSend")} wrap={false}>
+              <Pressable
+                onPress={onAcceptAndSend}
+                accessibilityRole="button"
+                accessibilityLabel={t("message.dictation.insertAndSend")}
+                style={overlayConfirmButtonStyle}
+              >
+                <ArrowUp size={theme.iconSize.lg} color={theme.colors.accent} strokeWidth={2.5} />
+              </Pressable>
+            </IconTooltip>
           </>
         ) : null}
       </View>

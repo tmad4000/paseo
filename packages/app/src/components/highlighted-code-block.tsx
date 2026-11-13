@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Pressable, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MarkdownTextSpan } from "@/components/markdown-text";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import * as Clipboard from "expo-clipboard";
 import { Check, Copy } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -203,27 +204,31 @@ const CopyButton = React.memo(function CopyButton({ getCode, visible }: CopyButt
     [visibilityStyle],
   );
 
+  const label = copied ? t("message.actions.copied") : t("message.actions.copyCode");
+  // Absolutely positioned, so the Pressable itself is the hover target (no wrapper View).
   return (
-    <Pressable
-      onPress={handlePress}
-      style={wrapperStyle}
-      pointerEvents={visible ? "auto" : "none"}
-      accessibilityRole="button"
-      accessibilityLabel={copied ? t("message.actions.copied") : t("message.actions.copyCode")}
-      hitSlop={8}
-      dataSet={markdownCopyDataSet.ignore}
-    >
-      {({ hovered }) => {
-        const iconColor = hovered
-          ? copyButtonStyles.iconHoveredColor.color
-          : copyButtonStyles.iconColor.color;
-        return copied ? (
-          <Check size={14} color={iconColor} />
-        ) : (
-          <Copy size={14} color={iconColor} />
-        );
-      }}
-    </Pressable>
+    <IconTooltip label={label} wrap={false} disabled={!visible}>
+      <Pressable
+        onPress={handlePress}
+        style={wrapperStyle}
+        pointerEvents={visible ? "auto" : "none"}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        hitSlop={8}
+        dataSet={markdownCopyDataSet.ignore}
+      >
+        {({ hovered }) => {
+          const iconColor = hovered
+            ? copyButtonStyles.iconHoveredColor.color
+            : copyButtonStyles.iconColor.color;
+          return copied ? (
+            <Check size={14} color={iconColor} />
+          ) : (
+            <Copy size={14} color={iconColor} />
+          );
+        }}
+      </Pressable>
+    </IconTooltip>
   );
 });
 

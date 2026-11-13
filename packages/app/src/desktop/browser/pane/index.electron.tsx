@@ -36,6 +36,7 @@ import * as Clipboard from "expo-clipboard";
 import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useToast } from "@/contexts/toast-context";
 import {
   DropdownMenu,
@@ -1612,14 +1613,16 @@ function BrowserElementAnnotationCard({
           <Text numberOfLines={1} style={styles.annotationTitle}>
             {t("workspace.browser.annotate.title")}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("workspace.browser.annotate.cancel")}
-            onPress={onCancel}
-            style={styles.annotationCloseButton}
-          >
-            <ThemedCloseIcon size={16} uniProps={iconForegroundMutedMapping} />
-          </Pressable>
+          <IconTooltip label={t("workspace.browser.annotate.cancel")} wrap={false}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.browser.annotate.cancel")}
+              onPress={onCancel}
+              style={styles.annotationCloseButton}
+            >
+              <ThemedCloseIcon size={16} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          </IconTooltip>
         </View>
         <Text numberOfLines={1} style={styles.annotationElement}>
           {elementLabel}

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -122,15 +123,17 @@ export function AgentProfilesSection({ serverId }: { serverId: string }): ReactE
 
   const addButton = useMemo(
     () => (
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={addIcon}
-        onPress={handleAddOpen}
-        disabled={!profiles}
-        accessibilityLabel={t("settings.host.agentProfiles.addProfileTitle")}
-        testID="agent-profiles-add-button"
-      />
+      <IconTooltip label={t("settings.host.agentProfiles.addProfileTitle")}>
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={addIcon}
+          onPress={handleAddOpen}
+          disabled={!profiles}
+          accessibilityLabel={t("settings.host.agentProfiles.addProfileTitle")}
+          testID="agent-profiles-add-button"
+        />
+      </IconTooltip>
     ),
     [handleAddOpen, profiles, t],
   );

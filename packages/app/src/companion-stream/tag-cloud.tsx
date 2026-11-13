@@ -11,6 +11,7 @@ import { Pin, PinOff, X } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { buildTagCloud, type TagCloudItem } from "./tag-model";
 
 const ThemedPin = withUnistyles(Pin);
@@ -191,36 +192,41 @@ function ActiveTagChip({
     () => onTogglePin?.(item.tag, !item.pinned),
     [onTogglePin, item.tag, item.pinned],
   );
+  const pinLabel = t(item.pinned ? "agentPanel.stream.tags.unpin" : "agentPanel.stream.tags.pin", {
+    tag: item.tag,
+  });
+  const removeLabel = t("agentPanel.stream.tags.remove", { tag: item.tag });
   return (
     <View style={styles.activeChip} testID={`stream-tag-filter-${item.tag}`}>
       <Text style={styles.chipTextActive}>#{item.tag}</Text>
       {onTogglePin ? (
+        <IconTooltip label={pinLabel} wrap={false}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={pinLabel}
+            onPress={togglePin}
+            hitSlop={8}
+            style={styles.iconButton}
+          >
+            {item.pinned ? (
+              <ThemedPinOff size={13} uniProps={mutedIcon} />
+            ) : (
+              <ThemedPin size={13} uniProps={mutedIcon} />
+            )}
+          </Pressable>
+        </IconTooltip>
+      ) : null}
+      <IconTooltip label={removeLabel} wrap={false}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t(
-            item.pinned ? "agentPanel.stream.tags.unpin" : "agentPanel.stream.tags.pin",
-            { tag: item.tag },
-          )}
-          onPress={togglePin}
+          accessibilityLabel={removeLabel}
+          onPress={remove}
           hitSlop={8}
           style={styles.iconButton}
         >
-          {item.pinned ? (
-            <ThemedPinOff size={13} uniProps={mutedIcon} />
-          ) : (
-            <ThemedPin size={13} uniProps={mutedIcon} />
-          )}
+          <ThemedX size={13} uniProps={mutedIcon} />
         </Pressable>
-      ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("agentPanel.stream.tags.remove", { tag: item.tag })}
-        onPress={remove}
-        hitSlop={8}
-        style={styles.iconButton}
-      >
-        <ThemedX size={13} uniProps={mutedIcon} />
-      </Pressable>
+      </IconTooltip>
     </View>
   );
 }

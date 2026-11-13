@@ -16,6 +16,7 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { useSidebarMetaPreferences } from "@/components/sidebar/display-preferences/model";
 import type { Theme } from "@/styles/theme";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
 import { selectMetaRowItems, type MetaRowItem } from "./meta-items";
@@ -217,32 +218,36 @@ function PullRequestItem({ hint }: { hint: PrHint }) {
   const handleHoverIn = useCallback(() => setIsHovered(true), []);
   const handleHoverOut = useCallback(() => setIsHovered(false), []);
 
+  const label = t("workspace.git.pr.accessibility.pullRequest", {
+    number: hint.number,
+    context: presentation.changeRequestContext,
+  });
+
   return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t("workspace.git.pr.accessibility.pullRequest", {
-        number: hint.number,
-        context: presentation.changeRequestContext,
-      })}
-      hitSlop={4}
-      onPressIn={handlePressIn}
-      onPress={handlePress}
-      onHoverIn={handleHoverIn}
-      onHoverOut={handleHoverOut}
-      style={pressableItemStyle}
-    >
-      {isHovered ? (
-        <ThemedExternalLink size={META_ICON_SIZE} uniProps={foregroundMapping} />
-      ) : (
-        <PullRequestStateIcon state={hint.state} size={META_ICON_SIZE} />
-      )}
-      <Text style={isHovered ? styles.prTextHovered : styles.prText} numberOfLines={1}>
-        {hint.number}
-        {/* An open change request is the unremarkable case and says nothing extra; a merged
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={label}
+        hitSlop={4}
+        onPressIn={handlePressIn}
+        onPress={handlePress}
+        onHoverIn={handleHoverIn}
+        onHoverOut={handleHoverOut}
+        style={pressableItemStyle}
+      >
+        {isHovered ? (
+          <ThemedExternalLink size={META_ICON_SIZE} uniProps={foregroundMapping} />
+        ) : (
+          <PullRequestStateIcon state={hint.state} size={META_ICON_SIZE} />
+        )}
+        <Text style={isHovered ? styles.prTextHovered : styles.prText} numberOfLines={1}>
+          {hint.number}
+          {/* An open change request is the unremarkable case and says nothing extra; a merged
             or closed one is why the row still looks like it has work in it. */}
-        {hint.state === "open" ? "" : ` ${t(PR_STATE_LABEL_KEYS[hint.state])}`}
-      </Text>
-    </Pressable>
+          {hint.state === "open" ? "" : ` ${t(PR_STATE_LABEL_KEYS[hint.state])}`}
+        </Text>
+      </Pressable>
+    </IconTooltip>
   );
 }
 
@@ -261,19 +266,22 @@ function PullRequestItem({ hint }: { hint: PrHint }) {
  */
 function ChecksItem({ summary, label }: { summary: CheckSummary; label: boolean }) {
   const { t } = useTranslation();
+  const accessibleLabel = t(CHECK_STATE_ACCESSIBLE_KEYS[summary.state]);
   return (
-    <View
-      style={styles.item}
-      accessibilityLabel={t(CHECK_STATE_ACCESSIBLE_KEYS[summary.state])}
-      testID={`sidebar-workspace-checks-${summary.state}`}
-    >
-      <CheckIndicator summary={summary} size={META_ICON_SIZE} />
-      {label ? (
-        <Text style={checksTextStyle(summary.state)} numberOfLines={1}>
-          {t(CHECK_STATE_LABEL_KEYS[summary.state])}
-        </Text>
-      ) : null}
-    </View>
+    <IconTooltip label={accessibleLabel} wrap={false}>
+      <View
+        style={styles.item}
+        accessibilityLabel={accessibleLabel}
+        testID={`sidebar-workspace-checks-${summary.state}`}
+      >
+        <CheckIndicator summary={summary} size={META_ICON_SIZE} />
+        {label ? (
+          <Text style={checksTextStyle(summary.state)} numberOfLines={1}>
+            {t(CHECK_STATE_LABEL_KEYS[summary.state])}
+          </Text>
+        ) : null}
+      </View>
+    </IconTooltip>
   );
 }
 
@@ -300,17 +308,23 @@ const CHECK_STATE_ACCESSIBLE_KEYS = {
 function ServiceItem({ summary }: { summary: WorkspaceServiceSummary }) {
   const { t } = useTranslation();
   const unhealthy = summary.health === "unhealthy";
+  const label = t(workspaceServiceLabelKey(summary), { name: summary.name });
   return (
-    <View
-      style={styles.serviceItem}
-      accessibilityLabel={t(workspaceServiceLabelKey(summary), { name: summary.name })}
-      testID={unhealthy ? "workspace-service-unhealthy" : "workspace-service"}
-    >
-      <ThemedGlobe size={META_ICON_SIZE} uniProps={unhealthy ? dangerMapping : successMapping} />
-      <Text style={unhealthy ? styles.serviceNameUnhealthy : styles.serviceName} numberOfLines={1}>
-        {summary.name}
-      </Text>
-    </View>
+    <IconTooltip label={label} wrap={false}>
+      <View
+        style={styles.serviceItem}
+        accessibilityLabel={label}
+        testID={unhealthy ? "workspace-service-unhealthy" : "workspace-service"}
+      >
+        <ThemedGlobe size={META_ICON_SIZE} uniProps={unhealthy ? dangerMapping : successMapping} />
+        <Text
+          style={unhealthy ? styles.serviceNameUnhealthy : styles.serviceName}
+          numberOfLines={1}
+        >
+          {summary.name}
+        </Text>
+      </View>
+    </IconTooltip>
   );
 }
 

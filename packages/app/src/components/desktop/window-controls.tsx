@@ -13,6 +13,7 @@ import {
   type DesktopWindowControlsPresentation,
 } from "@/desktop/window-chrome-presentation";
 import { useCustomDesktopWindowControls } from "@/utils/desktop-window";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import type { Theme } from "@/styles/theme";
 
 type WindowControlKind = "minimize" | "maximize" | "restore" | "close";
@@ -120,15 +121,18 @@ function WindowControl({
     () => [styles.control, { width: presentation.controlWidth }],
     [presentation.controlWidth],
   );
+  // The control stretches to the titlebar height, so it stays the direct layout child.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={controlStyle}
-    >
-      {glyph}
-    </Pressable>
+    <IconTooltip label={label} side="bottom" wrap={false}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={controlStyle}
+      >
+        {glyph}
+      </Pressable>
+    </IconTooltip>
   );
 }
 

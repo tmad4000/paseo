@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/context-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
@@ -878,56 +879,65 @@ function TabTrailingControls({
     >
       <TrailingActionScrim backdrop={backdrop} />
       {showReadControl ? (
-        <Pressable
-          {...(closeButtonDragBlockers as object | undefined)}
-          testID={`workspace-tab-mark-as-read-${testIdentity}`}
-          accessibilityRole="button"
-          accessibilityLabel={t("workspace.tabs.menu.markAsReadNamed", { name: tabLabel })}
-          onPressIn={handleCloseButtonPressIn}
-          onPress={handleReadButtonPress}
-          style={readSitsBesideClose ? styles.tabReadButton : styles.tabReadButtonTrailing}
-        >
-          {({ hovered: readHovered, pressed }) => (
-            <ThemedCircleCheck
-              size={12}
-              uniProps={readHovered || pressed ? foregroundColorMapping : mutedColorMapping}
-            />
-          )}
-        </Pressable>
+        <IconTooltip label={t("workspace.tabs.menu.markAsRead")} wrap={false}>
+          <Pressable
+            {...(closeButtonDragBlockers as object | undefined)}
+            testID={`workspace-tab-mark-as-read-${testIdentity}`}
+            accessibilityRole="button"
+            accessibilityLabel={t("workspace.tabs.menu.markAsReadNamed", { name: tabLabel })}
+            onPressIn={handleCloseButtonPressIn}
+            onPress={handleReadButtonPress}
+            style={readSitsBesideClose ? styles.tabReadButton : styles.tabReadButtonTrailing}
+          >
+            {({ hovered: readHovered, pressed }) => (
+              <ThemedCircleCheck
+                size={12}
+                uniProps={readHovered || pressed ? foregroundColorMapping : mutedColorMapping}
+              />
+            )}
+          </Pressable>
+        </IconTooltip>
       ) : null}
       {showCloseButton ? (
-        <Pressable
-          {...(closeButtonDragBlockers as object | undefined)}
-          testID={closeButtonTestId}
-          accessibilityRole="button"
-          accessibilityLabel={t("workspace.tabs.menu.close")}
-          disabled={isClosingTab}
-          onPressIn={handleCloseButtonPressIn}
-          onHoverIn={handleCloseButtonHoverIn}
-          onHoverOut={handleCloseButtonHoverOut}
-          onPress={handleCloseButtonPress}
-          // The open tab's check can show the overlay on its own; the close button stays hidden and
-          // out of reach until the chip is hovered.
-          style={showCloseControl ? styles.tabCloseButton : styles.tabCloseButtonHidden}
+        <IconTooltip
+          label={t("workspace.tabs.menu.close")}
+          wrap={false}
+          // A hidden close button is out of reach; it never explains itself.
+          disabled={!showCloseControl}
         >
-          {({ hovered: closeHovered, pressed }) => {
-            const highlighted = closeHovered || pressed;
-            if (isClosingTab) {
+          <Pressable
+            {...(closeButtonDragBlockers as object | undefined)}
+            testID={closeButtonTestId}
+            accessibilityRole="button"
+            accessibilityLabel={t("workspace.tabs.menu.close")}
+            disabled={isClosingTab}
+            onPressIn={handleCloseButtonPressIn}
+            onHoverIn={handleCloseButtonHoverIn}
+            onHoverOut={handleCloseButtonHoverOut}
+            onPress={handleCloseButtonPress}
+            // The open tab's check can show the overlay on its own; the close button stays hidden and
+            // out of reach until the chip is hovered.
+            style={showCloseControl ? styles.tabCloseButton : styles.tabCloseButtonHidden}
+          >
+            {({ hovered: closeHovered, pressed }) => {
+              const highlighted = closeHovered || pressed;
+              if (isClosingTab) {
+                return (
+                  <ThemedLoadingSpinner
+                    size={12}
+                    uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
+                  />
+                );
+              }
               return (
-                <ThemedLoadingSpinner
+                <ThemedX
                   size={12}
                   uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
                 />
               );
-            }
-            return (
-              <ThemedX
-                size={12}
-                uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
-              />
-            );
-          }}
-        </Pressable>
+            }}
+          </Pressable>
+        </IconTooltip>
       ) : null}
     </View>
   );

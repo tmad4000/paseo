@@ -4,6 +4,7 @@ import { Server } from "lucide-react-native";
 import { HOST_COLORS, type HostBadgeModel, type HostColor } from "@/hosts/appearance";
 import { identityForeground } from "@/styles/identity-colors";
 import type { Theme } from "@/styles/theme";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 
 /**
  * The glyph size the badge draws at. Rows that place the badge alongside their own glyphs
@@ -42,22 +43,25 @@ const HOST_ICON_MAPPINGS: Record<HostColor, (theme: Theme) => { color: string }>
  */
 export function HostBadge({ badge }: { badge: HostBadgeModel }) {
   return (
-    <View
-      style={styles.badge}
-      testID={`host-badge-${badge.serverId}`}
-      accessibilityLabel={badge.label}
-    >
-      <ThemedServer
-        size={HOST_BADGE_ICON_SIZE}
-        style={styles.icon}
-        uniProps={HOST_ICON_MAPPINGS[badge.color]}
-      />
-      {badge.showLabel ? (
-        <Text style={[styles.label, labelColorStyle(badge.color)]} numberOfLines={1}>
-          {badge.label}
-        </Text>
-      ) : null}
-    </View>
+    // A glyph-only badge names its host on hover; a labelled one already says it.
+    <IconTooltip label={badge.showLabel ? null : badge.label} wrap={false}>
+      <View
+        style={styles.badge}
+        testID={`host-badge-${badge.serverId}`}
+        accessibilityLabel={badge.label}
+      >
+        <ThemedServer
+          size={HOST_BADGE_ICON_SIZE}
+          style={styles.icon}
+          uniProps={HOST_ICON_MAPPINGS[badge.color]}
+        />
+        {badge.showLabel ? (
+          <Text style={[styles.label, labelColorStyle(badge.color)]} numberOfLines={1}>
+            {badge.label}
+          </Text>
+        ) : null}
+      </View>
+    </IconTooltip>
   );
 }
 

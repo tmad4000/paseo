@@ -50,6 +50,11 @@ const { theme, pressablePropsByLabel } = vi.hoisted(() => {
   };
 });
 
+// Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
+vi.mock("@/components/ui/icon-tooltip", () => ({
+  IconTooltip: ({ children }: { children: unknown }) => children,
+}));
+
 vi.mock("react-native", async (importOriginal) => {
   const ReactModule = await import("react");
   const actual = await importOriginal<typeof import("react-native")>();

@@ -18,6 +18,7 @@ import {
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
 import { isWeb } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import type { Theme } from "@/styles/theme";
 import { getMessageSelection } from "./message-selection";
 import { messagePinErrorMessage, type MessagePinHandler } from "./message-pin-operations";
@@ -147,19 +148,21 @@ export const MessagePinControl = memo(function MessagePinControl({
         </ContextMenu>
       ) : (
         <DropdownMenu open={open} onOpenChange={changeOpen}>
-          <DropdownMenuTrigger
-            accessibilityRole="button"
-            accessibilityLabel={t("agentPanel.stream.pinToStream")}
-            disabled={saving}
-            style={[styles.trigger, containerStyle]}
-            hitSlop={8}
-          >
-            {saved ? (
-              <ThemedCheck size={16} uniProps={iconColor} />
-            ) : (
-              <ThemedBookmark size={16} uniProps={iconColor} />
-            )}
-          </DropdownMenuTrigger>
+          <IconTooltip label={t("agentPanel.stream.pinToStream")} disabled={open}>
+            <DropdownMenuTrigger
+              accessibilityRole="button"
+              accessibilityLabel={t("agentPanel.stream.pinToStream")}
+              disabled={saving}
+              style={[styles.trigger, containerStyle]}
+              hitSlop={8}
+            >
+              {saved ? (
+                <ThemedCheck size={16} uniProps={iconColor} />
+              ) : (
+                <ThemedBookmark size={16} uniProps={iconColor} />
+              )}
+            </DropdownMenuTrigger>
+          </IconTooltip>
           <DropdownMenuContent>{menuItems}</DropdownMenuContent>
         </DropdownMenu>
       )}
