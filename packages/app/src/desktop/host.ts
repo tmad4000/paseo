@@ -118,6 +118,8 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
+  /** The bridge honors the agent target passed to openNew. */
+  supportsAgentTarget?: boolean;
   openNew?: (options?: {
     pendingOpenProjectPath?: string | null;
     /** Land the new window on this agent. Older desktop builds ignore it. */

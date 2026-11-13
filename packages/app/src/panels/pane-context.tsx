@@ -73,8 +73,12 @@ export function PaneFocusProvider({
   return <PaneFocusContext.Provider value={value}>{children}</PaneFocusContext.Provider>;
 }
 
+export function useOptionalPaneContext(): PaneContextValue | null {
+  return useContext(PaneContext);
+}
+
 export function usePaneContext(): PaneContextValue {
-  const value = useContext(PaneContext);
+  const value = useOptionalPaneContext();
   invariant(value, "PaneContext is required");
   return value;
 }

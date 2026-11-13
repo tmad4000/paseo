@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { runInNewContext } from "node:vm";
 import { PASEO_BROWSER_PROFILE_PARTITION } from "./features/browser-profile.js";
 
 // The preload runs inside Electron's sandbox and is tsc-compiled (not bundled), so at
@@ -96,4 +97,38 @@ describe("preload sandbox safety", () => {
     ).not.toBeNull();
     expect(match![1]).toBe(PASEO_BROWSER_PROFILE_PARTITION);
   });
+});
+
+it("advertises and forwards agent-targeted windows through the actual exposed preload bridge", async () => {
+  const exposed: Record<string, unknown> = {};
+  const invoke = vi.fn().mockResolvedValue(undefined);
+  const emitted = ts.transpileModule(readFileSync(preloadPath, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  runInNewContext(emitted, {
+    exports: {},
+    process: { argv: [], platform: "darwin" },
+    require: (name: string) => {
+      if (name !== "electron") throw new Error("Unexpected runtime module: " + name);
+      return {
+        contextBridge: {
+          exposeInMainWorld: (bridgeName: string, bridge: unknown) => {
+            exposed[bridgeName] = bridge;
+          },
+        },
+        ipcRenderer: { invoke },
+        webUtils: {},
+      };
+    },
+  });
+  const bridge = exposed.paseoDesktop as {
+    window: {
+      supportsAgentTarget: boolean;
+      openNew: (options: { agent: { serverId: string; agentId: string } }) => Promise<void>;
+    };
+  };
+  expect(bridge.window.supportsAgentTarget).toBe(true);
+  const agent = { serverId: "saved-host", agentId: "linked-agent" };
+  await bridge.window.openNew({ agent });
+  expect(invoke).toHaveBeenCalledExactlyOnceWith("paseo:window:openNew", { agent });
 });
