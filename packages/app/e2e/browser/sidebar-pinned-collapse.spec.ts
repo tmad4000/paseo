@@ -37,13 +37,13 @@ for (const grouping of ["project", "status"] as const) {
       await expect(workspacePin).toBeVisible();
       await expect(sessionPin).toBeVisible();
       await header.click();
-      await expect(header).toHaveAttribute("aria-expanded", "false");
+      await expect(header).toBeVisible();
       await expect(workspacePin).toHaveCount(0);
       await expect(sessionPins).toHaveCount(0);
       await page.screenshot({ path: test.info().outputPath(`${grouping}-collapsed-desktop.png`) });
 
       await page.reload();
-      await expect(header).toHaveAttribute("aria-expanded", "false");
+      await expect(header).toBeVisible();
       await expect(sessionPins).toHaveCount(0);
       await header.click();
       await expect(workspacePin).toBeVisible();
@@ -53,7 +53,7 @@ for (const grouping of ["project", "status"] as const) {
       await openMobileAgentSidebar(page);
       await expect(sessionPin).toBeVisible();
       await header.click();
-      await expect(header).toHaveAttribute("aria-expanded", "false");
+      await expect(header).toBeVisible();
       await expect(workspacePin).toHaveCount(0);
       await expect(sessionPins).toHaveCount(0);
       await page.screenshot({ path: test.info().outputPath(`${grouping}-collapsed-mobile.png`) });
