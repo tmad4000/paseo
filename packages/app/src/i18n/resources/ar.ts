@@ -1016,6 +1016,7 @@ export const ar: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "جارٍ تحميل مساحة العمل",
       connecting: "الاتصال",

@@ -82,6 +82,7 @@ import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
 } from "./agent/create-agent-title.js";
+import { moveAgentWorkspace } from "./agent/workspace-move.js";
 import { respondToAgentPermission } from "./agent/permission-response.js";
 import { resolveUiTabOpenCommand } from "./ui-commands.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
@@ -2852,6 +2853,7 @@ export class Session {
   }
 
   private dispatchAgentRelationshipMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (msg.type === "agent.workspace.move.request") return this.handleAgentWorkspaceMove(msg);
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
@@ -3729,6 +3731,48 @@ export class Session {
       didUnarchive,
       originalArchivedAt: matched.archivedAt ?? null,
     };
+  }
+
+  private async handleAgentWorkspaceMove(
+    msg: Extract<SessionInboundMessage, { type: "agent.workspace.move.request" }>,
+  ): Promise<void> {
+    try {
+      const workspace = await moveAgentWorkspace(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          workspaceRegistry: this.workspaceRegistry,
+          projectRegistry: this.projectRegistry,
+          workspaceProvisioning: this.workspaceProvisioning,
+        },
+        msg,
+      );
+      const record = await this.agentStorage.get(msg.agentId);
+      const agent = record ? await this.agentUpdates.emitStoredRecord(record) : null;
+      await Promise.all([
+        this.emitWorkspaceUpdateForWorkspaceId(msg.expectedWorkspaceId),
+        this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId),
+      ]);
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: {
+          requestId: msg.requestId,
+          agent,
+          workspace: await this.describeWorkspaceRecord(workspace),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: {
+          requestId: msg.requestId,
+          agent: null,
+          workspace: null,
+          error: getErrorMessage(error),
+        },
+      });
+    }
   }
 
   private async handleUpdateAgentRequest(

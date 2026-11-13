@@ -30,6 +30,7 @@ interface SeedProjectDescriptor {
  * prefer those wrappers over reaching for this client directly.
  */
 export interface SeedDaemonClient {
+  moveAgentToWorkspace: import("@getpaseo/client/internal/daemon-client").DaemonClient["moveAgentToWorkspace"];
   updateStreamEntry(
     input: import("@getpaseo/protocol/global-stream").StreamEntryUpdate,
   ): Promise<void>;

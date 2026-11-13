@@ -2523,7 +2523,8 @@ export class AgentManager {
       return;
     }
 
-    await this.writeStoredMetadata(agentId, updates);
+    const updated = await this.writeStoredMetadata(agentId, updates);
+    if (!updated.internal) this.dispatchStoredAgentState(updated);
   }
 
   private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {

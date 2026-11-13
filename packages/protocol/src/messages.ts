@@ -984,6 +984,24 @@ export const CloseItemsRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const AgentWorkspaceMoveDestinationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("existing"), workspaceId: z.string().min(1) }),
+  z.object({
+    kind: z.literal("new"),
+    workspaceId: z.string().regex(/^wks_[a-f0-9]{16}$/),
+    title: z.string().trim().min(1).max(200),
+  }),
+  z.object({ kind: z.literal("asides") }),
+]);
+
+export const AgentWorkspaceMoveRequestSchema = z.object({
+  type: z.literal("agent.workspace.move.request"),
+  agentId: z.string(),
+  expectedWorkspaceId: z.string(),
+  destination: AgentWorkspaceMoveDestinationSchema,
+  requestId: z.string(),
+});
+
 export const UpdateAgentRequestMessageSchema = z.object({
   type: z.literal("update_agent_request"),
   agentId: z.string(),
@@ -4073,6 +4091,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ArchiveAgentRequestMessageSchema,
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
+  AgentWorkspaceMoveRequestSchema,
   UpdateCompanionEntryRequestMessageSchema,
   StreamListRequestSchema,
   StreamUpdateRequestSchema,
@@ -4615,6 +4634,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
         agentDetach: z.boolean().optional(),
+        // COMPAT(agentWorkspaceMove): fork feature; remove gate after 2027-05-13.
+        agentWorkspaceMove: z.boolean().optional(),
         // COMPAT(agentThinkingUpdate): added in v0.2.4, remove gate after 2027-01-28.
         agentThinkingUpdate: z.boolean().optional(),
         // COMPAT(daemonDiagnostics): added in v0.1.100, remove gate after 2026-12-25 once daemon floor >= v0.1.100.
@@ -5863,6 +5884,16 @@ export const AgentCreateResponseSchema = z.object({
     agent: AgentSnapshotPayloadSchema.nullable(),
     error: z.string().nullable(),
     creation: CreationSnapshotSchema.optional(),
+  }),
+});
+
+export const AgentWorkspaceMoveResponseSchema = z.object({
+  type: z.literal("agent.workspace.move.response"),
+  payload: z.object({
+    agent: AgentSnapshotPayloadSchema.nullable(),
+    requestId: z.string(),
+    workspace: WorkspaceDescriptorPayloadSchema.nullable(),
+    error: z.string().nullable(),
   }),
 });
 
@@ -7873,6 +7904,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   CancelAgentResponseMessageSchema,
   ClearAgentAttentionResponseMessageSchema,
   WorkspaceCreateResponseSchema,
+  AgentWorkspaceMoveResponseSchema,
   AgentCreateResponseSchema,
   WorkspaceCreationUpdateSchema,
   AgentCreationUpdateSchema,

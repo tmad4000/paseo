@@ -1021,6 +1021,7 @@ export const ko: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "워크스페이스 불러오는 중",
       connecting: "연결 중",

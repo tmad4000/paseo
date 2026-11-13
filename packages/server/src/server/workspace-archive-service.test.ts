@@ -591,6 +591,52 @@ describe("archiveByScope", () => {
     expect(existsSync(worktree.worktreePath)).toBe(true);
   });
 
+  test("keeps a worktree used by a chat moved into a different-directory catch-all", async () => {
+    const { tempDir, repoDir } = createGitRepo();
+    const paseoHome = path.join(tempDir, ".paseo");
+    const worktree = await createPaseoOwnedWorktree(repoDir, paseoHome, "moved-aside");
+    const source: ActiveWorkspaceRef = {
+      workspaceId: "source",
+      cwd: worktree.worktreePath,
+      kind: "worktree",
+      worktreeRoot: worktree.worktreePath,
+      isPaseoOwnedWorktree: true,
+      mainRepoRoot: repoDir,
+    };
+    const asides: ActiveWorkspaceRef = {
+      workspaceId: "asides",
+      cwd: tempDir,
+      kind: "directory",
+      worktreeRoot: null,
+      isPaseoOwnedWorktree: false,
+      mainRepoRoot: null,
+    };
+    const deps = createArchiveDeps({ paseoHome, activeWorkspaces: [source, asides] });
+    deps.agentStorage.listByWorkspace = async (id) =>
+      id === "asides"
+        ? [
+            {
+              id: "moved",
+              provider: "codex",
+              cwd: worktree.worktreePath,
+              workspaceId: "asides",
+              labels: {},
+              lastStatus: "closed",
+              createdAt: "",
+              updatedAt: "",
+              archivedAt: null,
+            },
+          ]
+        : [];
+    const result = await archiveByScope(deps, {
+      scope: { kind: "workspace", workspaceId: "source" },
+      requestId: "moved-aside",
+    });
+    expect(result.removedDirectory).toBe(false);
+    expect(existsSync(worktree.worktreePath)).toBe(true);
+    expect(deps.archivedAgentIds).not.toContain("moved");
+  });
+
   test("workspace scope with unknown workspace id is a clean no-op", async () => {
     const { tempDir } = createGitRepo();
     const paseoHome = path.join(tempDir, ".paseo");

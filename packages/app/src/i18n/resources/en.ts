@@ -1033,6 +1033,20 @@ export const en = {
     },
   },
   workspace: {
+    moveChat: {
+      menu: "Move to workspace…",
+      title: "Move chat",
+      destination: "Destination",
+      asides: "Asides",
+      asidesDescription: "Shared catch-all on this host",
+      newWorkspace: "New workspace…",
+      name: "Workspace name",
+      preserved: "History and the original working directory stay with this chat.",
+      move: "Move chat",
+      moving: "Moving…",
+      moved: "Moved to {{workspace}}",
+      open: "Open chat",
+    },
     route: {
       loading: "Loading workspace",
       connecting: "Connecting",

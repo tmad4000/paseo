@@ -4881,9 +4881,17 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   await storage.upsert(before);
   expect(manager.getAgent(snapshot.id)).toBeNull();
 
+  const movedWorkspaceIds: Array<string | undefined> = [];
+  const unsubscribe = manager.subscribe(
+    (event) => {
+      if (event.type === "agent_state") movedWorkspaceIds.push(event.agent.workspaceId);
+    },
+    { replayState: false },
+  );
   const upsertSpy = vi.spyOn(storage, "upsert");
 
   await manager.updateAgentMetadata(snapshot.id, {
+    workspaceId: "asides",
     title: "Stored title",
     labels: { role: "worker" },
   });
@@ -4891,6 +4899,9 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   expect(upsertSpy).toHaveBeenCalledTimes(1);
   const after = await storage.get(snapshot.id);
   expect(after?.title).toBe("Stored title");
+  expect(after?.workspaceId).toBe("asides");
+  expect(movedWorkspaceIds).toEqual(["asides"]);
+  unsubscribe();
   expect(after?.labels).toEqual({ surface: "mobile", role: "worker" });
   expect(Date.parse(after!.updatedAt)).toBeGreaterThan(Date.parse(before!.updatedAt));
 });
