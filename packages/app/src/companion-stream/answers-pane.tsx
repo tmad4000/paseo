@@ -12,6 +12,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -75,6 +76,8 @@ export interface TrackedAnswerActions {
 }
 
 interface TrackedAnswersPaneProps {
+  /** Host, layout workspace, tab and chat identity; never shared across splits. */
+  paneKey?: string;
   entries: readonly CompanionEntry[];
   /** The chat showing the pane; answers written from another chat offer to open it. */
   agentId: string;
@@ -130,7 +133,7 @@ function sectionRows<T extends { entry: CompanionEntry }>(
  *
  * The pane never disappears while it has items: it minimizes to a small pill at the right
  * edge showing the count, which lights up when an answer arrives or an ask becomes blocked
- * after it was minimized. Phones start minimized; the choice is remembered across chats.
+ * after it was minimized. Phones start minimized; each tab/split remembers its own choice.
  *
  * When its items span more than one session or day of the chat, each section groups them
  * under dividers, newest first. Rows stay keyed siblings and expanded answers and the scroll
@@ -139,6 +142,7 @@ function sectionRows<T extends { entry: CompanionEntry }>(
 export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   entries,
   agentId,
+  paneKey = agentId,
   actions,
   showOpenAsks = false,
   agentTitle,
@@ -178,7 +182,8 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     },
     [actions],
   );
-  const minimized = useAnswersPaneStore((state) => state.minimized) ?? isCompact;
+  const minimized =
+    useAnswersPaneStore((state) => state.minimizedByPane[paneKey] ?? state.minimized) ?? isCompact;
   const setMinimized = useAnswersPaneStore((state) => state.setMinimized);
   // What was showing when the person minimized; later answers and blocks light up the pill.
   const [minimizedSignature, setMinimizedSignature] = useState<string | null>(null);
@@ -201,9 +206,9 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   const minimize = useCallback(() => {
     setMinimizedSignature(answersPaneSignature(items, asks, attentionKeys));
     scrollRestored.current = false;
-    setMinimized(true);
-  }, [asks, attentionKeys, items, setMinimized]);
-  const expand = useCallback(() => setMinimized(false), [setMinimized]);
+    setMinimized(paneKey, true);
+  }, [asks, attentionKeys, items, paneKey, setMinimized]);
+  const expand = useCallback(() => setMinimized(paneKey, false), [paneKey, setMinimized]);
   const toggleAnswer = useCallback((entryId: string) => {
     setExpandedAnswers((current) => {
       const next = new Set(current);
@@ -561,6 +566,23 @@ function shortAgentId(agentId: string): string {
   return agentId.slice(0, 8);
 }
 
+/** The shared clock updates just this label; invalid/missing history never invents an age. */
+const PaneTimestamp = memo(function PaneTimestamp({ timestamp }: { timestamp?: string }) {
+  const { i18n } = useTranslation();
+  const time = timestamp ? Date.parse(timestamp) : NaN;
+  const date = Number.isFinite(time) ? new Date(time) : null;
+  const label = useCompactTimeAgo(date);
+  if (!date) return null;
+  const fullTime = date.toLocaleString(i18n.language);
+  return (
+    <PaneTooltip label={fullTime}>
+      <Text style={styles.timestamp} accessibilityLabel={fullTime} testID="pane-timestamp">
+        {label}
+      </Text>
+    </PaneTooltip>
+  );
+});
+
 /**
  * One unresolved ask: state and owner as a muted eyebrow, the ask itself as the headline, and
  * its next step. Tapping jumps to where the ask was made when Chat can place it (its source
@@ -610,6 +632,7 @@ const OpenAskRow = memo(function OpenAskRow({
     <View style={[styles.row, !first && styles.rowBorder]} testID={`open-ask-${entry.id}`}>
       <View style={styles.askEyebrow}>
         <StatusBadge label={t(badge.label)} variant={badge.variant} />
+        <PaneTimestamp timestamp={entry.timestamp} />
         {delegation && childName ? (
           <DelegationPulseChip
             pulse={delegation.pulse}
@@ -681,6 +704,7 @@ const DelegatedHereRow = memo(function DelegatedHereRow({
     >
       <View style={styles.askEyebrow}>
         <StatusBadge label={t(badge.label)} variant={badge.variant} />
+        <PaneTimestamp timestamp={item.timestamp} />
         <Text style={styles.hint} numberOfLines={1}>
           {t("agentPanel.stream.answers.delegation.fromOwner", { name: owner })}
         </Text>
@@ -729,6 +753,7 @@ const TrackedAnswerRow = memo(function TrackedAnswerRow({
     <View style={[styles.row, !first && styles.rowBorder]} testID={`tracked-answer-${entry.id}`}>
       <View style={styles.rowEyebrow}>
         <StatusBadge label={t(badge.label)} variant={badge.variant} />
+        <PaneTimestamp timestamp={entry.timestamp} />
       </View>
       <Text style={styles.question} numberOfLines={2}>
         {question}
@@ -740,9 +765,12 @@ const TrackedAnswerRow = memo(function TrackedAnswerRow({
           aria-expanded={answerExpanded}
           testID="tracked-answer-text"
         >
-          <Text style={styles.answer} numberOfLines={answerExpanded ? undefined : 3}>
-            {entry.reply.text}
-          </Text>
+          <View style={styles.answerLine}>
+            <Text style={styles.answer} numberOfLines={answerExpanded ? undefined : 3}>
+              {entry.reply.text}
+            </Text>
+            <PaneTimestamp timestamp={entry.reply.answeredAt} />
+          </View>
         </Pressable>
       ) : null}
       {attention === "candidate" ? (
@@ -981,12 +1009,26 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowEyebrow: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  answerLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
+  },
+  timestamp: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontVariant: ["tabular-nums"],
+    flexShrink: 0,
   },
   question: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
   answer: {
+    flex: 1,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,

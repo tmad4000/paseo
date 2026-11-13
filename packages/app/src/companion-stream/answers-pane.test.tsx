@@ -86,10 +86,15 @@ vi.mock("./answers-pane-store", async () => {
   return {
     useAnswersPaneStore: create<{
       minimized: boolean | null;
-      setMinimized: (minimized: boolean) => void;
+      minimizedByPane: Record<string, boolean>;
+      setMinimized: (paneKey: string, minimized: boolean) => void;
     }>()((set) => ({
       minimized: null,
-      setMinimized: (minimized) => set({ minimized }),
+      minimizedByPane: {},
+      setMinimized: (paneKey, minimized) =>
+        set((state) => ({
+          minimizedByPane: { ...state.minimizedByPane, [paneKey]: minimized },
+        })),
     })),
   };
 });
@@ -201,7 +206,7 @@ beforeAll(async () => {
 afterEach(() => {
   cleanup();
   layout.compact = false;
-  useAnswersPaneStore.setState({ minimized: null });
+  useAnswersPaneStore.setState({ minimized: null, minimizedByPane: {} });
 });
 
 describe("TrackedAnswersPane", () => {
@@ -297,7 +302,7 @@ describe("TrackedAnswersPane", () => {
     expect(screen.queryByTestId("tracked-answers-expand")).toBeNull();
   });
 
-  it("starts minimized on phones, and remembers an explicit choice across chats", () => {
+  it("starts minimized on phones, and remembers an explicit choice when the pane remounts", () => {
     layout.compact = true;
     renderPane([askAnswered]);
     expect(screen.getByTestId("tracked-answers-expand")).toBeTruthy();

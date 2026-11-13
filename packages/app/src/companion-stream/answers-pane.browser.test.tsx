@@ -175,7 +175,7 @@ afterEach(() => {
     mounted = null;
   }
   fixture.compact = false;
-  useAnswersPaneStore.setState({ minimized: null });
+  useAnswersPaneStore.setState({ minimized: null, minimizedByPane: {} });
   vi.unstubAllGlobals();
 });
 
