@@ -13,6 +13,7 @@ import { Pencil, Plus } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { TerminalProfileIcon } from "@/components/terminal-profile-icon";
 import { Shortcut } from "@/components/ui/shortcut";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { isWeb } from "@/constants/platform";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
@@ -73,17 +74,19 @@ function editProfilesStyle({ pressed, hovered }: PressableStateCallbackType) {
 
 function EditProfilesButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={editProfilesStyle}
-      testID="workspace-new-tab-edit-terminal-profiles"
-    >
-      <View style={styles.editProfilesGlyph}>
-        <ThemedPencil size={ICON_SIZE.xs} uniProps={extraMutedColorMapping} />
-      </View>
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={editProfilesStyle}
+        testID="workspace-new-tab-edit-terminal-profiles"
+      >
+        <View style={styles.editProfilesGlyph}>
+          <ThemedPencil size={ICON_SIZE.xs} uniProps={extraMutedColorMapping} />
+        </View>
+      </Pressable>
+    </IconTooltip>
   );
 }
 

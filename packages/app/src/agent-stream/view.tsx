@@ -5,6 +5,7 @@ import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { MessageReplyScope } from "@/components/reply/composer-quote";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import React, {
   forwardRef,
   memo,
@@ -1295,15 +1296,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             {(!isNearBottom || isTimelineDetached) && (
               <View style={scrollToBottomContainerStyle} pointerEvents="box-none">
                 <Animated.View entering={scrollIndicatorFadeIn} exiting={scrollIndicatorFadeOut}>
-                  <Pressable
-                    style={stylesheet.scrollToBottomButton}
+                  <ScrollToBottomButton
+                    label={t("agentStream.scrollToBottom")}
                     onPress={scrollToBottom}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("agentStream.scrollToBottom")}
-                    testID="scroll-to-bottom-button"
-                  >
-                    <ChevronDown size={24} color={stylesheet.scrollToBottomIcon.color} />
-                  </Pressable>
+                  />
                 </Animated.View>
               </View>
             )}
@@ -1313,6 +1309,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
   },
 );
+
+function ScrollToBottomButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        style={stylesheet.scrollToBottomButton}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID="scroll-to-bottom-button"
+      >
+        <ChevronDown size={24} color={stylesheet.scrollToBottomIcon.color} />
+      </Pressable>
+    </IconTooltip>
+  );
+}
 
 function agentCapabilityFlagsEqual(
   left: AgentCapabilityFlags | undefined,

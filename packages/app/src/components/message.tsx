@@ -3,6 +3,7 @@ import { useMessageReply } from "@/components/reply/composer-quote";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { TaskListRow } from "@/components/task-list-row";
 import {
   View,
@@ -1214,20 +1215,23 @@ export const TurnQAndAButton = memo(function TurnQAndAButton({
     [containerStyle],
   );
 
+  const label = t("agentPanel.stream.trackQAndA");
   return (
-    <Pressable
-      accessibilityRole="button"
-      style={pressableStyle}
-      onPress={onQAndA}
-      accessibilityLabel={t("agentPanel.stream.trackQAndA")}
-    >
-      {({ hovered }) => {
-        const iconColor = hovered
-          ? turnCopyButtonStylesheet.iconHoveredColor.color
-          : turnCopyButtonStylesheet.iconColor.color;
-        return <HelpCircle size={16} color={iconColor} />;
-      }}
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="button"
+        style={pressableStyle}
+        onPress={onQAndA}
+        accessibilityLabel={label}
+      >
+        {({ hovered }) => {
+          const iconColor = hovered
+            ? turnCopyButtonStylesheet.iconHoveredColor.color
+            : turnCopyButtonStylesheet.iconColor.color;
+          return <HelpCircle size={16} color={iconColor} />;
+        }}
+      </Pressable>
+    </IconTooltip>
   );
 });
 
@@ -1247,21 +1251,24 @@ export const TurnReplyButton = memo(function TurnReplyButton({
   );
   const handleReply = useCallback(() => reply?.(getContent()), [getContent, reply]);
   if (!reply) return null;
+  const label = t("message.actions.reply");
   return (
-    <Pressable
-      accessibilityRole="button"
-      style={pressableStyle}
-      onPress={handleReply}
-      accessibilityLabel={t("message.actions.reply")}
-      testID="message-reply-button"
-    >
-      {({ hovered }) => {
-        const iconColor = hovered
-          ? turnCopyButtonStylesheet.iconHoveredColor.color
-          : turnCopyButtonStylesheet.iconColor.color;
-        return <Reply size={16} color={iconColor} />;
-      }}
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="button"
+        style={pressableStyle}
+        onPress={handleReply}
+        accessibilityLabel={label}
+        testID="message-reply-button"
+      >
+        {({ hovered }) => {
+          const iconColor = hovered
+            ? turnCopyButtonStylesheet.iconHoveredColor.color
+            : turnCopyButtonStylesheet.iconColor.color;
+          return <Reply size={16} color={iconColor} />;
+        }}
+      </Pressable>
+    </IconTooltip>
   );
 });
 
@@ -1314,28 +1321,29 @@ export const TurnCopyButton = memo(function TurnCopyButton({
     [containerStyle],
   );
 
+  const label = copied
+    ? (copiedAccessibilityLabel ?? t("message.actions.copied"))
+    : (accessibilityLabel ?? t("message.actions.copyTurn"));
   return (
-    <Pressable
-      onPress={handleCopy}
-      style={pressableStyle}
-      accessibilityRole="button"
-      accessibilityLabel={
-        copied
-          ? (copiedAccessibilityLabel ?? t("message.actions.copied"))
-          : (accessibilityLabel ?? t("message.actions.copyTurn"))
-      }
-    >
-      {({ hovered }) => {
-        const iconColor = hovered
-          ? turnCopyButtonStylesheet.iconHoveredColor.color
-          : turnCopyButtonStylesheet.iconColor.color;
-        return copied ? (
-          <Check size={ICON_SIZE.sm} color={iconColor} />
-        ) : (
-          <Copy size={ICON_SIZE.sm} color={iconColor} />
-        );
-      }}
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        onPress={handleCopy}
+        style={pressableStyle}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        {({ hovered }) => {
+          const iconColor = hovered
+            ? turnCopyButtonStylesheet.iconHoveredColor.color
+            : turnCopyButtonStylesheet.iconColor.color;
+          return copied ? (
+            <Check size={ICON_SIZE.sm} color={iconColor} />
+          ) : (
+            <Copy size={ICON_SIZE.sm} color={iconColor} />
+          );
+        }}
+      </Pressable>
+    </IconTooltip>
   );
 });
 
@@ -2707,21 +2715,23 @@ function ExpandableBadgeLabelRow({
         onSecondaryLayout={onSecondaryLayout}
       />
       {showOpenFileButton ? (
-        <Pressable
-          onPress={onOpenFilePress}
-          onHoverIn={onOpenFileHoverIn}
-          onHoverOut={onOpenFileHoverOut}
-          accessibilityRole="button"
-          accessibilityLabel={t("message.actions.openFile")}
-          testID="tool-call-open-file"
-          style={expandableBadgeStylesheet.openFileButton}
-          hitSlop={6}
-        >
-          <ThemedFileSymlinkIcon
-            size={14}
-            uniProps={isOpenFileHovered ? foregroundColorMapping : foregroundMutedColorMapping}
-          />
-        </Pressable>
+        <IconTooltip label={t("message.actions.openFile")} wrap={false}>
+          <Pressable
+            onPress={onOpenFilePress}
+            onHoverIn={onOpenFileHoverIn}
+            onHoverOut={onOpenFileHoverOut}
+            accessibilityRole="button"
+            accessibilityLabel={t("message.actions.openFile")}
+            testID="tool-call-open-file"
+            style={expandableBadgeStylesheet.openFileButton}
+            hitSlop={6}
+          >
+            <ThemedFileSymlinkIcon
+              size={14}
+              uniProps={isOpenFileHovered ? foregroundColorMapping : foregroundMutedColorMapping}
+            />
+          </Pressable>
+        </IconTooltip>
       ) : null}
       {isWebShimmer ? (
         <ExpandableBadgeWebShimmerOverlay

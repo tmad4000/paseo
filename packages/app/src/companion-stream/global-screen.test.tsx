@@ -21,6 +21,11 @@ function clickDone() {
   state.updateStatus?.("question:q", "done");
 }
 // Delegated chats have their own coverage in answers-pane and delegation-pulse tests.
+// Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
+vi.mock("@/components/ui/icon-tooltip", () => ({
+  IconTooltip: ({ children }: { children: unknown }) => children,
+}));
+
 vi.mock("./delegated-chats", () => ({ DelegatedChatsList: () => null }));
 vi.mock("./use-delegation-pulse", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./use-delegation-pulse")>()),

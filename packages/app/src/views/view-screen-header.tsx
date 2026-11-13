@@ -13,6 +13,7 @@ import { RecentSessionsButton } from "@/components/headers/recent-sessions-butto
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useViewsStore } from "@/stores/views-store";
 import type { WorkspaceTabScope } from "@/workspace-tabs/model";
@@ -97,36 +98,43 @@ export function ViewScreenHeader({
       <View style={styles.actions}>
         {pager ? (
           <View style={styles.pager} testID="view-pane-pager">
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={ChevronLeft}
-              accessibilityLabel={t("views.actions.previousPane")}
-              onPress={showPreviousPane}
-              testID="view-pane-previous"
-            />
+            <IconTooltip label={t("views.actions.previousPane")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={ChevronLeft}
+                accessibilityLabel={t("views.actions.previousPane")}
+                onPress={showPreviousPane}
+                testID="view-pane-previous"
+              />
+            </IconTooltip>
             <Text style={styles.pagerLabel}>{`${pager.index + 1}/${pager.count}`}</Text>
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={ChevronRight}
-              accessibilityLabel={t("views.actions.nextPane")}
-              onPress={showNextPane}
-              testID="view-pane-next"
-            />
+            <IconTooltip label={t("views.actions.nextPane")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={ChevronRight}
+                accessibilityLabel={t("views.actions.nextPane")}
+                onPress={showNextPane}
+                testID="view-pane-next"
+              />
+            </IconTooltip>
           </View>
         ) : null}
         {broadcastTargetCount > 1 ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={Radio}
-            accessibilityLabel={t("views.broadcast.title")}
-            onPress={onBroadcast}
-            testID="view-broadcast"
-          >
-            {pager ? null : t("views.broadcast.button")}
-          </Button>
+          // Icon-only beside the pager, so only then does it need a tooltip.
+          <IconTooltip label={pager ? t("views.broadcast.title") : null}>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={Radio}
+              accessibilityLabel={t("views.broadcast.title")}
+              onPress={onBroadcast}
+              testID="view-broadcast"
+            >
+              {pager ? null : t("views.broadcast.button")}
+            </Button>
+          </IconTooltip>
         ) : null}
         <Button
           variant="ghost"
@@ -137,14 +145,16 @@ export function ViewScreenHeader({
         >
           {t("views.actions.splitWithSession")}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={Trash2}
-          accessibilityLabel={t("views.actions.delete")}
-          onPress={deleteView}
-          testID="view-delete"
-        />
+        <IconTooltip label={t("views.actions.delete")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={Trash2}
+            accessibilityLabel={t("views.actions.delete")}
+            onPress={deleteView}
+            testID="view-delete"
+          />
+        </IconTooltip>
       </View>
     ),
     [

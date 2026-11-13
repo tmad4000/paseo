@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { House, Pin, PinOff } from "lucide-react-native";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { HOST_BADGE_ICON_SIZE } from "@/hosts/host-badge";
 import { useHostFeatureMap } from "@/runtime/host-features";
 import type { Theme } from "@/styles/theme";
@@ -34,19 +35,21 @@ export function ProjectPinGlyph({ hosts }: { hosts: readonly HostProjectRef[] })
     ? t("defaultProject.badges.default")
     : t("defaultProject.badges.pinned");
   return (
-    <View
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={label}
-      testID={state.isDefault ? "sidebar-project-default-glyph" : "sidebar-project-pinned-glyph"}
-      style={styles.glyph}
-    >
-      {state.isDefault ? (
-        <ThemedHouse size={HOST_BADGE_ICON_SIZE} uniProps={mutedColor} />
-      ) : (
-        <ThemedPin size={HOST_BADGE_ICON_SIZE} uniProps={mutedColor} />
-      )}
-    </View>
+    <IconTooltip label={label} wrap={false}>
+      <View
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={label}
+        testID={state.isDefault ? "sidebar-project-default-glyph" : "sidebar-project-pinned-glyph"}
+        style={styles.glyph}
+      >
+        {state.isDefault ? (
+          <ThemedHouse size={HOST_BADGE_ICON_SIZE} uniProps={mutedColor} />
+        ) : (
+          <ThemedPin size={HOST_BADGE_ICON_SIZE} uniProps={mutedColor} />
+        )}
+      </View>
+    </IconTooltip>
   );
 }
 

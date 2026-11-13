@@ -6,6 +6,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { AgentProfileGlyph } from "../internal/agent-profile-glyph";
@@ -101,40 +102,48 @@ export function AgentProfileRow({
         </View>
       </View>
       <View style={styles.rowActions}>
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveUpIcon}
-          onPress={handleMoveUp}
-          disabled={isFirst}
-          accessibilityLabel={t("settings.host.agentProfiles.moveUp")}
-          testID={`agent-profile-move-up-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveDownIcon}
-          onPress={handleMoveDown}
-          disabled={isLast}
-          accessibilityLabel={t("settings.host.agentProfiles.moveDown")}
-          testID={`agent-profile-move-down-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={editIcon}
-          onPress={handleEdit}
-          accessibilityLabel={t("settings.host.agentProfiles.editProfile")}
-          testID={`agent-profile-edit-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={removeIcon}
-          onPress={handleRemove}
-          accessibilityLabel={t("settings.host.agentProfiles.remove")}
-          testID={`agent-profile-remove-${profile.id}`}
-        />
+        <IconTooltip label={t("settings.host.agentProfiles.moveUp")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveUpIcon}
+            onPress={handleMoveUp}
+            disabled={isFirst}
+            accessibilityLabel={t("settings.host.agentProfiles.moveUp")}
+            testID={`agent-profile-move-up-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.agentProfiles.moveDown")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveDownIcon}
+            onPress={handleMoveDown}
+            disabled={isLast}
+            accessibilityLabel={t("settings.host.agentProfiles.moveDown")}
+            testID={`agent-profile-move-down-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.agentProfiles.editProfile")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={editIcon}
+            onPress={handleEdit}
+            accessibilityLabel={t("settings.host.agentProfiles.editProfile")}
+            testID={`agent-profile-edit-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.agentProfiles.remove")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={removeIcon}
+            onPress={handleRemove}
+            accessibilityLabel={t("settings.host.agentProfiles.remove")}
+            testID={`agent-profile-remove-${profile.id}`}
+          />
+        </IconTooltip>
       </View>
     </View>
   );

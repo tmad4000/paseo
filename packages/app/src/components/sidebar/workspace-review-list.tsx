@@ -33,6 +33,7 @@ import {
   workspaceNeedsInputAgents,
   workspaceReviewAgents,
 } from "./workspace-review-model";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 
 const PREVIEW_LIMIT = 3;
 
@@ -191,6 +192,7 @@ function AttentionRow({
     workspaceId,
     menuTestIDBase: `${kind}-${agent.id}`,
   });
+  const [actionsOpen, setActionsOpen] = useState(false);
   // Opening a review row does not read it by default, so its menus offer the explicit read.
   const readAction = useAgentReadAction({ serverId, agentId: agent.id, unread: false });
   const readEntries = useMemo(
@@ -206,6 +208,10 @@ function AttentionRow({
     onNavigate?.();
     navigateToAgent({ serverId, workspaceId, agentId: agent.id });
   }, [agent.id, serverId, workspaceId, onNavigate]);
+  const actionsLabel = t(
+    kind === "needs-input" ? "sidebar.sessionActions" : "sidebar.reviewActions",
+    { title },
+  );
   const menuItems = (
     <>
       <AgentStatusMenuTrigger />
@@ -244,17 +250,16 @@ function AttentionRow({
           {menuItems}
         </ContextMenuContent>
       </ContextMenu>
-      <DropdownMenu compactMode="sheet">
-        <DropdownMenuTrigger
-          accessibilityLabel={t(
-            kind === "needs-input" ? "sidebar.sessionActions" : "sidebar.reviewActions",
-            { title },
-          )}
-          style={styles.actions}
-          testID={`workspace-${kind}-actions-${agent.id}`}
-        >
-          <Text style={styles.title}>⋯</Text>
-        </DropdownMenuTrigger>
+      <DropdownMenu compactMode="sheet" open={actionsOpen} onOpenChange={setActionsOpen}>
+        <IconTooltip label={actionsLabel} disabled={actionsOpen} wrap={false}>
+          <DropdownMenuTrigger
+            accessibilityLabel={actionsLabel}
+            style={styles.actions}
+            testID={`workspace-${kind}-actions-${agent.id}`}
+          >
+            <Text style={styles.title}>⋯</Text>
+          </DropdownMenuTrigger>
+        </IconTooltip>
         <DropdownMenuContent pages={pages} sheetTitle={title}>
           {menuItems}
         </DropdownMenuContent>

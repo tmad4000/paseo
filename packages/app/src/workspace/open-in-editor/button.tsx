@@ -1,5 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ import { ForgeBrandIcon } from "@/git/forge-icon";
 import { getForgePresentation } from "@/git/forge";
 import { buttonControlHeight, HEADER_CONTROL_HEIGHT } from "@/components/ui/control-geometry";
 import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 
 interface WorkspaceOpenInEditorButtonProps {
   serverId: string;
@@ -207,6 +208,8 @@ export function WorkspaceOpenInEditorButton({
     [],
   );
 
+  const [caretMenuOpen, setCaretMenuOpen] = useState(false);
+
   const handlePrimaryPress = useCallback(() => {
     if (primaryOption) {
       handleOpenTarget(primaryOption);
@@ -217,51 +220,57 @@ export function WorkspaceOpenInEditorButton({
     return null;
   }
 
+  const primaryLabel = activeFileName
+    ? t("workspace.git.openInEditor.openFileIn", {
+        fileName: activeFileName,
+        target: primaryOption.label,
+      })
+    : t("workspace.git.openInEditor.openIn", { target: primaryOption.label });
+
   return (
     <View style={styles.row}>
       <View style={styles.splitButton}>
-        <Pressable
-          testID="workspace-open-in-editor-primary"
-          style={primaryPressableStyle}
-          onPress={handlePrimaryPress}
-          disabled={openMutation.isPending}
-          accessibilityRole="button"
-          accessibilityLabel={
-            activeFileName
-              ? t("workspace.git.openInEditor.openFileIn", {
-                  fileName: activeFileName,
-                  target: primaryOption.label,
-                })
-              : t("workspace.git.openInEditor.openIn", {
-                  target: primaryOption.label,
-                })
-          }
-        >
-          {openMutation.isPending ? (
-            <ThemedLoadingSpinner
-              size="small"
-              uniProps={foregroundColorMapping}
-              style={styles.splitButtonSpinnerOnly}
-            />
-          ) : (
-            <View style={styles.splitButtonContent}>
-              {primaryOption.icon}
-              {!hideLabels && (
-                <Text style={styles.splitButtonText}>{t("workspace.git.openInEditor.open")}</Text>
-              )}
-            </View>
-          )}
-        </Pressable>
+        <IconTooltip label={primaryLabel} wrap={false}>
+          <Pressable
+            testID="workspace-open-in-editor-primary"
+            style={primaryPressableStyle}
+            onPress={handlePrimaryPress}
+            disabled={openMutation.isPending}
+            accessibilityRole="button"
+            accessibilityLabel={primaryLabel}
+          >
+            {openMutation.isPending ? (
+              <ThemedLoadingSpinner
+                size="small"
+                uniProps={foregroundColorMapping}
+                style={styles.splitButtonSpinnerOnly}
+              />
+            ) : (
+              <View style={styles.splitButtonContent}>
+                {primaryOption.icon}
+                {!hideLabels && (
+                  <Text style={styles.splitButtonText}>{t("workspace.git.openInEditor.open")}</Text>
+                )}
+              </View>
+            )}
+          </Pressable>
+        </IconTooltip>
         {targets.length > 1 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              testID="workspace-open-in-editor-caret"
-              style={caretTriggerStyle}
-              accessibilityRole="button"
-              accessibilityLabel={t("workspace.git.openInEditor.chooseEditor")}
+          <DropdownMenu open={caretMenuOpen} onOpenChange={setCaretMenuOpen}>
+            <IconTooltip
+              label={t("workspace.git.openInEditor.chooseEditor")}
+              disabled={caretMenuOpen}
+              wrap={false}
             >
-              <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
-            </DropdownMenuTrigger>
+              <DropdownMenuTrigger
+                testID="workspace-open-in-editor-caret"
+                style={caretTriggerStyle}
+                accessibilityRole="button"
+                accessibilityLabel={t("workspace.git.openInEditor.chooseEditor")}
+              >
+                <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
+              </DropdownMenuTrigger>
+            </IconTooltip>
             <DropdownMenuContent
               align="end"
               minWidth={148}

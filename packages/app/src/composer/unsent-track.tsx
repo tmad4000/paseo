@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/shallow";
 
 import { DeliveryMark } from "@/components/delivery-mark";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import {
   describeDirectSendAttention,
   discardDirectSend,
@@ -141,35 +142,41 @@ const UnsentRow = memo(function UnsentRow({
         </View>
       </View>
       <View style={styles.actions}>
-        <Pressable
-          onPress={handleRetry}
-          disabled={isBusy || !client}
-          style={styles.action}
-          accessibilityRole="button"
-          accessibilityLabel={t("composer.delivery.retryNow")}
-        >
-          <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
-        </Pressable>
-        {canEditRefusedSend(entry) ? (
+        <IconTooltip label={t("composer.delivery.retryNow")} wrap={false}>
           <Pressable
-            onPress={handleEdit}
+            onPress={handleRetry}
+            disabled={isBusy || !client}
+            style={styles.action}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.delivery.retryNow")}
+          >
+            <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
+          </Pressable>
+        </IconTooltip>
+        {canEditRefusedSend(entry) ? (
+          <IconTooltip label={t("composer.delivery.editUnsent")} wrap={false}>
+            <Pressable
+              onPress={handleEdit}
+              disabled={isBusy}
+              style={styles.action}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.delivery.editUnsent")}
+            >
+              <ThemedPencil size={ICON_SIZE.sm} uniProps={iconMapping} />
+            </Pressable>
+          </IconTooltip>
+        ) : null}
+        <IconTooltip label={t("composer.delivery.discardUnsent")} wrap={false}>
+          <Pressable
+            onPress={handleDiscard}
             disabled={isBusy}
             style={styles.action}
             accessibilityRole="button"
-            accessibilityLabel={t("composer.delivery.editUnsent")}
+            accessibilityLabel={t("composer.delivery.discardUnsent")}
           >
-            <ThemedPencil size={ICON_SIZE.sm} uniProps={iconMapping} />
+            <ThemedTrash size={ICON_SIZE.sm} uniProps={iconMapping} />
           </Pressable>
-        ) : null}
-        <Pressable
-          onPress={handleDiscard}
-          disabled={isBusy}
-          style={styles.action}
-          accessibilityRole="button"
-          accessibilityLabel={t("composer.delivery.discardUnsent")}
-        >
-          <ThemedTrash size={ICON_SIZE.sm} uniProps={iconMapping} />
-        </Pressable>
+        </IconTooltip>
       </View>
     </View>
   );

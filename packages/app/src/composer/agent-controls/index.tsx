@@ -46,6 +46,7 @@ import {
 } from "@/composer/agent-controls/mode-control";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import type {
   AgentFeature,
   AgentMode,
@@ -1057,18 +1058,20 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
 
       {presentation.aggregateFeatures && features?.length ? (
         <>
-          <Pressable
-            onPress={handleOpenFeatures}
-            disabled={disabled}
-            style={styles.modeIconBadge}
-            accessibilityRole="button"
-            accessibilityLabel={t("agentControls.features.open")}
-            testID="agent-controls-features"
-          >
-            <ComposerToolbarGlyph size={glyphSize}>
-              <Settings2 size={glyphSize} color={theme.colors.foregroundMuted} />
-            </ComposerToolbarGlyph>
-          </Pressable>
+          <IconTooltip label={t("agentControls.features.open")} wrap={false}>
+            <Pressable
+              onPress={handleOpenFeatures}
+              disabled={disabled}
+              style={styles.modeIconBadge}
+              accessibilityRole="button"
+              accessibilityLabel={t("agentControls.features.open")}
+              testID="agent-controls-features"
+            >
+              <ComposerToolbarGlyph size={glyphSize}>
+                <Settings2 size={glyphSize} color={theme.colors.foregroundMuted} />
+              </ComposerToolbarGlyph>
+            </Pressable>
+          </IconTooltip>
           <AdaptiveModalSheet
             header={featuresSheetHeader}
             visible={activeSheet === "features"}

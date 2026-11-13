@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { CornerUpLeft, MessageSquareReply, SendHorizontal } from "lucide-react-native";
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
@@ -36,6 +37,7 @@ export function ThreadOriginControls({
   layoutWorkspaceId: string;
 }): ReactElement | null {
   const { t } = useTranslation();
+  const [menuOpen, setMenuOpen] = useState(false);
   const toast = useToast();
   const compact = useIsCompactFormFactor();
   const origin = useStoreWithEqualityFn(
@@ -109,22 +111,25 @@ export function ThreadOriginControls({
   }, [canQueue, hasReply, parentGone, t, threadBusy]);
 
   if (!origin) return null;
+  const menuLabel = t("threads.menuLabel", { title: parentTitle });
   // One icon-sized control: the chat header beside Pin is narrow in a split thread pane.
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        accessibilityRole="button"
-        accessibilityLabel={t("threads.menuLabel", { title: parentTitle })}
-        style={compact ? styles.compactTrigger : styles.trigger}
-        testID="thread-origin-menu"
-      >
-        {({ hovered, open }) => (
-          <ThemedReplyIcon
-            size={ICON_SIZE.sm}
-            uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
-          />
-        )}
-      </DropdownMenuTrigger>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      <IconTooltip label={menuLabel} disabled={menuOpen} side="bottom">
+        <DropdownMenuTrigger
+          accessibilityRole="button"
+          accessibilityLabel={menuLabel}
+          style={compact ? styles.compactTrigger : styles.trigger}
+          testID="thread-origin-menu"
+        >
+          {({ hovered, open }) => (
+            <ThemedReplyIcon
+              size={ICON_SIZE.sm}
+              uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
+            />
+          )}
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="end" minWidth={240} side="bottom">
         <DropdownMenuItem
           leading={backIcon}

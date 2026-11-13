@@ -109,6 +109,7 @@ import {
 } from "@/voice/preferred-voice";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
@@ -1441,15 +1442,17 @@ function QueuedMessageRow({
         />
         {!isPending && (
           <>
-            <Pressable
-              onPress={handleEdit}
-              disabled={isRemoving}
-              style={styles.queueActionButton}
-              accessibilityLabel={editLabel}
-              accessibilityRole="button"
-            >
-              <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
+            <IconTooltip label={editLabel} wrap={false}>
+              <Pressable
+                onPress={handleEdit}
+                disabled={isRemoving}
+                style={styles.queueActionButton}
+                accessibilityLabel={editLabel}
+                accessibilityRole="button"
+              >
+                <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+              </Pressable>
+            </IconTooltip>
             <Pressable
               onPress={sendFromUI}
               disabled={isRemoving}
@@ -1461,19 +1464,21 @@ function QueuedMessageRow({
             </Pressable>
           </>
         )}
-        <Pressable
-          onPress={removeFromUI}
-          disabled={isRemoving}
-          style={styles.queueActionButton}
-          accessibilityLabel={removeLabel}
-          accessibilityRole="button"
-        >
-          {isRemoving ? (
-            <ThemedAttachmentSpinner size={18} uniProps={iconForegroundMutedMapping} />
-          ) : (
-            <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-          )}
-        </Pressable>
+        <IconTooltip label={removeLabel} wrap={false}>
+          <Pressable
+            onPress={removeFromUI}
+            disabled={isRemoving}
+            style={styles.queueActionButton}
+            accessibilityLabel={removeLabel}
+            accessibilityRole="button"
+          >
+            {isRemoving ? (
+              <ThemedAttachmentSpinner size={18} uniProps={iconForegroundMutedMapping} />
+            ) : (
+              <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+            )}
+          </Pressable>
+        </IconTooltip>
       </View>
     </View>
   );
@@ -1512,18 +1517,21 @@ function QueuedMessageGrip({
   }
   // dnd-kit's attributes make this the focusable sortable handle (Space to lift, arrows to move).
   const { attributes, listeners, setActivatorNodeRef } = dragHandleProps ?? NO_DRAG_HANDLE_PROPS;
+  // The tooltip hovers a wrapper View so it never touches dnd-kit's handle ref or listeners.
   return (
-    <View
-      {...attributes}
-      {...listeners}
-      ref={setActivatorNodeRef as unknown as Ref<View>}
-      dataSet={KEYBOARD_OWNER_DATASET}
-      accessibilityLabel={label}
-      style={styles.queueDragHandle}
-      testID={`queued-message-drag-${itemId}`}
-    >
-      {icon}
-    </View>
+    <IconTooltip label={label}>
+      <View
+        {...attributes}
+        {...listeners}
+        ref={setActivatorNodeRef as unknown as Ref<View>}
+        dataSet={KEYBOARD_OWNER_DATASET}
+        accessibilityLabel={label}
+        style={styles.queueDragHandle}
+        testID={`queued-message-drag-${itemId}`}
+      >
+        {icon}
+      </View>
+    </IconTooltip>
   );
 }
 

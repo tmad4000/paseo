@@ -140,6 +140,7 @@ import {
 } from "@/components/sidebar/workspace-trailing";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -347,30 +348,33 @@ export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewS
     ? [prBadgeStyles.text, prBadgeStyles.textHovered]
     : prBadgeStyles.text;
   const presentation = getForgePresentation(normalizeForge(hint.forge));
+  const label = t("workspace.git.pr.accessibility.pullRequest", {
+    number: hint.number,
+    context: presentation.changeRequestContext,
+  });
 
   return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t("workspace.git.pr.accessibility.pullRequest", {
-        number: hint.number,
-        context: presentation.changeRequestContext,
-      })}
-      hitSlop={4}
-      onPressIn={handlePressIn}
-      onPress={handlePress}
-      onHoverIn={handleHoverIn}
-      onHoverOut={handleHoverOut}
-      style={pressableStyle}
-    >
-      {isHovered ? (
-        <ThemedExternalLink size={12} uniProps={foregroundColorMapping} />
-      ) : (
-        <PullRequestStateIcon state={hint.state} size={12} />
-      )}
-      <Text style={textStyle} numberOfLines={1}>
-        {hint.number}
-      </Text>
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={label}
+        hitSlop={4}
+        onPressIn={handlePressIn}
+        onPress={handlePress}
+        onHoverIn={handleHoverIn}
+        onHoverOut={handleHoverOut}
+        style={pressableStyle}
+      >
+        {isHovered ? (
+          <ThemedExternalLink size={12} uniProps={foregroundColorMapping} />
+        ) : (
+          <PullRequestStateIcon state={hint.state} size={12} />
+        )}
+        <Text style={textStyle} numberOfLines={1}>
+          {hint.number}
+        </Text>
+      </Pressable>
+    </IconTooltip>
   );
 }
 
@@ -511,17 +515,20 @@ function ProjectKebabMenu({
   removeProjectStatus: "idle" | "pending" | "success";
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu compactMode="sheet">
-      <DropdownMenuTrigger
-        hitSlop={8}
-        style={projectKebabStyle}
-        accessibilityRole={platformIsWeb ? undefined : "button"}
-        accessibilityLabel={t("sidebar.project.actions.menu")}
-        testID={`sidebar-project-kebab-${projectViewKey}`}
-      >
-        {renderKebabTriggerIcon}
-      </DropdownMenuTrigger>
+    <DropdownMenu compactMode="sheet" open={open} onOpenChange={setOpen}>
+      <IconTooltip label={t("sidebar.project.actions.menu")} disabled={open} wrap={false}>
+        <DropdownMenuTrigger
+          hitSlop={8}
+          style={projectKebabStyle}
+          accessibilityRole={platformIsWeb ? undefined : "button"}
+          accessibilityLabel={t("sidebar.project.actions.menu")}
+          testID={`sidebar-project-kebab-${projectViewKey}`}
+        >
+          {renderKebabTriggerIcon}
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="end" width={220} sheetTitle={t("sidebar.project.actions.menu")}>
         <ProjectMenuItems
           surface="dropdown"

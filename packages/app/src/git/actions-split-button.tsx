@@ -1,5 +1,6 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ChevronDown, GitBranch, MoreVertical } from "lucide-react-native";
@@ -129,6 +130,10 @@ export function GitActionsSplitButton({
     [theme.colors.surface2],
   );
 
+  const [menuOnlyOpen, setMenuOnlyOpen] = useState(false);
+  const [caretMenuOpen, setCaretMenuOpen] = useState(false);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+
   const menuOnlyActions = useMemo(
     () => [
       ...(gitActions.primary ? [gitActions.primary] : []),
@@ -144,16 +149,22 @@ export function GitActionsSplitButton({
     }
 
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          testID="changes-actions-menu-trigger"
-          style={menuOnlyTriggerStyle}
-          accessibilityRole="button"
-          accessibilityLabel={t("workspace.header.actions.workspaceActions")}
+      <DropdownMenu open={menuOnlyOpen} onOpenChange={setMenuOnlyOpen}>
+        <IconTooltip
+          label={t("workspace.header.actions.workspaceActions")}
+          disabled={menuOnlyOpen}
+          wrap={false}
         >
-          <GitBranch size={16} color={theme.colors.foregroundMuted} />
-          <ChevronDown size={12} color={theme.colors.foregroundExtraMuted} />
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            testID="changes-actions-menu-trigger"
+            style={menuOnlyTriggerStyle}
+            accessibilityRole="button"
+            accessibilityLabel={t("workspace.header.actions.workspaceActions")}
+          >
+            <GitBranch size={16} color={theme.colors.foregroundMuted} />
+            <ChevronDown size={12} color={theme.colors.foregroundExtraMuted} />
+          </DropdownMenuTrigger>
+        </IconTooltip>
         <DropdownMenuContent align="end" testID="changes-primary-cta-menu">
           {menuOnlyActions.map((action, index) => (
             <GitActionMenuItem
@@ -184,41 +195,53 @@ export function GitActionsSplitButton({
     <View style={styles.row}>
       {gitActions.primary ? (
         <View style={styles.splitButton}>
-          <Pressable
-            testID="changes-primary-cta"
-            style={primaryPressableStyle}
-            onPress={handlePrimaryPress}
-            disabled={gitActions.primary.disabled}
-            accessibilityRole="button"
-            accessibilityLabel={gitActions.primary.label}
+          <IconTooltip
+            // Icon-only in the header, where the action's name is otherwise hidden.
+            label={hideLabels ? gitActions.primary.label : null}
+            wrap={false}
           >
-            {gitActions.primary.status === "pending" ? (
-              <LoadingSpinner
-                size="small"
-                color={theme.colors.foreground}
-                style={styles.splitButtonSpinnerOnly}
-              />
-            ) : (
-              <View style={styles.splitButtonContent}>
-                {gitActions.primary.icon}
-                {!hideLabels && (
-                  <Text style={styles.splitButtonText}>
-                    {getActionDisplayLabel(gitActions.primary)}
-                  </Text>
-                )}
-              </View>
-            )}
-          </Pressable>
+            <Pressable
+              testID="changes-primary-cta"
+              style={primaryPressableStyle}
+              onPress={handlePrimaryPress}
+              disabled={gitActions.primary.disabled}
+              accessibilityRole="button"
+              accessibilityLabel={gitActions.primary.label}
+            >
+              {gitActions.primary.status === "pending" ? (
+                <LoadingSpinner
+                  size="small"
+                  color={theme.colors.foreground}
+                  style={styles.splitButtonSpinnerOnly}
+                />
+              ) : (
+                <View style={styles.splitButtonContent}>
+                  {gitActions.primary.icon}
+                  {!hideLabels && (
+                    <Text style={styles.splitButtonText}>
+                      {getActionDisplayLabel(gitActions.primary)}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </Pressable>
+          </IconTooltip>
           {gitActions.secondary.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                testID="changes-primary-cta-caret"
-                style={caretTriggerStyle}
-                accessibilityRole="button"
-                accessibilityLabel={t("workspace.git.actions.moreOptions")}
+            <DropdownMenu open={caretMenuOpen} onOpenChange={setCaretMenuOpen}>
+              <IconTooltip
+                label={t("workspace.git.actions.moreOptions")}
+                disabled={caretMenuOpen}
+                wrap={false}
               >
-                <ChevronDown size={16} color={theme.colors.foregroundExtraMuted} />
-              </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  testID="changes-primary-cta-caret"
+                  style={caretTriggerStyle}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("workspace.git.actions.moreOptions")}
+                >
+                  <ChevronDown size={16} color={theme.colors.foregroundExtraMuted} />
+                </DropdownMenuTrigger>
+              </IconTooltip>
               <DropdownMenuContent align="end" testID="changes-primary-cta-menu">
                 {gitActions.secondary.map((action, index) => (
                   <GitActionMenuItem
@@ -242,16 +265,22 @@ export function GitActionsSplitButton({
         </View>
       ) : null}
       {gitActions.menu.length > 0 ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            testID="changes-overflow-menu"
-            hitSlop={8}
-            style={overflowMenuButtonStyle}
-            accessibilityRole="button"
-            accessibilityLabel={t("workspace.git.actions.moreActions")}
+        <DropdownMenu open={overflowMenuOpen} onOpenChange={setOverflowMenuOpen}>
+          <IconTooltip
+            label={t("workspace.git.actions.moreActions")}
+            disabled={overflowMenuOpen}
+            wrap={false}
           >
-            <MoreVertical size={16} color={theme.colors.foregroundMuted} />
-          </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              testID="changes-overflow-menu"
+              hitSlop={8}
+              style={overflowMenuButtonStyle}
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.git.actions.moreActions")}
+            >
+              <MoreVertical size={16} color={theme.colors.foregroundMuted} />
+            </DropdownMenuTrigger>
+          </IconTooltip>
           <DropdownMenuContent align="end" width={220} testID="changes-overflow-content">
             {gitActions.menu.map((action) => (
               <GitActionMenuItem

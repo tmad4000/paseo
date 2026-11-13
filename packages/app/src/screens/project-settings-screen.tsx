@@ -14,6 +14,7 @@ import type {
 } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -917,6 +918,7 @@ function ScriptRow({ script, isFirst, onEdit, onRemove }: ScriptRowProps) {
   const handleEdit = useCallback(() => onEdit(script), [onEdit, script]);
   const handleRemove = useCallback(() => onRemove(script), [onRemove, script]);
   const rowStyle = isFirst ? styles.scriptRow : styles.scriptRowWithBorder;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={rowStyle} testID={`script-row-${script.id}`}>
@@ -928,14 +930,16 @@ function ScriptRow({ script, isFirst, onEdit, onRemove }: ScriptRowProps) {
           {scriptHint(script, t)}
         </Text>
       </Pressable>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          accessibilityLabel={t("settings.project.scripts.menuAccessibility")}
-          testID={`script-row-menu-${script.id}`}
-          style={styles.scriptKebab}
-        >
-          <MoreVertical size={ICON_SIZE} color={styles.chevronColor.color} />
-        </DropdownMenuTrigger>
+      <DropdownMenu onOpenChange={setMenuOpen}>
+        <IconTooltip label={t("settings.project.scripts.menuAccessibility")} disabled={menuOpen}>
+          <DropdownMenuTrigger
+            accessibilityLabel={t("settings.project.scripts.menuAccessibility")}
+            testID={`script-row-menu-${script.id}`}
+            style={styles.scriptKebab}
+          >
+            <MoreVertical size={ICON_SIZE} color={styles.chevronColor.color} />
+          </DropdownMenuTrigger>
+        </IconTooltip>
         <DropdownMenuContent align="end" minWidth={160}>
           <DropdownMenuItem testID={`script-action-${script.id}-edit`} onSelect={handleEdit}>
             {t("settings.project.scripts.actions.edit")}

@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { X } from "lucide-react-native";
 import { isNative } from "@/constants/platform";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
@@ -58,18 +59,21 @@ export function AttachmentPill({
       >
         {children}
       </Pressable>
-      <Pressable
-        onPress={onRemove}
-        disabled={disabled}
-        onHoverIn={handleCloseHoverIn}
-        onHoverOut={handleCloseHoverOut}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={removeAccessibilityLabel}
-        style={closeButtonStyle}
-      >
-        <ThemedX size={12} uniProps={iconForegroundMutedMapping} />
-      </Pressable>
+      {/* Absolutely positioned, so the Pressable itself is the hover target. */}
+      <IconTooltip label={removeAccessibilityLabel} wrap={false}>
+        <Pressable
+          onPress={onRemove}
+          disabled={disabled}
+          onHoverIn={handleCloseHoverIn}
+          onHoverOut={handleCloseHoverOut}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={removeAccessibilityLabel}
+          style={closeButtonStyle}
+        >
+          <ThemedX size={12} uniProps={iconForegroundMutedMapping} />
+        </Pressable>
+      </IconTooltip>
     </View>
   );
 }
