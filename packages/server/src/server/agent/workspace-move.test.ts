@@ -1,5 +1,13 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setImmediate as flushTasks } from "node:timers/promises";
+import { archiveByScope, type ArchiveDependencies } from "../workspace-archive-service.js";
+import { createNoopWorkspaceGitService } from "../test-utils/workspace-git-service-stub.js";
+
 import { assertWorkspaceAutomationAllowedForWorkspace } from "../workspace-automation-gate.js";
+import type { StoredAgentRecord } from "./agent-storage.js";
 import type { MoveAgentWorkspaceDependencies } from "./workspace-move.js";
 import { moveAgentWorkspace, ASIDES_WORKSPACE_LABEL } from "./workspace-move.js";
 import {
@@ -7,6 +15,19 @@ import {
   type PersistedWorkspaceRecord,
   type WorkspaceRegistry,
 } from "../workspace-registry.js";
+
+const cleanupPaths: string[] = [];
+afterEach(() => {
+  for (const path of cleanupPaths.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 
 function workspace(id: string): PersistedWorkspaceRecord {
   return createPersistedWorkspaceRecord({
@@ -56,14 +77,18 @@ function harness() {
     id: "chat",
   };
   let creates = 0;
+  const metadata = {
+    getAgent: () => null,
+    updateAgentMetadata: async (_id: string, patch: { workspaceId?: string }) => {
+      if (patch.workspaceId) agent.workspaceId = patch.workspaceId;
+    },
+  };
   const deps: MoveAgentWorkspaceDependencies = {
     workspaceRegistry: registry,
     agentStorage: { get: async () => null },
     agentManager: {
-      getAgent: () => null,
-      updateAgentMetadata: async (_id, patch) => {
-        if (patch.workspaceId) agent.workspaceId = patch.workspaceId;
-      },
+      ...metadata,
+      moveAgentToWorkspace: (id, patch) => metadata.updateAgentMetadata(id, patch),
     },
     projectRegistry: {
       list: async () => [],
@@ -96,7 +121,7 @@ function harness() {
     },
   };
   // Use the stored-agent boundary without constructing a provider runtime.
-  const record = {
+  const record: StoredAgentRecord = {
     ...agent,
     provider: "codex",
     archivedAt: null,
@@ -106,7 +131,58 @@ function harness() {
     updatedAt: "2026-11-13T00:00:00Z",
   };
   deps.agentStorage.get = async () => ({ ...record, workspaceId: agent.workspaceId });
-  return { deps, agent, workspaces, creates: () => creates };
+  return { deps, agent, record, workspaces, creates: () => creates };
+}
+
+function archiveHarness(h: ReturnType<typeof harness>) {
+  const events: string[] = [];
+  for (const [id, value] of h.workspaces) {
+    h.workspaces.set(id, {
+      ...value,
+      kind: "directory",
+      isPaseoOwnedWorktree: false,
+      mainRepoRoot: null,
+    });
+  }
+  const manager = {
+    ...h.deps.agentManager,
+    listAgents: () => [],
+    archiveAgent: async () => ({ archivedAt: "2026-11-13T00:00:00Z" }),
+    archiveSnapshot: async () => {
+      h.record.archivedAt = "2026-11-13T00:00:00Z";
+      events.push("archive-chat");
+      return { ...h.record, workspaceId: h.agent.workspaceId };
+    },
+  };
+  const move = manager.moveAgentToWorkspace;
+  manager.moveAgentToWorkspace = async (...args) => {
+    if (h.record.archivedAt) throw new Error("Chat is unavailable or archived");
+    await move(...args);
+    events.push("move-chat");
+  };
+  h.deps.agentManager = manager;
+  const deps: ArchiveDependencies = {
+    agentManager: manager,
+    agentStorage: {
+      listByWorkspace: async (id) =>
+        h.agent.workspaceId === id ? [{ ...h.record, workspaceId: id }] : [],
+    },
+    github: { invalidate: () => {} } as ArchiveDependencies["github"],
+    workspaceGitService: createNoopWorkspaceGitService(),
+    findWorkspaceIdForCwd: async () => null,
+    getWorkspace: (id) => h.deps.workspaceRegistry.get(id),
+    listActiveWorkspaces: async () =>
+      [...h.workspaces.values()].filter((record) => !record.archivedAt),
+    archiveWorkspaceRecord: async (id) => {
+      await h.deps.workspaceRegistry.archive(id, "2026-11-13T00:00:00Z");
+      events.push(`archive-${id}`);
+    },
+    emitWorkspaceUpdatesForWorkspaceIds: async () => {},
+    markWorkspaceArchiving: () => {},
+    clearWorkspaceArchiving: () => {},
+    killTerminalsForWorkspace: async () => {},
+  };
+  return { deps, events };
 }
 
 describe("move chat workspace", () => {
@@ -221,6 +297,115 @@ describe("move chat workspace", () => {
       assertWorkspaceAutomationAllowedForWorkspace(h.deps.workspaceRegistry, moved.workspaceId),
     ).resolves.toBeUndefined();
   });
+  test("retains the automation block before publishing Asides through a Default directory alias", async () => {
+    const h = harness();
+    const root = mkdtempSync(join(tmpdir(), "move-alias-"));
+    cleanupPaths.push(root);
+    const cwd = join(root, "checkout");
+    const alias = join(root, "alias");
+    mkdirSync(cwd);
+    symlinkSync(cwd, alias, process.platform === "win32" ? "junction" : "dir");
+    const untrustedSource = {
+      kind: "change_request" as const,
+      forge: "github",
+      number: 42,
+      headRepository: "contributor/repo",
+    };
+    h.workspaces.set("source", { ...workspace("source"), cwd, untrustedSource });
+    const project = await h.deps.projectRegistry.get("project");
+    if (!project) throw new Error("Missing project fixture");
+    h.deps.projectRegistry.list = async () => [
+      { ...project, rootPath: alias, defaultAt: "2026-11-13T00:00:00Z" },
+    ];
+    const create = h.deps.workspaceProvisioning.createWorkspaceForDirectory;
+    h.deps.workspaceProvisioning.createWorkspaceForDirectory = async (...args) => {
+      const created = await create(...args);
+      await expect(
+        assertWorkspaceAutomationAllowedForWorkspace(h.deps.workspaceRegistry, created.workspaceId),
+      ).rejects.toThrow("Scripts are blocked");
+      return created;
+    };
+    const moved = await moveAgentWorkspace(h.deps, {
+      agentId: "chat",
+      expectedWorkspaceId: "source",
+      destination: { kind: "asides" },
+    });
+    expect(moved).toMatchObject({ cwd: alias, untrustedSource });
+  });
+
+  test.each(["source", "destination"])(
+    "serializes %s archive behind a paused move",
+    async (target) => {
+      const h = harness();
+      h.workspaces.set("destination", workspace("destination"));
+      const archive = archiveHarness(h);
+      const entered = deferred();
+      const release = deferred();
+      const getProject = h.deps.projectRegistry.get;
+      h.deps.projectRegistry.get = async (id) => {
+        entered.resolve();
+        await release.promise;
+        return getProject(id);
+      };
+      const moving = moveAgentWorkspace(h.deps, {
+        agentId: "chat",
+        expectedWorkspaceId: "source",
+        destination: { kind: "existing", workspaceId: "destination" },
+      });
+      await entered.promise;
+      const archiving = archiveByScope(archive.deps, {
+        scope: { kind: "workspace", workspaceId: target },
+        requestId: "race",
+      });
+      await flushTasks();
+      release.resolve();
+      const [moved, archived] = await Promise.all([moving, archiving]);
+      expect(moved.workspaceId).toBe("destination");
+      expect(h.agent).toMatchObject({
+        id: "chat",
+        cwd: "/repo/worktree",
+        history: ["keep this"],
+        workspaceId: "destination",
+      });
+      expect(archived.archivedWorkspaceIds).toEqual([target]);
+      expect(archived.archivedAgentIds).toEqual(target === "source" ? [] : ["chat"]);
+      expect(h.record.archivedAt).toBe(target === "source" ? null : "2026-11-13T00:00:00Z");
+      expect(archive.events[0]).toBe("move-chat");
+    },
+  );
+
+  test.each(["source", "destination"])(
+    "rejects a move queued behind %s archive",
+    async (target) => {
+      const h = harness();
+      h.workspaces.set("destination", workspace("destination"));
+      const archive = archiveHarness(h);
+      const entered = deferred();
+      const release = deferred();
+      archive.deps.stopWorkspaceSetup = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const archiving = archiveByScope(archive.deps, {
+        scope: { kind: "workspace", workspaceId: target },
+        requestId: "race",
+      });
+      await entered.promise;
+      const moving = moveAgentWorkspace(h.deps, {
+        agentId: "chat",
+        expectedWorkspaceId: "source",
+        destination: { kind: "existing", workspaceId: "destination" },
+      });
+      const rejected = expect(moving).rejects.toThrow(
+        target === "source" ? "archived" : "Destination workspace is archived",
+      );
+      release.resolve();
+      await Promise.all([archiving, rejected]);
+      expect(h.agent.workspaceId).toBe("source");
+      expect(archive.events).not.toContain("move-chat");
+    },
+  );
+
   test("rejects an archived target and a stale source without moving the chat", async () => {
     const h = harness();
     h.workspaces.set("archived", { ...workspace("archived"), archivedAt: "2026-11-13T00:00:00Z" });

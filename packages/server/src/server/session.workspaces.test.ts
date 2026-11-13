@@ -1752,8 +1752,8 @@ test.each([true, false])(
       agentManager: {
         getAgent: () => (isLive ? live : null),
         listAgents: () => (isLive ? [live] : []),
-        updateAgentMetadata: async (_id: string, patch: { workspaceId: string }) => {
-          stored = { ...stored, ...patch };
+        moveAgentToWorkspace: async (_id: string, patch: { workspaceId: string }) => {
+          stored = { ...stored, workspaceId: patch.workspaceId };
           live.workspaceId = patch.workspaceId;
         },
       },

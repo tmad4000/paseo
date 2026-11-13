@@ -4906,6 +4906,130 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   expect(Date.parse(after!.updatedAt)).toBeGreaterThan(Date.parse(before!.updatedAt));
 });
 
+test.each([true, false])(
+  "workspace placement rechecks archive state in the lifecycle lane (live=%s)",
+  async (isLive) => {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-archive-race-"));
+    const storage = new AgentStorage(join(workdir, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: storage,
+      logger,
+    });
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "source",
+    });
+    if (!isLive) await manager.closeAgent(agent.id);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const blocking = manager.runLifecycleMutation(agent.id, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const archiving = manager.archiveSnapshot(agent.id, "2026-11-13T00:00:00.000Z");
+    const moving = manager.moveAgentToWorkspace(agent.id, {
+      expectedWorkspaceId: "source",
+      workspaceId: "destination",
+    });
+    const rejected = expect(moving).rejects.toThrow("Chat is unavailable or archived");
+    release.resolve();
+    try {
+      await Promise.all([blocking, archiving, rejected]);
+      expect(await storage.get(agent.id)).toMatchObject({
+        workspaceId: "source",
+        archivedAt: expect.any(String),
+      });
+      expect(manager.getAgent(agent.id)).toBeNull();
+    } finally {
+      release.resolve();
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("workspace placement rechecks ownership after queued metadata changes", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-stale-race-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: "source",
+  });
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const blocking = manager.runLifecycleMutation(agent.id, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const first = manager.updateAgentMetadata(agent.id, { workspaceId: "other" });
+  const moving = manager.moveAgentToWorkspace(agent.id, {
+    expectedWorkspaceId: "source",
+    workspaceId: "destination",
+  });
+  const rejected = expect(moving).rejects.toThrow("Chat has already moved");
+  release.resolve();
+  try {
+    await Promise.all([blocking, first, rejected]);
+    expect(await storage.get(agent.id)).toMatchObject({ workspaceId: "other", cwd: workdir });
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test.each([true, false])(
+  "workspace placement preserves the conversation state (live=%s)",
+  async (isLive) => {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-state-"));
+    const storage = new AgentStorage(join(workdir, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: storage,
+      logger,
+    });
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "source",
+    });
+    await manager.updateAgentMetadata(agent.id, { labels: { [PARENT_AGENT_ID_LABEL]: "parent" } });
+    if (!isLive) await manager.closeAgent(agent.id);
+    const before = await storage.get(agent.id);
+    const live = manager.getAgent(agent.id);
+    const permission = {
+      id: "approval",
+      provider: "codex" as const,
+      kind: "tool" as const,
+      name: "shell",
+    };
+    live?.pendingPermissions.set(permission.id, permission);
+    try {
+      await manager.moveAgentToWorkspace(agent.id, {
+        expectedWorkspaceId: "source",
+        workspaceId: "destination",
+      });
+      const after = await storage.get(agent.id);
+      expect(after).toMatchObject({
+        id: agent.id,
+        cwd: workdir,
+        workspaceId: "destination",
+        labels: before!.labels,
+        persistence: before!.persistence,
+      });
+      expect(after?.archivedAt).toBeFalsy();
+      const current = manager.getAgent(agent.id);
+      expect(current?.session ?? null).toBe(live?.session ?? null);
+      if (isLive) expect(current?.pendingPermissions.get(permission.id)).toEqual(permission);
+    } finally {
+      if (manager.getAgent(agent.id)) await manager.closeAgent(agent.id);
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
 test("persists live mode, model, and thinking changes without an external snapshot subscriber", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-live-persist-"));
   const storagePath = join(workdir, "agents");

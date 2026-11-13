@@ -15,9 +15,10 @@ covers the known workflows below, not an exhaustive audit of every historical fo
 `move-chat-workspace`: [Move to workspace](move-chat-workspace.md) preserves chat identity and
 execution directory across Asides, new and existing destinations. Acceptance includes keeping
 pending approvals, modes and runtime capabilities visible after a live move, retaining automation
-blocks before publishing a workspace backed by an untrusted directory, and preventing source
+blocks before publishing a workspace backed by an untrusted directory or its aliases, rejecting
+stale placement during archive races, and preventing source
 archive from removing a moved chat's directory. Source prepared, not installed; regressions:
-`agent/workspace-move.test.ts`, `session.workspaces.test.ts`,
+`agent/workspace-move.test.ts`, `agent/agent-manager.test.ts`, `session.workspaces.test.ts`,
 `session/workspace-provisioning/workspace-provisioning-service.test.ts`,
 `workspace-archive-service.test.ts` and browser `move-chat-workspace.spec.ts`.
 

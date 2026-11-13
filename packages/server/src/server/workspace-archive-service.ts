@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { runWorkspaceMutation } from "./workspace-mutations.js";
 
 import type { Logger } from "pino";
 
@@ -124,7 +125,9 @@ export async function archiveByScope(
   dependencies: ArchiveDependencies,
   request: ArchiveByScopeRequest,
 ): Promise<ArchiveResult> {
-  return runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request));
+  return runWorkspaceMutation(dependencies.agentManager, () =>
+    runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request)),
+  );
 }
 
 async function archiveByScopeWithPriority(

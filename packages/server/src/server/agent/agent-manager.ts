@@ -2527,6 +2527,20 @@ export class AgentManager {
     if (!updated.internal) this.dispatchStoredAgentState(updated);
   }
 
+  async moveAgentToWorkspace(
+    agentId: string,
+    input: { workspaceId: string; expectedWorkspaceId: string },
+  ): Promise<void> {
+    return this.runLifecycleMutation(agentId, async () => {
+      const stored = await this.requireRegistry().get(agentId);
+      const agent = this.getAgent(agentId) ?? stored;
+      if (!agent || stored?.archivedAt) throw new Error("Chat is unavailable or archived");
+      if (agent.workspaceId !== input.expectedWorkspaceId)
+        throw new Error("Chat has already moved. Reopen its tab and try again.");
+      await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
+    });
+  }
+
   private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) {

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { areEquivalentPaths } from "../../utils/path.js";
+import { createRealpathAwarePathMatcher } from "../../utils/path.js";
 import type { AgentWorkspaceMoveRequestSchema } from "@getpaseo/protocol/messages";
 import type { AgentManager } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
@@ -10,11 +10,12 @@ import type {
 } from "../workspace-registry.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 
+import { runWorkspaceMutation } from "../workspace-mutations.js";
+
 export const ASIDES_WORKSPACE_LABEL = "paseo:asides";
-const moveTails = new WeakMap<WorkspaceRegistry, Promise<unknown>>();
 
 export interface MoveAgentWorkspaceDependencies {
-  agentManager: Pick<AgentManager, "getAgent" | "updateAgentMetadata">;
+  agentManager: Pick<AgentManager, "getAgent" | "moveAgentToWorkspace">;
   agentStorage: Pick<AgentStorage, "get">;
   workspaceRegistry: WorkspaceRegistry;
   projectRegistry: Pick<ProjectRegistry, "list" | "get">;
@@ -26,23 +27,11 @@ export type MoveAgentWorkspaceInput = Omit<
   "type" | "requestId"
 >;
 
-// One host-wide lane prevents two connected clients from creating two catch-alls.
 export function moveAgentWorkspace(
   deps: MoveAgentWorkspaceDependencies,
   input: MoveAgentWorkspaceInput,
 ): Promise<PersistedWorkspaceRecord> {
-  const previous = moveTails.get(deps.workspaceRegistry) ?? Promise.resolve();
-  const result = previous.catch(() => undefined).then(() => move(deps, input));
-  const tail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  moveTails.set(deps.workspaceRegistry, tail);
-  void tail.then(() => {
-    if (moveTails.get(deps.workspaceRegistry) === tail) moveTails.delete(deps.workspaceRegistry);
-    return undefined;
-  });
-  return result;
+  return runWorkspaceMutation(deps.agentManager, () => move(deps, input));
 }
 
 async function move(
@@ -67,8 +56,9 @@ async function move(
   if (!workspace) workspace = await createDestination(deps, input, source);
   const project = await deps.projectRegistry.get(workspace.projectId);
   if (!project || project.archivedAt) throw new Error("Destination project is unavailable");
-  await deps.agentManager.updateAgentMetadata(input.agentId, {
+  await deps.agentManager.moveAgentToWorkspace(input.agentId, {
     workspaceId: workspace.workspaceId,
+    expectedWorkspaceId: input.expectedWorkspaceId,
   });
   await deps.workspaceRegistry.update(source.workspaceId, (record) => ({
     ...record,
@@ -109,7 +99,9 @@ async function createDestination(
     projectId,
     {
       workspaceId,
-      untrustedSource: areEquivalentPaths(cwd, source.cwd) ? source.untrustedSource : undefined,
+      untrustedSource: createRealpathAwarePathMatcher(source.cwd)(cwd)
+        ? source.untrustedSource
+        : undefined,
     },
   );
   workspace = { ...created, labels };
