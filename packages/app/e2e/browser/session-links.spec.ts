@@ -96,10 +96,12 @@ for (const width of [1100, 390])
             await link.click({ button: "middle" });
           }
           await expect(
-            page.getByText(
-              "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
-              { exact: true },
-            ).last(),
+            page
+              .getByText(
+                "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+                { exact: true },
+              )
+              .last(),
           ).toBeVisible();
           await expect(link).toBeVisible();
           await expect(page).toHaveTitle(/Session link source/);
