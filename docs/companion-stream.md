@@ -109,9 +109,15 @@ Rows are **New answer**, then **Possible answer**, then **Waiting for answer**, 
 it jumps to `ask.sourceMessageId` when that message is loaded. **Answer** jumps to a
 candidate's anchor; **Open answering chat** opens the chat that wrote an explicit answer. Tap
 an answer to expand it. Mark seen and Stop tracking wait for the host; the row leaves only when
-the updated snapshot arrives, and a failed save stays visible. The header collapses the list
-(compact starts collapsed). **×** hides the pane until an answer, or a new revision, arrives
-that was not showing when you hid it. Seen and stopped entries stay in Stream.
+the updated snapshot arrives, and a failed save stays visible. The header minimizes the list to
+a pill; tapping the pill opens it again. Compact starts minimized. Each tab or split remembers its own choice across view switches and launches, scoped
+to the host, layout workspace, tab and chat. The old global preference seeds panes without an
+explicit choice. New answers and blocks light up a minimized pill without opening it.
+
+Each ask/question shows its request age, and each answer shows its own `answeredAt` age, using
+the shared live compact clock (`12m`, `2h`). Hover reveals the full local timestamp, which is
+also the label read by assistive technology.
+Missing or invalid historical timestamps are omitted. Seen and stopped entries stay in Stream.
 
 Agents list your questions with `list_stream_asks questions=true` (entry IDs, replies and
 seen revisions). Orchestrating agents should record each question you ask as an ask with
@@ -139,9 +145,8 @@ progress, then open; newest first within each. Tapping a row jumps to `ask.sourc
 when that message is loaded in Chat; otherwise (no id, a prose source, or history not loaded)
 it opens the ask's card: this chat's Stream, on Tasks, searched to the ask's headline.
 
-Collapse and **×** work as above; once hidden, the pane returns for a new or revised answer or
-for an ask that becomes blocked, or a delegated child that newly needs you, not for progress on
-other asks.
+Minimize and reopen work as above. A new or revised answer, blocked ask, or delegated child
+that newly needs you lights up the minimized pill; progress on other asks does not reopen it.
 
 #### Delegated asks
 

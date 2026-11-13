@@ -3,6 +3,8 @@ import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useOptionalPaneContext } from "@/panels/pane-context";
+import { answersPaneKey } from "./answers-pane-store";
 import type { ToastApi } from "@/components/toast-host";
 import { useHostFeature } from "@/runtime/host-features";
 import { useAgentViewStore } from "@/stores/agent-view-store";
@@ -176,6 +178,13 @@ export function ChatTrackedAnswers({
   readOnly: boolean;
   jump: TimelineJump;
 }) {
+  const pane = useOptionalPaneContext();
+  const paneKey = answersPaneKey(
+    serverId,
+    pane?.layoutWorkspaceId ?? pane?.workspaceId ?? null,
+    pane?.tabId ?? null,
+    agentId,
+  );
   const supported = useSupportsTrackedAnswers(serverId);
   const showOpenAsks = useSupportsOpenAsks(serverId);
   const openStreamEntry = useAgentViewStore((state) => state.openStreamEntry);
@@ -237,6 +246,8 @@ export function ChatTrackedAnswers({
   if (!supported || readOnly) return null;
   return (
     <TrackedAnswersPane
+      key={paneKey}
+      paneKey={paneKey}
       entries={entries}
       agentId={agentId}
       actions={actions}

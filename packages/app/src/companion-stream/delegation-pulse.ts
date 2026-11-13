@@ -163,6 +163,7 @@ export function delegationTargetKey(target: DelegationTarget): string {
 
 /** An open ask, in another chat on this host, that this chat was delegated to work. */
 export interface DelegatedHereAsk {
+  timestamp?: string;
   ownerAgentId: string;
   ownerTitle: string | null;
   entryId: string;
@@ -192,6 +193,7 @@ export function selectDelegatedHere(
         ownerAgentId: agent.id,
         ownerTitle: agent.title?.trim() || null,
         entryId: entry.id,
+        timestamp: entry.timestamp,
         headline: headlineOf(entry),
         state,
       });
