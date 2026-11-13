@@ -83,9 +83,60 @@ for (const width of [1100, 390])
       await link.focus();
       await page.keyboard.press("Enter");
       await expect(page).toHaveTitle(/Linked destination/, { timeout: 20_000 });
-      if (width > 500) {
+      if (width <= 500) {
         await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: source.id });
         await expect(link).toBeVisible();
+        for (const gesture of ["modifier", "middle"] as const) {
+          const sourceUrl = page.url();
+          const paneCount = await page.locator('[data-testid^="workspace-pane-"]').count();
+          if (gesture === "modifier") {
+            await link.click({ modifiers: ["Control"] });
+          } else {
+            await link.click({ button: "middle" });
+          }
+          await expect(
+            page.getByText(
+              "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+              { exact: true },
+            ).last(),
+          ).toBeVisible();
+          await expect(link).toBeVisible();
+          await expect(page).toHaveTitle(/Session link source/);
+          await expect(page).toHaveURL(sourceUrl);
+          await expect(page.locator('[data-testid^="workspace-pane-"]')).toHaveCount(paneCount);
+        }
+        await page.screenshot({
+          path: testInfo.outputPath("session-link-compact-preserved.png"),
+          fullPage: true,
+        });
+      } else {
+        await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: source.id });
+        await expect(link).toBeVisible();
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+Shift+F`);
+        const exitFocusMode = page.getByRole("button", { name: "Exit focus mode" });
+        await expect(exitFocusMode).toBeVisible();
+        const sourceUrl = page.url();
+        const paneCount = await page.locator('[data-testid^="workspace-pane-"]').count();
+        await link.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Open session beside", exact: true }).click();
+        await expect(
+          page.getByText(
+            "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await expect(link).toBeVisible();
+        await expect(page).toHaveTitle(/Session link source/);
+        await expect(page).toHaveURL(sourceUrl);
+        await expect(exitFocusMode).toBeVisible();
+        await expect(page.locator('[data-testid^="workspace-pane-"]')).toHaveCount(paneCount);
+        await page.screenshot({
+          path: testInfo.outputPath("session-link-focus-preserved.png"),
+          fullPage: true,
+        });
+        await exitFocusMode.click();
+        await expect(exitFocusMode).toHaveCount(0);
         await link.click({ modifiers: ["Control"] });
         await expect(link).toBeVisible();
         await expect(page).toHaveTitle(/Linked destination/, { timeout: 20_000 });

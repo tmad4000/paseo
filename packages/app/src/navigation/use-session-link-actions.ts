@@ -5,6 +5,7 @@ import { useOptionalPaneContext } from "@/panels/pane-context";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useToast } from "@/contexts/toast-api-context";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { canOpenSessionWindow, openSessionLink } from "./session-link-runtime";
 import { SessionLinkError, type SessionLinkDisposition } from "./session-link";
 
@@ -13,12 +14,13 @@ export function useSessionLinkActions() {
   const { t } = useTranslation();
   const selection = useActiveWorkspaceSelection();
   const pane = useOptionalPaneContext();
+  const isCompact = useIsCompactFormFactor();
   const origin =
     pane &&
     selection &&
     pane.serverId === selection.serverId &&
     (pane.layoutWorkspaceId ?? pane.workspaceId) === selection.workspaceId
-      ? { ...selection, tabId: pane.tabId }
+      ? { ...selection, tabId: pane.tabId, isCompact }
       : null;
   const originRef = useRef(origin);
   originRef.current = origin;

@@ -7,6 +7,8 @@ import {
   type ActiveWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { getDesktopHost } from "@/desktop/host";
+import { supportsDesktopPaneSplits } from "@/constants/layout";
+import { usePanelStore } from "@/stores/panel-store";
 import {
   normalizeWorkspaceOpaqueId,
   resolveWorkspaceMapKeyByIdentity,
@@ -19,6 +21,7 @@ import {
 
 export interface SessionLinkOrigin extends ActiveWorkspaceSelection {
   tabId: string;
+  isCompact: boolean;
 }
 
 function isOriginInWorkspace(
@@ -73,6 +76,9 @@ export async function openSessionLink(
         if (
           !isOriginInWorkspace(origin, serverId, workspaceId) ||
           !isOriginInWorkspace(active, serverId, workspaceId) ||
+          active.isCompact ||
+          !supportsDesktopPaneSplits() ||
+          usePanelStore.getState().desktop.focusModeEnabled ||
           active.tabId !== origin.tabId ||
           !sourcePane ||
           sourcePane.hidden === true ||

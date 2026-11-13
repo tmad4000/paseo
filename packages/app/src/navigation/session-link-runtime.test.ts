@@ -12,10 +12,21 @@ const fixture = vi.hoisted(() => ({
   detail: null as { id: string; workspaceId: string | null } | null,
   hydrated: true,
   workspaceKnown: true,
+  compact: false,
+  paneSplits: true,
+  focusMode: false,
   fetchAgent: vi.fn(),
   navigate: vi.fn(),
   side: vi.fn(() => "right"),
   window: vi.fn(),
+}));
+vi.mock("@/constants/layout", () => ({
+  supportsDesktopPaneSplits: () => fixture.paneSplits,
+}));
+vi.mock("@/stores/panel-store", () => ({
+  usePanelStore: {
+    getState: () => ({ desktop: { focusModeEnabled: fixture.focusMode } }),
+  },
 }));
 vi.mock("@/runtime/host-runtime", () => ({
   getHostRuntimeStore: () => ({
@@ -74,7 +85,12 @@ vi.mock("@/desktop/host", () => ({
   }),
 }));
 const href = "paseo-fork://h/saved/agent/session";
-const active = () => ({ serverId: "saved", workspaceId: "workspace", tabId: "source" });
+const active = () => ({
+  serverId: "saved",
+  workspaceId: "workspace",
+  tabId: "source",
+  isCompact: fixture.compact,
+});
 beforeEach(() => {
   fixture.supportsAgentWindow = true;
   fixture.sourcePane = "main";
@@ -86,6 +102,9 @@ beforeEach(() => {
   fixture.detail = null;
   fixture.hydrated = true;
   fixture.workspaceKnown = true;
+  fixture.compact = false;
+  fixture.paneSplits = true;
+  fixture.focusMode = false;
   fixture.fetchAgent
     .mockReset()
     .mockResolvedValue({ agent: { id: "session", workspaceId: "workspace" } });
@@ -122,6 +141,7 @@ it("rejects side opens across workspaces without changing the layout or route", 
       serverId: "saved",
       workspaceId: "other",
       tabId: "source",
+      isCompact: false,
     })),
   ).rejects.toEqual(new SessionLinkError("sideUnavailable"));
   expect(fixture.side).not.toHaveBeenCalled();
@@ -219,3 +239,58 @@ it("does not navigate beside a source that is no longer visible", async () => {
   expect(fixture.side).not.toHaveBeenCalled();
   expect(fixture.navigate).not.toHaveBeenCalled();
 });
+
+it.each(["compact", "focusMode", "paneSplits"] as const)(
+  "preserves the source when simultaneous panes are unavailable through %s",
+  async (capability) => {
+    fixture[capability] = capability !== "paneSplits";
+    await expect(openSessionLink(href, "side", active)).rejects.toEqual(
+      new SessionLinkError("sideUnavailable"),
+    );
+    expect(fixture.side).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    await openSessionLink(href, "current", active);
+    expect(fixture.navigate).toHaveBeenCalledWith(
+      expect.objectContaining({ placement: { mode: "focused" } }),
+    );
+    await openSessionLink(href, "window", active);
+    expect(fixture.window).toHaveBeenCalledExactlyOnceWith({
+      agent: { serverId: "saved", agentId: "session" },
+    });
+  },
+);
+
+it("rechecks the source tab after awaiting the linked agent", async () => {
+  let resolveAgent!: (value: { agent: { id: string; workspaceId: string } }) => void;
+  fixture.fetchAgent.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveAgent = resolve;
+    }),
+  );
+  let tabId = "source";
+  const opening = openSessionLink(href, "side", () => ({ ...active(), tabId }));
+  tabId = "other";
+  resolveAgent({ agent: { id: "session", workspaceId: "workspace" } });
+  await expect(opening).rejects.toEqual(new SessionLinkError("sideUnavailable"));
+  expect(fixture.side).not.toHaveBeenCalled();
+  expect(fixture.navigate).not.toHaveBeenCalled();
+});
+
+it.each(["compact", "focusMode", "paneSplits"] as const)(
+  "rechecks %s after awaiting the linked agent",
+  async (capability) => {
+    let resolveAgent!: (value: { agent: { id: string; workspaceId: string } }) => void;
+    fixture.fetchAgent.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveAgent = resolve;
+      }),
+    );
+    const opening = openSessionLink(href, "side", active);
+    expect(fixture.fetchAgent).toHaveBeenCalledExactlyOnceWith({ agentId: "session" });
+    fixture[capability] = capability !== "paneSplits";
+    resolveAgent({ agent: { id: "session", workspaceId: "workspace" } });
+    await expect(opening).rejects.toEqual(new SessionLinkError("sideUnavailable"));
+    expect(fixture.side).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+  },
+);

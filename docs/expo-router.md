@@ -304,7 +304,9 @@ or Enter opens the session; Cmd/Ctrl/middle click uses the desktop new-window br
 only when it explicitly advertises agent-target support. Other desktop bridges
 remain unavailable for targeted windows even if their navigation handshake exists.
 Browser clients use the ordinary side pane when the target is in the active, hydrated
-workspace. The originating tab identifies its pane independently of global focus;
+workspace and the layout supports simultaneous panes. Compact layouts and desktop
+Focus mode reject side requests without changing the layout. These checks run again
+after resolving the target. The originating tab identifies its pane independently of global focus;
 opening beside never replaces that chat, including when it is already in the side
 pane. Unsupported side requests explain that the user can open the session
 normally or in a supported new window. Shift-click explicitly requests a
