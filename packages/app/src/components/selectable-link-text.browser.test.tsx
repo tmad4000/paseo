@@ -10,6 +10,13 @@ import { QuestionFormCard } from "./question-form-card";
 import { PlanCard } from "./plan-card";
 import { i18n as testI18n } from "@/i18n/i18next";
 
+// Plans share the session-aware Markdown renderer, but this fixture has no Expo route tree.
+vi.mock("expo-router", () => ({
+  router: {},
+  useLocalSearchParams: () => ({}),
+  usePathname: () => "/fixture",
+}));
+
 void testI18n;
 let root: Root;
 let container: HTMLDivElement;
