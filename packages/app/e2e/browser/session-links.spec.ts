@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect } from "../support/fixtures";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { openAgentRoute } from "../support/helpers/mock-agent";
@@ -153,6 +154,81 @@ for (const width of [1100, 390])
       await workspace.cleanup();
     }
   });
+
+test("opening a rendered self-link beside preserves its source pane", async ({ page }, info) => {
+  info.setTimeout(180_000);
+  await page.setViewportSize({ width: 1100, height: 844 });
+  const workspace = await seedWorkspace({ repoPrefix: "session-links-self-b2k-" });
+  try {
+    // The creation API accepts a caller-selected ID, so the mock assistant can emit
+    // its own real session URL without mutating the rendered link or its handlers.
+    const agentId = randomUUID();
+    const href = `paseo-fork://h/${getServerId()}/agent/${agentId}`;
+    const source = await workspace.client.createAgent({
+      agentId,
+      provider: "mock",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Self-link source",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+      featureValues: {
+        mockStreamingAssistantResponse: `[Open this session](${href})`,
+        mockStreamingAssistantIntervalMs: 1,
+      },
+    });
+    expect(source.id).toBe(agentId);
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId });
+    await workspace.client.sendAgentMessage(agentId, "Show the self-link.");
+    await workspace.client.waitForFinish(agentId, 30_000);
+    const link = page
+      .getByTestId("assistant-message")
+      .getByRole("link", { name: "Open this session", exact: true });
+    await expect(link).toBeVisible({ timeout: 45_000 });
+    await expect(link).toHaveAttribute("href", href);
+    await expect(page).toHaveTitle(/Self-link source/);
+    const sourceUrl = page.url();
+    const panes = page.locator('[data-testid^="workspace-pane-"]');
+    const paneCount = await panes.count();
+    const sourcePane = panes.filter({ visible: true }).filter({ has: link });
+    const sourcePaneId = await sourcePane.getAttribute("data-testid");
+    if (sourcePaneId === null) throw new Error("Self-link source pane has no test ID");
+    const sideUnavailable = page.getByText(
+      "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+      { exact: true },
+    );
+    for (const gesture of ["modifier", "middle", "context menu"] as const) {
+      // Wait for the previous toast to expire so each gesture must report its own failure.
+      await expect(sideUnavailable).toHaveCount(0);
+      if (gesture === "context menu") {
+        await link.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Open session beside", exact: true }).click();
+      } else if (gesture === "middle") {
+        await link.click({ button: "middle" });
+      } else {
+        await link.click({ modifiers: ["Control"] });
+      }
+      await expect(sideUnavailable).toBeVisible();
+      await expect(link).toBeVisible();
+      await expect(sourcePane).toHaveAttribute("data-testid", sourcePaneId);
+      await expect(page).toHaveTitle(/Self-link source/);
+      await expect(page).toHaveURL(sourceUrl);
+      await expect(panes).toHaveCount(paneCount);
+      await page.screenshot({
+        path: info.outputPath(`preserved-self-source-${gesture.replace(" ", "-")}.png`),
+        fullPage: true,
+      });
+    }
+    await link.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open session", exact: true }).click();
+    await expect(link).toBeVisible();
+    await expect(page).toHaveTitle(/Self-link source/);
+    await expect(page).toHaveURL(sourceUrl);
+    await expect(panes).toHaveCount(paneCount);
+  } finally {
+    await workspace.cleanup();
+  }
+});
 
 for (const gesture of ["modifier", "context menu"] as const) {
   test(`opening beside from a side-pane source preserves it via ${gesture}`, async ({

@@ -32,6 +32,59 @@ function isOriginInWorkspace(
   return origin != null && origin.serverId === serverId && origin.workspaceId === workspaceId;
 }
 
+interface SessionLinkSideOpenOptions extends ActiveWorkspaceSelection {
+  agentId: string;
+  origin: SessionLinkOrigin | null | undefined;
+  active: SessionLinkOrigin | null | undefined;
+}
+
+function requireSessionLinkSideOrigin({
+  serverId,
+  workspaceId,
+  origin,
+  active,
+}: SessionLinkSideOpenOptions): SessionLinkOrigin {
+  if (
+    !isOriginInWorkspace(origin, serverId, workspaceId) ||
+    !isOriginInWorkspace(active, serverId, workspaceId) ||
+    active.isCompact ||
+    !supportsDesktopPaneSplits() ||
+    usePanelStore.getState().desktop.focusModeEnabled ||
+    active.tabId !== origin.tabId
+  )
+    throw new SessionLinkError("sideUnavailable");
+  return origin;
+}
+
+function ensureSessionLinkSidePane(options: SessionLinkSideOpenOptions): string {
+  const origin = requireSessionLinkSideOrigin(options);
+  const { serverId, agentId, workspaceId } = options;
+  const store = useWorkspaceLayoutStore.getState();
+  const workspaceKey = `${serverId}:${workspaceId}`;
+  const layout = store.layoutByWorkspace[workspaceKey];
+  const sourcePane = layout ? findPaneContainingTab(layout.root, origin.tabId) : null;
+  const sourceTab = layout
+    ? collectAllTabs(layout.root).find((tab) => tab.tabId === origin.tabId)
+    : null;
+  const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+  if (
+    !sourceTab ||
+    (sourceTab.target.kind === "agent" && sourceTab.target.agentId === agentId) ||
+    !sourcePane ||
+    sourcePane.hidden === true ||
+    sourcePane.focusedTabId !== origin.tabId ||
+    store.sidePaneIdByWorkspace[workspaceKey] === sourcePane.id ||
+    !useWorkspaceLayoutStore.persist.hasHydrated() ||
+    !resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId })
+  )
+    throw new SessionLinkError("sideUnavailable");
+  // The gesture's actual tab identifies its source even for an unfocused context menu.
+  // Do not focus or replace that pane when it is already the remembered side pane.
+  const paneId = store.ensureSidePane(workspaceKey, { focus: false });
+  if (!paneId || paneId === sourcePane.id) throw new SessionLinkError("sideUnavailable");
+  return paneId;
+}
+
 export function canOpenSessionWindow(): boolean {
   const host = getDesktopHost();
   // COMPAT(agentTargetWindow): added in v0.10.0 beta; remove after 2027-05-12
@@ -66,38 +119,13 @@ export async function openSessionLink(
     navigate: ({ serverId, agentId, workspaceId }, placement) => {
       let paneId: string | null = null;
       if (placement === "side") {
-        const active = getOrigin?.();
-        const store = useWorkspaceLayoutStore.getState();
-        const workspaceKey = `${serverId}:${workspaceId}`;
-        const layout = store.layoutByWorkspace[workspaceKey];
-        const sourcePane =
-          origin && layout ? findPaneContainingTab(layout.root, origin.tabId) : null;
-        const sourceTab =
-          origin && layout
-            ? collectAllTabs(layout.root).find((tab) => tab.tabId === origin.tabId)
-            : null;
-        const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
-        if (
-          !isOriginInWorkspace(origin, serverId, workspaceId) ||
-          !isOriginInWorkspace(active, serverId, workspaceId) ||
-          active.isCompact ||
-          !supportsDesktopPaneSplits() ||
-          usePanelStore.getState().desktop.focusModeEnabled ||
-          active.tabId !== origin.tabId ||
-          !sourceTab ||
-          (sourceTab.target.kind === "agent" && sourceTab.target.agentId === agentId) ||
-          !sourcePane ||
-          sourcePane.hidden === true ||
-          sourcePane.focusedTabId !== origin.tabId ||
-          store.sidePaneIdByWorkspace[workspaceKey] === sourcePane.id ||
-          !useWorkspaceLayoutStore.persist.hasHydrated() ||
-          !resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId })
-        )
-          throw new SessionLinkError("sideUnavailable");
-        // The gesture's actual tab identifies its source even for an unfocused context menu.
-        // Do not focus or replace that pane when it is already the remembered side pane.
-        paneId = store.ensureSidePane(workspaceKey, { focus: false });
-        if (!paneId || paneId === sourcePane.id) throw new SessionLinkError("sideUnavailable");
+        paneId = ensureSessionLinkSidePane({
+          serverId,
+          agentId,
+          workspaceId,
+          origin,
+          active: getOrigin?.(),
+        });
       }
       navigateToWorkspace({
         serverId,
