@@ -79,7 +79,7 @@ import {
   SidebarWorkspaceMarkReadButton,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
-import { PinnedSectionHeader } from "@/components/sidebar/pinned-section-header";
+import { SidebarPinnedSection } from "@/session-pins/sidebar";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pin";
@@ -171,11 +171,6 @@ export function SidebarStatusWorkspaceList({
   const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedWorkspaceGroupKeys,
   );
-  const storedPinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
-  const pinnedCollapsed = searchActive ? false : storedPinnedCollapsed;
-  const togglePinnedCollapsed = useSidebarCollapsedSectionsStore(
-    (state) => state.togglePinnedCollapsed,
-  );
   const {
     visibleItems: visiblePinnedWorkspaces,
     expanded: pinnedWorkspacesExpanded,
@@ -223,34 +218,31 @@ export function SidebarStatusWorkspaceList({
   );
   const content = (
     <>
-      {pinnedWorkspaces.length > 0 ? (
-        <View style={styles.pinnedSection} testID="sidebar-pinned-section">
-          <PinnedSectionHeader collapsed={pinnedCollapsed} onToggle={togglePinnedCollapsed} />
-          {pinnedCollapsed ? null : (
-            <>
-              <DraggableList
-                testID="sidebar-pinned-list"
-                data={visiblePinnedWorkspaces}
-                keyExtractor={statusWorkspaceKeyExtractor}
-                renderItem={renderPinnedWorkspace}
-                onDragEnd={onPinnedWorkspaceReorder}
-                scrollEnabled={false}
-                useDragHandle
-                nestable={platformIsNative}
-                simultaneousGestureRef={parentGestureRef}
-                gestureHostPresented={dragGestureHostActive}
-              />
-              {canTogglePinnedWorkspaces ? (
-                <SidebarGroupToggleRow
-                  expanded={pinnedWorkspacesExpanded}
-                  onPress={togglePinnedWorkspacesExpanded}
-                  testID="sidebar-pinned-show-more"
-                />
-              ) : null}
-            </>
-          )}
-        </View>
-      ) : null}
+      <SidebarPinnedSection
+        hasPinnedWorkspaces={pinnedWorkspaces.length > 0}
+        searchActive={searchActive}
+        onNavigate={onWorkspacePress}
+      >
+        <DraggableList
+          testID="sidebar-pinned-list"
+          data={visiblePinnedWorkspaces}
+          keyExtractor={statusWorkspaceKeyExtractor}
+          renderItem={renderPinnedWorkspace}
+          onDragEnd={onPinnedWorkspaceReorder}
+          scrollEnabled={false}
+          useDragHandle
+          nestable={platformIsNative}
+          simultaneousGestureRef={parentGestureRef}
+          gestureHostPresented={dragGestureHostActive}
+        />
+        {canTogglePinnedWorkspaces ? (
+          <SidebarGroupToggleRow
+            expanded={pinnedWorkspacesExpanded}
+            onPress={togglePinnedWorkspacesExpanded}
+            testID="sidebar-pinned-show-more"
+          />
+        ) : null}
+      </SidebarPinnedSection>
       {listHeaderComponent}
       {!sidebarFilterEmpty && sessionRows ? (
         <SidebarSessionList rows={sessionRows} onNavigate={onWorkspacePress} />
@@ -1109,9 +1101,6 @@ const styles = StyleSheet.create((theme) => ({
     // Keep status mode's Pinned/Workspaces boundary identical to project mode.
     paddingTop: 2,
     paddingBottom: theme.spacing[4],
-  },
-  pinnedSection: {
-    marginBottom: theme.spacing[1],
   },
   // Matches `projectBlockExpanded` in sidebar-workspace-list.tsx. See the note there.
   statusGroupBlockExpanded: {
