@@ -3,6 +3,7 @@ import {
   Pressable,
   Text,
   View,
+  type GestureResponderEvent,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -10,6 +11,7 @@ import {
 import { type ASTNode } from "react-native-markdown-display";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { linkifyLiteralText, SelectableLinkText, SelectableTextLink } from "./selectable-link-text";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { ChevronRight } from "lucide-react-native";
 import { isWeb } from "@/constants/platform";
@@ -17,10 +19,10 @@ import type { Theme } from "@/styles/theme";
 import { getMarkdownListMarker } from "@/utils/markdown-list";
 import { createMarkdownParser } from "@/utils/markdown-parser";
 
-// Without this prop react-native-markdown-display builds its own parser with
-// `typographer: true`, which would render a plan's literal `(c)` as ©. Its
-// default also leaves linkify off, so this one keeps bare URLs as plain text.
-const planMarkdownParser = createMarkdownParser({ linkify: false });
+// Keep literal command text while making bare URLs in approval plans actionable.
+const planMarkdownParser = createMarkdownParser({ linkify: true });
+planMarkdownParser.normalizeLinkText = (text) => text;
+planMarkdownParser.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
 
 type MarkdownRuleStyles = Record<string, TextStyle & ViewStyle & { [key: string]: unknown }>;
 
@@ -34,7 +36,11 @@ function MarkdownInlineText({
   children: ReactNode;
 }) {
   const style = useMemo(() => [inheritedStyle, ruleStyle], [inheritedStyle, ruleStyle]);
-  return <Text style={style}>{children}</Text>;
+  return (
+    <Text selectable style={style}>
+      {children}
+    </Text>
+  );
 }
 
 function MarkdownListItemContent({
@@ -66,6 +72,16 @@ function MarkdownParagraph({
 
 function createPlanMarkdownRules() {
   return {
+    link: (
+      node: ASTNode,
+      children: ReactNode[],
+      _parent: ASTNode[],
+      styles: MarkdownRuleStyles,
+    ) => (
+      <MarkdownInlineText key={node.key} inheritedStyle={styles.text} ruleStyle={styles.link}>
+        <SelectableTextLink href={node.attributes?.href ?? ""}>{children}</SelectableTextLink>
+      </MarkdownInlineText>
+    ),
     text: (
       node: ASTNode,
       _children: ReactNode[],
@@ -104,7 +120,7 @@ function createPlanMarkdownRules() {
         inheritedStyle={inheritedStyles}
         ruleStyle={styles.code_block}
       >
-        {node.content}
+        {linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     fence: (
@@ -115,13 +131,13 @@ function createPlanMarkdownRules() {
       inheritedStyles: TextStyle = {},
     ) => (
       <MarkdownInlineText key={node.key} inheritedStyle={inheritedStyles} ruleStyle={styles.fence}>
-        {node.content}
+        {linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     code_inline: (
       node: ASTNode,
       _children: ReactNode[],
-      _parent: ASTNode[],
+      parent: ASTNode[],
       styles: MarkdownRuleStyles,
       inheritedStyles: TextStyle = {},
     ) => (
@@ -130,7 +146,9 @@ function createPlanMarkdownRules() {
         inheritedStyle={inheritedStyles}
         ruleStyle={styles.code_inline}
       >
-        {node.content}
+        {parent.some((ancestor) => ancestor.type === "link")
+          ? node.content
+          : linkifyLiteralText(node.content)}
       </MarkdownInlineText>
     ),
     bullet_list: (
@@ -234,7 +252,24 @@ function PlanCardContent({
     () => (isWeb ? ({ "aria-expanded": expanded } as const) : null),
     [expanded],
   );
-  const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
+  const toggleExpanded = useCallback((event: GestureResponderEvent) => {
+    if (
+      isWeb &&
+      event.nativeEvent instanceof MouseEvent &&
+      event.nativeEvent.detail > 0 &&
+      event.currentTarget instanceof Node
+    ) {
+      const selection = window.getSelection();
+      if (
+        selection &&
+        !selection.isCollapsed &&
+        selection.rangeCount > 0 &&
+        selection.getRangeAt(0).intersectsNode(event.currentTarget)
+      )
+        return;
+    }
+    setExpanded((value) => !value);
+  }, []);
   const containerStyle = useMemo(
     () => [styles.container, disableOuterSpacing && styles.containerCompact],
     [disableOuterSpacing],
@@ -257,11 +292,15 @@ function PlanCardContent({
         <View style={chevronStyle}>
           <ThemedChevron size={16} uniProps={chevronColor} />
         </View>
-        <Text style={styles.title}>{resolvedTitle}</Text>
+        <Text selectable style={styles.title}>
+          {resolvedTitle}
+        </Text>
       </Pressable>
       {expanded ? (
         <View style={styles.body}>
-          {description ? <Text style={styles.description}>{description}</Text> : null}
+          {description ? (
+            <SelectableLinkText style={styles.description}>{description}</SelectableLinkText>
+          ) : null}
           <MarkdownRenderer text={text} rules={markdownRules} markdownit={planMarkdownParser} />
         </View>
       ) : null}

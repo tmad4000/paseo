@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Approval card text — pspin-sqj
+
+`approval-card-text`: Permission titles/descriptions, question prompts/options, plan text, and
+plain tool details are selectable. Explicit HTTP(S) URLs open through the existing external
+opener; copying retains the original text, including command quotes and query strings. Opening
+a question-option link must not select the option or submit an answer. Plan cards also linkify
+bare URLs in prose, code spans, and code blocks without decoding URL labels. Keyboard activation
+and unrelated text selections still allow links to open; selection-drag clicks do not. Plan headers
+toggle with Enter and Space even while text is selected; selecting a title does not toggle it.
+Source prepared, not installed; regression coverage:
+`components/selectable-link-text.browser.test.tsx`.
+
 ## Sidebar Tabs grouping — pfork-ly4
 
 `sidebar-tabs-grouping`: Display → Grouping offers **Tabs** beside Project, Status, One list and

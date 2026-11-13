@@ -168,41 +168,20 @@ async function simulateDamagedLegacyDirectoryCache(
         await new Promise<void>((resolve, reject) => {
           const transaction = database.transaction("rows", "readwrite");
           const store = transaction.objectStore("rows");
-          const request = store.getAll();
-          request.onsuccess = () => {
-            const rows = request.result as Array<{
-              serverId: string;
-              kind: string;
-              id: string;
-              payload: string;
-            }>;
-            const checkpoint = rows.find(
-              (row) => row.serverId === serverId && row.kind === "checkpoint",
-            );
-            if (!checkpoint) {
-              transaction.abort();
-              return;
-            }
-            const stored = JSON.parse(checkpoint.payload);
-            // Accept either writer so this fixture also reproduces on the unfixed client.
-            const cursors = stored.version === 1 ? stored.cursors : stored;
-            if (!cursors.workspaces?.generation) {
-              transaction.abort();
-              return;
-            }
-            store.put({ ...checkpoint, payload: JSON.stringify(cursors) });
-            for (const row of rows) {
-              if (
-                row.serverId === serverId &&
-                row.kind === "workspace" &&
-                row.id === missingWorkspaceId
-              )
-                store.delete([serverId, row.kind, row.id]);
-            }
-          };
+          // Current hosts use paginated snapshots and never emit workspace sync cursors.
+          // Seed the old unversioned checkpoint contract independently of today's writer.
+          store.put({
+            serverId,
+            kind: "checkpoint",
+            id: "singleton",
+            payload: JSON.stringify({
+              workspaces: { generation: "legacy-directory-generation", afterSeq: 1 },
+            }),
+          });
+          store.delete([serverId, "workspace", missingWorkspaceId]);
           transaction.addEventListener("complete", () => resolve());
           transaction.addEventListener("abort", () =>
-            reject(transaction.error ?? new Error("Missing current directory checkpoint")),
+            reject(transaction.error ?? new Error("Failed to seed damaged legacy directory cache")),
           );
           transaction.addEventListener("error", () => reject(transaction.error));
         });
@@ -252,34 +231,6 @@ async function cacheWorkspaces(page: Page, workspaceIds: string[]): Promise<void
   await gotoAppShell(page);
   await expectSidebarWorkspaces(page, workspaceIds);
   await expect.poll(() => readCachedRowIds(page, "workspace")).toEqual(workspaceIds);
-  await expect
-    .poll(() =>
-      page.evaluate(async (serverId) => {
-        const database = await new Promise<IDBDatabase>((resolve, reject) => {
-          const request = indexedDB.open("paseo-replica-row-store");
-          request.onsuccess = () => resolve(request.result);
-          request.addEventListener("error", () => reject(request.error));
-        });
-        try {
-          return await new Promise<boolean>((resolve, reject) => {
-            const request = database.transaction("rows").objectStore("rows").getAll();
-            request.onsuccess = () => {
-              const checkpoint = request.result.find(
-                (row: { serverId: string; kind: string }) =>
-                  row.serverId === serverId && row.kind === "checkpoint",
-              );
-              const stored = checkpoint ? JSON.parse(checkpoint.payload) : null;
-              const cursors = stored?.version === 1 ? stored.cursors : stored;
-              resolve(Boolean(cursors?.workspaces?.generation));
-            };
-            request.addEventListener("error", () => reject(request.error));
-          });
-        } finally {
-          database.close();
-        }
-      }, getServerId()),
-    )
-    .toBe(true);
 }
 
 async function reopenDamagedCacheBeforeHostResponds(
@@ -324,9 +275,6 @@ test.describe("Sidebar workspace list", () => {
   }, testInfo) => {
     const project = await seedWorkspace({ repoPrefix: "directory-cache-recovery-" });
     try {
-      // Exercise the retained sync implementation even while the host advertises
-      // the paginated compatibility path by default.
-      await overrideServerInfoFeatures(page, { directorySync: true });
       const siblingId = await createPinnedSiblingWorkspace(project);
       const ids = [project.workspaceId, siblingId].sort();
       await test.step("cache both workspaces", () => cacheWorkspaces(page, ids));

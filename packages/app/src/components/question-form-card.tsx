@@ -1,3 +1,4 @@
+import { SelectableLinkText } from "./selectable-link-text";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useState, useCallback, useMemo, useRef, type RefObject } from "react";
 import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
@@ -129,9 +130,11 @@ function QuestionOptionRow({
           {isSelected && !multiSelect ? <View style={radioDotStyle} /> : null}
         </View>
         <View style={styles.optionTextBlock}>
-          <Text style={optionLabelStyle}>{option.label}</Text>
+          <SelectableLinkText style={optionLabelStyle}>{option.label}</SelectableLinkText>
           {option.description ? (
-            <Text style={optionDescriptionStyle}>{option.description}</Text>
+            <SelectableLinkText style={optionDescriptionStyle}>
+              {option.description}
+            </SelectableLinkText>
           ) : null}
         </View>
       </View>
@@ -544,9 +547,9 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
         onSelect={handleSelectQuestion}
       />
       <View style={styles.questionHeader}>
-        <Text testID="question-form-current-question" style={questionTextStyle}>
+        <SelectableLinkText testID="question-form-current-question" style={questionTextStyle}>
           {activeQuestion?.question}
-        </Text>
+        </SelectableLinkText>
       </View>
 
       {activeQuestion ? (
