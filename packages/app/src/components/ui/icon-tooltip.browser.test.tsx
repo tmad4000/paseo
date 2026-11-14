@@ -1,3 +1,5 @@
+import { setResponseMonitoringActive } from "@/performance/response-monitor";
+import { responsivenessMetrics } from "@/performance/responsiveness";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Pressable, Text } from "react-native";
@@ -26,6 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  setResponseMonitoringActive(false);
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
@@ -114,4 +117,32 @@ test("a press that disables the tooltip mid-delay does not leave it to reappear 
   await act(async () => render(false));
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(document.body.textContent).not.toContain("Workspace actions");
+});
+
+function measuredWork() {
+  const started = performance.now();
+  let iterations = 0;
+  do {
+    iterations++;
+  } while (performance.now() - started < 25);
+  return iterations;
+}
+
+test("times the action inside the standard hover wrapper, including its synchronous work", async () => {
+  const onPress = vi.fn(measuredWork);
+  const before =
+    responsivenessMetrics.snapshot().find((row) => row.metric === "tooltip.handler")?.count ?? 0;
+  await act(async () =>
+    root.render(
+      <IconTooltip label="Back">
+        <IconButton onPress={onPress} testID="timed-back" />
+      </IconTooltip>,
+    ),
+  );
+  setResponseMonitoringActive(true);
+  await page.getByTestId("timed-back").click();
+  expect(onPress).toHaveBeenCalledTimes(1);
+  const sample = responsivenessMetrics.snapshot().find((row) => row.metric === "tooltip.handler");
+  expect(sample?.count).toBe(before + 1);
+  expect(sample?.max).toBeGreaterThanOrEqual(20);
 });

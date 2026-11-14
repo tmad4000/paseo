@@ -43,7 +43,7 @@ export function TimelineSyncStatus({
     <ToastViewport
       toast={toast ?? syncToast}
       onDismiss={toast ? onDismiss : keepUntilSynchronized}
-      placement="composer"
+      placement="panel-bottom"
       passive={!toast}
     />
   );

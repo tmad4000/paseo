@@ -25,6 +25,14 @@ test.describe("Agent timeline sync retry", () => {
       const input = page.getByRole("textbox", { name: "Message agent..." });
       await expect(input).toBeEditable();
       await expect(page.getByTestId("agent-updating-toast")).toBeVisible();
+      const statusBox = await page.getByTestId("agent-updating-toast").boundingBox();
+      const contentBox = await page.getByTestId("agent-history-content").boundingBox();
+      expect(statusBox).not.toBeNull();
+      expect(contentBox).not.toBeNull();
+      expect(statusBox!.y).toBeGreaterThanOrEqual(contentBox!.y);
+      expect(statusBox!.y + statusBox!.height).toBeLessThanOrEqual(
+        contentBox!.y + contentBox!.height,
+      );
       await input.fill("keep typing during first sync");
       const send = page.getByRole("button", { name: "Send message", exact: true });
       await expect(send).toBeEnabled();

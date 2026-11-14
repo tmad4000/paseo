@@ -2,8 +2,9 @@
 
 Known chats remain usable while their first history response is held. The device-save boundary
 releases the composer before Send acknowledgement; pending/refused delivery remains recoverable.
-The sync badge is passive and sits above the composer without moving the history or covering
-navigation.
+The sync badge is passive and sits at the bottom of the history area, above the composer.
+User toasts take priority in the same viewport. The viewport stays inside its native parent bounds
+so toast actions remain touchable on Android.
 
 ![390px viewport with history and Send acknowledgement held, and a second draft ready](mobile-responsiveness/phone-history-held.png)
 
@@ -14,10 +15,9 @@ Checked against the beta.30 source line (`accd8743a`) plus this change, using No
 - `npm run build:app-deps` and `npm run build:server`: pass.
 - `npm run format`, `npm run lint`, `npm run typecheck`: pass. After moving the status badge,
   formatting/lint and the app typecheck were repeated and passed.
-- App Vitest: 234 tests across `composer/actions.test.ts`, `composer/submit.test.ts`,
-  `composer/submission/writer.test.ts`, `hooks/use-agent-screen-state-machine.test.ts`,
-  `timeline/session-stream-reducers.test.ts`, `performance/responsiveness.test.ts` and
-  `performance/response-monitor.test.ts`: pass.
+- App Vitest: 248 tests across composer actions, submission and writer, screen state,
+  stream reducers, responsiveness metrics, shared outbox settlement, tooltip handlers and sync
+  status: pass. The tooltip browser component suite adds four passing Chromium tests.
 - `npx playwright test --project=browser e2e/browser/agent-timeline-sync-retry.spec.ts --workers=1`:
   3 pass, including the 390×844 viewport. It holds actual daemon WebSocket responses for first
   history and Send, submits through the real composer, starts a second draft before releasing
@@ -29,24 +29,32 @@ and a complete synchronous drain before canonical history. The Send regression l
 promise unresolved and checks submission still finishes after the device save. Storage failure
 and explicit/uncertain refusals remain covered.
 
-### Review repair validation pending
+### Review repairs
 
-The review repair centralizes refusal settlement for composer, reconnect and manual Retry,
-measures the full tooltip child action, and restores user-error priority and alert continuity
-above the composer. Sidebar mark-as-read now handles Enter/Space without opening its parent
-workspace. Outline pixel interactions wait for two usable, matching layout boxes.
+Independent review caught refusal settlement missing from reconnect/manual Retry and tooltip
+measurement excluding the child action. Refusals now retire the matching live submission through
+the shared flush path, leaving the saved message visible in Unsent. Uncertain outcomes remain live;
+Retry sends the identical ID and payload. Icon tooltips measure wrapped child actions once.
 
-The outer executor owns cloud execution of the new regressions; this repair has not run tests,
-builds, typecheck, lint or formatting on M4. Run these focused checks on the existing cloud builder:
+The single status viewport preserves user-error priority and alert continuity during reconnect.
+It is hosted inside the history area's bounds, above the composer, including native hit testing.
+Sidebar mark-as-read handles Enter/Space without opening its parent workspace. Outline pointer
+interactions wait for usable stable layout geometry.
 
-- App Vitest: `stores/send-outbox-store/index.test.ts`, `components/ui/tooltip.test.tsx`,
-  `timeline/sync-status.test.tsx`, plus existing `composer/actions.test.ts` and
-  `performance/response-monitor.test.ts`.
-- Browser Playwright: `sidebar-workspace-mark-unread.spec.ts` (both keyboard cases),
-  `viewed-agent-timelines.spec.ts` (error priority, stable alert and reconnect), and
-  `chat-outline.spec.ts` (stable geometry with the existing hover assertions).
-- Format the touched files, then run the app typecheck and targeted lint through the repository
-  scripts before accepting the repair. Native build and device verification remain deferred.
+Browser release-order tests hold all matching running snapshots, including attention/read updates,
+until the test explicitly releases authoritative state. Legacy-host rejection tests explicitly disable
+receipt support and retain their draft-restoration checks. A modern saved-send test holds the rejection
+response while composing a newer draft, then checks Unsent recovery, attachment delivery, identical
+retry ID, and the unchanged newer draft.
+
+Full workspace typecheck, lint, and the 248 focused app tests pass on GCP. The keyboard, outline,
+three running-state delivery orders, legacy refusal/Steer, and reconnect status browser cases pass.
+Saved-send recovery also passes: the host accepts one retry with identical image bytes and
+message ID, while the newer draft remains unchanged. This fixture refuses before host dispatch;
+ambiguous provider outcomes remain covered separately. The mock canonical echo omits image
+previews, so delivery is checked through the complete outbound request payload and host acceptance.
+All 12 focused daemon browser cases pass across these runs. The final phone screenshot was visually
+inspected. Native build/device verification remains deferred; no signed package or rollout is included.
 
 ## Burst comparison
 
@@ -64,14 +72,19 @@ It is not an iPhone latency result or a performance threshold for CI.
 
 ## Platform coverage and remaining work
 
-| Platform    | Verified                                                                       |
-| ----------- | ------------------------------------------------------------------------------ |
-| Browser web | Three daemon-backed flows; narrow layout visually inspected                    |
-| iOS         | Source and shared behavior tested; native release build/device latency pending |
-| Android     | Source and shared behavior tested; device verification pending                 |
-| Electron    | Shared app typecheck; installed desktop behavior not verified                  |
+| Platform    | Verified                                                                         |
+| ----------- | -------------------------------------------------------------------------------- |
+| Browser web | Three daemon-backed flows; narrow layout visually inspected                      |
+| iOS         | Native JS export passed on GCP; optimized bytecode/signing/device checks pending |
+| Android     | Source and shared behavior tested; device verification pending                   |
+| Electron    | Shared app typecheck; installed desktop behavior not verified                    |
 
 No app distribution or shared daemon restart is part of this source receipt. Native release
 profiling must confirm the actual touch-to-display improvement. See
 [agent stream performance](../agent-stream-performance.md#responsiveness-telemetry) for telemetry
 coverage, privacy, bounds and the difference between a frame callback and a completed action.
+
+The optional Linux iOS JS export used Expo `--platform ios --no-bytecode --max-workers 2`
+with an 8 GiB Node heap. Optimized Hermes compilation exceeded this builder's memory budget,
+including a standalone compile capped at 27 GiB of virtual memory. That is build-time allocation,
+not a measurement of phone runtime memory. A native release still requires Apple tooling and signing.

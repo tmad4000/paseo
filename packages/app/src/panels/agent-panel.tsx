@@ -50,11 +50,7 @@ import {
 import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
-import {
-  useToastHost,
-  type ToastApi,
-  type ToastState,
-} from "@/components/toast-host";
+import { useToastHost, type ToastApi, type ToastState } from "@/components/toast-host";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
 import {
@@ -1338,25 +1334,22 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     textSource,
   ]);
   const composerSection = (
-    <View style={styles.composerStatusAnchor}>
-      <TimelineSyncStatus sync={timelineSync} toast={toast} onDismiss={dismiss} />
-      <RenderProfile id={`AgentComposerSection:${agentId}`}>
-        <AgentComposerSection
-          agentId={agentId}
-          serverId={serverId}
-          isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
-          isArchivingCurrentAgent={isArchivingCurrentAgent}
-          archivedAt={agentState.archivedAt}
-          cwd={cwd}
-          isSubmitLoading={false}
-          agentInputDraft={agentInputDraft}
-          onAttentionInputFocus={onAttentionInputFocus}
-          onAttentionPromptSend={onAttentionPromptSend}
-          onComposerHeightChange={handleComposerHeightChange}
-          onMessageSent={handleMessageSent}
-        />
-      </RenderProfile>
-    </View>
+    <RenderProfile id={`AgentComposerSection:${agentId}`}>
+      <AgentComposerSection
+        agentId={agentId}
+        serverId={serverId}
+        isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
+        isArchivingCurrentAgent={isArchivingCurrentAgent}
+        archivedAt={agentState.archivedAt}
+        cwd={cwd}
+        isSubmitLoading={false}
+        agentInputDraft={agentInputDraft}
+        onAttentionInputFocus={onAttentionInputFocus}
+        onAttentionPromptSend={onAttentionPromptSend}
+        onComposerHeightChange={handleComposerHeightChange}
+        onMessageSent={handleMessageSent}
+      />
+    </RenderProfile>
   );
   const streamContent = (
     <View style={animatedStaticStyles.content}>
@@ -1394,7 +1387,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   );
 
   const dockContent = (
-    <View style={styles.contentContainer}>
+    <View style={styles.contentContainer} testID="agent-history-content">
       {streamContent}
       {hasActiveComposer ? (
         <AgentLimitHandoff
@@ -1410,6 +1403,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       {showHistorySyncError ? (
         <TimelineSyncErrorCallout isRetrying={isRetryingHistorySync} onRetry={retryTimelineSync} />
       ) : null}
+      <TimelineSyncStatus sync={timelineSync} toast={toast} onDismiss={dismiss} />
     </View>
   );
 
@@ -1534,7 +1528,7 @@ function ChatSurface({
   disabled,
   active,
 }: {
-  children: [ReactNode, ReactNode, ReactNode];
+  children: [ReactNode, ReactNode, ReactNode?];
   disabled: boolean;
   /** Inactive keeps the chat mounted but hidden and inert, e.g. behind the Stream. */
   active: boolean;
@@ -1961,7 +1955,6 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface0,
   },
-  composerStatusAnchor: { position: "relative", width: "100%", flexShrink: 1 },
   contentContainer: {
     flex: 1,
     overflow: "hidden",

@@ -31,6 +31,22 @@ describe("response monitor", () => {
     expect(frame).toHaveBeenCalledTimes(32);
   });
 
+  it("counts nested tooltip wrappers once without changing the action result", () => {
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const before =
+      responsivenessMetrics.snapshot().find((row) => row.metric === "tooltip.handler")?.count ?? 0;
+    setResponseMonitoringActive(true);
+    const nested = () => measurePress("tooltip", () => 42);
+    expect(measurePress("tooltip", nested)).toBe(42);
+    expect(
+      responsivenessMetrics.snapshot().find((row) => row.metric === "tooltip.handler")?.count,
+    ).toBe(before + 1);
+  });
+
   it("does not count suspension as a stall and reports slow samples off the input path", () => {
     vi.useFakeTimers();
     const events: unknown[] = [];

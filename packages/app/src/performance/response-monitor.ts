@@ -2,6 +2,7 @@ import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import { responsivenessMetrics, type ResponseMetric } from "./responsiveness";
 
 const pendingFrames = new Set<number>();
+const measuringKinds = new Set<string>();
 let active = false;
 let activeSince = 0;
 
@@ -25,12 +26,14 @@ export function measureResponseFrame(metric: ResponseMetric, started = performan
 }
 
 export function measurePress<T>(kind: "button" | "tooltip" | "send", action: () => T): T {
-  if (!active) return action();
+  if (!active || measuringKinds.has(kind)) return action();
+  measuringKinds.add(kind);
   const started = performance.now();
   measureResponseFrame(`${kind}.frame`, started);
   try {
     return action();
   } finally {
+    measuringKinds.delete(kind);
     responsivenessMetrics.record(`${kind}.handler`, performance.now() - started);
   }
 }

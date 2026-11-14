@@ -1,3 +1,4 @@
+/* eslint-disable react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-function-as-prop -- tests deliberately replace props and control handlers */
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -122,7 +123,9 @@ describe("TooltipTrigger response telemetry", () => {
     let now = 0;
     const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
     const frames: FrameRequestCallback[] = [];
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      frames.push(callback),
+    );
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     const record = vi.spyOn(responsivenessMetrics, "record");
     const calls: string[] = [];
@@ -142,13 +145,25 @@ describe("TooltipTrigger response telemetry", () => {
       now += 3;
     };
     try {
-      act(() => root?.render(
-        <Tooltip>
-          <TooltipTrigger asChild={asChild} onPress={onTriggerPress} testID={asChild ? undefined : "trigger"}>
-            {asChild ? <Pressable onPress={onChildPress} testID="trigger"><Text>Action</Text></Pressable> : <Text>Action</Text>}
-          </TooltipTrigger>
-        </Tooltip>,
-      ));
+      act(() =>
+        root?.render(
+          <Tooltip>
+            <TooltipTrigger
+              asChild={asChild}
+              onPress={onTriggerPress}
+              {...(asChild ? {} : { testID: "trigger" })}
+            >
+              {asChild ? (
+                <Pressable onPress={onChildPress} testID="trigger">
+                  <Text>Action</Text>
+                </Pressable>
+              ) : (
+                <Text>Action</Text>
+              )}
+            </TooltipTrigger>
+          </Tooltip>,
+        ),
+      );
       setResponseMonitoringActive(true);
       pressTrigger();
       expect(calls).toEqual(asChild ? ["child", "trigger"] : ["trigger"]);
@@ -177,7 +192,9 @@ it("measures an asChild-only action and leaves a disabled child unsampled", asyn
   const frame = vi.fn(() => 1);
   vi.stubGlobal("requestAnimationFrame", frame);
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  const onPress = vi.fn(() => { now += 25; });
+  const onPress = vi.fn(() => {
+    now += 25;
+  });
   try {
     renderTrigger({ childDisabled: true, onPress });
     setResponseMonitoringActive(true);

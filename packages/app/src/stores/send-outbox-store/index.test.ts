@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SendOutboxFlushClient } from "./model";
 
@@ -20,6 +20,12 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
     },
   },
 }));
+
+// Warm the real dependency graph outside timed cold-storage assertions. Each scenario
+// still resets modules before creating the store, so hydration is exercised afresh.
+beforeAll(async () => {
+  await import("./index");
+}, 30_000);
 
 const SAVED = {
   state: {
@@ -72,15 +78,21 @@ async function setupLiveSend() {
   const { useSessionStore, selectAgentTurnPresentation } = await import("@/stores/session-store");
   const { createMessageSubmissionWriter } = await import("@/composer/submission/writer");
   const { createDirectSendOutbox } = await import("@/composer/submission/direct-send-outbox");
-  const { flushSendOutboxForServer, useSendOutboxStore, canEditRefusedSend } = await import("./index");
+  const { flushSendOutboxForServer, useSendOutboxStore, canEditRefusedSend } =
+    await import("./index");
   const { retryDirectSend } = await import("@/composer/delivery-actions");
+  useSessionStore.getState().clearSession("server");
   const session = useSessionStore.getState();
   session.initializeSession("server", null as unknown as DaemonClient);
   session.updateSessionServerInfo("server", {
     serverId: "server",
     hostname: null,
     version: "1.0.0",
-    features: { canonicalSubmittedPrompts: true, agentRequestReceipts: true, agentMessageQueue: true },
+    features: {
+      canonicalSubmittedPrompts: true,
+      agentRequestReceipts: true,
+      agentMessageQueue: true,
+    },
   });
   const entry = SAVED.state.entries["msg-1"];
   await useSendOutboxStore.getState().add(entry);
@@ -94,9 +106,16 @@ async function setupLiveSend() {
   const client = { sendAgentMessage: vi.fn<SendOutboxFlushClient["sendAgentMessage"]>() };
   const composerOutbox = createDirectSendOutbox("server", client)!;
   return {
-    entry, client, composerOutbox, useSessionStore, useSendOutboxStore, canEditRefusedSend,
-    retryDirectSend, flushSendOutboxForServer,
-    isActive: () => selectAgentTurnPresentation(useSessionStore.getState().sessions.server, "agent").isActive,
+    entry,
+    client,
+    composerOutbox,
+    useSessionStore,
+    useSendOutboxStore,
+    canEditRefusedSend,
+    retryDirectSend,
+    flushSendOutboxForServer,
+    isActive: () =>
+      selectAgentTurnPresentation(useSessionStore.getState().sessions.server, "agent").isActive,
   };
 }
 
@@ -117,22 +136,36 @@ describe("send outbox submission settlement", () => {
       state.client.sendAgentMessage.mockRejectedValueOnce(refusal());
       const onRejected = vi.fn(() => expect(state.isActive()).toBe(false));
       if (origin === "composer") await state.composerOutbox.flush("agent");
-      else if (origin === "retry") await state.retryDirectSend({ entry: state.entry, client: state.client });
+      else if (origin === "retry")
+        await state.retryDirectSend({ entry: state.entry, client: state.client });
       else {
-        await state.flushSendOutboxForServer({ serverId: "server", client: state.client, onRejected });
+        await state.flushSendOutboxForServer({
+          serverId: "server",
+          client: state.client,
+          onRejected,
+        });
         expect(onRejected).toHaveBeenCalledTimes(1);
       }
 
       expect(state.isActive()).toBe(false);
       const saved = state.useSendOutboxStore.getState().entries["msg-1"];
-      expect(saved).toMatchObject({ text: state.entry.text, rejectedError: "Agent refused this message" });
+      expect(saved).toMatchObject({
+        text: state.entry.text,
+        rejectedError: "Agent refused this message",
+      });
       expect(state.canEditRefusedSend(saved)).toBe(true);
-      expect(state.useSessionStore.getState().sessions.server.agentStreamTail.get("agent")).toEqual([]);
-      expect(JSON.parse(storage.values.get("paseo-send-outbox")!).state.entries["msg-1"]).toEqual(saved);
+      expect(state.useSessionStore.getState().sessions.server.agentStreamTail.get("agent")).toEqual(
+        [],
+      );
+      expect(JSON.parse(storage.values.get("paseo-send-outbox")!).state.entries["msg-1"]).toEqual(
+        saved,
+      );
 
       state.client.sendAgentMessage.mockRejectedValueOnce(refusal("Still refused"));
       await state.retryDirectSend({ entry: saved, client: state.client });
-      expect(state.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe("Still refused");
+      expect(state.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe(
+        "Still refused",
+      );
       expect(state.isActive()).toBe(false);
       state.useSessionStore.getState().clearSession("server");
     },
@@ -147,7 +180,9 @@ describe("send outbox submission settlement", () => {
     expect(state.canEditRefusedSend(saved)).toBe(false);
     state.client.sendAgentMessage.mockRejectedValueOnce(refusal());
     await state.retryDirectSend({ entry: saved, client: state.client });
-    expect(state.client.sendAgentMessage.mock.calls[1]).toEqual(state.client.sendAgentMessage.mock.calls[0]);
+    expect(state.client.sendAgentMessage.mock.calls[1]).toEqual(
+      state.client.sendAgentMessage.mock.calls[0],
+    );
     expect(state.isActive()).toBe(false);
     state.useSessionStore.getState().clearSession("server");
   });
@@ -157,13 +192,22 @@ describe("send outbox submission settlement", () => {
     const store = state.useSessionStore.getState();
     store.setAgentStreamState("server", "agent", { acknowledgedClientMessageIds: ["msg-1"] });
     store.beginAgentMessageSubmission("server", "agent", {
-      kind: "user_message", id: "newer", clientMessageId: "newer", text: "Newer message", timestamp: new Date(1),
+      kind: "user_message",
+      id: "newer",
+      clientMessageId: "newer",
+      text: "Newer message",
+      timestamp: new Date(1),
     });
     state.client.sendAgentMessage.mockRejectedValueOnce(refusal());
     await state.flushSendOutboxForServer({ serverId: "server", client: state.client });
     const session = state.useSessionStore.getState().sessions.server;
-    expect(session.messageSubmissions.get("agent")?.map((item) => item.clientMessageId)).toEqual(["newer"]);
-    expect(session.agentStreamTail.get("agent")?.map((item) => item.id)).toEqual(["msg-1", "newer"]);
+    expect(session.messageSubmissions.get("agent")?.map((item) => item.clientMessageId)).toEqual([
+      "newer",
+    ]);
+    expect(session.agentStreamTail.get("agent")?.map((item) => item.id)).toEqual([
+      "msg-1",
+      "newer",
+    ]);
     expect(state.isActive()).toBe(true);
     state.useSessionStore.getState().clearSession("server");
   });

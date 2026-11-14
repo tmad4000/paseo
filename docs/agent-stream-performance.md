@@ -77,7 +77,8 @@ see [queue mirroring](queue-mirroring.md#direct-sends).
 
 App diagnostics includes session counts, slow counts (>=100ms), worst latency and p50/p95 over
 the latest 256 samples per fixed metric. Common buttons, tooltip-based controls and Send measure
-synchronous handler work and callback-to-next-animation-frame delay separately. A passive root
+synchronous handler work and callback-to-next-animation-frame delay separately. Wrapped icon
+tooltips time the child action, and nested wrappers of the same metric count one press. A passive root
 touch-end observer covers other touch controls, but also includes touches that are not buttons.
 The active app samples event-loop timer overshoot once per second. Background/hidden time and
 pending frame samples are discarded on suspension. Reducer batches report their own duration.
