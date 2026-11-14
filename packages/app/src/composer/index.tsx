@@ -2681,6 +2681,7 @@ function ComposerContentImpl({
           }
           await submitMessage(submitText, submitAttachments, activeTurnBehavior);
         },
+        getDraftRevision: textSource.getRevision ?? textSource.getSnapshot,
         clearDraft,
         setUserInput: replaceUserInput,
         setAttachments: (nextAttachments) => {
@@ -2703,6 +2704,7 @@ function ComposerContentImpl({
       beginSubmit,
       clearDraft,
       completeSubmit,
+      textSource,
       hasExternalContent,
       isAgentRunning,
       queueMessage,

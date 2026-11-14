@@ -4,7 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftStore } from "@/stores/draft-store";
-import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
+import type {
+  AttachmentMetadata,
+  ComposerAttachment,
+  UserComposerAttachment,
+} from "@/attachments/types";
+import { submitAgentInput } from "@/composer/submit";
+import { dispatchComposerAgentMessage, type DirectSendOutbox } from "@/composer/actions";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
 const { asyncStorage } = vi.hoisted(() => ({
@@ -604,4 +610,224 @@ describe("useAgentInputDraft live contract", () => {
       input: { text: "", attachments: [] },
     });
   });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("draft settlement through submission and device save", () => {
+  beforeEach(() => {
+    asyncStorage.clear();
+    document.body.innerHTML = "<div id='root'></div>";
+    useDraftStore.setState({ drafts: {}, createModalDraft: null });
+  });
+
+  const cases = (["encode", "save"] as const).flatMap((stage) =>
+    (["success", "failure"] as const).flatMap((outcome) =>
+      (
+        [
+          "text",
+          "text-aba",
+          "same-text",
+          "add",
+          "remove",
+          "attachment-aba",
+          "store",
+          "unchanged",
+        ] as const
+      ).map((edit) => ({ stage, outcome, edit, behavior: "clear" as const })),
+    ),
+  );
+
+  const lockedCases = (["encode", "save"] as const).flatMap((stage) =>
+    (["success", "failure"] as const).map((outcome) => ({
+      stage,
+      outcome,
+      edit: "unchanged" as const,
+      behavior: "preserve-and-lock" as const,
+    })),
+  );
+  it.each([...cases, ...lockedCases])(
+    "retains $edit edits during $stage $outcome ($behavior)",
+    async ({ stage, outcome, edit, behavior }) => {
+      let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+      function draft(): ReturnType<typeof useAgentInputDraft> {
+        if (!latest) throw new Error("Draft not mounted");
+        return latest;
+      }
+      function Probe() {
+        latest = useAgentInputDraft({ draftKey: "draft:settlement" });
+        return null;
+      }
+      const container = document.getElementById("root")!;
+      const root = createTestRoot(container);
+      const queryClient = new QueryClient();
+      await act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <Probe />
+          </QueryClientProvider>,
+        );
+      });
+      const original: UserComposerAttachment[] = [
+        {
+          kind: "image",
+          metadata: {
+            id: "original",
+            storageKey: "original",
+            storageType: "web-indexeddb",
+            mimeType: "image/png",
+            createdAt: 1,
+          },
+        },
+      ];
+      const added = createWorkspaceFileAttachment({ path: "new.ts" });
+      await act(async () => {
+        draft().replaceText("first");
+        draft().setAttachments(original);
+      });
+      const pending = deferred<void>();
+      const entered = deferred<void>();
+      const hostAck = deferred<void>();
+      const saved: Parameters<DirectSendOutbox["add"]>[0][] = [];
+      const flush = vi.fn(() => hostAck.promise);
+      const begin = vi.fn();
+      const reject = vi.fn(() => "rejected" as const);
+      const processing = vi.fn();
+      const clear = vi.fn((lifecycle: "sent" | "abandoned") => draft().clear(lifecycle));
+      let result!: ReturnType<typeof submitAgentInput>;
+      await act(async () => {
+        result = submitAgentInput({
+          message: "first",
+          attachments: original,
+          submitBehavior: behavior,
+          isAgentRunning: false,
+          canSubmit: true,
+          getDraftRevision: () => draft().textSource.getRevision!(),
+          queueMessage: vi.fn(),
+          submitMessage: ({ message, attachments }) =>
+            dispatchComposerAgentMessage({
+              client: {
+                sendAgentMessage: async () => ({ queued: false }),
+                uploadFile: async () => ({ requestId: "unused", file: null, error: null }),
+              },
+              agentId: "agent",
+              text: message,
+              attachments,
+              encodeImages: async (images) => {
+                if (stage === "encode") {
+                  entered.resolve();
+                  await pending.promise;
+                }
+                return images.map((image) => ({ data: image.id, mimeType: image.mimeType }));
+              },
+              submission: { begin, reject, accept: vi.fn() },
+              outbox: {
+                serverId: "server",
+                add: async (entry) => {
+                  if (stage === "save") {
+                    entered.resolve();
+                    await pending.promise;
+                  }
+                  saved.push(entry);
+                },
+                flush,
+                get: () => undefined,
+                remove: async () => {},
+              },
+            }),
+          clearDraft: clear,
+          setUserInput: (text) => draft().editText(text),
+          setAttachments: (attachments) => draft().setAttachments(attachments),
+          setSendError: vi.fn(),
+          setIsProcessing: processing,
+        });
+        await entered.promise;
+      });
+      expect(saved).toEqual([]);
+      expect(draft().textSource.getSnapshot()).toBe(behavior === "clear" ? "" : "first");
+      expect(draft().attachments).toEqual(behavior === "clear" ? [] : original);
+      expect(processing).toHaveBeenLastCalledWith(true);
+      let expected = { text: "", attachments: [] as UserComposerAttachment[] };
+      await act(async () => {
+        switch (edit) {
+          case "text":
+            draft().editText("new draft");
+            expected.text = "new draft";
+            break;
+          case "text-aba":
+            draft().editText("temporary");
+            draft().editText("");
+            break;
+          case "same-text":
+            draft().editText("first");
+            expected.text = "first";
+            break;
+          case "add":
+            draft().setAttachments([added]);
+            expected.attachments = [added];
+            break;
+          case "remove":
+            draft().setAttachments([added]);
+            draft().setAttachments([]);
+            break;
+          case "attachment-aba":
+            draft().setAttachments(original);
+            draft().setAttachments([]);
+            break;
+          case "store":
+            useDraftStore.getState().saveDraftInput({
+              draftKey: "draft:settlement",
+              draft: { text: "external edit", attachments: [added] },
+            });
+            expected = { text: "external edit", attachments: [added] };
+            break;
+          case "unchanged":
+            break;
+        }
+        if (outcome === "failure") pending.reject(new Error("preparation failed"));
+        else pending.resolve();
+        expect(await result).toBe(outcome === "success" ? "submitted" : "failed");
+        draft().textSource.getRevision!();
+      });
+      expect(processing).toHaveBeenLastCalledWith(false);
+      if (edit === "unchanged" && outcome === "failure") {
+        expected = { text: "first", attachments: original };
+      }
+      expect(draft().textSource.getSnapshot()).toBe(expected.text);
+      expect(draft().attachments).toEqual(expected.attachments);
+      if (edit === "unchanged" && outcome === "success") {
+        expect(clear).toHaveBeenCalledExactlyOnceWith("sent");
+        expect(useDraftStore.getState().drafts["draft:settlement"].lifecycle).toBe("sent");
+      } else {
+        expect(clear).not.toHaveBeenCalled();
+      }
+      if (outcome === "success") {
+        expect(saved).toEqual([
+          expect.objectContaining({
+            text: "first",
+            images: [{ data: "original", mimeType: "image/png" }],
+            clientMessageId: begin.mock.calls[0][1].clientMessageId,
+          }),
+        ]);
+        expect(flush).toHaveBeenCalledExactlyOnceWith("agent");
+        expect(reject).not.toHaveBeenCalled();
+      } else {
+        expect(saved).toEqual([]);
+        expect(flush).not.toHaveBeenCalled();
+        expect(reject).toHaveBeenCalledExactlyOnceWith(
+          "agent",
+          begin.mock.calls[0][1].clientMessageId,
+        );
+      }
+      hostAck.resolve();
+    },
+  );
 });

@@ -91,8 +91,35 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         : [],
     ),
   );
+  const textPublication = useMemo(
+    () =>
+      new AfterPaintPublication<string>((nextText) => {
+        useDraftStore.getState().editDraftText({ draftKey, text: nextText });
+      }),
+    [draftKey],
+  );
+
+  const draftRevision = useMemo(() => {
+    let token = {};
+    let record = useDraftStore.getState().drafts[draftKey];
+    return {
+      markEdited: () => {
+        token = {};
+      },
+      getSnapshot: () => {
+        textPublication.flush();
+        const current = useDraftStore.getState().drafts[draftKey];
+        if (current !== record) {
+          record = current;
+          token = {};
+        }
+        return token;
+      },
+    };
+  }, [draftKey, textPublication]);
   const textSource = useMemo<ComposerTextSource>(
     () => ({
+      getRevision: draftRevision.getSnapshot,
       getSnapshot: () => {
         const record = useDraftStore.getState().drafts[draftKey];
         return record?.lifecycle === "active" ? record.input.text : "";
@@ -106,7 +133,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
             listener();
         }),
     }),
-    [draftKey],
+    [draftKey, draftRevision],
   );
   const attachmentFocusRequestId = useDraftStore(
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
@@ -137,6 +164,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         attachments: UserComposerAttachment[];
       },
     ) => {
+      draftRevision.markEdited();
       const store = useDraftStore.getState();
       const current = store.getDraftInput(draftKey) ?? { text: "", attachments: [] };
       const next = update(current);
@@ -146,35 +174,29 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       }
       store.saveDraftInput({ draftKey, draft: next });
     },
-    [draftKey],
-  );
-
-  const textPublication = useMemo(
-    () =>
-      new AfterPaintPublication<string>((nextText) => {
-        useDraftStore.getState().editDraftText({ draftKey, text: nextText });
-      }),
-    [draftKey],
+    [draftKey, draftRevision],
   );
 
   const editText = useCallback(
     (nextText: string) => {
+      draftRevision.markEdited();
       if (isWeb) {
         textPublication.stage(nextText);
       } else {
         useDraftStore.getState().editDraftText({ draftKey, text: nextText });
       }
     },
-    [draftKey, textPublication],
+    [draftKey, draftRevision, textPublication],
   );
 
   const replaceText = useCallback(
     (nextText: string) => {
+      draftRevision.markEdited();
       textPublication.cancel();
       useDraftStore.getState().editDraftText({ draftKey, text: nextText });
       publishTextReplacement(nextText);
     },
-    [draftKey, publishTextReplacement, textPublication],
+    [draftKey, draftRevision, publishTextReplacement, textPublication],
   );
 
   const setAttachments = useCallback(
@@ -189,10 +211,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   const clear = useCallback(
     (lifecycle: "sent" | "abandoned") => {
+      draftRevision.markEdited();
       textPublication.cancel();
       useDraftStore.getState().clearDraftInput({ draftKey, lifecycle });
     },
-    [draftKey, textPublication],
+    [draftKey, draftRevision, textPublication],
   );
 
   useEffect(() => {

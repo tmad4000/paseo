@@ -55,8 +55,15 @@ Independent review caught gaps in the first implementation:
   A preparation wake-up runs only after its own entry is durably removed; retained failures do
   not trigger an implicit retry. Recovery releases ordering ownership only after persistence succeeds.
 - Broadcast results distinguish device-pending saves from confirmed host delivery.
+- Shared submit settlement checks draft revisions across encoding and storage, including text and
+  attachment edits that return to identical content. Both delivery paths reject incomplete image
+  encoding before persisting or sending.
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
+
+The draft-revision and image-completeness regressions were added after `3b8a8adc` in
+`composer/draft/input-draft.live.test.tsx`, `composer/submit.test.ts` and `composer/actions.test.ts`.
+Their execution is pending the outer executor's GCP checks; prior receipts do not validate these repairs.
 
 The executable regressions use real store operations and held/failing storage to check ordering,
 restart recovery, exclusion, cancellation, independent agents and automatic wake-ups. Dependency

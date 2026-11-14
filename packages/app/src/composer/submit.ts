@@ -13,6 +13,7 @@ export interface AgentInputSubmitActionInput<TAttachment> {
   canSubmit: boolean;
   queueMessage: (input: { message: string; attachments: TAttachment[] }) => void | Promise<void>;
   submitMessage: (input: { message: string; attachments: TAttachment[] }) => Promise<void>;
+  getDraftRevision: () => unknown;
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
   setUserInput: (text: string) => void;
   setAttachments: (attachments: TAttachment[]) => void;
@@ -62,17 +63,20 @@ export async function submitAgentInput<TAttachment>(
     input.setUserInput("");
     input.setAttachments([]);
   }
+  const submittedRevision = input.getDraftRevision();
   input.setSendError(null);
   input.setIsProcessing(true);
 
   try {
     await input.submitMessage({ message: trimmedMessage, attachments });
-    input.clearDraft("sent");
+    if (input.getDraftRevision() === submittedRevision) {
+      input.clearDraft("sent");
+    }
     input.setIsProcessing(false);
     return "submitted";
   } catch (error) {
     input.onSubmitError?.(error);
-    if (shouldClearOnSubmit) {
+    if (shouldClearOnSubmit && input.getDraftRevision() === submittedRevision) {
       input.setUserInput(trimmedMessage);
       input.setAttachments(attachments);
     }

@@ -230,27 +230,18 @@ async function dispatchDurableComposerAgentMessage(
   input: DispatchComposerAgentMessageInput & { outbox: DirectSendOutbox },
   clientMessageId: string,
   wirePayload: ReturnType<typeof splitComposerAttachmentsForSubmit>,
+  imagesData: Array<{ data: string; mimeType: string }>,
 ): Promise<void> {
-  try {
-    const imagesData = await input.encodeImages(wirePayload.images);
-    if (wirePayload.images.length > 0 && imagesData?.length !== wirePayload.images.length) {
-      throw new Error(i18n.t("composer.errors.failedToSend"));
-    }
-    await input.outbox.add({
-      serverId: input.outbox.serverId,
-      agentId: input.agentId,
-      clientMessageId,
-      text: input.text,
-      images: imagesData ?? [],
-      attachments: wirePayload.attachments,
-      ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
-      ...(input.interrupt ? { interrupt: true } : {}),
-    });
-  } catch (error) {
-    // Nothing was stored, so the composer must keep the text.
-    input.submission.reject(input.agentId, clientMessageId);
-    throw error;
-  }
+  await input.outbox.add({
+    serverId: input.outbox.serverId,
+    agentId: input.agentId,
+    clientMessageId,
+    text: input.text,
+    images: imagesData,
+    attachments: wirePayload.attachments,
+    ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
+    ...(input.interrupt ? { interrupt: true } : {}),
+  });
   // Saving is the composer boundary. Waiting for the relay here locks Send and
   // the draft until acknowledgement, even though the message is already durable.
   void input.outbox
@@ -297,16 +288,20 @@ export async function dispatchComposerAgentMessage(
       : {}),
   });
   input.submission.begin(input.agentId, userMessage);
-  if (input.outbox) {
-    await dispatchDurableComposerAgentMessage(
-      { ...input, outbox: input.outbox },
-      clientMessageId,
-      wirePayload,
-    );
-    return;
-  }
   try {
     const imagesData = await input.encodeImages(wirePayload.images);
+    if ((imagesData?.length ?? 0) !== wirePayload.images.length) {
+      throw new Error(i18n.t("composer.errors.failedToSend"));
+    }
+    if (input.outbox) {
+      await dispatchDurableComposerAgentMessage(
+        { ...input, outbox: input.outbox },
+        clientMessageId,
+        wirePayload,
+        imagesData ?? [],
+      );
+      return;
+    }
     const options = {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),

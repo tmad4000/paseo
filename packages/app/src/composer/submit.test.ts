@@ -35,6 +35,7 @@ describe("submitAgentInput", () => {
       canSubmit: true,
       queueMessage,
       submitMessage,
+      getDraftRevision: () => 0,
       clearDraft,
       setUserInput,
       setAttachments,
@@ -80,6 +81,7 @@ describe("submitAgentInput", () => {
       canSubmit: true,
       queueMessage,
       submitMessage,
+      getDraftRevision: () => 0,
       clearDraft,
       setUserInput,
       setAttachments,
@@ -121,6 +123,7 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
         clearDraft,
         setUserInput,
         setAttachments,
@@ -163,6 +166,7 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
         clearDraft,
         setUserInput,
         setAttachments,
@@ -202,6 +206,7 @@ describe("submitAgentInput", () => {
         submitMessage: async () => {
           throw error;
         },
+        getDraftRevision: () => 0,
         clearDraft: vi.fn(),
         setUserInput,
         setAttachments,
@@ -235,6 +240,7 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
         clearDraft,
         setUserInput,
         setAttachments,
@@ -267,6 +273,7 @@ it("preserves draft and attachments until durable queue acceptance and on storag
     canSubmit: true,
     queueMessage: () => pending,
     submitMessage: async () => {},
+    getDraftRevision: () => 0,
     clearDraft: vi.fn(),
     setUserInput,
     setAttachments,
@@ -280,4 +287,33 @@ it("preserves draft and attachments until durable queue acceptance and on storag
   expect(setUserInput).not.toHaveBeenCalled();
   expect(setAttachments).not.toHaveBeenCalled();
   expect(setSendError).toHaveBeenCalledWith("storage full");
+});
+
+it("keeps a preserve-and-lock draft untouched when preparation fails", async () => {
+  const pending = createDeferredPromise<void>();
+  const clearDraft = vi.fn();
+  const setUserInput = vi.fn();
+  const setAttachments = vi.fn();
+  const result = submitAgentInput({
+    message: "original",
+    attachments: [{ id: "original" }],
+    submitBehavior: "preserve-and-lock",
+    isAgentRunning: false,
+    canSubmit: true,
+    getDraftRevision: () => 0,
+    queueMessage: vi.fn(),
+    submitMessage: () => pending.promise,
+    clearDraft,
+    setUserInput,
+    setAttachments,
+    setSendError: vi.fn(),
+    setIsProcessing: vi.fn(),
+  });
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
+  pending.reject(new Error("save failed"));
+  expect(await result).toBe("failed");
+  expect(clearDraft).not.toHaveBeenCalled();
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
 });

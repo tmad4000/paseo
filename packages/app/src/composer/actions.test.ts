@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { submitAgentInput } from "@/composer/submit";
+import { useSendOutboxStore } from "@/stores/send-outbox-store";
 import { i18n } from "@/i18n/i18next";
 import {
   AgentMessageRejectedError,
@@ -1830,4 +1832,96 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
     expect(client.calls).toHaveLength(0);
     expect(stream.tail.get("agent")).toHaveLength(0);
   });
+});
+
+describe("complete image encoding before delivery admission", () => {
+  const cases = (["durable", "one-shot", "legacy"] as const).flatMap((path) =>
+    ([undefined, [], [{ data: "first", mimeType: "image/png" }]] as const).map((encoded) => ({
+      path,
+      encoded,
+    })),
+  );
+  it.each(cases)(
+    "retains both original images when $path encoding is incomplete: $encoded",
+    async ({ path, encoded }) => {
+      const attachments: ComposerAttachment[] = [
+        { kind: "image", metadata: imageWithId("first") },
+        { kind: "image", metadata: imageWithId("second") },
+      ];
+      let draftText = "recover both";
+      let draftAttachments = attachments;
+      let revision = 0;
+      const client = createFakeSendClient();
+      const stream = createFakeStream();
+      const add = vi.fn(async () => {});
+      const flush = vi.fn(async () => {});
+      const beforeDispatch = vi.fn(async () => {});
+      const persisted: string[] = [];
+      const unsubscribe = useSendOutboxStore.subscribe((state, previous) => {
+        for (const id of Object.keys(state.entries)) {
+          if (!previous.entries[id]) persisted.push(id);
+        }
+      });
+      try {
+        expect(
+          await submitAgentInput({
+            message: draftText,
+            attachments,
+            isAgentRunning: false,
+            canSubmit: true,
+            getDraftRevision: () => revision,
+            queueMessage: vi.fn(),
+            submitMessage: ({ message, attachments: outgoing }) =>
+              dispatchComposerAgentMessage({
+                serverId: path === "one-shot" ? "incomplete-images" : undefined,
+                client,
+                agentId: "agent",
+                text: message,
+                attachments: outgoing,
+                encodeImages: async () => (encoded === undefined ? undefined : [...encoded]),
+                submission: stream,
+                beforeDispatch,
+                outbox:
+                  path === "durable"
+                    ? {
+                        serverId: "incomplete-images",
+                        add,
+                        flush,
+                        get: () => undefined,
+                        remove: async () => {},
+                      }
+                    : undefined,
+              }),
+            clearDraft: () => {
+              throw new Error("Incomplete payload cleared the draft");
+            },
+            setUserInput: (text) => {
+              draftText = text;
+              revision += 1;
+            },
+            setAttachments: (next) => {
+              draftAttachments = next;
+              revision += 1;
+            },
+            setSendError: vi.fn(),
+            setIsProcessing: vi.fn(),
+          }),
+        ).toBe("failed");
+        expect(draftText).toBe("recover both");
+        expect(draftAttachments).toBe(attachments);
+        expect(draftAttachments).toEqual([
+          { kind: "image", metadata: imageWithId("first") },
+          { kind: "image", metadata: imageWithId("second") },
+        ]);
+        expect(client.calls).toEqual([]);
+        expect(add).not.toHaveBeenCalled();
+        expect(flush).not.toHaveBeenCalled();
+        expect(beforeDispatch).not.toHaveBeenCalled();
+        expect(persisted).toEqual([]);
+        expect(stream.tail.get("agent")).toEqual([]);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
 });

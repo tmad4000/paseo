@@ -309,8 +309,10 @@ client message id before sending. That requires both `agentRequestReceipts` (ste
 receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
 per-agent delivery worker that queued composer messages, reconnects and manual Retry use. Once local storage accepts the request, the
 composer finishes its submission and becomes available for the next draft. It does not wait for
-the host acknowledgement. Storage/attachment preparation failures still return the original draft
-with an error. Pending delivery remains visible on the saved bubble.
+the host acknowledgement. Settlement only clears or restores the draft if no text or attachment edit
+has occurred since submission, including re-entering identical content. Storage/attachment preparation
+failures restore an unchanged draft with an error. Both durable and one-shot delivery require every
+selected image to encode before saving or sending. Pending delivery remains visible on the saved bubble.
 
 - Accepted: the entry is removed and the optimistic bubble proceeds as before.
 - Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
