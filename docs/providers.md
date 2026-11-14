@@ -73,6 +73,15 @@ Existing direct providers: `claude` (in `providers/claude/agent.ts`), `codex` (`
 
 Claude first-party model metadata lives in `packages/server/src/server/agent/providers/claude/model-manifest.ts`. When adding or updating a Claude model, update that manifest only; the model picker thinking options and Claude-specific feature gates are derived from the manifest. Do not add model-specific Claude capability lists in feature code.
 
+For a Claude freshness review, capture `paseo provider models claude --json` to a file,
+then run `npx tsx scripts/check-claude-catalog-freshness.ts <daemon-Claude-version> <file>`.
+Use the version reported by the target daemon's provider diagnostic, not another host's CLI.
+A missing ID means the source catalog and daemon disagree; it does not authorize installing
+that checkout. Custom settings entries outside the manifest are reported separately and retained.
+Refreshing the catalog cannot teach an older installed manifest new IDs. Review provider-native
+metadata and successful runtime evidence before proposing manifest additions; never generate
+future IDs from model family names. Keep source validation separate from deployment verification.
+
 Paseo tools are not implemented as MCP tools internally. They live in a shared tool catalog under `packages/server/src/server/agent/tools/`; MCP is only the fallback adapter. The daemon resolves `agents.providers.<provider>.paseoTools` by the exact provider ID. The catalog policy belongs to the caller: it filters the tools exposed to the current agent. When that agent calls `create_agent`, the child receives the policy for the child provider ID; the caller's policy is not inherited.
 
 A provider that can register runtime tools directly should set `supportsNativePaseoTools: true` and consume the already-filtered `launchContext.paseoTools` in `createSession`/`resumeSession`. When native tools are present, `AgentManager` strips the internal Paseo MCP server from the provider launch config so the provider does not receive the same tools twice. Providers that only know MCP should keep `supportsMcpServers: true` and let the daemon inject `/mcp/agents`; the MCP server builds the same policy-filtered catalog for that caller. Filtering is enforced at catalog registration in both paths. Browser tools remain subject to the daemon browser-tools setting and browser-host availability.
