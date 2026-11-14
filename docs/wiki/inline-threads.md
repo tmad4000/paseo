@@ -109,8 +109,8 @@ Four choices are the spec's recommendations, not decisions Jacob has made (spec 
 agents may add reactions but never read them; the turn word is "Finished", not "Done"; a
 permission request badges its row without expanding it; the setting is per device.
 
-The four `pspin-plx` questions have proposed answers in the same section. The wording of
-`pspin-plx` above is as summarized by later sessions; the bead itself was not read.
+The four `pspin-plx` questions have proposed answers in the same section, and in a comment on
+the bead. Tickets for each phase are filed (spec section 11): `pspin-plx.3` is Phase 1.
 
 ## Screenshots
 

@@ -751,30 +751,30 @@ The **N replies** chip becomes a thread row under its anchor (5.9). The navigato
 
 ## 11. Tickets
 
-GitHub issues are disabled on the fork; tickets are beads in the `pspin` tracker. Drafts,
-deduplicated against what exists:
+GitHub issues are disabled on the fork; tickets are beads in the `pspin` tracker. Filed
+2026-11-14, after searching every bead (open and closed) for threads, reactions, emoji, sender,
+exchange log, turn state and delivery marks, and confirming each parent exists:
 
-| Draft                                                         | Parent        | Relation to existing beads                                                                                                                                                                  |
-| ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Record the calling agent as sender for `paseo send` (Phase 0) | `pspin-787`   | Completes the sender contract from `pspin-575`. New                                                                                                                                         |
-| Exchange log and inline thread rows, default on (Phase 1)     | `pspin-plx`   | New child. `pspin-plx` asked for an orchestrator's threads with state, condensed report and unread; this is the in-transcript form. Not a duplicate of `pspin-plx.1` (side-panel navigator) |
-| Turn state beside delivery marks, with turn records (Phase 2) | `pspin-86u`   | Sits beside the delivery marks bead's work. New child                                                                                                                                       |
-| Message reactions, people (Phase 3)                           | `pspin-787`   | New. No earlier bead, PR or plan found                                                                                                                                                      |
-| Agent-added reactions (Phase 3b)                              | Phase 3 bead  | New. Default is to build it; see section 12, default 1                                                                                                                                      |
-| Reply-thread chip as a thread row (Phase 4)                   | `pspin-plx.1` | New child                                                                                                                                                                                   |
-| Find covers exchange-log text                                 | Phase 1 bead  | New, follow-up                                                                                                                                                                              |
-| Cross-host sender identity and threads                        | `pspin-787`   | New, deferred                                                                                                                                                                               |
+| Bead            | What                                                          | Parent        | State                     |
+| --------------- | ------------------------------------------------------------- | ------------- | ------------------------- |
+| `pspin-575.1`   | Record the calling agent as sender for `paseo send` (Phase 0) | `pspin-575`   | Closed: merged as #214    |
+| `pspin-plx.3`   | Exchange log and inline thread rows, default on (Phase 1)     | `pspin-plx`   | Open                      |
+| `pspin-plx.3.1` | Find covers exchange-log text                                 | `pspin-plx.3` | Open, follow-up           |
+| `pspin-plx.3.2` | Decide whether restricted principals may name a caller (8.1)  | `pspin-plx.3` | Open, decision            |
+| `pspin-86u.3`   | Turn state beside delivery marks, with turn records (Phase 2) | `pspin-86u`   | Open, after `pspin-plx.3` |
+| `pspin-787.9`   | Message reactions, people (Phase 3)                           | `pspin-787`   | Open                      |
+| `pspin-787.9.1` | Agent-added reactions (Phase 3b)                              | `pspin-787.9` | Open; see section 12      |
+| `pspin-plx.4`   | Reply-thread chip as a thread row (Phase 4)                   | `pspin-plx`   | Open, after `pspin-plx.3` |
+| `pspin-787.10`  | Cross-host sender identity and threads                        | `pspin-787`   | Open, deferred            |
 
-`pspin-plx` gets a note with the proposed answers to its four open questions (section 12).
-`pspin-plx.1`, `pspin-787.4` (native provider fork) and `pspin-c64` are unchanged.
-
-The bead text could not be read while writing this (section 13), so parent ids come from
-earlier summaries and PR descriptions. Check them against the tracker when filing.
+No duplicates were found. The nearest existing beads are the parents themselves, `pspin-c64`
+(subagents drawer) and `pspin-plx.1` / `pspin-plx.2` (the navigator plan and its review, both
+closed). `pspin-plx` carries a comment with the proposed answers to its four open questions
+(section 12). `pspin-787.4` (native provider fork) and `pspin-c64` are unchanged.
 
 ## 12. Open questions and defaults
 
-The four left on `pspin-plx` since 2026-10-11, as later summaries record them, with this
-spec's answers:
+The four left on `pspin-plx` since 2026-10-11, with this spec's answers:
 
 1. _Do sessions an orchestrator routed work to, but did not create, count as threads?_ Yes.
    Membership is the recorded sender and recipient (5.1). No "thread-of" label is needed;
@@ -813,8 +813,8 @@ plan; an independent review of this spec against the source.
 
 Limits:
 
-- The `pspin` beads tracker was not readable from where this was written. Bead descriptions
-  are as quoted by earlier summaries and by PR bodies, and are not authoritative wording.
+- The `pspin` beads were not readable while the spec was first written; bead wording was
+  checked against the tracker when the tickets were filed, and matched.
 - Which providers put message ids on user messages in their history was not verified per
   provider. Section 8.2's restart matching depends on it. Check Claude, Codex and OpenCode
   before Phase 1 commits to the acceptance check that names it.
