@@ -10,6 +10,16 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Stacked-pane composer
+
+`composer-stacked-panes`: short desktop panes reduce empty composer space and bound growing
+drafts to their pane. Resize stacked panes down and back up: drafts, readable text and toolbar
+actions must survive. Compact phone layouts and native keyboard sizing retain their existing policy.
+This feature-only candidate is based on installed beta.27 at
+`a7a7ba030eb95575a482ff2005bfb95f22453cb9`; it excludes later main changes.
+Coverage: `composer/dock/pane-geometry.test.ts` and `e2e/browser/composer-stacked-panes.spec.ts`.
+Installed acceptance is recorded separately from source integration.
+
 ## Session task checklist — pspin-tg2
 
 `session-task-checklist`: each chat's own plan (Claude TodoWrite/TaskCreate/TaskUpdate/TaskList,

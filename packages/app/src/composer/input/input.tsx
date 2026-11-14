@@ -69,6 +69,8 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useComposerHeight } from "./height";
+import { useComposerPaneHeight } from "../dock/pane-height";
+import { isShortComposerPane, resolvePaneInputMaxHeight } from "../dock/pane-geometry";
 import { ComposerKeyboardDismissButton } from "./keyboard-dismiss-button";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
@@ -1357,6 +1359,20 @@ function resolveInputAccessibilityLabel(
     : t(fallbackKey);
 }
 
+function usePaneInputGeometry(isCompact: boolean, windowHeight: number) {
+  const paneHeight = useComposerPaneHeight();
+  const isShortPane = isWeb && !isCompact && isShortComposerPane(paneHeight);
+  const minInputHeight = isShortPane ? MIN_INPUT_HEIGHT_MOBILE : MIN_INPUT_HEIGHT;
+  const maxInputHeight = Math.max(
+    minInputHeight,
+    resolvePaneInputMaxHeight(
+      resolveMaxInputHeight(windowHeight),
+      isWeb && !isCompact ? paneHeight : null,
+    ),
+  );
+  return { isShortPane, minInputHeight, maxInputHeight };
+}
+
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
   function MessageInput(props, ref) {
     const {
@@ -1413,7 +1429,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const replyTargetLabel = useSubthreadReplyLabel(voiceAgentId);
     const isCompact = useIsCompactFormFactor();
     const { height: windowHeight } = useWindowDimensions();
-    const maxInputHeight = resolveMaxInputHeight(windowHeight);
+    const { isShortPane, minInputHeight, maxInputHeight } = usePaneInputGeometry(
+      isCompact,
+      windowHeight,
+    );
     const buttonIconSize = isWeb ? ICON_SIZE.md : ICON_SIZE.lg;
     const toast = useToast();
     const voice = useVoiceOptional();
@@ -1438,7 +1457,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const composerHeight = useComposerHeight({
       getText: getLiveText,
       textareaRef: webTextareaRef,
-      minHeight: MIN_INPUT_HEIGHT,
+      minHeight: minInputHeight,
       maxHeight: maxInputHeight,
     });
     const { style: composerHeightStyle, scrollEnabled: isComposerScrollEnabled } = composerHeight;
@@ -1977,12 +1996,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const inputWrapperCombinedStyle = useMemo(
       () => [
         styles.inputWrapper,
+        isShortPane && styles.inputWrapperShortPane,
         readOnly && styles.inputWrapperReadOnly,
         inputWrapperStyle,
         showRealtimeOverlay ? styles.inputWrapperBehindVoice : undefined,
         { opacity: surfacePresentation.input.opacity },
       ],
-      [inputWrapperStyle, readOnly, surfacePresentation.input.opacity, showRealtimeOverlay],
+      [
+        inputWrapperStyle,
+        isShortPane,
+        readOnly,
+        surfacePresentation.input.opacity,
+        showRealtimeOverlay,
+      ],
     );
     // `withUnistyles` maps this component's `style` into a `.hash > *` child
     // rule, which ties on specificity with react-native-web's own
@@ -1996,8 +2022,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     // Static content has no textarea to mirror, so it grows with its own text
     // instead of the measured input height.
     const readOnlyTextStyle = useMemo(
-      () => [styles.textInput, mode.isMonospace && styles.textInputMonospace, styles.readOnlyText],
-      [mode.isMonospace],
+      () => [
+        styles.textInput,
+        mode.isMonospace && styles.textInputMonospace,
+        styles.readOnlyText,
+        { minHeight: minInputHeight },
+      ],
+      [mode.isMonospace, minInputHeight],
     );
     const primarySendLabel = resolvePrimarySendLabel({
       submitLabel,
@@ -2222,6 +2253,10 @@ const styles = StyleSheet.create((theme: Theme) => ({
           transitionTimingFunction: "ease-in-out",
         }
       : {}),
+  },
+  inputWrapperShortPane: {
+    paddingVertical: theme.spacing[2],
+    gap: theme.spacing[1],
   },
   // Dotted says "this surface is the same box, but there is nothing to type
   // into it" without swapping the border colour, which reads as an error state.
