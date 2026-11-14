@@ -1,172 +1,74 @@
 # Message-update responsiveness — pspin-bvs
 
-Known chats remain usable while their first history response is held. The device-save boundary
-releases the composer before Send acknowledgement; pending/refused delivery remains recoverable.
-The sync badge is passive and sits at the bottom of the history area, above the composer.
-User toasts take priority in the same viewport. The viewport stays inside its native parent bounds
-so toast actions remain touchable on Android.
+Known chats keep their composer available during first history sync. Send releases the composer
+after the device saves the complete message, while ordered host delivery continues in the background.
+The passive sync badge sits inside the history area above the composer; user errors take priority,
+and toast actions remain inside their native parent bounds for Android hit testing.
 
 ![390px viewport with history and Send acknowledgement held, and a second draft ready](mobile-responsiveness/phone-history-held.png)
 
-## Validation
+## Source validation
 
-Checked against the beta.30 source line (`accd8743a`) plus this change, using Node 22.20.0 on Linux:
+The initial implementation and UI repairs at `c8ef9cda1` passed full workspace typecheck, lint,
+formatting, 248 focused app tests, four tooltip browser component tests, and 12 selected
+daemon-backed browser scenarios across runs. GitHub CI also passed on that revision. That CI run
+does not validate the later delivery-coordination repairs.
 
-- `npm run build:app-deps` and `npm run build:server`: pass.
-- `npm run format`, `npm run lint`, `npm run typecheck`: pass. After moving the status badge,
-  formatting/lint and the app typecheck were repeated and passed.
-- App Vitest: 248 tests across composer actions, submission and writer, screen state,
-  stream reducers, responsiveness metrics, shared outbox settlement, tooltip handlers and sync
-  status: pass. The tooltip browser component suite adds four passing Chromium tests.
-- `npx playwright test --project=browser e2e/browser/agent-timeline-sync-retry.spec.ts --workers=1`:
-  3 pass, including the 390×844 viewport. It holds actual daemon WebSocket responses for first
-  history and Send, submits through the real composer, starts a second draft before releasing
-  either response, and checks that draft survives. The other cases exercise refusal/retry/recovery
-  after first load and reconnect.
+The delivery repairs were checked on GCP `jacob-dev-1` using Node 22.23.3. The exact source revisions,
+commands, exit codes and logs are retained in the task's validation receipts. Builds, full workspace and app typechecks, lint, formatting, focused unit/component tests and
+daemon-backed browser flows were run there. Revision-specific commands and outcomes for the
+published source are listed in the PR; earlier diagnostics are retained rather than counted as passes.
 
-The queue regressions verify bounded scheduled batches, fairness between chats, lossless ordering
-and a complete synchronous drain before canonical history. The Send regression leaves the host
-promise unresolved and checks submission still finishes after the device save. Storage failure
-and explicit/uncertain refusals remain covered.
+The published revision's required checks are recorded on [PR 207](https://github.com/tmad4000/paseo/pull/207).
 
-### Review repairs
+The phone-width flow holds actual daemon WebSocket responses for first history and Send, submits
+through the real composer, types a second draft before releasing either response, and verifies that
+draft survives. Recovery cases exercise definite refusal, identical-ID/image-payload retry,
+reconnect and status continuity. Other cases hold a direct request before host dispatch, save a
+later queue message locally, then verify canonical delivery order. Routed Queue, ambiguous
+one-shot recovery through reload, Send Back and reopening the original thread are covered too.
 
-Independent review caught refusal settlement missing from reconnect/manual Retry and tooltip
-measurement excluding the child action. Refusals now retire the matching live submission through
-the shared flush path, leaving the saved message visible in Unsent. Uncertain outcomes remain live;
-Retry sends the identical ID and payload. Icon tooltips measure wrapped child actions once.
+The history-layout test first verifies that its response text and read tool are absent from the
+seeded history, then checks that both appear after Send. It retains the original row-stability
+recorder. A total mounted-row count is unsuitable for virtualized
+history: a new row can replace an older mounted row without increasing the count. Earlier
+diagnostic failures and traces are retained; the assertions for a missing row and downward movement
+were preserved.
 
-The single status viewport preserves user-error priority and alert continuity during reconnect.
-It is hosted inside the history area's bounds, above the composer, including native hit testing.
-Sidebar mark-as-read handles Enter/Space without opening its parent workspace. Outline pointer
-interactions wait for usable stable layout geometry.
+## Review repairs
 
-Browser release-order tests hold all matching running snapshots, including attention/read updates,
-until the test explicitly releases authoritative state. Legacy-host rejection tests explicitly disable
-receipt support and retain their draft-restoration checks. A modern saved-send test holds the rejection
-response while composing a newer draft, then checks Unsent recovery, attachment delivery, identical
-retry ID, and the unchanged newer draft.
+Independent review caught gaps in the first implementation:
 
-Before the shared delivery-order repair below, full workspace typecheck, lint, and the 248 focused app tests passed on GCP. The keyboard, outline,
-three running-state delivery orders, legacy refusal/Steer, and reconnect status browser cases pass.
-Saved-send recovery also passes: the host accepts one retry with identical image bytes and
-message ID, while the newer draft remains unchanged. This fixture refuses before host dispatch;
-ambiguous provider outcomes remain covered separately. The mock canonical echo omits image
-previews, so delivery is checked through the complete outbound request payload and host acceptance.
-All 12 focused daemon browser cases pass across these runs. The final phone screenshot was visually
-inspected. Native build/device verification remains deferred; no signed package or rollout is included.
+- Refusal settlement now runs for composer delivery, reconnect and manual Retry, preserving the
+  newer draft and the identical saved message identity and payload.
+- Tooltip timing includes the actual child action and avoids nested double-counting. Sidebar
+  Enter/Space actions preserve navigation isolation. Sync status preserves error priority and
+  alert identity, and its native touch targets stay within parent bounds.
+- One per-agent worker orders direct sends, queued messages, routing, Send Back and Stream replies.
+  Creation order accounts for hydrated entries even after a backward device-clock change.
+  Other chats and local cancellation can proceed independently.
+- Unknown outcomes retain ownership across restart and slow or failed storage writes. One-shot
+  routed sends have an explicit recovery hold and are never automatically replayed. The receipt
+  owner normalizes the first ambiguous provider response and completion-write failures; the
+  client also recognizes older daemon wording. Known pre-submission refusals remain distinct.
+- Failed provisional saves and terminal routing preparation failures wake later saved work.
+  A preparation wake-up runs only after its own entry is durably removed; retained failures do
+  not trigger an implicit retry. Recovery releases ordering ownership only after persistence succeeds.
+- Broadcast results distinguish device-pending saves from confirmed host delivery.
+- Delivery hydration and flushing use dependencies available when the composer loads, keeping
+  lazy code-bundle fetches off the first-send path.
 
-### Shared direct/queue ordering repair — verification pending
+The executable regressions use real store operations and held/failing storage to check ordering,
+restart recovery, exclusion, cancellation, independent agents and automatic wake-ups. Dependency
+compilation occurs in module setup outside timed storage assertions; cold module resets,
+hydration scenarios and behavioral timeouts remain intact. Tests execute behavior rather than
+checking implementation source strings.
 
-Review reproduced a source-level ordering gap: a saved direct send could still wait before host
-dispatch while a later queued message reached an idle daemon. Both outboxes now use one per-agent
-worker ordered by durable creation time. Transport failures and parked unknown outcomes retain
-the barrier; definitive refusal, successful retry and explicit discard allow later delivery. Queue
-removals bypass the delivery barrier, and other agents have independent workers.
+## Performance evidence and limits
 
-Added executable regressions in `stores/send-outbox-store/index.test.ts` for held A / locally saved
-B / later direct C, transport and unknown barriers across rehydration and fresh startup, identical retry, definitive
-refusal, discard wake-up, cancellation and independent agents. `model.test.ts` checks that a new or
-already parked unknown outcome blocks later direct sends. The daemon-backed
-`agent-message-submission.spec.ts` case holds A's actual client request before forwarding, verifies
-B's persisted device entry and absence from the host, keeps a newer draft editable, then releases A
-and checks canonical A-before-B delivery.
-
-The next source review found two remaining gaps: Find/Send and Send Back could still bypass the
-worker, and restarting with a backward device clock could allocate an earlier creation time. Active
-routed admissions now join the worker without releasing their undispatched hold or draft escrow;
-Send Back saves in the queue outbox. The caller audit also coordinated broadcast, Stream replies,
-direct routing and legacy composer delivery. New creation order observes both hydrated outboxes.
-Host queue Send now keeps its explicit steering path.
-
-Added unit cases cover routed admission behind held/unknown A, retry/discard wake-up, exclusion
-revalidation, cancellation, Send Back, and all four older/newer outbox combinations with a backward
-clock and delayed reads. Daemon-backed routing and threaded-reply regressions now hold A before host
-dispatch, assert B remains device-only, and check canonical A-before-B order plus newer draft
-preservation. The composer queue regression expects the actual capable-host `steer_only` behavior;
-its ordering assertions are unchanged.
-
-A further review found that a failed routed admission stopped the worker even after its durable
-item was removed. The worker now continues when that admission has no unresolved saved entry.
-Added the exact unknown-A / excluded-routed-B / ordinary-queue-C regression: discarding A must
-automatically deliver C after B is removed, preserving B's draft. Separate cases retain B and C
-after transport loss or an unknown outcome. Execution of these new cases is pending GCP validation.
-
-The outbox suites compile the real delivery dependency graph at module setup, outside timed
-behavioral assertions. Their cold resets, read/write holds and assertion timeouts remain unchanged.
-The Stream screen's hook mock and imperative `getState` share the same state factory, retaining the
-actual dispatcher. The supplied GCP fixture/format patch is applied. The outer executor reported
-227 passing tests across eight suites with those fixture changes on `0363d5e7`, plus passing lint,
-workspace typecheck, server build and 34 server tests on that commit. These are earlier-source
-receipts, not validation of the storage-transition repair below.
-
-The one-shot admission follow-up now saves a stable-ID hold in the existing send outbox before
-dispatch. Ambiguous routed direct sends and Stream replies retain it across restart; their recovery
-track confirms release without replay. Client adapters let earlier retryable entries progress.
-Broadcast results and translated copy distinguish device-pending saves from confirmed sends and
-host queue admission, and queued broadcast flushing remains in the background.
-
-Added unit regressions cover held host preparation followed by timeout and Queue B, slow/failed
-hold storage, restart/slow hydration, known preflight failure, explicit recovery of a never-resolving
-client promise, prior-work adapter progress, legacy hosts and Stream replies. Broadcast cases cover
-unresolved and refused delivery, held queue admission, prior unresolved work and confirmed legacy
-receipts. The routing browser case preserves its draft and B through an ambiguous response/reload,
-then exercises the visible release confirmation and verifies A was never replayed. Existing queue
-E2E persistence predicates now use named helpers; their ordering assertions remain. The Send Back
-case navigates to the original turn before reopening its thread chip after the newer parent messages.
-The reported shadowing, callback complexity, nesting, ternary and promise-return issues are refactored
-in source without suppressions.
-
-The first ambiguous provider response now carries `agent_request_outcome_unknown` with its original
-detail, including completion-receipt write failures. The client also recognizes older hosts' provider
-ambiguity wording. Added receipt tests exercise the first response, reconstruction without replay,
-explicit settlement, completion-write failure and known pre-dispatch failure. Client regressions hold
-A while B saves, return the first ambiguous response, then restart with slow hydration and explicitly
-release the retained hold; an ordinary direct-send case retains the same barrier across restart.
-A definite provider refusal releases later work. Configured mock prompt rejection now declares that
-submission never began; mock steering transport failure remains ambiguous.
-
-The storage-transition repair retains committed ordering ownership while durable removal is
-unfinished or fails. The existing worker reschedules with its client adapters after an unfinished
-write settles. New regressions save direct B behind a failing Send Back A save and Queue B behind a
-failing ordinary direct A save; B must proceed automatically after A disappears. Recovery cases
-cover ordinary unknown and one-shot entries: save and flush B during A's held removal write, fail
-that write, retain A and B, then explicitly recover A successfully and deliver B once.
-
-The outer executor reported 230 selected app unit tests, lint and app typecheck passing on
-`c0d0379d`. Preparation-time routing rejection exposed another wake-up gap before admission
-registration. The new regression blocks B's final ownership read behind a real queue-store mutation,
-saves direct C, then excludes B's host. C must proceed without another flush after B's durable
-removal; the failed-removal case flushes C during held storage and retains B, C and the draft.
-The routing completion boundary now rescans through the existing worker for preparation rejection,
-cancellation and already-acknowledged outcomes, using the caller's complete client adapters.
-
-The virtualized 81-turn layout case reached submission on `c0d0379d` but failed its mounted-row
-count-growth assertion. The test now checks the default mock's new scroll-anchor response and read
-tool group in rows after the submitted prompt. It retains the same stability recorder and its
-missing-row and two-pixel downward-shift assertions, with unchanged timeouts. The initial fixture
-preparation timeout and the semantic replacement still need final GCP execution; no performance
-claim follows from this test-only repair. The outer executor separately reported ten other selected
-daemon browser flows passing on `0363d5e7` with the fixture patch, including held history, saved image
-retry, ordered Queue B, routed unknown/reload, and Send Back with chip reopening.
-
-The supplied `c0d0379d` formatting patch is applied. The newly changed text files are formatted with
-the existing native formatter using one thread. Validation of this routing repair and its new
-regressions remains pending on GCP. Published `c8ef9cda1` CI does not validate the repair commits. Rebuild the server before browser validation of
-the receipt normalization. No tests, builds or lint ran in this M4 review phase.
-
-The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
-`c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing
-receipt for this source. These additions have not been executed in this M4 review/fix phase. The outer executor must run
-focused unit/browser regressions and formatting/typecheck/lint on `jacob-dev-1` through `agent-dev`. Earlier
-passing receipts and the screenshot above do not validate this repair. Native rollout remains deferred.
-
-## Burst comparison
-
-One synthetic run queues 1,024 assistant deltas for each of eight chats, then measures each
-scheduled reducer callback. Both versions produce the identical final text. This isolates reducer
-and commit scheduling; it excludes React rendering, native touch dispatch and display presentation.
-It is not an iPhone latency result or a performance threshold for CI.
+One synthetic run queues 1,024 assistant deltas for each of eight chats. Both implementations
+produce identical final text. This isolates reducer/commit scheduling and excludes React rendering,
+native touch dispatch and screen presentation; it is not an iPhone benchmark or a CI threshold.
 
 | Node 22, 8,192 queued events |  Before |   After |
 | ---------------------------- | ------: | ------: |
@@ -175,21 +77,31 @@ It is not an iPhone latency result or a performance threshold for CI.
 | p95 callback                 | 26.84ms |  0.56ms |
 | Total reducer/commit time    | 26.84ms | 24.23ms |
 
-## Platform coverage and remaining work
+The optional developer-web stream-smoothness experiment did **not** consistently meet its strict
+12ms React p95 budget. Three baseline samples were 12.5/13.0/12.0ms; three interim patched samples
+were 15.1/12.6/14.4ms. All six visible-update-gap p95 measurements were below the separate 250ms
+budget. Workload phase and characters painted differed, so this is not a controlled release/native
+comparison and does not establish either an iPhone improvement or a rendering regression. The
+budget was not relaxed. Physical-device release profiling remains necessary.
 
-| Platform    | Verified                                                                         |
-| ----------- | -------------------------------------------------------------------------------- |
-| Browser web | Three daemon-backed flows; narrow layout visually inspected                      |
-| iOS         | Native JS export passed on GCP; optimized bytecode/signing/device checks pending |
-| Android     | Source and shared behavior tested; device verification pending                   |
-| Electron    | Shared app typecheck; installed desktop behavior not verified                    |
+Responsiveness diagnostics measure synchronous handlers, the next JS animation-frame callback,
+event-loop stalls and reducer batches. They are bounded and contain no message text, route or
+control labels. These measurements do not include native pre-JS input queuing, confirmed screen
+presentation or asynchronous action completion. See [telemetry coverage](../agent-stream-performance.md#responsiveness-telemetry).
 
-No app distribution or shared daemon restart is part of this source receipt. Native release
-profiling must confirm the actual touch-to-display improvement. See
-[agent stream performance](../agent-stream-performance.md#responsiveness-telemetry) for telemetry
-coverage, privacy, bounds and the difference between a frame callback and a completed action.
+## Platform coverage
 
-The optional Linux iOS JS export used Expo `--platform ios --no-bytecode --max-workers 2`
-with an 8 GiB Node heap. Optimized Hermes compilation exceeded this builder's memory budget,
-including a standalone compile capped at 27 GiB of virtual memory. That is build-time allocation,
-not a measurement of phone runtime memory. A native release still requires Apple tooling and signing.
+| Platform    | Coverage                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| Browser web | Unit/component and daemon-backed flows; 390px layout visually inspected                                 |
+| iOS         | Initial implementation's native JS export passed; optimized bytecode, signing and device checks pending |
+| Android     | Shared behavior and native parent bounds reviewed; device verification pending                          |
+| Electron    | Shared source checks and required PR CI; installed application not verified                             |
+
+The optional Linux iOS export used Expo `--platform ios --no-bytecode --max-workers 2` with an
+8 GiB Node heap. Optimized Hermes compilation exceeded that builder's memory budget, including a
+standalone compile capped at 27 GiB virtual memory. This is build-time allocation, not phone memory.
+An installable iOS build requires Apple tooling and signing, whether on a local or cloud Mac.
+
+The user selected code and CI only. No app distribution, installation, signing changes or shared
+daemon restart is included.

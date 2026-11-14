@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 
 import { createOutboxWriteTracker } from "@/stores/outbox-write";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
 import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
@@ -194,7 +195,6 @@ export interface SendOutboxServerInput {
 }
 
 export async function flushSendOutboxForServer(input: SendOutboxServerInput): Promise<void> {
-  const { flushDeliveryOutboxes } = await import("@/stores/delivery-outboxes");
   await flushDeliveryOutboxes({ ...input, direct: input });
 }
 

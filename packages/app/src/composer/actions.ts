@@ -21,7 +21,7 @@ import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
 import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
-import type { DeliveryClient } from "@/stores/delivery-outboxes";
+import { runOrderedAdmission, type DeliveryClient } from "@/stores/delivery-outboxes";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import { isUncertainSendOutcome, type PendingDirectSend } from "@/stores/send-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
@@ -320,9 +320,7 @@ export async function dispatchComposerAgentMessage(
       return input.client.sendAgentMessage(input.agentId, input.text, options);
     };
     const result = input.serverId
-      ? await (
-          await import("@/stores/delivery-outboxes")
-        ).runOrderedAdmission({
+      ? await runOrderedAdmission({
           serverId: input.serverId,
           agentId: input.agentId,
           itemId: clientMessageId,

@@ -124,6 +124,7 @@ export interface RouteDeliveryInput {
 
 export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ queued: boolean }> {
   const { recipient, text, itemId } = input;
+  let preparationRemovedEntry = false;
   return serializeQueueOperation(
     JSON.stringify(["route-prepare", recipient.serverId, recipient.agentId]),
     async () => {
@@ -157,7 +158,10 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       }
       if (current.removalRequested) throw new Error("Delivery cancellation is pending.");
       if (!input.isHostEligible()) {
-        if (!existing) await input.outbox.removeDurably(itemId);
+        if (!existing) {
+          await input.outbox.removeDurably(itemId);
+          preparationRemovedEntry = true;
+        }
         throw new Error("The selected host was excluded. Choose a destination again.");
       }
       return { status: "pending" as const, enqueue, existing, current };
@@ -219,6 +223,8 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       });
     })
     .finally(() => {
+      // Registered admissions wake their own followers. Retained failures need explicit retry.
+      if (!preparationRemovedEntry) return;
       void flushDeliveryOutboxes({
         serverId: recipient.serverId,
         agentId: recipient.agentId,

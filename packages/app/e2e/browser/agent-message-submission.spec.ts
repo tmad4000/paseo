@@ -1191,6 +1191,11 @@ test.describe("Agent message submission", () => {
     await expect(
       page.getByTestId("user-message").filter({ hasText: submissionScenario.existingPrompt }),
     ).toBeVisible();
+    const responseText = "I'll take a look at the scroll anchor behavior you described.";
+    const assistantOutput = page.getByTestId("assistant-message").filter({ hasText: responseText });
+    const readTool = page.getByTestId("tool-call-group").filter({ hasText: /read/i });
+    await expect(assistantOutput).toHaveCount(0);
+    await expect(readTool).toHaveCount(0);
     const finishTimelineRowStabilityCheck = await beginTimelineRowStabilityCheck(
       page,
       page.getByTestId("assistant-message").last(),
@@ -1198,17 +1203,9 @@ test.describe("Agent message submission", () => {
     await composer.press("Enter");
     const userMessage = page.getByTestId("user-message").filter({ hasText: prompt }).last();
     await expect(userMessage).toBeVisible();
-    const submittedTurnRows = userMessage.locator(
-      "xpath=ancestor::*[@data-history-row-id][1]/following-sibling::*[@data-history-row-id]",
-    );
-    const assistantOutput = submittedTurnRows.getByTestId("assistant-message").first();
-    await expect(assistantOutput).toContainText(
-      "I'll take a look at the scroll anchor behavior you described.",
-    );
+    await expect(assistantOutput).toContainText(responseText);
     await expect(assistantOutput).toBeVisible();
-    await expect(
-      submittedTurnRows.getByTestId("tool-call-group").filter({ hasText: /read/i }).first(),
-    ).toBeVisible();
+    await expect(readTool).toBeVisible();
     await finishTimelineRowStabilityCheck();
   });
 

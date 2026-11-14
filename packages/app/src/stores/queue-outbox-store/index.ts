@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
 import { createOutboxWriteTracker } from "@/stores/outbox-write";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
@@ -443,7 +444,6 @@ export interface QueueOutboxServerInput {
 }
 
 export async function flushQueueOutboxForServer(input: QueueOutboxServerInput): Promise<void> {
-  const { flushDeliveryOutboxes } = await import("@/stores/delivery-outboxes");
   await flushDeliveryOutboxes({ ...input, queue: input });
 }
 
