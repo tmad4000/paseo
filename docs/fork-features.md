@@ -122,6 +122,38 @@ latest user message; a dormant Claude/Codex sibling reports its true first promp
 [workspace describe](workspace-describe.md). Source prepared on `feat/workspace-describe`; reaches
 installs through the next staged build.
 
+## Tab-local splits — pspin-4ci
+
+`tab-local-splits`: **Split this tab → Right / Below** (tab context menu, Cmd+K, `Cmd+Alt+\` and `Cmd+Alt+Shift+\`; `Ctrl+Alt+\` and `Ctrl+Alt+Shift+\` elsewhere) splits inside the current tab, beside
+upstream's workspace **Split pane** (`Cmd+\`, unchanged). A new leaf is a chooser: an existing tab of
+the pane, or a new terminal, agent or browser through the normal launcher; nothing starts until a
+row is chosen, and a target is never shown twice. Leaves have a 24px header (zoom, close through the
+tab's own close policy, **Move to its own tab**); Cmd/Ctrl+Shift+Enter zooms the focused leaf and
+falls through to Maximize pane outside a composite; the pane focus actions walk leaves before
+panes. The strip hides members and shows the host with a columns/rows glyph and leaf count,
+the members' unread and modified state, and a summary tooltip.
+
+Preservation notes:
+
+- A composite is ordinary workspace tabs plus a tree, stored in its own strict `tab-local-splits`
+  store (v1). `workspace-layout-state` stays v2 and never holds composite data, so older builds show
+  the members as ordinary tabs and lose nothing. Do not move this into the layout schema.
+- One subscription (`tab-local-splits/workspace-integration.tsx`) keeps members in the host's
+  pane, after the host, and turns focus on a member into its host with that leaf focused. Upstream
+  callers (deep links, `ui open-tab`, tab cycling, drag and drop, pane moves) stay unaware of it.
+- Upstream touch points are small hooks: `split-container.tsx` (strip and panel host use
+  `useTabLocalPane`; Zoom falls through to Maximize), `workspace-panel-host.tsx` (`tabContent`
+  slot), `workspace-desktop-tabs-row.tsx` (chip glyph, menu entries), `workspace-screen.tsx`
+  (mount, strip order for Cmd+1-9 and cycling, leaf agents in timeline sync), keyboard action and
+  binding tables, and English strings that other locales reuse.
+- Web and desktop only. Compact and native layouts list members as ordinary tabs and keep the
+  composite for the next wide layout. Views show the entries disabled (Phase 2).
+
+Acceptance: `tab-local-splits/*.test.ts` (actions, normalization, retargets, geometry, strict
+schema and downgrade) and browser `e2e/browser/tab-local-splits.spec.ts`. Source prepared on
+`feat/tab-local-splits`; not installed. Cmd combinations and Electron were not exercised on Linux.
+Phase 2 (per the 2026-11-14 design, which follows `design/tab-local-splits-20261029`): drop zones inside a composite, compact grouping, Views, open-beside into a leaf, leaf moves by keyboard.
+
 ## Feature register
 
 | ID                           | Behavior to preserve / quick acceptance check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Source evidence and status at audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
