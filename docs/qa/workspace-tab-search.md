@@ -200,6 +200,45 @@ The final added tests and receipt passed repository formatting, full lint and al
 again (`precleanup-focus-static.result`, exit zero). Temporary instrumentation is absent from tracked
 source; runnable probes are archived with the retained diagnostic evidence.
 
+### Deferred restoration document lifetime
+
+CI `43583406747` at `6bd8046cc` reported 739 files / 6,668 tests passed but failed on six unhandled
+`ReferenceError: document is not defined` exceptions from the queued return at `overlay-root.ts:247`.
+All six originated after the attachment-lightbox tests removed their ambient JSDOM globals. Running
+that unchanged file alone reproduced **7 passing tests plus six unhandled errors**, exit one.
+This run is a failure; passing assertions do not qualify a suite with deferred errors.
+
+The new lifecycle regression unmounts the overlay, removes the ambient document binding, and flushes
+the queued return. It reproduces the same ReferenceError before the fix and requires actual opener
+focus exactly once with `preventScroll` afterward. The callback now retains its registering DOM's
+owning document. Its commit timing, connected-target and active-focus ownership checks stay intact.
+Overlay, unchanged lightbox and Combobox units pass **3 files / 16 tests**, with no unhandled errors;
+all **10 Chromium DOM regressions** pass. Red/green receipts are `document-lifetime-red.log`,
+`document-lifetime-lightbox-red.log`, `document-lifetime-green-unit.log` and
+`document-lifetime-green-dom.log`, retained outside tracked source.
+
+Focused app acceptance passed **9/9** (full picker, compact Escape/Explorer, both footer handoffs,
+split launcher, exact explorer creation, Rename and Move), and settings Escape passed **1/1**.
+Formatting, full lint and all-workspace typecheck passed (`document-lifetime-static.result`, exit zero).
+Old CI shard four completed **209 passed, 3 skipped**, so all four old browser shards are green.
+
+The requested full local app run remains **failed**, exit one: **737/738 files and 6,660/6,661 tests
+passed**, with one 5-second timeout in the unchanged whole-source Unistyles AST scan and **zero
+unhandled errors**. The first isolated scanner also timed out (13.22 seconds); no timeout or assertion
+was changed. A task-owned `6bd8046cc` snapshot verified all 2,447 source blobs and passed the unchanged
+baseline scanner at its original limit (2.924 seconds). Exact scanner functions reported zero
+violations on both baseline and current trees: 2,408 files each, approximately 21 MB, with only 1,003
+bytes added; measured scans were 2.881 and 4.955 seconds. One final current test selected explicitly
+with `--project unit` passed in **3.972 seconds**, still at the original 5-second limit. Timing varied;
+the exact host cause is unproven. No scanner, timeout, configuration or dependency changed in this PR.
+
+Root reviewed this bounded disposition and authorized the narrow push for normal exact-head GitHub
+qualification; it does not turn the failed local full run green. `document-lifetime-full-app.log`,
+`document-lifetime-style-focused.log`, `document-lifetime-style-baseline*` and
+`document-lifetime-style-current-*` retain the results. Temporary probe tools are archived outside
+active source, and the original source snapshot remains available. Merge waits for every applicable
+new-head CI check and root's published-tree verification.
+
 ### Separate plugin retry qualification
 
 CI run `43576238248`, shard three: **172 passed, 9 skipped, 1 flaky on retry**. The plugin-buttons

@@ -217,6 +217,8 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
   webOverlayEntries.push(entry);
   attachWebOverlayListeners();
   const registeredScope = entry.getScope();
+  // Deferred restoration can outlive the ambient DOM globals.
+  const registeredDocument = registeredScope?.ownerDocument ?? document;
   let restoreFocusQueued = false;
 
   const focusFrame = window.requestAnimationFrame(() => {
@@ -244,8 +246,9 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
       if (top && !top.getScope()?.contains(target)) return;
       // A menu command can focus a launcher or inline editor without opening
       // another overlay. Preserve that move; only return closing/lost focus.
-      const active = document.activeElement;
-      if (active && active !== document.body && !registeredScope?.contains(active)) return;
+      const active = registeredDocument.activeElement;
+      if (active && active !== registeredDocument.body && !registeredScope?.contains(active))
+        return;
       target.focus({ preventScroll: true });
     });
   };

@@ -85,6 +85,28 @@ describe("useWebOverlayRegistration", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("restores using its owning document after ambient globals are torn down", () => {
+    const { result, unmount } = renderHook(() =>
+      useWebOverlayRegistration({ active: true, layer: 20, onKeyDown: () => false }),
+    );
+    act(() => result.current(scope));
+    input.focus();
+    const ownerDocument = scope.ownerDocument;
+    const openerFocus = vi.spyOn(opener, "focus");
+    vi.useFakeTimers({ toFake: ["queueMicrotask"] });
+    try {
+      unmount();
+      vi.stubGlobal("document", undefined);
+      Reflect.deleteProperty(globalThis, "document");
+      expect(() => vi.runAllTicks()).not.toThrow();
+      expect(ownerDocument.activeElement).toBe(opener);
+      expect(openerFocus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
   it("leaves IME composition keys with the focused editor", () => {
     const event = new KeyboardEvent("keydown", { key: "Process", bubbles: true });
     expect(dispatchTopWebOverlayKeyDown(event)).toBe(false);
