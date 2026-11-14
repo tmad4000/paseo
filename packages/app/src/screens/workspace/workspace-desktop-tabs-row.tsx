@@ -98,6 +98,12 @@ import {
   useHorizontalScrollBoundary,
 } from "@/components/ui/horizontal-scroll-boundary";
 import { useSessionStore } from "@/stores/session-store";
+import { TabLocalChipGlyph, tabLocalChipGlyphWidth } from "@/tab-local-splits/chip";
+import {
+  useTabLocalSplitMenuEntries,
+  withTabLocalSplitMenuEntries,
+} from "@/tab-local-splits/menu-entries";
+import type { TabLocalChip } from "@/tab-local-splits/use-tab-local-pane";
 
 const DROPDOWN_WIDTH = 220;
 const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
@@ -515,6 +521,8 @@ export interface WorkspaceDesktopTabRowItem {
   seen?: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
+  /** Set on the host of a tab-local split (fork: `tab-local-splits`). */
+  tabLocal?: TabLocalChip;
 }
 
 interface ResolvedWorkspaceDesktopTabRowItem extends WorkspaceDesktopTabRowItem {
@@ -526,6 +534,7 @@ interface WorkspaceTabLabel {
   label: string;
   modified: boolean;
   unread: boolean;
+  tabLocalLeafCount: number;
 }
 
 interface WorkspaceTabLabelMeasurement {
@@ -549,7 +558,7 @@ function completeWorkspaceTabLabelWidths(
   measurements: Map<string, WorkspaceTabLabelMeasurement>,
 ): number[] | null {
   const widths: number[] = [];
-  for (const { key, label, modified, unread } of labels) {
+  for (const { key, label, modified, unread, tabLocalLeafCount } of labels) {
     const measurement = measurements.get(key);
     if (!measurement || measurement.label !== label || measurement.width <= 0) {
       return null;
@@ -563,7 +572,8 @@ function completeWorkspaceTabLabelWidths(
       measurement.width +
         TAB_LABEL_LAYOUT_ALLOWANCE +
         dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE) +
-        readControlAllowance,
+        readControlAllowance +
+        tabLocalChipGlyphWidth(tabLocalLeafCount),
     );
   }
   return widths;
@@ -737,6 +747,7 @@ function TabHandleContent({
   modifiedTestId,
   readState,
   reserveReadControl,
+  tabLocal,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -748,6 +759,7 @@ function TabHandleContent({
   readState: TabReadState;
   /** Keep the title clear of the read check, which the overlay draws without a solid scrim. */
   reserveReadControl: boolean;
+  tabLocal?: TabLocalChip;
 }) {
   const { t } = useTranslation();
   const tabHandleDataSet = useMemo(
@@ -775,7 +787,10 @@ function TabHandleContent({
       ) : null}
       {/* The dot is a laid-out sibling of the label, not an overlay, so a truncated label ends
           before it instead of running underneath it. */}
-      {presentation.modified ? (
+      {tabLocal ? (
+        <TabLocalChipGlyph chip={tabLocal} testID={`${modifiedTestId}-tab-local`} />
+      ) : null}
+      {presentation.modified || tabLocal?.modified ? (
         <View
           style={styles.tabModifiedDot}
           accessibilityLabel={t("workspace.tabs.modified")}
@@ -965,6 +980,7 @@ function TabChip({
   onNavigateTab,
   onCloseTab,
   dragHandleProps,
+  tabLocal,
 }: {
   serverId: string;
   tab: WorkspaceTabDescriptor;
@@ -987,6 +1003,7 @@ function TabChip({
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   dragHandleProps: DraggableListDragHandleProps | undefined;
+  tabLocal?: TabLocalChip;
 }) {
   const { closeButtonTestId, contextMenuTestId, menuEntries } = resolvedTab;
   const statusTarget = useMemo<ManualStatusTarget | null>(
@@ -1092,6 +1109,7 @@ function TabChip({
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
                 readState={readState}
                 reserveReadControl={readAction.canMarkRead}
+                tabLocal={tabLocal}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>
@@ -1111,6 +1129,7 @@ function TabChip({
             ) : (
               <Text style={styles.newTabTooltipText}>{tooltipLabel}</Text>
             )}
+            {tabLocal ? <Text style={styles.menuItemHint}>{tabLocal.summary}</Text> : null}
           </TooltipContent>
         </Tooltip>
 
@@ -1320,7 +1339,13 @@ function ResolvedWorkspaceDesktopTabsRow({
           tab.presentation.titleState === "loading"
             ? getFallbackTabLabel(tab.tab, fallbackTabLabels)
             : tab.presentation.label;
-        return { key: tab.tab.key, label, modified: tab.presentation.modified, unread: tab.unread };
+        return {
+          key: tab.tab.key,
+          label,
+          modified: tab.presentation.modified || tab.tabLocal?.modified === true,
+          unread: tab.unread,
+          tabLocalLeafCount: tab.tabLocal?.leafCount ?? 0,
+        };
       }),
     [fallbackTabLabels, tabs],
   );
@@ -1729,6 +1754,12 @@ function ResolvedDesktopTabChip({
     serverId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const tabLocalEntries = useTabLocalSplitMenuEntries({
+    tab: item.tab,
+    serverId,
+    workspaceId,
+    menuTestIDBase: baseResolvedTab.contextMenuTestId,
+  });
   const readAction = useAgentReadAction({
     serverId: item.tab.scope?.serverId ?? serverId,
     agentId: item.tab.target.kind === "agent" ? item.tab.target.agentId : null,
@@ -1748,7 +1779,8 @@ function ResolvedDesktopTabChip({
       openInViewEntries.length === 0 &&
       markUnreadEntries.length === 0 &&
       markReadEntries.length === 0 &&
-      agentControlEntries.length === 0
+      agentControlEntries.length === 0 &&
+      tabLocalEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
@@ -1757,10 +1789,17 @@ function ResolvedDesktopTabChip({
               ...markReadEntries,
               ...markUnreadEntries,
               ...openInViewEntries,
-              ...baseResolvedTab.menuEntries,
+              ...withTabLocalSplitMenuEntries(baseResolvedTab.menuEntries, tabLocalEntries),
             ],
           },
-    [agentControlEntries, baseResolvedTab, markReadEntries, markUnreadEntries, openInViewEntries],
+    [
+      agentControlEntries,
+      baseResolvedTab,
+      markReadEntries,
+      markUnreadEntries,
+      openInViewEntries,
+      tabLocalEntries,
+    ],
   );
 
   const rawTooltipLabel =
@@ -1801,6 +1840,7 @@ function ResolvedDesktopTabChip({
         onNavigateTab={onNavigateTab}
         onCloseTab={onCloseTab}
         dragHandleProps={dragHandleProps}
+        tabLocal={item.tabLocal}
       />
       {showDropIndicatorAfter ? (
         <View style={[styles.tabDropIndicator, styles.tabDropIndicatorAfter]} />

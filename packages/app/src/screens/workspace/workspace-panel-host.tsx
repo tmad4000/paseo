@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { RetainedPanel } from "@/components/retained-panel";
 import { useModifiedPanelTabIds } from "@/panels/panel-instance-attributes";
 import {
@@ -24,6 +24,15 @@ interface WorkspacePanelHostProps {
     paneId: string;
     tab: WorkspaceTabDescriptor;
   }) => WorkspacePaneContentModel;
+  /** Replaces a mounted tab's panel (fork: a tab-local split's composite). */
+  tabContent?: WorkspacePanelHostTabContent;
+}
+
+export interface WorkspacePanelHostTabContent {
+  /** `null` keeps the tab's own panel. */
+  render: (input: { tab: WorkspaceTabDescriptor; interactive: boolean }) => ReactNode | null;
+  /** Kept mounted like a modified tab. */
+  retainedTabIds: ReadonlySet<string>;
 }
 
 interface MountedTabProps {
@@ -34,6 +43,7 @@ interface MountedTabProps {
   isWorkspaceFocused: boolean;
   onFocusPane?: (paneId: string) => void;
   buildPaneContentModel: WorkspacePanelHostProps["buildPaneContentModel"];
+  override: ReactNode | null;
 }
 
 const MountedTab = memo(function MountedTab({
@@ -44,6 +54,7 @@ const MountedTab = memo(function MountedTab({
   isWorkspaceFocused,
   onFocusPane,
   buildPaneContentModel,
+  override,
 }: MountedTabProps) {
   const content = useMemo(
     () => buildPaneContentModel({ paneId, tab }),
@@ -53,12 +64,14 @@ const MountedTab = memo(function MountedTab({
   return (
     <RenderProfile id={`DesktopMountedTab:${tab.kind}:${tab.tabId}`}>
       <RetainedPanel active={visible}>
-        <WorkspacePaneContent
-          content={content}
-          isWorkspaceFocused={isWorkspaceFocused}
-          isPaneFocused={interactive}
-          onFocusPane={onFocusPane ? handleFocusPane : undefined}
-        />
+        {override ?? (
+          <WorkspacePaneContent
+            content={content}
+            isWorkspaceFocused={isWorkspaceFocused}
+            isPaneFocused={interactive}
+            onFocusPane={onFocusPane ? handleFocusPane : undefined}
+          />
+        )}
       </RetainedPanel>
     </RenderProfile>
   );
@@ -102,14 +115,23 @@ export function WorkspacePanelHost({
   isPaneFocused,
   onFocusPane,
   buildPaneContentModel,
+  tabContent,
 }: WorkspacePanelHostProps) {
   const viewPaneActions = useViewPaneActions();
   const tabIds = useMemo(() => tabs.map((tab) => tab.tabId), [tabs]);
-  const retainedTabIds = useModifiedPanelTabIds({
+  const modifiedTabIds = useModifiedPanelTabIds({
     serverId: normalizedServerId,
     workspaceId: normalizedWorkspaceId,
     tabIds,
   });
+  const extraRetainedTabIds = tabContent?.retainedTabIds;
+  const retainedTabIds = useMemo(
+    () =>
+      extraRetainedTabIds?.size
+        ? new Set([...modifiedTabIds, ...extraRetainedTabIds])
+        : modifiedTabIds,
+    [extraRetainedTabIds, modifiedTabIds],
+  );
   const stableTabs = useStableTabs(tabs);
   const { mountedTabIds } = useMountedTabSet({
     activeTabId,
@@ -130,16 +152,18 @@ export function WorkspacePanelHost({
     const tab = stableTabs.get(tabId);
     if (!tab) return null;
     const visible = tabId === activeTabId;
+    const interactive = isPaneFocused && visible;
     return (
       <MountedTab
         key={tabId}
         tab={tab}
         paneId={paneId}
         visible={visible}
-        interactive={isPaneFocused && visible}
+        interactive={interactive}
         isWorkspaceFocused={isWorkspaceFocused}
         onFocusPane={onFocusPane}
         buildPaneContentModel={buildPaneContentModel}
+        override={tabContent?.render({ tab, interactive }) ?? null}
       />
     );
   });
