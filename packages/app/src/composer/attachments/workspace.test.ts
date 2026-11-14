@@ -47,7 +47,10 @@ function chatHistoryAttachment(): WorkspaceComposerAttachment {
   };
 }
 
-function pullRequestContextAttachment(): WorkspaceComposerAttachment {
+function pullRequestContextAttachment(): Extract<
+  WorkspaceComposerAttachment,
+  { kind: "github.pull_request_comment" }
+> {
   return {
     kind: "github.pull_request_comment",
     id: "comment-1",

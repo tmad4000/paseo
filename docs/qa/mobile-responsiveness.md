@@ -77,47 +77,24 @@ Independent review caught gaps in the first implementation:
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
 
-The outer executor's GCP checks at `ab71376b3bfe9dc3b8072fa61b894a22c6edb7d7` passed 302 tests
-across 11 unit suites, formatting and app typecheck. Lint reported three errors in the dispatch
-function and direct-settlement case setup; this review refactors those sites without suppressions.
-The original nine browser flows passed at `3b8a8adc`; the expanded browser batch at `ab71376b`
-finished with nine of eleven flows passing. The failures were a layout selector matching two
-new mock cycles and a legacy retry blocked after run-start waiting dropped the provider's definitive
-error code. The selector now chooses the first newly observed response/read tool, retaining zero
-matches before Send and the original row-stability checks.
+The independent source review completed at `0fc63b4a` with no remaining findings. GCP passed
+499 server tests across eight suites and 159 focused composer/attachment tests across three
+suites on that revision. The stored-byte cases use the production file store with a test filesystem:
+a removed image remains readable and encodable while held, including after failed preparation,
+and ordinary deletion works after every hold is released.
 
-The queue-settlement regressions in `composer/draft/input-draft.live.test.tsx` and
-`composer/input/state.test.ts`, plus this round's lint repairs, await the outer executor's GCP checks.
-Checks at `44b94d7b8a673565b97a7574f986e32c8fc1e9f2` were still running when this review began.
-This review also adds snapshot cleanup cases in `composer/attachments/workspace.test.ts` and
-`review/store.test.ts`, plus manager/receipt cases in server `agent/agent-manager.test.ts`.
-These repairs await GCP validation. Rebuild the server before rerunning the daemon-backed browser
-flows; preserve the legacy refusal/retry/image assertions.
+All eleven selected daemon-backed browser flows passed at `1847a0c5`. Its expanded app run passed
+607 cases but exposed a missing React binding in three recovery-row cases and one outbox test
+deadline; that outbox case passed unchanged in isolation. Follow-up fixes add the React import and
+narrow the pull-request fixture type caught by typecheck. The assertions and timeouts are unchanged.
+The published revision's commands, counts and required CI outcomes are listed on PR 207; earlier
+receipts are retained as diagnostics rather than substituted for current-revision results.
 
-At `782a8ef3a8ad11a6516b54c03ba8cda813fbe8c8`, global formatting passed and GCP reported two
-mechanical lint errors in `composer/input/state.test.ts`; this round applies their supplied patch.
-The server build, workspace typecheck, expanded unit suites and browser batch were still running
-when this review began. This round adds owned-acceptance coverage in server `agent/agent-prompt.test.ts`
-and `session.test.ts`, alongside the real-manager receipt race and review reconstruction regressions.
-Those new changes still require GCP validation and a server rebuild before E2E.
-
-At `98589884b07e619ddc07f905da11f115192c3e83`, the outer executor reported formatting,
-lint and server-build passes. The expanded server checks passed 498/499: the owned-acceptance race
-fixture passed `agentId` as the prompt, so its A-entry gate never opened. This round corrects that
-adapter without changing its assertions or timeout. The live 121-case suite and 60-second layout
-case passed on isolated retries after initial contention/setup deadline failures.
-
-At `1847a0c5fed1e5768a041c571f816760eb69d181`, lint and full workspace typecheck passed;
-formatting flagged `composer/index.tsx`. Twenty app suites and eleven daemon browser flows were
-still running when this review began. This round formats that file and adds scoped review/context
-failure cases in `composer/attachments/workspace.test.ts` and stored-byte recovery cases in
-`composer/actions.test.ts`. Those new cases and the corrected server fixture await the next
-candidate's GCP checks. Runtime server source is unchanged from the built `98589884` revision.
-No new-source or native rollout pass is claimed here.
-
-Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
-legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and
-Queue as new message.
+The queue cases cover held encoding/device saves, legacy local acceptance, failures, A→B→A
+text edits, image changes, review/context-only versions, unchanged clearing and Queue as new
+message. The layout selector chooses the first newly observed mock response/read tool while
+retaining the zero-match preconditions and original row-stability checks. Runtime server source
+is unchanged from the successful `98589884` server build.
 
 The executable regressions use real store operations and held/failing storage to check ordering,
 restart recovery, exclusion, cancellation, independent agents and automatic wake-ups. Dependency
