@@ -18,6 +18,22 @@ actions must survive. Compact phone layouts and native keyboard sizing retain th
 Source candidate against `accd8743ae6cc34e4d9ce7133fd3b18288e307eb`; not installed.
 Coverage: `composer/dock/pane-geometry.test.ts` and `e2e/browser/composer-stacked-panes.spec.ts`.
 
+## Mobile responsiveness — pspin-bvs
+
+`responsive-message-updates`: known chats keep their composer and controls available during
+first history sync, reconnect and sync failure; status/retry UI stays visible. Scheduled stream
+bursts yield in bounded batches and rotate busy chats, while explicit canonical-history flushes
+preserve complete ordering. A direct send unlocks after its device save; host acknowledgement
+continues in the ordered durable outbox, with pending/refused recovery and no overwrite of a new
+draft. Content-free handler/frame/stall diagnostics are bounded and use the existing paired-host
+reporter. See [agent stream performance](agent-stream-performance.md) for measurement limits.
+Acceptance: hold first history response and a send acknowledgement, type/send and start a second
+draft, release them and retain the second draft; verify refusal and storage failure recovery.
+Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
+`session-stream-reducers.test.ts`, `composer/actions.test.ts`, `performance/*.test.ts`.
+Source validation: [responsiveness QA receipt](qa/mobile-responsiveness.md). Native installed
+performance not yet verified.
+
 ## Move chats to workspaces — pspin-5qh
 
 `move-chat-workspace`: [Move to workspace](move-chat-workspace.md) preserves chat identity and

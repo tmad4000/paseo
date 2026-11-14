@@ -1,3 +1,4 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import type { SelectedFile } from "@/attachments/selected-file";
 import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
@@ -245,17 +246,31 @@ async function dispatchDurableComposerAgentMessage(
     input.submission.reject(input.agentId, clientMessageId);
     throw error;
   }
-  await input.outbox.flush(input.agentId);
-  const entry = input.outbox.get(clientMessageId);
-  if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
-    // The host refused this message while the author is still here: hand the
-    // text back to the composer instead of parking it.
-    await input.outbox.remove(clientMessageId);
-    input.submission.reject(input.agentId, clientMessageId);
-    throw new Error(entry.rejectedError);
-  }
-  // Accepted (the flush removed it), saved for retry on reconnect, or parked
-  // with an uncertain outcome for the user to judge.
+  // Saving is the composer boundary. Waiting for the relay here locks Send and
+  // the draft until acknowledgement, even though the message is already durable.
+  void input.outbox
+    .flush(input.agentId)
+    .then(() => {
+      const entry = input.outbox.get(clientMessageId);
+      if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
+        // Keep the refused request in Unsent messages, where Edit/Retry/Discard are
+        // available. Never put it over a newer draft the author has started.
+        input.submission.reject(input.agentId, clientMessageId);
+      }
+      return undefined;
+    })
+    .catch(() => {
+      // The saved entry remains retryable; an unexpected bookkeeping failure must
+      // neither clear it nor become an unhandled rejection.
+      recordClientDiagnostic({
+        source: "rpc",
+        severity: "warning",
+        operation: "send-outbox.flush",
+        serverId: input.outbox.serverId,
+        agentId: input.agentId,
+        message: "Saved message delivery could not finish; the request remains on this device.",
+      });
+    });
 }
 
 export async function dispatchComposerAgentMessage(

@@ -7,6 +7,7 @@ import {
   useSendOutboxStore,
   type PendingDirectSend,
 } from "@/stores/send-outbox-store";
+import { isUncertainSendOutcome } from "@/stores/send-outbox-store/model";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
 
 /**
@@ -42,6 +43,10 @@ export function createDirectSendOutbox(
         agentId,
         client,
         onAccepted: createDirectSendAcceptanceHandler(serverId),
+        onRejected: (entry, message) => {
+          if (!isUncertainSendOutcome(message))
+            createMessageSubmissionWriter(serverId).reject(entry.agentId, entry.clientMessageId);
+        },
       }),
     get: (clientMessageId) => useSendOutboxStore.getState().entries[clientMessageId],
     remove: (clientMessageId) => useSendOutboxStore.getState().removeDurably(clientMessageId),

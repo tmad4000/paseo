@@ -158,7 +158,7 @@ describe("deriveAgentScreenViewState", () => {
     expect(ready.sync.status).toBe("reconnecting");
   });
 
-  it("shows overlay catching-up state for first open while loading history", () => {
+  it("keeps the first known chat interactive while loading history", () => {
     const memory = createBaseMemory({
       hasRenderedReady: true,
       lastReadyAgent: createAgent("agent-1"),
@@ -172,7 +172,7 @@ describe("deriveAgentScreenViewState", () => {
     const ready = expectReadyState(result.state);
     const sync = expectCatchingUpSync(ready);
 
-    expect(sync.ui).toBe("overlay");
+    expect(sync.ui).toBe("status");
   });
 
   it("shows updating status for already-hydrated agents", () => {
@@ -249,7 +249,7 @@ describe("deriveAgentScreenViewState", () => {
     expectSyncErrorSync(ready);
   });
 
-  it("shows the owner error when the first timeline load fails", () => {
+  it("keeps the composer available with the owner error when first timeline load fails", () => {
     const result = deriveAgentScreenViewState({
       input: {
         ...createBaseInput(),
@@ -260,10 +260,8 @@ describe("deriveAgentScreenViewState", () => {
       memory: createBaseMemory(),
     });
 
-    expect(result.state).toEqual({
-      tag: "error",
-      message: "already has an active writer",
-    });
+    expectSyncErrorSync(expectReadyState(result.state));
+    expect(expectReadyState(result.state).agent.id).toBe("agent-1");
     expect(result.memory.hadInitialSyncFailure).toBe(true);
   });
 
@@ -401,7 +399,7 @@ describe("deriveAgentScreenViewState", () => {
     expect(ready.sync.status).toBe("idle");
   });
 
-  it("keeps first route entry blocked until authoritative history is applied", () => {
+  it("renders the known chat and composer before authoritative history is applied", () => {
     const memory = createBaseMemory();
     const input: AgentScreenMachineInput = {
       ...createBaseInput(),
@@ -413,13 +411,11 @@ describe("deriveAgentScreenViewState", () => {
 
     const result = deriveAgentScreenViewState({ input, memory });
 
-    expect(result.state).toEqual({
-      tag: "boot",
-      reason: "loading",
-      source: "none",
-    });
-    expect(result.memory.hasRenderedReady).toBe(false);
-    expect(result.memory.lastReadyAgent).toBeNull();
+    const ready = expectReadyState(result.state);
+    expect(ready.agent.id).toBe("agent-1");
+    expect(ready.sync).toEqual({ status: "catching_up", ui: "status" });
+    expect(result.memory.hasRenderedReady).toBe(true);
+    expect(result.memory.lastReadyAgent?.id).toBe("agent-1");
   });
 
   it("renders an archived agent before provider history is initialized", () => {

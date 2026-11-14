@@ -1,3 +1,4 @@
+import { formatResponsivenessReport } from "@/performance/responsiveness";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, Text, View, type PressableStateCallbackType } from "react-native";
@@ -98,6 +99,7 @@ export function AppDiagnosticSheet({
           hostCount: hosts.length,
         }),
       );
+      sections.push(formatResponsivenessReport());
       updateRunProgress("client", t("settings.diagnostics.app.progress.client"), "done");
 
       if (isDesktopApp) {

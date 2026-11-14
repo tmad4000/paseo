@@ -50,7 +50,12 @@ import {
 import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
-import { useToastHost, type ToastApi, type ToastState } from "@/components/toast-host";
+import {
+  ToastViewport,
+  useToastHost,
+  type ToastApi,
+  type ToastState,
+} from "@/components/toast-host";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
 import {
@@ -1115,10 +1120,6 @@ function ChatAgentContent({
   invariant(effectiveAgent, "effectiveAgent is defined when the non-ready view is absent");
   const agentCwd = agentState.cwd;
   invariant(agentCwd, "agent cwd is defined when agent content is ready");
-  const showHistorySyncOverlay =
-    viewState.tag === "ready" &&
-    viewState.sync.status === "catching_up" &&
-    viewState.sync.ui === "overlay";
   const showHistorySyncError = viewState.tag === "ready" && viewState.sync.status === "sync_error";
   const isRetryingHistorySync =
     viewState.tag === "ready" &&
@@ -1144,7 +1145,6 @@ function ChatAgentContent({
       handleMessageSent={handleMessageSent}
       handleRewindComplete={handleRewindComplete}
       timelineSync={isPaneVisible && viewState.tag === "ready" ? viewState.sync : null}
-      showHistorySyncOverlay={showHistorySyncOverlay}
       showHistorySyncError={showHistorySyncError}
       isRetryingHistorySync={isRetryingHistorySync}
       cwd={agentCwd}
@@ -1176,7 +1176,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   handleMessageSent,
   handleRewindComplete,
   timelineSync,
-  showHistorySyncOverlay,
   showHistorySyncError,
   isRetryingHistorySync,
   retryTimelineSync,
@@ -1202,7 +1201,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   handleMessageSent: () => void;
   handleRewindComplete: () => void;
   timelineSync: AgentScreenReadySyncState | null;
-  showHistorySyncOverlay: boolean;
   showHistorySyncError: boolean;
   isRetryingHistorySync: boolean;
   retryTimelineSync: () => void;
@@ -1341,22 +1339,25 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     textSource,
   ]);
   const composerSection = (
-    <RenderProfile id={`AgentComposerSection:${agentId}`}>
-      <AgentComposerSection
-        agentId={agentId}
-        serverId={serverId}
-        isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
-        isArchivingCurrentAgent={isArchivingCurrentAgent}
-        archivedAt={agentState.archivedAt}
-        cwd={cwd}
-        isSubmitLoading={false}
-        agentInputDraft={agentInputDraft}
-        onAttentionInputFocus={onAttentionInputFocus}
-        onAttentionPromptSend={onAttentionPromptSend}
-        onComposerHeightChange={handleComposerHeightChange}
-        onMessageSent={handleMessageSent}
-      />
-    </RenderProfile>
+    <View style={styles.composerStatusAnchor}>
+      <TimelineSyncStatus sync={timelineSync} />
+      <RenderProfile id={`AgentComposerSection:${agentId}`}>
+        <AgentComposerSection
+          agentId={agentId}
+          serverId={serverId}
+          isPaneFocused={isPaneFocused && visibleView !== "artifacts"}
+          isArchivingCurrentAgent={isArchivingCurrentAgent}
+          archivedAt={agentState.archivedAt}
+          cwd={cwd}
+          isSubmitLoading={false}
+          agentInputDraft={agentInputDraft}
+          onAttentionInputFocus={onAttentionInputFocus}
+          onAttentionPromptSend={onAttentionPromptSend}
+          onComposerHeightChange={handleComposerHeightChange}
+          onMessageSent={handleMessageSent}
+        />
+      </RenderProfile>
+    </View>
   );
   const streamContent = (
     <View style={animatedStaticStyles.content}>
@@ -1413,17 +1414,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     </View>
   );
 
-  const dockOverlay = (
-    <>
-      {showHistorySyncOverlay ? (
-        <View style={styles.historySyncOverlay} testID="agent-history-overlay">
-          <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
-        </View>
-      ) : null}
-
-      <TimelineSyncStatus sync={timelineSync} toast={toast} onDismiss={dismiss} />
-    </>
-  );
+  const dockOverlay = <ToastViewport toast={toast} onDismiss={dismiss} placement="panel" />;
 
   // The chat stays mounted behind the Stream so the draft, scroll position and
   // expanded state survive Back to chat and Reply in chat.
@@ -1974,6 +1965,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface0,
   },
+  composerStatusAnchor: { position: "relative", width: "100%", flexShrink: 1 },
   contentContainer: {
     flex: 1,
     overflow: "hidden",
@@ -2028,17 +2020,6 @@ const styles = StyleSheet.create((theme) => ({
     mobileSegmentedControl: {
       flex: 1,
     },
-  },
-  historySyncOverlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: theme.colors.surface0,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 40,
   },
   archivingOverlay: {
     position: "absolute",

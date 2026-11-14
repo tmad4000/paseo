@@ -307,7 +307,10 @@ The send outbox (`packages/app/src/stores/send-outbox-store/`) closes it. When t
 dedupes retried sends, `dispatchComposerAgentMessage` stores the full request under its
 client message id before sending. That requires both `agentRequestReceipts` (steer and interrupt
 receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
-per-agent ordered flush that reconnects use:
+per-agent ordered flush that reconnects use. Once local storage accepts the request, the
+composer finishes its submission and becomes available for the next draft. It does not wait for
+the host acknowledgement. Storage/attachment preparation failures still return the original draft
+with an error. Pending delivery remains visible on the saved bubble.
 
 - Accepted: the entry is removed and the optimistic bubble proceeds as before.
 - Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
@@ -317,9 +320,9 @@ per-agent ordered flush that reconnects use:
   retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
   receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
 - A definitive answer (`AgentMessageRejectedError` from `accepted: false`, a `DaemonRpcError`,
-  or a request that cannot be built): while the author is sending, the entry is removed and the
-  text returns to the composer with the error, as before. A refusal during a background flush
-  parks the entry with `rejectedError`; it is not retried until the user taps Retry. Classify
+  or a request that cannot be built): after local save, park the entry with `rejectedError` and
+  expose it through the existing attention mark and Unsent messages recovery. Do not restore it
+  over the next draft. It is not retried until the user taps Retry. Classify
   refusals positively. Any unrecognized error means "unknown", never "refused", because handing an
   arrived message back to the composer turns the user's resend into a duplicate.
 - `agent_request_outcome_unknown` arrives as a refusal, but the host may have delivered the message.

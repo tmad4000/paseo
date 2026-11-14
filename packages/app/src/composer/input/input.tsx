@@ -1,3 +1,4 @@
+import { measurePress } from "@/performance/response-monitor";
 import { useSubthreadReplyLabel } from "@/subthreads/context";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
@@ -829,11 +830,18 @@ function SendButtonTooltip({
   sendTooltipLabel: string;
   alternateSendTooltipLabel?: string;
 }) {
+  const handlePress = useCallback(
+    () =>
+      measurePress("send", () =>
+        (canPressLoadingButton ? onSubmitLoadingPress : onDefaultSendAction)?.(),
+      ),
+    [canPressLoadingButton, onSubmitLoadingPress, onDefaultSendAction],
+  );
   if (!shouldShow) return null;
   return (
     <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
       <TooltipTrigger
-        onPress={canPressLoadingButton ? onSubmitLoadingPress : onDefaultSendAction}
+        onPress={handlePress}
         disabled={isSendButtonDisabled}
         accessibilityLabel={submitAccessibilityLabel}
         accessibilityRole="button"

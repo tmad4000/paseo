@@ -1,3 +1,4 @@
+import { measurePress } from "@/performance/response-monitor";
 import {
   Children,
   cloneElement,
@@ -362,7 +363,7 @@ export function TooltipTrigger({
 
   const handlePress = useCallback(
     (e: unknown) => {
-      if (isCallable(onPress)) onPress(e);
+      if (isCallable(onPress)) measurePress("tooltip", () => onPress(e));
       if (!ctx.enabled || disabled) {
         return;
       }

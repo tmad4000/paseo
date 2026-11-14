@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import type { AgentTimelineItem, ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import {
@@ -4327,6 +4327,63 @@ describe("createAgentStreamReducerQueue", () => {
       },
     };
   }
+
+  it("yields between bounded burst batches and preserves every delta before a history flush", () => {
+    const scheduler = createManualScheduler();
+    let head: StreamItem[] = [];
+    const committed: number[] = [];
+    const queue = createAgentStreamReducerQueue({
+      getSnapshot: () => ({ currentTail: [], currentHead: head, currentCursor: undefined }),
+      commit: (_id, result, events) => {
+        head = result.head;
+        committed.push(events.length);
+      },
+      handleSideEffects: () => {},
+      scheduleFlush: scheduler.schedule,
+      cancelFlush: scheduler.cancel,
+    });
+    for (let seq = 1; seq <= 40; seq++)
+      queue.enqueue("agent-1", makeStreamReducerEvent(makeTimelineEvent("x"), seq));
+    scheduler.flushOne();
+    expect(committed).toEqual([16]);
+    expect(scheduler.size).toBe(1);
+    queue.flushAgent("agent-1");
+    expect(committed).toEqual([16, 24]);
+    expect(head[0]).toMatchObject({ kind: "assistant_message", text: "x".repeat(40) });
+    expect(scheduler.size).toBe(0);
+  });
+
+  it("lets another chat update before resuming a busy chat after the frame budget", () => {
+    const scheduler = createManualScheduler();
+    const committed: string[] = [];
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const queue = createAgentStreamReducerQueue({
+      getSnapshot: () => ({ currentTail: [], currentHead: [], currentCursor: undefined }),
+      commit: (id) => {
+        committed.push(id);
+        clock += 10;
+      },
+      handleSideEffects: () => {},
+      scheduleFlush: scheduler.schedule,
+      cancelFlush: scheduler.cancel,
+    });
+    try {
+      for (let seq = 1; seq <= 40; seq++)
+        queue.enqueue("busy", makeStreamReducerEvent(makeTimelineEvent("x"), seq));
+      queue.enqueue("other", makeStreamReducerEvent(makeTimelineEvent("y"), 1));
+      scheduler.flushOne();
+      expect(committed).toEqual(["busy"]);
+      scheduler.flushOne();
+      expect(committed).toEqual(["busy", "other"]);
+      queue.dispose({ flush: true });
+      expect(committed).toEqual(["busy", "other", "busy"]);
+      expect(scheduler.size).toBe(0);
+    } finally {
+      now.mockRestore();
+      queue.dispose();
+    }
+  });
 
   it("coalesces multiple events for one agent into one scheduled commit", () => {
     const scheduler = createManualScheduler();
