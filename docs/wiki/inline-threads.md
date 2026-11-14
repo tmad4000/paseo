@@ -1,6 +1,6 @@
 # Inline threads, message statuses and reactions
 
-**Status (2026-11-14):** Design recommended, nothing built. Spec:
+**Status (2026-11-14):** Design recommended. Phase 0 merged (#214), not released. Nothing else built. Spec:
 [inline-threads-design-2026-11-14.md](inline-threads-design-2026-11-14.md).
 [Interactive prototype](inline-threads/prototype.html) (open the file in a browser). Code
 references are to fork `main` at `9ae1aafe2`.
@@ -100,7 +100,8 @@ What the code turned up:
 | 3     | Reactions; 3b agent-added reactions                                 | Daemon, app           |
 | 4     | Reply-thread chip as a thread row; Threads navigator                | App                   |
 
-Phases 0 and 1 are the smallest useful set. Phase 0 has its own PR.
+Phases 0 and 1 are the smallest useful set. Phase 0 is merged (#214) and not yet released;
+Phases 1 to 4 are not built.
 
 ## Open questions
 

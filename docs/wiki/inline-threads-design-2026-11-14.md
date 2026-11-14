@@ -8,7 +8,8 @@ An independent review checked the references and technical claims against the so
 corrections are folded in (section 13 lists what stays unverified).
 
 This is a design, with an [interactive prototype](inline-threads/prototype.html). Phase 0 is
-implemented in a separate PR. Nothing else here is built.
+merged (#214) as source only: it takes effect with the next daemon and CLI release. Nothing
+else here is built.
 
 ---
 
@@ -644,14 +645,16 @@ row in the [fork feature register](../fork-features.md).
 
 ### Phase 0 — truthful sender for CLI sends (protocol, daemon, CLI)
 
-Section 8.1. Register id `cli-sender`. Implemented in its own PR.
+Section 8.1. Register id `cli-sender`. Merged as #214 after an independent review; not
+released or installed.
 
 Acceptance:
 
 - From an agent's shell, `paseo send <other> "x"` reaches the other chat with
   `sender = agent:<caller id>`, queued or direct. The same command from a terminal outside any
   agent records `human`.
-- A send naming a caller the daemon has no record of is refused and nothing is delivered.
+- A send naming a caller the daemon has no record of, or an internal agent, is refused and
+  nothing is delivered.
 - From an agent's shell, a send to another daemon succeeds and records `human`.
 - `lastHumanMessageAt` on the recipient does not advance for an agent's CLI send.
 - An older daemon accepts the request from a new CLI.
