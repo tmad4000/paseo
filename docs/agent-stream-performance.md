@@ -11,7 +11,7 @@ provider deltas (every provider streams incrementally)
   → AgentStreamCoalescer (daemon, leading + trailing, ≤1 message per 60ms per agent)
   → recordTimeline: one canonical row per flushed item
   → agent_stream ws message
-  → reducer queue (app, one commit per frame) → session store
+  → reducer queue (app, bounded cooperative batches) → session store
   → source-item plugin transforms → native Markdown blocks / tool grouping
   → paced reveal (app, per displayed item) → paint
 ```
@@ -65,10 +65,11 @@ So arrival sets a _target_ and the reveal rate is derived from the backlog inste
 
 ## Responsive controls during sync
 
-Once a chat's agent is known, mount its controls and composer while history loads. Show the
-Updating messages badge above the composer and the retry callout. The badge passes touches
-through and takes no layout space; it must not cover navigation. Do not cover the panel with a touch-blocking
-history overlay. Missing agents still need resolution. A successful first history load is not a
+Once a chat's agent is known, mount its controls and composer while history loads. Keep one
+status viewport inside the history bounds above the composer. User toasts take priority over
+passive sync status; sync failures show the retry callout. Passive status passes touches through
+and takes no layout space. Do not cover the panel with a touch-blocking history overlay.
+Missing agents still need resolution. A successful first history load is not a
 prerequisite for typing or submitting a durably saved message. Keep cached text and draft state
 mounted during reconnects. The message outbox owns delivery independently of history sync;
 see [queue mirroring](queue-mirroring.md#direct-sends).
@@ -93,9 +94,9 @@ minute, metrics with new slow samples emit a warning through existing paired-hos
 (`code=ui_slow_response`, fixed `operation`, minute-window `phase`). This works with existing
 `clientDiagnostics` hosts and records the app version. Read them with `paseo diagnostics errors
 --source global --since 1h --json`. There is no third-party collector. Fast samples stay in the app
-diagnostics report; warnings use session counts/max and recent-sample percentiles. No persistence,
-network call, diagnostic-store notification, or React state update runs inside a measured input
-callback. At most 32 frame probes can be outstanding.
+diagnostics report; warnings use session counts/max and recent-sample percentiles. Telemetry adds
+no persistence, network call, diagnostic-store notification, or React state update inside a measured
+input callback. At most 32 frame probes can be outstanding.
 
 ## Measuring
 

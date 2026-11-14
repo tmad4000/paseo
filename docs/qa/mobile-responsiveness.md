@@ -21,6 +21,14 @@ published source are listed in the PR; earlier diagnostics are retained rather t
 
 The published revision's required checks are recorded on [PR 207](https://github.com/tmad4000/paseo/pull/207).
 
+Integrated candidate `45da9bcda83ca76d62b51352b7e9578429c22a9a` has the same tree as
+`ab3528ae242a9441e0c27c89dbe23bd63d75012d`, whose GCP source manifest verified all 5,701
+tracked blobs. The existing `ab35-*` receipts passed formatting, lint, a rebuilt server,
+full workspace typecheck, focused app/server tests, client/CLI/protocol tests, tooltip browser
+tests and selected daemon-backed browser flows. These receipts cover the integration with
+`ed70de2a`, including compact stacked-pane sizing and sender attribution; they do not establish
+exact-head GitHub CI or native device performance.
+
 The phone-width flow holds actual daemon WebSocket responses for first history and Send, submits
 through the real composer, types a second draft before releasing either response, and verifies that
 draft survives. Recovery cases exercise definite refusal, identical-ID/image-payload retry,
@@ -91,15 +99,15 @@ deadline; that outbox case passed unchanged in isolation. Follow-up fixes add th
 narrow the pull-request fixture type caught by typecheck. The assertions and timeouts are unchanged.
 The published revision's commands, counts and required CI outcomes are listed on PR 207; earlier
 receipts are retained as diagnostics rather than substituted for current-revision results. The
-review-pill binding regressions and cold-import setup correction added after `8178d8d8` await the
-outer executor's GCP checks. The draft dependency now loads during collection; the setup hook only
+review-pill binding regressions and cold-import setup correction added after `8178d8d8` are covered
+by the integrated candidate's GCP receipts above. The draft dependency now loads during collection; the setup hook only
 sets the React act environment. Behavioral assertions and timeouts are unchanged.
 
 The queue cases cover held encoding/device saves, legacy local acceptance, failures, A→B→A
 text edits, image changes, review/context-only versions, unchanged clearing and Queue as new
 message. The layout selector chooses the first newly observed mock response/read tool while
-retaining the zero-match preconditions and original row-stability checks. Runtime server source
-is unchanged from the successful `98589884` server build.
+retaining the zero-match preconditions and original row-stability checks. The integrated candidate
+uses the rebuilt server recorded above, rather than the earlier `98589884` build.
 
 The executable regressions use real store operations and held/failing storage to check ordering,
 restart recovery, exclusion, cancellation, independent agents and automatic wake-ups. Dependency

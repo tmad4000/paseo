@@ -1,6 +1,6 @@
 ---
 title: Open Source Codex App Alternative With Native Mobile and Multi-Provider Support
-description: Paseo is an open source Codex alternative that runs on your machines without a required Paseo account, telemetry, or cloud service.
+description: Paseo is an open source Codex alternative that runs on your machines without a required Paseo account or cloud service.
 nav: Codex App
 order: 54
 ---
@@ -17,7 +17,7 @@ Paseo is an app for orchestrating coding agents, with native clients on desktop,
 
 OpenAI provides Codex through the ChatGPT desktop and mobile apps. Using those product surfaces requires an OpenAI account, and cloud work runs on OpenAI-managed infrastructure.
 
-Paseo runs your installed Codex CLI on machines you control. It does not require a Paseo account, collect telemetry, or depend on a Paseo cloud service. Connect directly from desktop, mobile, web, or the CLI, or use the optional end-to-end encrypted relay.
+Paseo runs your installed Codex CLI on machines you control. It does not require a Paseo account or depend on a Paseo cloud service. Connect directly from desktop, mobile, web, or the CLI, or use the optional end-to-end encrypted relay. See the [privacy policy](/privacy) for data handling.
 
 Paseo does not upload or store your code. The relay cannot read your code, messages, or agent output. You can self-host the daemon, web client, and relay, and use the same control plane with Codex, Claude Code, OpenCode, Pi, ACP agents, and custom providers.
 

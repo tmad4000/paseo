@@ -31,9 +31,8 @@ const iconMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 
 /**
  * Direct sends saved on this device that no live chat bubble represents, e.g.
- * after the app was killed while the host was unreachable. They retry on every
- * reconnect; this track makes them visible and recoverable until then.
- * See docs/queue-mirroring.md, "Direct sends".
+ * after the app was killed while the host was unreachable. Retry eligibility and
+ * one-shot hold recovery are owned by docs/queue-mirroring.md, "Direct sends".
  */
 export function UnsentTrack({
   serverId,

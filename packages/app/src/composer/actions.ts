@@ -209,7 +209,7 @@ export interface DispatchComposerAgentMessageInput {
   submission: MessageSubmissionWriter;
   activeTurnBehavior?: ActiveTurnBehavior;
   activeTurnId?: string;
-  /** When present, the send is stored on the device first and retried until the host answers. */
+  /** Device-first delivery; retry rules are owned by docs/queue-mirroring.md, "Direct sends". */
   outbox?: DirectSendOutbox;
 }
 

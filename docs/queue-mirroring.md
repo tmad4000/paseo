@@ -416,8 +416,9 @@ The user's own messages carry a messaging-app style tick
 | Alert        | Outbox entry refused or at `SEND_OUTBOX_MAX_ATTEMPTS`        | Outbox entry at `QUEUE_OUTBOX_MAX_ATTEMPTS`      |
 
 Clock, check and alert stay visible on every platform. The double check joins the timestamp row,
-which desktop reveals on hover. The alert never stops retries; it only tells the user. Tapping a
-bubble's alert explains it and offers Retry now.
+which desktop reveals on hover. The attempt-limit alert does not stop retryable delivery. Refusals,
+unknown outcomes and one-shot holds follow [Direct sends](#direct-sends). Tapping a bubble's alert
+explains it and offers the applicable recovery action.
 
 ## Delivery inspection
 
@@ -451,9 +452,6 @@ after sending lost the entry, while a kill 15 s after it was delivered exactly o
 Never `set()` a persisted outbox store before it has rehydrated. Persist writes the in-memory
 state, so an early write replaces the saved entries with the empty initial state. Every mutation
 awaits hydration first (`send-outbox-store/index.test.ts` covers the connect-time case).
-
-`agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
-affordance; adding one is a separate change.
 
 A message claimed for delivery just before its editor's hold arrives is still sent with its old
 text. The edit survives as a detached draft (see
