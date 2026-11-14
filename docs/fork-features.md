@@ -10,6 +10,14 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Stacked-pane composer
+
+`composer-stacked-panes`: short desktop panes reduce empty composer space and bound growing
+drafts to their pane. Resize stacked panes down and back up: drafts, readable text and toolbar
+actions must survive. Compact phone layouts and native keyboard sizing retain their existing policy.
+Source candidate against `accd8743ae6cc34e4d9ce7133fd3b18288e307eb`; not installed.
+Coverage: `composer/dock/pane-geometry.test.ts` and `e2e/browser/composer-stacked-panes.spec.ts`.
+
 ## Move chats to workspaces — pspin-5qh
 
 `move-chat-workspace`: [Move to workspace](move-chat-workspace.md) preserves chat identity and

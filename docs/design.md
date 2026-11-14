@@ -126,6 +126,10 @@ Cards inside a section sit closer than sections. Rows inside a card touch — on
 
 Rows have generous vertical padding: roughly 16px of content plus 16px of vertical padding for settings rows, 8–12px for sidebar list items where many rows must fit. Compressing rows below the established density to fit more on the screen is wrong. Too many rows means more cards or more sections, not smaller rows.
 
+Short desktop chat panes reduce composer spacing while preserving content type and control targets.
+Size growing drafts against the pane, so stacked chats retain room for history. Widening or
+tallening a pane restores its ordinary spacing without replacing the input or its draft.
+
 The whitespace is the design.
 
 ---
