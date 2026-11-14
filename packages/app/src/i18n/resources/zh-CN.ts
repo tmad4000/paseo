@@ -1271,6 +1271,7 @@ export const zhCN: TranslationResources = {
         pullRequest: "拉取请求",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "打开侧边面板",

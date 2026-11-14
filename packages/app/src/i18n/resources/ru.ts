@@ -1292,6 +1292,7 @@ export const ru: TranslationResources = {
         pullRequest: "PR",
         terminalProfilesMenu: "Профили терминала",
         editTerminalProfiles: "Изменить профили",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "Открыть боковую панель",

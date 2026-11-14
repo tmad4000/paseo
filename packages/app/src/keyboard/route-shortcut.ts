@@ -72,6 +72,9 @@ const PASSTHROUGH_DISPATCH: Record<string, KeyboardActionDefinition> = {
   "workspace.pane.move-tab.up": { id: "workspace.pane.move-tab.up", scope: "workspace" },
   "workspace.pane.move-tab.down": { id: "workspace.pane.move-tab.down", scope: "workspace" },
   "workspace.pane.close": { id: "workspace.pane.close", scope: "workspace" },
+  "workspace.tab.split-local.right": { id: "workspace.tab.split-local.right", scope: "workspace" },
+  "workspace.tab.split-local.below": { id: "workspace.tab.split-local.below", scope: "workspace" },
+  "workspace.tab.zoom-leaf": { id: "workspace.tab.zoom-leaf", scope: "workspace" },
   "view.toggle.focus": { id: "workspace.focus.toggle", scope: "workspace" },
 };
 
