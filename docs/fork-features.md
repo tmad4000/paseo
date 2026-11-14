@@ -136,7 +136,9 @@ The optional footer names only **sessions and workspaces**, carrying the query i
 Compact stacked Rename/Move sheets must own keyboard input and Escape above the picker; closing
 returns focus to the surviving parent, and final footer Escape returns to the original invoker.
 Compact Escape must still focus its trigger after retained closing DOM disappears; a closing scope
-must not steal focus from a newer or reopened overlay.
+must not steal focus from a newer or reopened overlay. Menu commands that focus a launcher or inline
+editor must keep that destination; restoration only returns focus still owned by closing content or
+lost to the document body.
 Default Mac Cmd+Shift+K, desktop Ctrl+Shift+K, non-Mac browser Alt+Shift+K; retain saved overrides,
 New agent and positional tab cycling. Contract/evidence: [workspace tab search](workspace-tab-search.md)
 and [QA receipt](qa/workspace-tab-search.md). Reuses design pspin-787.7; source only until release.

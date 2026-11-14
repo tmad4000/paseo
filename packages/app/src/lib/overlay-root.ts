@@ -216,6 +216,7 @@ function detachWebOverlayListeners(): void {
 function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptions) => void {
   webOverlayEntries.push(entry);
   attachWebOverlayListeners();
+  const registeredScope = entry.getScope();
   let restoreFocusQueued = false;
 
   const focusFrame = window.requestAnimationFrame(() => {
@@ -241,6 +242,10 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
       const top = getTopWebOverlay();
       if (top?.id === entry.id) return; // This scope reopened before restoration.
       if (top && !top.getScope()?.contains(target)) return;
+      // A menu command can focus a launcher or inline editor without opening
+      // another overlay. Preserve that move; only return closing/lost focus.
+      const active = document.activeElement;
+      if (active && active !== document.body && !registeredScope?.contains(active)) return;
       target.focus({ preventScroll: true });
     });
   };

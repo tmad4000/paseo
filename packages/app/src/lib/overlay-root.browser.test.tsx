@@ -24,9 +24,11 @@ function OverlayHarness({ active, showScope }: { active: boolean; showScope: boo
 function RetainedOverlayHarness({
   active,
   successorOpen = false,
+  destinationFocus,
 }: {
   active: boolean;
   successorOpen?: boolean;
+  destinationFocus?: "input" | "button";
 }) {
   const setScope = useWebOverlayRegistration({ active, layer: 20, onKeyDown: () => false });
   const setSuccessor = useWebOverlayRegistration({
@@ -50,6 +52,12 @@ function RetainedOverlayHarness({
         <div ref={setSuccessor as RefCallback<HTMLDivElement>} tabIndex={-1}>
           <input data-testid="successor-input" autoFocus />
         </div>
+      ) : null}
+      {destinationFocus === "input" ? <input data-testid="destination-input" autoFocus /> : null}
+      {destinationFocus === "button" ? (
+        <button type="button" data-testid="destination-button" autoFocus>
+          Agent
+        </button>
       ) : null}
     </>
   );
@@ -166,6 +174,28 @@ describe("useWebOverlayRegistration in the browser", () => {
     expect(document.activeElement).toBe(container.querySelector('[data-testid="retained-input"]'));
     expect(openerFocusCalls).toBe(0);
   });
+
+  it.each(["input", "button"] as const)(
+    "preserves intentionally focused %s outside the closing scope",
+    async (destinationFocus) => {
+      flushSync(() => root.render(<RetainedOverlayHarness active />));
+      await nextFrame();
+      const originalFocus = opener.focus.bind(opener);
+      let openerFocusCalls = 0;
+      opener.focus = (options) => {
+        openerFocusCalls++;
+        originalFocus(options);
+      };
+      flushSync(() =>
+        root.render(<RetainedOverlayHarness active={false} destinationFocus={destinationFocus} />),
+      );
+      await nextFrame();
+      expect(document.activeElement).toBe(
+        container.querySelector(`[data-testid="destination-${destinationFocus}"]`),
+      );
+      expect(openerFocusCalls).toBe(0);
+    },
+  );
 
   it("skips focus restoration for active scope detach but restores focus when closing", async () => {
     await renderHarness(true, true);

@@ -144,7 +144,7 @@ Focused receipts retained at the cloud job root:
 - `compact-focus-red.log`, `overlay-scroll-red.log` and `evidence/backdrop-*` retain the original focus
   and geometry failures outside the source tree. Temporary diagnostic code is removed from tests.
 
-### Compact Escape follow-up after exact-head CI
+### Post-commit focus ownership qualification
 
 Run `43571303183` at `69b62c583` passed static checks, app tests, both desktop jobs and three browser
 shards. Shard four failed only the compact title-search Escape return, twice. The same case reproduced
@@ -165,6 +165,26 @@ overlay/Combobox unit tests **2 files / 8 tests**, and Chromium DOM **6/6** pass
 full lint (zero warnings/errors) and all-workspace typecheck passed. Retained receipts are
 `compact-escape-regressions.log`, `compact-escape-settings.log`, `compact-escape-unit.log`,
 `compact-escape-dom-green.log` and `compact-escape-final-checks.result` (exit zero).
+
+CI at `eb4fb9fef` then exposed two missing ownership cases: a menu command focused the new split
+launcher's Agent row, and New file focused its inline editor. Both unchanged tests reproduced red.
+Before/after-return traces show Agent → sidebar Search and the inline input → folder row. The queued
+return was overwriting valid focus without a newer overlay. It now retains the registered DOM owner
+across ref detachment and returns only focus inside that closing owner or lost to `BODY`. New plain
+button/input DOM regressions fail before this guard; all eight DOM regressions pass with it. The
+original compact restoration, newer/reopened-overlay checks and `preventScroll` remain covered.
+
+Both unchanged failing app cases then passed: file-explorer create/rename/copy and split-launcher
+keyboard navigation. The first guarded launcher run failed earlier during workspace hydration, before
+its command or focus assertion; that setup failure remains in `intentional-focus-green.log`. The
+bounded unchanged rerun passed in `intentional-launcher-green.log`. Related picker, footer, stacked
+Rename/Move and settings focus flows passed **8/8** in `intentional-focus-regressions.log`; overlay and
+Combobox unit tests passed **8/8**. Red traces and extracted before/after focus evidence remain in
+`evidence/intentional-focus-diagnostic-focus.json`. No application test assertion changed.
+Repository formatting, full lint (zero warnings/errors), all-workspace typecheck and the final **8/8**
+Chromium DOM rerun passed. `intentional-focus-static.result` and `intentional-focus-final-dom.result`
+both record exit zero. The initial lint finding was a missing `type` on the new test button and was
+corrected before these results.
 
 ## Platform and acceptance boundaries
 
