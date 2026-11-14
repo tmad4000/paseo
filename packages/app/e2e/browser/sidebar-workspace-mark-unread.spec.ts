@@ -382,7 +382,8 @@ test("sending a prompt reads the chat with a bounded read clear", async ({ page,
     .toMatchObject({ read: { seenAttentionAt: expect.any(String) } });
 });
 
-test("the sidebar check is reachable and usable from the keyboard", async ({
+for (const activationKey of ["Enter", "Space"]) {
+test(`the sidebar check is reachable and usable from the keyboard (${activationKey})`, async ({
   page,
   workspaces,
 }) => {
@@ -410,9 +411,11 @@ test("the sidebar check is reachable and usable from the keyboard", async ({
   }
   await expect(check).toBeFocused();
   await expect(check).toHaveAttribute("aria-label", "Mark main as read");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press(activationKey);
   await expectStatus(page, subject.workspaceId, "done");
+  await expect(page).toHaveURL(new RegExp(`/workspace/${other.workspaceId}`));
 });
+}
 
 test("on a touch layout the sidebar check shows without hover and is touch sized", async ({
   page,

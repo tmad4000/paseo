@@ -28,9 +28,13 @@ continues in the ordered durable outbox, with pending/refused recovery and no ov
 draft. Content-free handler/frame/stall diagnostics are bounded and use the existing paired-host
 reporter. See [agent stream performance](agent-stream-performance.md) for measurement limits.
 Acceptance: hold first history response and a send acknowledgement, type/send and start a second
-draft, release them and retain the second draft; verify refusal and storage failure recovery.
+draft, release them and retain the second draft; verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
+transport loss. User-error toasts temporarily replace passive sync status in the same alert above
+the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
-`session-stream-reducers.test.ts`, `composer/actions.test.ts`, `performance/*.test.ts`.
+`session-stream-reducers.test.ts`, `composer/actions.test.ts`, `stores/send-outbox-store/index.test.ts`,
+`components/ui/tooltip.test.tsx`, `timeline/sync-status.test.tsx`, `viewed-agent-timelines.spec.ts`,
+`sidebar-workspace-mark-unread.spec.ts`, `chat-outline.spec.ts`, `performance/*.test.ts`.
 Source validation: [responsiveness QA receipt](qa/mobile-responsiveness.md). Native installed
 performance not yet verified.
 

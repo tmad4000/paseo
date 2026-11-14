@@ -1,6 +1,6 @@
 import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
 import type { ManualStatusTarget } from "@/agent-status/model";
-import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
+import { useMemo, type ComponentProps, type KeyboardEvent, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -118,6 +118,20 @@ export function SidebarWorkspaceMarkReadButton({
             accessibilityRole={isWeb ? undefined : "button"}
             accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name })}
             accessibilityHint={t("sidebar.workspace.actions.markAsReadHint")}
+            {...(isWeb ? {
+              onKeyDownCapture: (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Enter" && !event.repeat) onMarkAsRead();
+              },
+              onKeyUpCapture: (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === " ") onMarkAsRead();
+              },
+            } : {})}
             onPress={onMarkAsRead}
             testID={`sidebar-workspace-mark-as-read-${workspace.workspaceKey}`}
           >

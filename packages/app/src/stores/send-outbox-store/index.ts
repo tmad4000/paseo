@@ -4,9 +4,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import {
   flushSendOutbox,
+  isUncertainSendOutcome,
   PendingDirectSendSchema,
   type PendingDirectSend,
   type SendOutboxFlushClient,
@@ -174,6 +176,12 @@ export async function flushSendOutboxForServer(input: {
   const store = useSendOutboxStore.getState();
   await flushSendOutbox({
     ...input,
+    onRejected: (entry, message) => {
+      if (!isUncertainSendOutcome(message)) {
+        createMessageSubmissionWriter(input.serverId).reject(entry.agentId, entry.clientMessageId);
+      }
+      input.onRejected?.(entry, message);
+    },
     outbox: {
       list: (serverId) => useSendOutboxStore.getState().entriesForServer(serverId),
       get: (clientMessageId) => useSendOutboxStore.getState().entries[clientMessageId],

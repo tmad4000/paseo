@@ -51,7 +51,6 @@ import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
 import { getProviderIcon } from "@/components/provider-icons";
 import {
-  ToastViewport,
   useToastHost,
   type ToastApi,
   type ToastState,
@@ -1340,7 +1339,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   ]);
   const composerSection = (
     <View style={styles.composerStatusAnchor}>
-      <TimelineSyncStatus sync={timelineSync} />
+      <TimelineSyncStatus sync={timelineSync} toast={toast} onDismiss={dismiss} />
       <RenderProfile id={`AgentComposerSection:${agentId}`}>
         <AgentComposerSection
           agentId={agentId}
@@ -1414,8 +1413,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     </View>
   );
 
-  const dockOverlay = <ToastViewport toast={toast} onDismiss={dismiss} placement="panel" />;
-
   // The chat stays mounted behind the Stream so the draft, scroll position and
   // expanded state survive Back to chat and Reply in chat.
   const isChatVisible = visibleView === "chat";
@@ -1423,7 +1420,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
       {composerSection}
-      {dockOverlay}
     </ChatSurface>
   );
   const artifacts = agentState.artifacts ?? [];

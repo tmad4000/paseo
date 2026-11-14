@@ -29,6 +29,25 @@ and a complete synchronous drain before canonical history. The Send regression l
 promise unresolved and checks submission still finishes after the device save. Storage failure
 and explicit/uncertain refusals remain covered.
 
+### Review repair validation pending
+
+The review repair centralizes refusal settlement for composer, reconnect and manual Retry,
+measures the full tooltip child action, and restores user-error priority and alert continuity
+above the composer. Sidebar mark-as-read now handles Enter/Space without opening its parent
+workspace. Outline pixel interactions wait for two usable, matching layout boxes.
+
+The outer executor owns cloud execution of the new regressions; this repair has not run tests,
+builds, typecheck, lint or formatting on M4. Run these focused checks on the existing cloud builder:
+
+- App Vitest: `stores/send-outbox-store/index.test.ts`, `components/ui/tooltip.test.tsx`,
+  `timeline/sync-status.test.tsx`, plus existing `composer/actions.test.ts` and
+  `performance/response-monitor.test.ts`.
+- Browser Playwright: `sidebar-workspace-mark-unread.spec.ts` (both keyboard cases),
+  `viewed-agent-timelines.spec.ts` (error priority, stable alert and reconnect), and
+  `chat-outline.spec.ts` (stable geometry with the existing hover assertions).
+- Format the touched files, then run the app typecheck and targeted lint through the repository
+  scripts before accepting the repair. Native build and device verification remain deferred.
+
 ## Burst comparison
 
 One synthetic run queues 1,024 assistant deltas for each of eight chats, then measures each
