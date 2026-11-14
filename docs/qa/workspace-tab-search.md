@@ -191,7 +191,14 @@ by a command before cleanup, alongside the new-control autofocus cases during th
 The pre-cleanup regression fails with the ownership guard removed; all **10 DOM tests** pass with it,
 including retained closing input, newer overlay, reopening, once-only return and zero ancestor scroll.
 The five-line product guard is unchanged. `precleanup-focus-red.log` and `precleanup-focus-green.log`
-retain the comparison; the unchanged full-app split/explorer acceptance results above still apply.
+retain the comparison. Both complete unchanged acceptance files, `empty-pane-keyboard.spec.ts` and
+`file-explorer-context-actions.spec.ts`, then passed **7/7** without grep filtering
+(`intentional-focus-full-specs.result`, exit zero). The initial red command's `context menu` filter
+selected only the split case; `intentional-inline-red.log` separately reproduces the exact
+**creates, renames, copies, and deletes entries through the file explorer** failure at line 160.
+The final added tests and receipt passed repository formatting, full lint and all-workspace typecheck
+again (`precleanup-focus-static.result`, exit zero). Temporary instrumentation is absent from tracked
+source; runnable probes are archived with the retained diagnostic evidence.
 
 ### Separate plugin retry qualification
 
