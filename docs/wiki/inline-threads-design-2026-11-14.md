@@ -556,15 +556,19 @@ To mark a message for follow-up, use Save to Stream. To approve, answer the perm
   `packages/cli/src/commands/agent/run.ts:768`): `PASEO_AGENT_ID`, confirmed to exist on the
   target daemon. So does the follow-up send inside `paseo run`'s structured-output loop.
 - The daemon records `agent:<id>` on both branches of the handler (queued and direct). It
-  refuses a send that names a caller it does not have, as create does.
+  refuses a send that names a caller it has no record of. A stored agent that is not loaded
+  counts, because a process can outlive its agent's runtime.
 - A send to another daemon (`--host`, `--home`) carries no caller and is recorded as `human`.
 - The only daemon logic that branches on a human sender is message activity
   (`agent-manager.ts:4969`, `:5311`, `message-activity.ts:73`). So `lastHumanMessageAt`, the
   Mine filter and "Your last message" stop counting an agent's CLI sends as the user's.
   Attention and permission clearing do not depend on the sender.
 - An older daemon ignores the field. An older CLI does not send it. No flag needed.
-- Trust: the claim comes from a local process holding the daemon credential, the same trust
-  `paseo run` already extends for parentage. It is attribution, not authorization.
+- Trust: the claim comes from a client holding a daemon credential, the same trust
+  `paseo run` already extends for parentage. It is attribution, not authorization, and today
+  it feeds only message activity. Any principal allowed to send (including a Hub execution
+  session) can name any agent. Decide in Phase 1 whether restricted principals may, before
+  thread rows are drawn from it.
 
 ### 8.2 Phase 1: the exchange log
 
@@ -645,8 +649,8 @@ Acceptance:
 - From an agent's shell, `paseo send <other> "x"` reaches the other chat with
   `sender = agent:<caller id>`, queued or direct. The same command from a terminal outside any
   agent records `human`.
-- A send naming a caller the daemon does not have is refused and nothing is delivered.
-- A send to a daemon that does not have the caller succeeds and records `human`.
+- A send naming a caller the daemon has no record of is refused and nothing is delivered.
+- From an agent's shell, a send to another daemon succeeds and records `human`.
 - `lastHumanMessageAt` on the recipient does not advance for an agent's CLI send.
 - An older daemon accepts the request from a new CLI.
 
