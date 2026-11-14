@@ -31,6 +31,9 @@ import {
 } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js";
+import { MessageReceipts } from "../message-receipts/index.js";
+import { isPromptNotSubmittedError } from "./prompt-not-submitted.js";
+import { AgentRunState } from "./agent-run-state.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
@@ -1382,13 +1385,27 @@ test("ambiguous steer failure leaves the active turn untouched", async () => {
       }
     })();
     await manager.waitForAgentRunStart(agent.id);
-    await expect(
-      startAgentRun(manager, agent.id, "must not resend", logger, {
-        replaceRunning: true,
-        activeTurnBehavior: "steer",
-        runOptions: { clientMessageId: "ambiguous-client" },
-      }),
-    ).rejects.toThrow("connection lost after delivery");
+    const receiptsDirectory = join(workdir, "ambiguous-receipts");
+    const receiptInput = {
+      agentId: agent.id,
+      messageId: "ambiguous-client",
+      request: { text: "must not resend", activeTurnBehavior: "steer" },
+      send: async () => {
+        await startAgentRun(manager, agent.id, "must not resend", logger, {
+          replaceRunning: true,
+          activeTurnBehavior: "steer",
+          runOptions: { clientMessageId: "ambiguous-client" },
+        });
+      },
+    };
+    await expect(new MessageReceipts(receiptsDirectory).send(receiptInput)).rejects.toMatchObject({
+      message: "agent_request_outcome_unknown: connection lost after delivery",
+      cause: session.steerResult,
+    });
+    const reopened = new MessageReceipts(receiptsDirectory);
+    expect(await reopened.get(agent.id, "ambiguous-client")).toBe("pending");
+    await expect(reopened.send(receiptInput)).rejects.toThrow("agent_request_outcome_unknown");
+    expect(session.steerCount).toBe(1);
     expect(session.interruptCount).toBe(0);
     expect(session.startCount).toBe(1);
     expect(manager.getTimeline(agent.id)).not.toContainEqual(
@@ -12956,4 +12973,129 @@ test("the agent's latest task list rides on its snapshot and survives reopen", a
     if (agentId) await manager.closeAgent(agentId);
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+class ControlledRunStartSession extends TestAgentSession {
+  startError: Error | null = null;
+  startGate = Promise.resolve();
+  attempts = 0;
+
+  override async startTurn(): Promise<{ turnId: string }> {
+    this.attempts += 1;
+    await this.startGate;
+    if (this.startError) throw this.startError;
+    return super.startTurn();
+  }
+}
+
+async function runStartFailureFixture() {
+  const workdir = mkdtempSync(join(tmpdir(), "run-start-proof-"));
+  const session = new ControlledRunStartSession({ provider: "codex", cwd: workdir });
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  return { manager, session, agentId: agent.id, workdir };
+}
+
+test("run-start observers retain the original failure before and after registry settlement", async () => {
+  const { manager, session, agentId, workdir } = await runStartFailureFixture();
+  const error = Object.assign(new Error("provider refused preparation"), {
+    code: "AGENT_PROMPT_NOT_SUBMITTED",
+  });
+  const gate = deferred<void>();
+  session.startError = error;
+  session.startGate = gate.promise;
+  try {
+    const stream = manager.streamAgent(agentId, "first");
+    const drained = drainAsyncGenerator(stream);
+    const failedDrain = expect(drained).rejects.toBe(error);
+    const observed = expect(manager.waitForAgentRunStart(agentId)).rejects.toBe(error);
+    gate.resolve();
+    await failedDrain;
+    await observed;
+    expect(manager.hasInFlightRun(agentId)).toBe(false);
+    await expect(manager.waitForAgentRunStart(agentId)).rejects.toBe(error);
+    session.startError = null;
+    await startAgentRun(manager, agentId, "retry", logger, { awaitRunStart: true });
+    await expect(manager.waitForAgentRunStart(agentId)).resolves.toBeUndefined();
+    expect(session.attempts).toBe(2);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => {});
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test.each(["definite", "generic"] as const)(
+  "receipt delivery classifies a %s provider start failure without losing its proof",
+  async (kind) => {
+    const { manager, session, agentId, workdir } = await runStartFailureFixture();
+    const error = new Error("Requested mock prompt rejection");
+    if (kind === "definite") Object.assign(error, { code: "AGENT_PROMPT_NOT_SUBMITTED" });
+    session.startError = error;
+    const directory = join(workdir, "receipts");
+    const requests = new MessageReceipts(directory);
+    const input = {
+      agentId,
+      messageId: "stable-rejected-request",
+      request: { text: "retry with image", images: [{ data: "AAAA", mimeType: "image/png" }] },
+      send: async () => {
+        await startAgentRun(manager, agentId, "retry with image", logger, {
+          activeTurnBehavior: "interrupt",
+          runOptions: { clientMessageId: "stable-rejected-request" },
+        });
+        await manager.waitForAgentRunStart(agentId);
+      },
+    };
+    try {
+      const failure = await requests.send(input).catch((cause: unknown) => cause);
+      expect(isPromptNotSubmittedError(error)).toBe(kind === "definite");
+      session.startError = null;
+      const reopened = new MessageReceipts(directory);
+      if (kind === "definite") {
+        expect(failure).toBe(error);
+        expect(await reopened.get(agentId, input.messageId)).toBe("absent");
+        await reopened.send(input);
+        expect(await reopened.get(agentId, input.messageId)).toBe("completed");
+        expect(session.attempts).toBe(2);
+      } else {
+        expect(failure).toMatchObject({
+          message: "agent_request_outcome_unknown: Requested mock prompt rejection",
+          cause: error,
+        });
+        expect(await reopened.get(agentId, input.messageId)).toBe("pending");
+        await expect(reopened.send(input)).rejects.toThrow("agent_request_outcome_unknown");
+        expect(session.attempts).toBe(1);
+      }
+    } finally {
+      await manager.closeAgent(agentId).catch(() => {});
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("failed run-start generations cannot replace a later reservation", async () => {
+  const runs = new AgentRunState();
+  const first = runs.createPendingRun("agent");
+  const error = Object.assign(new Error("not submitted"), { code: "AGENT_PROMPT_NOT_SUBMITTED" });
+  first.start = { status: "failed", error };
+  runs.settleForegroundRun("agent", first.token);
+  expect(runs.getPendingRun("agent")).toBeNull();
+  expect(runs.getFailedStart("agent")).toEqual({ token: first.token, error });
+  const second = runs.createPendingRun("agent");
+  expect(runs.getFailedStart("agent")).toBeNull();
+  runs.settleForegroundRun("agent", first.token);
+  expect(runs.getPendingRun("agent")).toBe(second);
+  expect(first.start).toEqual({ status: "failed", error });
+  const laterError = new Error("later ambiguous start");
+  second.start = { status: "failed", error: laterError };
+  runs.settleForegroundRun("agent", second.token);
+  expect(runs.getFailedStart("agent")).toEqual({ token: second.token, error: laterError });
+  runs.clearAgentRun("agent");
+  expect(runs.getFailedStart("agent")).toBeNull();
 });

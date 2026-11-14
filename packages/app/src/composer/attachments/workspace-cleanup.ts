@@ -1,5 +1,6 @@
 import type { ComposerAttachment, WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachments-store";
+import { clearSubmittedReviewAttachment } from "@/review/store";
 import { isPullRequestContextAttachment } from "@/attachments/workspace-attachment-utils";
 
 export function getAttachmentKey(attachment: WorkspaceComposerAttachment): string {
@@ -64,8 +65,28 @@ function isSentContextAttachment(
 }
 
 export function removeSentContextAttachments(attachments: readonly ComposerAttachment[]): void {
-  const sentContextKeys = attachments.filter(isSentContextAttachment).map(getAttachmentKey);
-  for (const key of sentContextKeys) {
-    removeWorkspaceAttachmentsMatching(key);
+  const submitted = new Set(attachments.filter(isSentContextAttachment));
+  const store = useWorkspaceAttachmentsStore.getState();
+  for (const [scopeKey, current] of Object.entries(store.attachmentsByScope)) {
+    const remaining = current.filter((attachment) => !submitted.has(attachment));
+    if (remaining.length !== current.length) {
+      store.setWorkspaceAttachments({ scopeKey, attachments: remaining });
+    }
   }
+}
+
+export function clearSubmittedWorkspaceAttachments(
+  attachments: readonly ComposerAttachment[],
+): void {
+  for (const attachment of attachments) {
+    if (attachment.kind === "review") clearSubmittedReviewAttachment(attachment);
+  }
+  removeSentContextAttachments(attachments);
+}
+
+export function activeWorkspaceAttachments(
+  attachments: readonly WorkspaceComposerAttachment[],
+  suppressed: readonly WorkspaceComposerAttachment[],
+): WorkspaceComposerAttachment[] {
+  return attachments.filter((attachment) => !suppressed.includes(attachment));
 }

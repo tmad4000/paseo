@@ -1192,8 +1192,11 @@ test.describe("Agent message submission", () => {
       page.getByTestId("user-message").filter({ hasText: submissionScenario.existingPrompt }),
     ).toBeVisible();
     const responseText = "I'll take a look at the scroll anchor behavior you described.";
-    const assistantOutput = page.getByTestId("assistant-message").filter({ hasText: responseText });
-    const readTool = page.getByTestId("tool-call-group").filter({ hasText: /read/i });
+    const assistantOutput = page
+      .getByTestId("assistant-message")
+      .filter({ hasText: responseText })
+      .first();
+    const readTool = page.getByTestId("tool-call-group").filter({ hasText: /read/i }).first();
     await expect(assistantOutput).toHaveCount(0);
     await expect(readTool).toHaveCount(0);
     const finishTimelineRowStabilityCheck = await beginTimelineRowStabilityCheck(

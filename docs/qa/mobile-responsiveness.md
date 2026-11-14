@@ -60,6 +60,12 @@ Independent review caught gaps in the first implementation:
   widget and dictation use the same revision guard; unchanged acceptance still clears, while
   Queue as new message retains the composer. Both delivery paths reject incomplete image encoding
   before persisting or sending.
+- Review cleanup removes only unchanged comments included in the submitted snapshot. Newer
+  same-key review/context snapshots remain visible during preparation and survive settlement;
+  discarded comments are not reconstructed.
+- Run-start waiting preserves the original provider error through active-registry settlement and
+  keeps observers bound to their captured run. A proven pre-submission refusal releases its receipt;
+  generic failures and ambiguous steering retain it.
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
 
@@ -67,10 +73,19 @@ The outer executor's GCP checks at `ab71376b3bfe9dc3b8072fa61b894a22c6edb7d7` pa
 across 11 unit suites, formatting and app typecheck. Lint reported three errors in the dispatch
 function and direct-settlement case setup; this review refactors those sites without suppressions.
 The original nine browser flows passed at `3b8a8adc`; the expanded browser batch at `ab71376b`
-was still running when this review began.
+finished with nine of eleven flows passing. The failures were a layout selector matching two
+new mock cycles and a legacy retry blocked after run-start waiting dropped the provider's definitive
+error code. The selector now chooses the first newly observed response/read tool, retaining zero
+matches before Send and the original row-stability checks.
 
 The queue-settlement regressions in `composer/draft/input-draft.live.test.tsx` and
 `composer/input/state.test.ts`, plus this round's lint repairs, await the outer executor's GCP checks.
+Checks at `44b94d7b8a673565b97a7574f986e32c8fc1e9f2` were still running when this review began.
+This review also adds snapshot cleanup cases in `composer/attachments/workspace.test.ts` and
+`review/store.test.ts`, plus manager/receipt cases in server `agent/agent-manager.test.ts`.
+These repairs await GCP validation. Rebuild the server before rerunning the daemon-backed browser
+flows; preserve the legacy refusal/retry/image assertions.
+
 Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
 legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and
 Queue as new message.

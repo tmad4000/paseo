@@ -15,10 +15,10 @@ import {
 } from "@/attachments/workspace-attachment-utils";
 import {
   getAttachmentKey,
-  removeSentContextAttachments,
+  clearSubmittedWorkspaceAttachments,
+  activeWorkspaceAttachments as selectActiveWorkspaceAttachments,
   removeWorkspaceAttachmentsMatching,
 } from "./workspace-cleanup";
-import { useClearReviewDraft } from "@/review/store";
 
 interface WorkspaceAttachmentBindingInput {
   normalAttachments: UserComposerAttachment[];
@@ -105,18 +105,12 @@ function useWorkspaceAttachmentBinding({
   workspaceAttachments,
   onOpenWorkspaceAttachment,
 }: WorkspaceAttachmentBindingInput): ComposerWorkspaceAttachmentBinding {
-  const clearReviewDraft = useClearReviewDraft();
-  const [suppressedKeys, setSuppressedKeys] = useState<readonly string[]>([]);
-  const workspaceAttachmentKeys = useMemo(
-    () => workspaceAttachments.map(getAttachmentKey),
-    [workspaceAttachments],
-  );
+  const [suppressedAttachments, setSuppressedAttachments] = useState<
+    readonly WorkspaceComposerAttachment[]
+  >([]);
   const activeWorkspaceAttachments = useMemo(
-    () =>
-      workspaceAttachments.filter(
-        (attachment, index) => !suppressedKeys.includes(workspaceAttachmentKeys[index] ?? ""),
-      ),
-    [suppressedKeys, workspaceAttachmentKeys, workspaceAttachments],
+    () => selectActiveWorkspaceAttachments(workspaceAttachments, suppressedAttachments),
+    [suppressedAttachments, workspaceAttachments],
   );
 
   const selectedAttachments = useMemo<ComposerAttachment[]>(
@@ -128,13 +122,11 @@ function useWorkspaceAttachmentBinding({
   );
 
   useEffect(() => {
-    setSuppressedKeys((current) => {
-      const next = current.filter((suppressedKey) =>
-        workspaceAttachmentKeys.includes(suppressedKey),
-      );
+    setSuppressedAttachments((current) => {
+      const next = current.filter((attachment) => workspaceAttachments.includes(attachment));
       return next.length === current.length ? current : next;
     });
-  }, [workspaceAttachmentKeys]);
+  }, [workspaceAttachments]);
 
   const buildOutgoingAttachments = useCallback(
     (attachments: UserComposerAttachment[]): ComposerAttachment[] =>
@@ -145,21 +137,12 @@ function useWorkspaceAttachmentBinding({
   );
 
   const suppressWorkspaceAttachment = useCallback((attachment: WorkspaceComposerAttachment) => {
-    const key = getAttachmentKey(attachment);
-    setSuppressedKeys((current) => (current.includes(key) ? current : [...current, key]));
+    setSuppressedAttachments((current) =>
+      current.includes(attachment) ? current : [...current, attachment],
+    );
   }, []);
 
-  const clearSentAttachments = useCallback(
-    (attachments: readonly ComposerAttachment[]) => {
-      for (const attachment of attachments) {
-        if (attachment.kind === "review") {
-          clearReviewDraft({ key: attachment.reviewDraftKey });
-        }
-      }
-      removeSentContextAttachments(attachments);
-    },
-    [clearReviewDraft],
-  );
+  const clearSentAttachments = clearSubmittedWorkspaceAttachments;
 
   const removeAttachment = useCallback(
     ({ selectedAttachments: current, index }: RemoveWorkspaceAttachmentInput) => {
@@ -194,15 +177,14 @@ function useWorkspaceAttachmentBinding({
   );
 
   const resetSuppression = useCallback(() => {
-    setSuppressedKeys([]);
+    setSuppressedAttachments([]);
   }, []);
 
   const beginSubmit = useCallback((attachments: readonly ComposerAttachment[]) => {
-    const keys = attachments.filter(isWorkspaceAttachment).map(getAttachmentKey);
-    if (keys.length === 0) return;
-    setSuppressedKeys((current) => {
-      const next = new Set(current);
-      for (const key of keys) next.add(key);
+    const submitted = attachments.filter(isWorkspaceAttachment);
+    if (submitted.length === 0) return;
+    setSuppressedAttachments((current) => {
+      const next = new Set([...current, ...submitted]);
       return next.size === current.length ? current : Array.from(next);
     });
   }, []);

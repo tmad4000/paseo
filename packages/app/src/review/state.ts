@@ -94,6 +94,19 @@ export function deleteCommentFromState(
   };
 }
 
+export function clearSubmittedReviewCommentsInState(
+  state: ReviewDraftStoreState,
+  input: { key: string; comments: readonly ReviewDraftComment[] },
+): ReviewDraftStoreState {
+  const current = state.drafts[input.key];
+  if (!current) return state;
+  const submitted = new Set(input.comments);
+  const remaining = current.filter((comment) => !submitted.has(comment));
+  if (remaining.length === current.length) return state;
+  if (remaining.length === 0) return clearReviewInState(state, input);
+  return { ...state, drafts: { ...state.drafts, [input.key]: remaining } };
+}
+
 export function clearReviewInState(
   state: ReviewDraftStoreState,
   input: { key: string },

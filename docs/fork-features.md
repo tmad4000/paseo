@@ -33,7 +33,10 @@ success and failure; preserve text and attachment edits, including identical-tex
 that return to the cleared state. Repeat Queue/default Send while running and explicit Queue with
 A→B→A edits and attachment changes before acceptance, including legacy local queues. Both the composer
 and input widget must retain those edits; unchanged Queue clears and Queue as new message preserves
-the composer. An unchanged draft still settles or restores on failure, and
+the composer. Hold Send/Queue encoding and device save with a review snapshot, then add or edit a
+comment under the same review key. Only unchanged submitted comments clear; newer comments stay
+visible/retryable, and discarded comments stay discarded. Updated context snapshots with the same
+key must survive cleanup too. An unchanged draft still settles or restores on failure, and
 preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
 either delivery path and leave the original images recoverable. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
 transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
@@ -48,7 +51,9 @@ failed removal must retain B and C and the routing draft. Routed direct sends an
 stable-ID delivery hold across timeout and restart, without replay; explicit review/release resumes
 later work. The first ambiguous provider response and a failed completion-receipt write must retain
 that barrier for ordinary and one-shot sends, including older hosts' provider ambiguity wording;
-known-not-submitted refusals allow later work. Failed initial saves in either outbox must wake later
+known-not-submitted refusals allow later work. The original provider error must survive run-start
+observation and registry settlement so a definite mock refusal remains retryable; generic failures
+and ambiguous steering retain the receipt across reconstruction. Failed initial saves in either outbox must wake later
 saved work without another user action. Hold and fail recovery storage while B saves and flushes:
 ordinary unknown and one-shot A must retain ownership until a later explicit recovery succeeds.
 Broadcast receipts distinguish saved/pending work from confirmed host delivery.
@@ -57,7 +62,8 @@ clock and delayed hydration of either outbox: new entries must still follow save
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
 `session-stream-reducers.test.ts`, `composer/actions.test.ts`, `composer/submit.test.ts`,
-`composer/draft/input-draft.live.test.tsx`, `composer/input/state.test.ts`, `stores/send-outbox-store/index.test.ts`,
+`composer/draft/input-draft.live.test.tsx`, `composer/input/state.test.ts`,
+`composer/attachments/workspace.test.ts`, `review/store.test.ts`, `agent/agent-manager.test.ts`, `stores/send-outbox-store/index.test.ts`,
 `stores/send-outbox-store/model.test.ts`, `agent-message-submission.spec.ts`,
 `components/ui/tooltip.test.tsx`, `timeline/sync-status.test.tsx`, `viewed-agent-timelines.spec.ts`,
 `sidebar-workspace-mark-unread.spec.ts`, `chat-outline.spec.ts`, `performance/*.test.ts`.

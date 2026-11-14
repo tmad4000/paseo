@@ -180,6 +180,12 @@ uploaded-file handles, workspace file paths, and forge items, never a local stor
 
 The inline editor changes only text; both attachment lists and image bytes stay on the daemon.
 
+Composer cleanup consumes the submitted workspace attachment snapshot. For reviews, only unchanged
+comments actually included in that snapshot are removed; added or edited comments remain available
+for another message. Discarding a comment while submission is pending must never recreate it.
+Suppression follows the submitted snapshot, so a newer attachment with the same review/context key
+stays visible while encoding or storage finishes.
+
 ## Composer controls
 
 Expand the queue, then tap a message to expand or collapse its full text. Scroll the queue to read

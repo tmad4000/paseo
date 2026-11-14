@@ -7,6 +7,7 @@ import type { ParsedDiffFile } from "@/git/use-diff-query";
 import {
   addCommentToState,
   clearReviewInState,
+  clearSubmittedReviewCommentsInState,
   deleteCommentFromState,
   normalizePersistedState,
   type ReviewDraftComment,
@@ -32,6 +33,10 @@ const EMPTY_REVIEW_DRAFT_COMMENTS: ReviewDraftComment[] = [];
 type ReviewAttachment = Extract<AgentAttachment, { type: "review" }>;
 type ReviewAttachmentContextLine = ReviewAttachment["comments"][number]["context"]["targetLine"];
 type ReviewComposerAttachment = Extract<ComposerAttachment, { kind: "review" }>;
+const submittedReviewComments = new WeakMap<
+  ReviewComposerAttachment,
+  readonly ReviewDraftComment[]
+>();
 
 export interface BuildReviewDraftKeyInput {
   serverId: string;
@@ -66,6 +71,7 @@ interface ReviewDraftStoreActions {
   }) => void;
   deleteComment: (input: { key: string; id: string }) => void;
   clearReview: (input: { key: string }) => void;
+  clearSubmittedComments: (input: { key: string; comments: readonly ReviewDraftComment[] }) => void;
 }
 
 type ReviewDraftStore = ReviewDraftStoreState & ReviewDraftStoreActions;
@@ -145,6 +151,9 @@ export const useReviewDraftStore = create<ReviewDraftStore>()(
       deleteComment: (input) => {
         set((state) => deleteCommentFromState(state, input));
       },
+      clearSubmittedComments: (input) => {
+        set((state) => clearSubmittedReviewCommentsInState(state, input));
+      },
       clearReview: (input) => {
         set((state) => clearReviewInState(state, input));
       },
@@ -205,6 +214,7 @@ export function buildReviewAttachmentSnapshot(
   input: BuildReviewAttachmentSnapshotInput,
 ): ReviewComposerAttachment | null {
   const comments: ReviewAttachment["comments"] = [];
+  const includedComments: ReviewDraftComment[] = [];
 
   for (const draftComment of input.comments) {
     const target = findTarget({
@@ -227,6 +237,7 @@ export function buildReviewAttachmentSnapshot(
       .map(toContextLine)
       .filter((line): line is ReviewAttachmentContextLine => line !== null);
 
+    includedComments.push(draftComment);
     comments.push({
       filePath: draftComment.filePath,
       side: draftComment.side,
@@ -253,12 +264,22 @@ export function buildReviewAttachmentSnapshot(
     comments,
   };
 
-  return {
+  const snapshot: ReviewComposerAttachment = {
     kind: "review",
     reviewDraftKey: input.reviewDraftKey,
     commentCount: comments.length,
     attachment,
   };
+  submittedReviewComments.set(snapshot, includedComments);
+  return snapshot;
+}
+
+export function clearSubmittedReviewAttachment(attachment: ReviewComposerAttachment): void {
+  const comments = submittedReviewComments.get(attachment);
+  if (!comments) return;
+  useReviewDraftStore
+    .getState()
+    .clearSubmittedComments({ key: attachment.reviewDraftKey, comments });
 }
 
 export function useReviewDraftComments(key: string): ReviewDraftComment[] {
