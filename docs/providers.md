@@ -75,6 +75,8 @@ Claude first-party model metadata lives in `packages/server/src/server/agent/pro
 
 For a Claude freshness review, capture `paseo provider models claude --json` to a file,
 then run `npx tsx scripts/check-claude-catalog-freshness.ts <daemon-Claude-version> <file>`.
+Optionally pass a third file containing provider-native `supportedModels()` metadata to report
+resolved IDs absent from the manifest without promoting them into the picker.
 Use the version reported by the target daemon's provider diagnostic, not another host's CLI.
 A missing ID means the source catalog and daemon disagree; it does not authorize installing
 that checkout. Custom settings entries outside the manifest are reported separately and retained.

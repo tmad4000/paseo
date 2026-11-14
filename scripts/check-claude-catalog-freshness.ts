@@ -5,11 +5,11 @@ import { parseClaudeCodeVersion } from "../packages/server/src/server/agent/prov
 // Compare an explicitly captured daemon listing with this checkout. This is a read-only
 // diagnostic, never a source of new model IDs or authorization to deploy this checkout.
 async function main(): Promise<void> {
-  const [versionInput, listingPath] = process.argv.slice(2);
+  const [versionInput, listingPath, metadataPath] = process.argv.slice(2);
   const version = versionInput ? parseClaudeCodeVersion(versionInput) : null;
   if (!version || !listingPath) {
     throw new Error(
-      "Usage: npx tsx scripts/check-claude-catalog-freshness.ts <daemon-Claude-version> <paseo-models.json>",
+      "Usage: npx tsx scripts/check-claude-catalog-freshness.ts <daemon-Claude-version> <paseo-models.json> [supported-models.json]",
     );
   }
   const listing: unknown = JSON.parse(await readFile(listingPath, "utf8"));
@@ -30,9 +30,34 @@ async function main(): Promise<void> {
   );
   const missingFromDaemon = [...expected].filter((id) => !installed.has(id));
   const outsideManifest = [...installed].filter((id) => !expected.has(id));
-  console.log(JSON.stringify({ version, missingFromDaemon, outsideManifest }, null, 2));
+  let metadataMissingFromManifest: string[] = [];
+  if (metadataPath) {
+    const metadata: unknown = JSON.parse(await readFile(metadataPath, "utf8"));
+    if (!Array.isArray(metadata)) throw new Error("Expected supportedModels() metadata array");
+    const resolvedIds = new Set<string>();
+    for (const row of metadata as unknown[]) {
+      if (typeof row !== "object" || row === null) {
+        throw new Error("Expected supportedModels() metadata objects");
+      }
+      // Aliases such as default/fable are not model IDs. Never synthesize a resolved ID.
+      if ("resolvedModel" in row) {
+        if (typeof row.resolvedModel !== "string" || !row.resolvedModel.trim()) {
+          throw new Error("Expected nonempty supportedModels() resolvedModel");
+        }
+        resolvedIds.add(row.resolvedModel);
+      }
+    }
+    metadataMissingFromManifest = [...resolvedIds].filter((id) => !expected.has(id));
+  }
+  console.log(
+    JSON.stringify(
+      { version, missingFromDaemon, outsideManifest, metadataMissingFromManifest },
+      null,
+      2,
+    ),
+  );
   // Outside-manifest entries can be explicitly configured custom models. Do not remove them.
-  process.exitCode = missingFromDaemon.length ? 1 : 0;
+  process.exitCode = missingFromDaemon.length || metadataMissingFromManifest.length ? 1 : 0;
 }
 
 void main();
