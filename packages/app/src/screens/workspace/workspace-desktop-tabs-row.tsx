@@ -745,6 +745,7 @@ function TabHandleContent({
   tabLabelStyle,
   modifiedTestId,
   readState,
+  trailingInset = 0,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -754,6 +755,7 @@ function TabHandleContent({
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
   readState: TabReadState;
+  trailingInset?: number;
 }) {
   const { t } = useTranslation();
   const { settings } = useAppSettings();
@@ -763,7 +765,7 @@ function TabHandleContent({
   );
 
   return (
-    <View style={styles.tabHandle} dataSet={tabHandleDataSet}>
+    <View style={[styles.tabHandle, { paddingRight: trailingInset }]} dataSet={tabHandleDataSet}>
       <View style={styles.tabIcon}>
         <WorkspaceTabIcon
           presentation={presentation}
@@ -1019,11 +1021,27 @@ function TabChip({
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
   );
   const [hovered, setHovered] = useState(false);
+  const isCompact = useIsCompactFormFactor();
   // An active tab in a pane that does not have focus stays legible but quiet: it keeps the fill of
   // a hovered chip and the muted label, so only one chip in the window reads as the live one.
   const isActiveFocused = isActive && isFocused;
   const isHovered = hovered || isCloseHovered;
   const isHighlighted = isActiveFocused || isHovered;
+  const trailingControls = resolveTabTrailingControls({
+    canMarkRead: readAction.canMarkRead,
+    showCloseButton,
+    isKeyboardFocused: keyboardFocused,
+    isHovered,
+    isClosingTab,
+    isTouch: isNative || isCompact,
+  });
+  // Only the title viewport gives way to revealed controls. The measured chip
+  // width and fixed close/read targets never move, including when read clears.
+  const trailingInset = trailingControls.showTrailingOverlay
+    ? (trailingControls.readSitsBesideClose ? 42 : 22) +
+      TAB_CONTENT_GAP -
+      TAB_CHIP_HORIZONTAL_PADDING
+    : 0;
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
     isActiveFocused,
     isFilled: isActive || isHovered,
@@ -1100,6 +1118,7 @@ function TabChip({
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
                 readState={readState}
+                trailingInset={trailingInset}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>

@@ -22,7 +22,8 @@ was restarted. No release, deployment or installed-app update is part of this wo
 - Existing lockfile: `npm ci --ignore-scripts --no-audit --no-fund`, followed by the repository's
   `npm run postinstall` and native `npm rebuild node-pty esbuild`. No manifest, lockfile or dependency
   version changed. This is a clean Linux dependency tree, independent of the earlier mixed Mac
-  symlinks. The Mac's shared dependencies were not installed into or mutated.
+  symlinks. The Mac's shared dependencies were not installed into or mutated. No new dependency audit
+  was run.
 - `npm run build:app-deps` and `npm run build:server`: passed. The initial direct-Node invocation of
   postinstall lacked npm's executable PATH and failed; it was corrected before either build was
   counted. `build.result` now records actual exit zero.
@@ -82,7 +83,7 @@ exposed compact Escape returning to a disconnected footer. The final fix retains
 invoking element across the handoff and repeated opens. Focused lint/app typecheck and the strengthened
 **2/2 desktop/compact flows passed** after this fix; the refreshed handoff captures show the old
 picker fully gone. Origin independently reviewed both the source and the corrected compact capture.
-No additional broad retest ran after this focused correction.
+The CI follow-up below rechecks both settled handoff flows after shared compact focus changes.
 
 Both desktop and compact **keyboard footer handoff** flows passed with matching results present:
 native Tab reaches the footer, Enter opens Cmd+K with the typed query, subsequent typing stays in
@@ -98,6 +99,51 @@ layout. The tests now use the observed native Tab order and seed before hydratio
 also keeps the composer focused until overlay capture; compact web retains the app's established
 policy disabling global shortcuts and uses visible entry points.
 
+## PR #211 CI follow-up
+
+The follow-up replaces three obsolete plural-label selectors with the stable picker trigger ID.
+Launcher helpers now select actual tab buttons; the original 96–160px and title-fit expectations
+remain. Read-control tests reveal the check by hover before asserting its label, explicit-read effect,
+persistence and title clearance. Both normal/cold-reload and 2× clearance cases pass. The title viewport
+shrinks only while controls are shown, inside the unchanged chip width and fixed close/read targets.
+The six title captures above are refreshed with the corrected hover/focus clipping.
+
+Stacked compact Rename/Move sheets originally lost keyboard input to the underlying picker. The
+pre-cleanup diagnostic confirmed that focusing Rename returned `activeElement` to Search tabs.
+Compact sheets now register their own web focus scope, and nested Combobox sheets resolve above it.
+The original native hierarchy is retained. Stronger real-browser Rename coverage types a cancelled
+name, checks enabled Save, escapes to the picker, reopens, types and saves, then verifies daemon state.
+Compact Move verifies the keyboard-entered workspace name through the daemon.
+
+A separate real-browser regression reproduced focus scrolling a clipped ancestor by 251px. In the
+phone app this shifted a correctly transformed 60% sheet over the entire viewport, covering its
+backdrop. Entry, enforced refocus and restoration now use `preventScroll`; ordinary Tab wrapping
+keeps its original scrolling behavior. The Chromium DOM suite passes **3/3**, asserting focus and zero
+ancestor scroll on entry/refocus/restoration. Phone tests hit-test an actual exposed viewport point,
+click it with the mouse, and require both backdrop and picker to close. Compact tests retain complete
+agent-ID membership and saved order before activity, after activity and after reopening. Desktop's
+opt-in activity ordering and every unread/read-on-open/explicit-read assertion remain intact.
+
+Focused receipts retained at the cloud job root:
+
+- `web-only-final-browser.log`: **6/6**, including stacked Rename/Move, reopening, density and both
+  settled footer handoff/final Escape flows after the native hierarchy guard.
+- `shared-focus-unit.log`: **9 files / 62 tests**; `overlay-scroll-green.log`: **3 DOM tests**.
+- `shared-focus-handoff-density.log`: **4/4**, including existing unsaved-file modified-dot behavior.
+- `prevent-scroll-browser.log`: launcher, density, both footers and Rename passed; two old compact
+  activity-first assumptions failed after physical backdrop dismissal. Their corrected stable-order
+  follow-up is recorded separately; the failed run is retained and is not counted as green.
+- `final-focus-order-browser.log`: **4/4**, both compact read policies with stable full order/membership
+  and actual backdrop dismissal, plus desktop/compact footer query typing and final Escape restoration.
+  `final-focus-order-dom.log`: **3/3**, with ordinary Tab-wrap focus retained. The
+  [exposed compact backdrop](workspace-tab-search/compact-backdrop-exposed.png) capture shows the
+  intended partial-height sheet after focus entry.
+- `delivery-checks.result`: **exit 0**, full lint (zero warnings/errors), all-workspace typecheck,
+  final overlay/Combobox **2 files / 8 tests** and Chromium overlay **3/3**. Changed files passed
+  repository formatting scripts; documentation-only receipt updates were formatted afterward.
+- `compact-focus-red.log`, `overlay-scroll-red.log` and `evidence/backdrop-*` retain the original focus
+  and geometry failures outside the source tree. Temporary diagnostic code is removed from tests.
+
 ## Platform and acceptance boundaries
 
 | Surface                                                    | Evidence / remaining boundary                                                        |
@@ -111,5 +157,6 @@ The browser fixtures use agent tabs for interaction checks. Saved-pane enumerati
 kinds; titles reuse the existing tab-strip/sidebar descriptor resolver. Native presentation, arbitrary
 plugin panels, live non-agent content and packaged Electron require their normal release acceptance.
 The feature register remains the release checklist. New labels use the repository's English fallback
-in locales without a translation. Merge waits for origin's independent PR review; release/deployment
-needs its own authorization.
+in locales without a translation. Merge waits for origin's independent PR review and green exact-head CI. Jacob authorized shipping;
+origin coordinates the existing release owner. This receipt does not claim installation or native
+acceptance.

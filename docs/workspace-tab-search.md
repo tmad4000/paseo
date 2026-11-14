@@ -30,7 +30,10 @@ navigation permanently invalidates that presentation: A → B → A must not res
 closed during selection is not reopened. On web, jump after invocation focus has returned so the
 previous composer cannot reclaim the old pane. Escape restores the invoker and preserves drafts.
 Focused result buttons own Enter/Space; modified input arrows and composition remain text editing.
-Compact touch opens for browsing without forcing the software keyboard.
+Compact touch opens for browsing without forcing the software keyboard. Stacked compact Rename/Move
+sheets must take web focus ownership above the picker. Gorhom moves their content outside the opener's
+context, so nested pickers need their own layer; leaving the old scope on top redirects typing into
+the search field.
 
 See the [verification receipt](qa/workspace-tab-search.md) for source/browser evidence and native
 and installed Electron boundaries. Delivery reuses `pspin-45p`; `pspin-787.7` and Fable's review are

@@ -70,6 +70,7 @@ import {
   getOverlayRoot,
   OverlayLayerProvider,
   useOverlayLayer,
+  useGlobalWebOverlayLayer,
   useWebOverlayRegistration,
 } from "@/lib/overlay-root";
 import { buildDesktopFrameStyle } from "./combobox-frame-style";
@@ -967,6 +968,7 @@ function dispatchDesktopKey(
 type BottomSheetVisibility = ReturnType<typeof useIsolatedBottomSheetVisibility>;
 
 interface MobileBodyProps {
+  isOpen: boolean;
   bottomSheetRef: BottomSheetVisibility["sheetRef"];
   snapPoints: string[];
   handleSheetChange: BottomSheetVisibility["handleSheetChange"];
@@ -1001,17 +1003,21 @@ interface MobileBodyProps {
 }
 
 function MobileComboboxFrame({
+  isOpen,
   children,
   style,
   handleKey,
   searchAccessibility,
 }: {
+  isOpen: boolean;
   children: ReactNode;
   style: StyleProp<ViewStyle>;
   handleKey: (key: DesktopKey, event?: KeyboardEvent) => boolean;
   searchAccessibility: React.ContextType<typeof SearchAccessibilityContext>;
 }) {
-  const layer = useOverlayLayer("floating");
+  // Gorhom hosts the sheet outside its opener's context. Resolve above the
+  // current sheet so nested pickers own focus and Escape until they close.
+  const layer = useGlobalWebOverlayLayer("floating", isWeb && isOpen);
   const onKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (
@@ -1027,7 +1033,7 @@ function MobileComboboxFrame({
     [handleKey],
   );
   const scopeRef = useWebOverlayRegistration({
-    active: isWeb && Boolean(searchAccessibility),
+    active: isWeb && isOpen,
     layer,
     onKeyDown,
   });
@@ -1094,6 +1100,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
       presentation={props.presentation}
     >
       <MobileComboboxFrame
+        isOpen={props.isOpen}
         style={frameStyle}
         handleKey={props.handleDesktopKey}
         searchAccessibility={searchAccessibility}
@@ -1735,6 +1742,7 @@ export function Combobox({
     return (
       <SearchAccessibilityContext.Provider value={searchAccessibility}>
         <MobileComboboxBody
+          isOpen={isOpen}
           bottomSheetRef={bottomSheetRef}
           snapPoints={snapPoints}
           handleSheetChange={handleSheetChange}

@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useWebOverlayRegistration } from "./overlay-root";
 
+const enteringOverlayStyle = { height: 600, paddingTop: 300 };
+
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -42,6 +44,51 @@ describe("useWebOverlayRegistration in the browser", () => {
     });
     await nextFrame();
   }
+
+  it("focuses an entering overlay without scrolling its clipped ancestors", async () => {
+    container.style.height = "120px";
+    container.style.overflow = "hidden";
+    function EnteringOverlay() {
+      const setScope = useWebOverlayRegistration({
+        active: true,
+        layer: 20,
+        onKeyDown: () => false,
+      });
+      return (
+        <div
+          ref={setScope as RefCallback<HTMLDivElement>}
+          style={enteringOverlayStyle}
+          tabIndex={-1}
+        >
+          <input data-testid="entering-input" />
+        </div>
+      );
+    }
+    flushSync(() => root.render(<EnteringOverlay />));
+    await nextFrame();
+    expect(document.activeElement).toBe(container.querySelector("input"));
+    expect(container.scrollTop).toBe(0);
+    opener.focus();
+    await nextFrame();
+    expect(document.activeElement).toBe(container.querySelector("input"));
+    expect(container.scrollTop).toBe(0);
+  });
+
+  it("restores the opener without scrolling its clipped ancestors", async () => {
+    const clipped = document.createElement("div");
+    clipped.style.height = "120px";
+    clipped.style.overflow = "hidden";
+    const spacer = document.createElement("div");
+    spacer.style.height = "300px";
+    clipped.append(spacer, opener);
+    document.body.prepend(clipped);
+    opener.focus({ preventScroll: true });
+    await renderHarness(true, true);
+    expect(clipped.scrollTop).toBe(0);
+    await renderHarness(false, false);
+    expect(document.activeElement).toBe(opener);
+    expect(clipped.scrollTop).toBe(0);
+  });
 
   it("skips focus restoration for active scope detach but restores focus when closing", async () => {
     await renderHarness(true, true);

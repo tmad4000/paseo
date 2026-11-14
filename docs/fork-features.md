@@ -130,7 +130,11 @@ Header/menu, compact picker and Command Center show the configurable shortcut. E
 strip/layout order; current selection and repeated invocations remain stable through metadata updates.
 Enter reveals in place; Escape preserves drafts and restores focus. Compact ordinary Explorer content
 must not reappear after main navigation A → B → A. Modified arrows keep input text selection.
+Web sheet focus must preserve clipped ancestor scroll and an exposed physical backdrop; retain
+ordinary Tab scrolling inside long overlays.
 The optional footer names only **sessions and workspaces**, carrying the query into existing Cmd+K.
+Compact stacked Rename/Move sheets must own keyboard input and Escape above the picker; closing
+returns focus to the surviving parent, and final footer Escape returns to the original invoker.
 Default Mac Cmd+Shift+K, desktop Ctrl+Shift+K, non-Mac browser Alt+Shift+K; retain saved overrides,
 New agent and positional tab cycling. Contract/evidence: [workspace tab search](workspace-tab-search.md)
 and [QA receipt](qa/workspace-tab-search.md). Reuses design pspin-787.7; source only until release.
@@ -138,7 +142,8 @@ and [QA receipt](qa/workspace-tab-search.md). Reuses design pspin-787.7; source 
 `compact-tab-titles`: Settings → Chat → Tabs has default-on **Compact tab titles**. Long titles
 fade within the existing label area; off retains normal ellipsis. Full titles stay in accessible
 names/tooltips. Read checks take no width at rest, including active unread tabs; hover/keyboard
-focus reveal a fixed overlay beside close, and touch retains menu access. Reading never moves close
+focus reveal a fixed overlay beside close and reduce the title viewport within the unchanged chip;
+visible letters must stop before the check, including at 2× scale. Touch retains menu access. Reading never moves close
 under the pointer, clears the same unread/seen state, and leaves tab width/order unchanged. Verify
 normal, long, narrow, hover, keyboard-focused and active-unread states. Regressions:
 `workspace-tab-trailing-controls.test.ts`, settings `storage.test.ts`, browser

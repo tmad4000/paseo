@@ -105,7 +105,7 @@ test("creates an individual workspace through the compact tab menu", async ({ pa
     await expect(page.getByTestId("workspace-tab-switcher-trigger")).toBeVisible({
       timeout: 30_000,
     });
-    await page.getByRole("button", { name: /Switch tabs/ }).click();
+    await page.getByTestId("workspace-tab-switcher-trigger").click();
     const menuBase = `workspace-tab-menu-agent_${agent.id}`;
     await page.getByTestId(`${menuBase}-trigger`).click();
     await page.getByTestId(`${menuBase}-move-workspace`).click();
@@ -113,7 +113,12 @@ test("creates an individual workspace through the compact tab menu", async ({ pa
     await page.getByTestId("move-chat-destination").click();
     await page.getByText("New workspace…", { exact: true }).click();
     await expect(page.getByText("Shared catch-all on this host", { exact: true })).toBeHidden();
-    await page.getByTestId("move-chat-name").fill("An independent topic");
+    const name = page.getByTestId("move-chat-name");
+    await name.focus();
+    await expect(name).toBeFocused();
+    await name.press("ControlOrMeta+A");
+    await page.keyboard.type("An independent topic");
+    await expect(name).toHaveValue("An independent topic");
     await page.screenshot({ path: "test-results/move-chat-compact.png" });
     await page.getByTestId("move-chat-submit").click();
     await expect(page.getByTestId("move-chat-dialog")).toBeHidden();

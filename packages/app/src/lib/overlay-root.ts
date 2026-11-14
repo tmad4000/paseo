@@ -135,7 +135,9 @@ function focusFirstElement(scope: HTMLElement): void {
     '[data-menu-item="true"]:not([data-menu-disabled="true"])',
   );
   const first = firstMenuItem ?? getFocusableElements(scope)[0];
-  (first ?? scope).focus();
+  // Animated sheets can enter outside an overflow-hidden ancestor. Browser
+  // focus scrolling shifts that ancestor and destroys the visible snap geometry.
+  (first ?? scope).focus({ preventScroll: true });
 }
 
 function handleWebOverlayFocus(event: FocusEvent): void {
@@ -232,7 +234,7 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
       entry.restoreFocus &&
       document.contains(entry.restoreFocus)
     ) {
-      entry.restoreFocus.focus();
+      entry.restoreFocus.focus({ preventScroll: true });
     }
   };
 }
