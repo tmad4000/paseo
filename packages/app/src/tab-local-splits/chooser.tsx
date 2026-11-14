@@ -256,7 +256,6 @@ export function TabLocalChooser({
     <View ref={containerRef} style={styles.container} testID={`tab-local-chooser-${chooserId}`}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.list}>
-          <Text style={styles.title}>{t("workspace.tabs.actions.tabLocal.chooserTitle")}</Text>
           {awaiting ? (
             <Text style={styles.sectionLabel}>{t("workspace.tabs.actions.tabLocal.opening")}</Text>
           ) : null}
@@ -317,13 +316,6 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: 280,
     gap: 2,
-  },
-  title: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
-    paddingHorizontal: theme.spacing[2],
-    paddingBottom: theme.spacing[2],
   },
   sectionLabel: {
     color: theme.colors.foregroundMuted,

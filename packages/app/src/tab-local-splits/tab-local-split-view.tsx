@@ -114,23 +114,23 @@ function applyPreviewSizes(node: TabLocalNode, preview: Record<string, number[]>
   };
 }
 
-/** Tracks pointer and keyboard focus entering a leaf, the way a pane tracks it (web only). */
-function useLeafFocusTracking(onFocus: () => void) {
+/**
+ * A press inside a leaf focuses it (web only). Focus events are not used: panels focus
+ * themselves on mount and reload, and that must not take the leaf focus back from a deep link
+ * or a focus-direction shortcut that just chose another leaf.
+ */
+function useLeafPressTracking(onPress: () => void) {
   const ref = useRef<View | null>(null);
-  const onFocusRef = useRef(onFocus);
-  onFocusRef.current = onFocus;
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
   useEffect(() => {
     if (!isWeb) return;
     const raw: unknown = ref.current;
     if (!(raw instanceof HTMLElement)) return;
     const element = raw;
-    const handle = () => onFocusRef.current();
-    element.addEventListener("pointerdown", handle, true);
-    element.addEventListener("focusin", handle, true);
-    return () => {
-      element.removeEventListener("pointerdown", handle, true);
-      element.removeEventListener("focusin", handle, true);
-    };
+    const handlePointerDown = () => onPressRef.current();
+    element.addEventListener("pointerdown", handlePointerDown, true);
+    return () => element.removeEventListener("pointerdown", handlePointerDown, true);
   }, []);
   return ref;
 }
@@ -225,7 +225,10 @@ function LeafSlot({ leaf, rect, hidden, isFocused, isZoomed, composite }: LeafSl
     focusTabLocalLeaf({ workspaceKey, hostTabId, leafId });
     onFocusPane(paneId);
   }, [hostTabId, leafId, onFocusPane, paneId, workspaceKey]);
-  const slotRef = useLeafFocusTracking(handleFocus);
+  const slotRef = useLeafPressTracking(handleFocus);
+  // A panel reports focus when it focuses itself (a terminal on mount). That keeps the pane
+  // focused but must not move the leaf focus, which presses and keyboard moves own.
+  const handleFocusPane = useCallback(() => onFocusPane(paneId), [onFocusPane, paneId]);
   const handleToggleZoom = useCallback(() => {
     focusTabLocalLeaf({ workspaceKey, hostTabId, leafId });
     toggleTabLocalZoom({ workspaceKey, hostTabId });
@@ -253,7 +256,7 @@ function LeafSlot({ leaf, rect, hidden, isFocused, isZoomed, composite }: LeafSl
             isZoomed={isZoomed}
             testIdBase={testIdBase}
             onToggleZoom={handleToggleZoom}
-            onFocus={handleFocus}
+            onFocusPane={handleFocusPane}
           />
         ) : null}
         {leaf.kind === "leaf" && !tab ? (
@@ -306,7 +309,7 @@ function TabLeaf({
   isZoomed,
   testIdBase,
   onToggleZoom,
-  onFocus,
+  onFocusPane,
 }: {
   tab: WorkspaceTabDescriptor;
   composite: TabLocalSplitViewProps;
@@ -314,7 +317,7 @@ function TabLeaf({
   isZoomed: boolean;
   testIdBase: string;
   onToggleZoom: () => void;
-  onFocus: () => void;
+  onFocusPane: () => void;
 }) {
   const { workspaceKey, paneId, layout, buildPaneContentModel, onCloseTab } = composite;
   const content = useMemo(
@@ -366,7 +369,7 @@ function TabLeaf({
           content={content}
           isWorkspaceFocused={composite.isWorkspaceFocused}
           isPaneFocused={composite.interactive && isFocused}
-          onFocusPane={onFocus}
+          onFocusPane={onFocusPane}
         />
       </View>
     </>

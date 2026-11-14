@@ -567,7 +567,8 @@ function completeWorkspaceTabLabelWidths(
     // state lives on the icon's corner badge and takes no row width of its own.
     const dotAllowance = Number(modified);
     // An unread tab still reserves room for its read check (see `tabReadControlSpace`).
-    const readControlAllowance = unread ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
+    const readControlAllowance =
+      unread || tabLocalLeafCount > 0 ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
     widths.push(
       measurement.width +
         TAB_LABEL_LAYOUT_ALLOWANCE +
@@ -797,7 +798,8 @@ function TabHandleContent({
           testID={modifiedTestId}
         />
       ) : null}
-      {reserveReadControl ? <View style={styles.tabReadControlSpace} /> : null}
+      {/* A composite's glyph is the tab's identity; keep it clear of the close overlay too. */}
+      {reserveReadControl || tabLocal ? <View style={styles.tabReadControlSpace} /> : null}
     </View>
   );
 }
