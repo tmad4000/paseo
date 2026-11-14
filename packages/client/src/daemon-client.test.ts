@@ -3044,6 +3044,55 @@ test("sends create_agent_request with workspace and caller identity", async () =
   await expect(createPromise).rejects.toThrow("compat test sentinel");
 });
 
+test("sends the calling agent with send_agent_message_request", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const sendPromise = client.sendAgentMessage("worker-agent", "Report", {
+    messageId: "report-1",
+    callerAgentId: "parent-agent",
+  });
+
+  expect(mock.sent).toHaveLength(1);
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toEqual(
+    expect.objectContaining({
+      type: "send_agent_message_request",
+      agentId: "worker-agent",
+      text: "Report",
+      messageId: "report-1",
+      callerAgentId: "parent-agent",
+    }),
+  );
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "send_agent_message_response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "worker-agent",
+        accepted: true,
+        error: null,
+      },
+    }),
+  );
+
+  await expect(sendPromise).resolves.toEqual({ queued: false });
+});
+
 test("sends worktree target and autoArchive in create_agent_request", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();
