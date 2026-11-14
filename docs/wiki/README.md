@@ -9,10 +9,11 @@ How it relates to the rest of `docs/`:
 
 ## Pages
 
-| Page                                             | Topic                                                                                                              | Status                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| [split-layouts.md](split-layouts.md)             | iTerm2-style "split this tab" compared with the current cmux-style workspace splits                                | Coexist recommended; Phase 1 in progress (2026-11-14) |
-| [agent-peek-registry.md](agent-peek-registry.md) | Provider subagents and spawned agents as separate groups, a registry with side peek, and collapsible stacked panes | Design recommended; nothing built (2026-11-14)        |
+| Page                                             | Topic                                                                                                              | Status                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| [split-layouts.md](split-layouts.md)             | iTerm2-style "split this tab" compared with the current cmux-style workspace splits                                | Coexist recommended; Phase 1 in progress (2026-11-14)      |
+| [agent-peek-registry.md](agent-peek-registry.md) | Provider subagents and spawned agents as separate groups, a registry with side peek, and collapsible stacked panes | Design recommended; nothing built (2026-11-14)             |
+| [fork-tracking.md](fork-tracking.md)             | How fork work is tracked in beads, World Issue Tracker and PRs, and how they cross-link                            | Beads in use; WIT mirroring blocked on access (2026-11-14) |
 
 The [log](log.md) lists every recorded discussion and query, newest first.
 
