@@ -120,6 +120,10 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../relay/src/index.ts"),
       },
       { find: "@", replacement: path.resolve(__dirname, "src") },
+      {
+        find: /^expo-clipboard$/,
+        replacement: path.resolve(__dirname, "test-stubs/expo-clipboard.ts"),
+      },
       // The Expo module ships from build/, which unit tests never produce; resolve the
       // source entry so vi.mock has a module id to replace.
       {

@@ -20,6 +20,18 @@ This feature-only candidate is based on installed beta.27 at
 Coverage: `composer/dock/pane-geometry.test.ts` and `e2e/browser/composer-stacked-panes.spec.ts`.
 Installed acceptance is recorded separately from source integration.
 
+## Approval card text — pspin-sqj
+
+`approval-card-text`: Permission titles/descriptions, question prompts/options, plan text, and
+plain tool details are selectable. Explicit HTTP(S) URLs use the existing external opener;
+copying preserves literal quotes, percent escapes and query strings. Option links must not
+select an answer or submit the form, and selection drags must not open links. Keyboard links
+and plan toggles continue to work after text selection. Stream Answers cards are a separate surface.
+This narrow port of [#200](https://github.com/tmad4000/paseo/pull/200) is based on eligible
+beta.27 plus compact composer [#217](https://github.com/tmad4000/paseo/pull/217), without
+later main changes or dependency updates. Source validation and installed acceptance are separate.
+Coverage: `components/selectable-link-text.browser.test.tsx` and `components/question-form-card.browser.test.tsx`.
+
 ## Session task checklist — pspin-tg2
 
 `session-task-checklist`: each chat's own plan (Claude TodoWrite/TaskCreate/TaskUpdate/TaskList,

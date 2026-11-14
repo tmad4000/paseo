@@ -45,6 +45,7 @@ import {
   MessageOuterSpacingProvider,
   type InlinePathTarget,
 } from "@/components/message";
+import { SelectableLinkText } from "@/components/selectable-link-text";
 import { PlanCard } from "@/components/plan-card";
 import { isUnreconciledLocalUserMessage, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
@@ -1748,9 +1749,11 @@ function PermissionRequestCard({
 
   return (
     <View style={permissionStyles.container}>
-      <Text style={permissionStyles.title}>{title}</Text>
+      <SelectableLinkText style={permissionStyles.title}>{title}</SelectableLinkText>
 
-      {description ? <Text style={permissionStyles.description}>{description}</Text> : null}
+      {description ? (
+        <SelectableLinkText style={permissionStyles.description}>{description}</SelectableLinkText>
+      ) : null}
 
       {planMarkdown ? (
         <PlanCard
