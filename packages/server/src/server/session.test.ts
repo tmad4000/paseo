@@ -6535,7 +6535,7 @@ test("direct RPC receipts use their own iterator when a later run supplies diffe
       waitForAgentClose: async () => {},
       tryRunOutOfBand: () => false,
       hasInFlightRun: () => false,
-      streamAgent: providerRun,
+      streamAgent: (_agentId, prompt) => providerRun(prompt),
       waitForAgentRunStart: lateWait,
     },
     messageReceipts: {

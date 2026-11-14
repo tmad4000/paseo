@@ -41,7 +41,10 @@ updates reconstruct its attachment; actual added, edited and ABA-edited comments
 preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
 either delivery path and leave the original images recoverable. Fail held encoding/device storage
 after newer text/image/review edits: B stays in the composer and exact A remains in the memory-only
-recovery track with its images retained. Restore must refuse an occupied composer, preserve the
+recovery track with its images retained. Repeat Send, default Queue and explicit Queue with only
+review/context changes, including ABA edits and no text/image edits. Removing an image pill during
+a held Queue save must preserve its stored bytes for explicit recovery after failure; verify encoding
+those bytes after restore and cleanup after the final owner releases them. Restore must refuse an occupied composer, preserve the
 copy on a failed restore, and restore A into an empty composer without sending it or changing newer
 review comments. Discard releases only the chosen copy; successful submissions leave no duplicate
 recovery copy. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after

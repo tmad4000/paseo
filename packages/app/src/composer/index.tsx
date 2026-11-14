@@ -1,5 +1,7 @@
 import { useComposerPaneHeight } from "./dock/pane-height";
 import { isShortComposerPane } from "./dock/pane-geometry";
+import { createScopedDraftRevision } from "@/composer/draft/scoped-revision";
+import { captureDraftPreparation } from "@/composer/submission/preparation-recovery";
 import { useDraftStore, flushDraftPersistStorage } from "@/stores/draft-store";
 import type { ComposerTextSource } from "./text-source";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -2198,6 +2200,15 @@ function ComposerContentImpl({
   );
   const workspaceAttachments = useWorkspaceAttachmentsForScopes(composerAttachmentScopes);
   const workspaceAttachmentsAtRender = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
+  const getDraftRevision = useMemo(
+    () =>
+      createScopedDraftRevision({
+        getInputRevision: textSource.getRevision ?? textSource.getSnapshot,
+        scopeKeys: composerAttachmentScopes,
+        attachments: workspaceAttachments,
+      }),
+    [textSource, composerAttachmentScopes, workspaceAttachments],
+  );
   const {
     selectedAttachments,
     buildOutgoingAttachments,
@@ -2358,12 +2369,10 @@ function ComposerContentImpl({
         },
         apply: (draft) => {
           const workspace = draft.attachments.filter(composerWorkspaceAttachment.is);
-          useWorkspaceAttachmentsStore
-            .getState()
-            .setWorkspaceAttachments({
-              scopeKey: recoveredAttachmentScope,
-              attachments: workspace,
-            });
+          useWorkspaceAttachmentsStore.getState().setWorkspaceAttachments({
+            scopeKey: recoveredAttachmentScope,
+            attachments: workspace,
+          });
           setSelectedAttachments(
             composerWorkspaceAttachment.userAttachmentsOnly(draft.attachments),
           );
@@ -2674,10 +2683,17 @@ function ComposerContentImpl({
         throw error;
       }
       queueSubmissionInFlight.current.add(submissionKey);
-      const held = failedPreparationRecovery
-        .forScope(failedPreparationScope)
-        .prepare({ message: queuedMessage, attachments: queuedAttachments });
-      const submittedRevision = (textSource.getRevision ?? textSource.getSnapshot)();
+      const getQueuedDraftRevision = createScopedDraftRevision({
+        getInputRevision: getDraftRevision,
+        scopeKeys: [],
+        attachments: queuedAttachments,
+      });
+      const held = captureDraftPreparation({
+        message: queuedMessage,
+        attachments: queuedAttachments,
+        recovery: failedPreparationRecovery.forScope(failedPreparationScope),
+        getDraftRevision: getQueuedDraftRevision,
+      });
       try {
         const queued = await queueInputMessage(
           { text: queuedMessage, attachments: queuedAttachments, cwd },
@@ -2712,7 +2728,7 @@ function ComposerContentImpl({
             );
           },
           {
-            getDraftRevision: textSource.getRevision ?? textSource.getSnapshot,
+            getDraftRevision: getQueuedDraftRevision,
             keepComposer: options?.keepComposer,
             clearDraft: () => {
               replaceUserInput("");
@@ -2724,8 +2740,7 @@ function ComposerContentImpl({
         if (queued && !options?.keepComposer) clearSentAttachments(queuedAttachments);
         return queued;
       } catch (error) {
-        if ((textSource.getRevision ?? textSource.getSnapshot)() !== submittedRevision)
-          held.fail(error);
+        held.failIfChanged(error);
         throw error;
       } finally {
         held.release();
@@ -2737,9 +2752,9 @@ function ComposerContentImpl({
       applyAgentQueueSnapshot,
       clearSentAttachments,
       failedPreparationScope,
+      getDraftRevision,
       client,
       cwd,
-      textSource,
       replaceUserInput,
       queueOutbox,
       queueWriter,
@@ -2758,6 +2773,11 @@ function ComposerContentImpl({
       forceSend?: boolean,
       activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
+      const getSubmittedDraftRevision = createScopedDraftRevision({
+        getInputRevision: getDraftRevision,
+        scopeKeys: [],
+        attachments: outgoingAttachments,
+      });
       const result = await submitAgentInput({
         message: outgoingMessage,
         attachments: outgoingAttachments,
@@ -2778,7 +2798,7 @@ function ComposerContentImpl({
           }
           await submitMessage(submitText, submitAttachments, activeTurnBehavior);
         },
-        getDraftRevision: textSource.getRevision ?? textSource.getSnapshot,
+        getDraftRevision: getSubmittedDraftRevision,
         recovery: failedPreparationRecovery.forScope(failedPreparationScope),
         clearDraft,
         setUserInput: replaceUserInput,
@@ -2803,7 +2823,7 @@ function ComposerContentImpl({
       clearDraft,
       completeSubmit,
       failedPreparationScope,
-      textSource,
+      getDraftRevision,
       hasExternalContent,
       isAgentRunning,
       queueMessage,
@@ -3842,7 +3862,7 @@ function ComposerContentImpl({
                 <StableMessageInput
                   ref={messageInputRef}
                   value={textSource.getSnapshot()}
-                  getDraftRevision={textSource.getRevision ?? textSource.getSnapshot}
+                  getDraftRevision={getDraftRevision}
                   onChangeText={setUserInput}
                   onSubmit={handleSubmit}
                   hasExternalContent={hasExternalContent}

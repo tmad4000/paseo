@@ -168,6 +168,18 @@ export const useReviewDraftStore = create<ReviewDraftStore>()(
   ),
 );
 
+const draftRevisions = new Map<string, object>();
+useReviewDraftStore.subscribe((state, previous) => {
+  const keys = new Set([...Object.keys(state.drafts), ...Object.keys(previous.drafts)]);
+  for (const key of keys) {
+    if (state.drafts[key] !== previous.drafts[key]) draftRevisions.set(key, {});
+  }
+});
+
+export function getReviewDraftRevision(key: string): unknown {
+  return draftRevisions.get(key);
+}
+
 function toContextLine(line: NumberedDiffLine): ReviewAttachmentContextLine | null {
   if (line.line.type === "header") {
     return null;

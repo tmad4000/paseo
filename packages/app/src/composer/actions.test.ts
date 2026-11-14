@@ -1,3 +1,20 @@
+import { captureDraftPreparation } from "@/composer/submission/preparation-recovery";
+import {
+  failedPreparationRecovery,
+  preparationRecoveryScopeKey,
+  restoreFailedPreparation,
+} from "@/composer/submission/preparation-recovery-store";
+import { createLocalFileAttachmentStore } from "@/attachments/local-file-attachment-store";
+import { createTestAttachmentFileSystem } from "@/attachments/test-attachment-file-system";
+import { __setAttachmentStoreForTests } from "@/attachments/store";
+import {
+  deleteAttachments,
+  encodeAttachmentsForSend,
+  garbageCollectAttachments,
+  persistAttachmentFromBytes,
+} from "@/attachments/service";
+import { retainAttachmentForGarbageCollection } from "@/attachments/gc-retention";
+import { useDraftStore } from "@/stores/draft-store";
 import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
 import { describe, expect, it, vi } from "vitest";
 import { submitAgentInput } from "@/composer/submit";
@@ -1927,3 +1944,167 @@ describe("complete image encoding before delivery admission", () => {
     },
   );
 });
+
+function attachmentSaveGate() {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+it.each(["restore", "discard"] as const)(
+  "keeps stored image bytes through removal and failed Queue save until %s releases ownership",
+  async (action) => {
+    const fileSystem = createTestAttachmentFileSystem();
+    const store = createLocalFileAttachmentStore({
+      storageType: "native-file",
+      baseDirectoryName: "recovery",
+      fileSystem,
+      resolvePreviewUrl: async (attachment) => attachment.storageKey,
+    });
+    __setAttachmentStoreForTests(store);
+    const scopeKey = preparationRecoveryScopeKey("byte-recovery", action);
+    const draftKey = `byte-recovery:${action}`;
+    const entered = attachmentSaveGate();
+    const write = attachmentSaveGate();
+    const bytes = new Uint8Array([0, 1, 2, 3, 4, 5, 251, 255]);
+    let releaseOtherOwner = () => {};
+    try {
+      const metadata = await persistAttachmentFromBytes({
+        id: `recovery-image-${action}`,
+        bytes,
+        mimeType: "image/png",
+      });
+      const original: UserComposerAttachment[] = [{ kind: "image", metadata }];
+      let current = original;
+      let text = "queued A";
+      let revision = 0;
+      let removal = Promise.resolve();
+      const send = vi.fn(async () => ({ agentId: "agent", revision: 1, items: [] }));
+      const flush = vi.fn(async () => {});
+      const saved: unknown[] = [];
+      const held = captureDraftPreparation({
+        message: text,
+        attachments: original,
+        recovery: failedPreparationRecovery.forScope(scopeKey),
+        getDraftRevision: () => revision,
+      });
+      const queue = async () => {
+        try {
+          const result = await queueComposerMessageOnServer({
+            client: {
+              enqueueAgentMessage: send,
+              removeQueuedAgentMessage: send,
+              getQueuedAgentMessageImages: async () => [],
+            },
+            agentId: "agent",
+            text,
+            attachments: original,
+            encodeImages: encodeAttachmentsForSend,
+            queue: { read: () => [], write: () => {} },
+            applySnapshot: () => {},
+            outbox: {
+              serverId: `byte-recovery-${action}`,
+              add: async (entry) => {
+                entered.resolve();
+                await write.promise;
+                saved.push(entry);
+              },
+              remove: async () => {},
+              flush,
+            },
+          });
+          if (result.error) throw new Error(result.error);
+        } catch (error) {
+          held.failIfChanged(error);
+          throw error;
+        } finally {
+          held.release();
+        }
+      };
+      const queued = queue().then(
+        () => "queued",
+        () => "failed",
+      );
+      await entered.promise;
+      current = removeComposerAttachmentAtIndex({
+        attachments: current,
+        index: 0,
+        deleteAttachments: (attachments) => {
+          removal = deleteAttachments(attachments);
+          return removal;
+        },
+      });
+      revision++;
+      await removal;
+      expect(current).toEqual([]);
+      expect(fileSystem.files.get(`file://${metadata.storageKey}`)).toEqual(bytes);
+      write.reject(new Error("device save rejected"));
+      expect(await queued).toBe("failed");
+      expect(saved).toEqual([]);
+      expect(send).not.toHaveBeenCalled();
+      expect(flush).not.toHaveBeenCalled();
+      const copy = failedPreparationRecovery
+        .getSnapshot()
+        .find((entry) => entry.scopeKey === scopeKey);
+      if (!copy) throw new Error("Missing failed Queue copy");
+      expect(copy.message).toBe("queued A");
+      expect(copy.attachments).toEqual(original);
+      await deleteAttachments([metadata]);
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      await expect(encodeAttachmentsForSend([metadata])).resolves.toEqual([
+        { data: "AAECAwQF+/8=", mimeType: "image/png" },
+      ]);
+      releaseOtherOwner = retainAttachmentForGarbageCollection(metadata.id);
+      if (action === "restore") {
+        text = "";
+        await restoreFailedPreparation({
+          id: copy.id,
+          scopeKey,
+          occupiedMessage: "Draft occupied",
+          getCurrentDraft: () => ({ message: text, attachments: current }),
+          apply: (snapshot) => {
+            text = snapshot.message;
+            current = snapshot.attachments.filter(
+              (attachment): attachment is UserComposerAttachment => attachment.kind === "image",
+            );
+            useDraftStore
+              .getState()
+              .saveDraftInput({ draftKey, draft: { text, attachments: current } });
+          },
+        });
+        expect(text).toBe("queued A");
+        expect(current).toEqual(original);
+        releaseOtherOwner();
+        await garbageCollectAttachments({
+          referencedIds: new Set(useDraftStore.getState().collectActiveAttachmentIds()),
+        });
+        await expect(store.encodeBase64({ attachment: metadata })).resolves.toBe("AAECAwQF+/8=");
+        releaseOtherOwner = retainAttachmentForGarbageCollection(metadata.id);
+        useDraftStore.getState().clearDraftInput({ draftKey });
+      } else {
+        failedPreparationRecovery.discard(copy.id);
+      }
+      expect(
+        failedPreparationRecovery.getSnapshot().some((entry) => entry.scopeKey === scopeKey),
+      ).toBe(false);
+      await deleteAttachments([metadata]);
+      await expect(store.encodeBase64({ attachment: metadata })).resolves.toBe("AAECAwQF+/8=");
+      releaseOtherOwner();
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      expect(fileSystem.files.has(`file://${metadata.storageKey}`)).toBe(false);
+      await expect(store.encodeBase64({ attachment: metadata })).rejects.toThrow();
+    } finally {
+      releaseOtherOwner();
+      for (const entry of failedPreparationRecovery.getSnapshot())
+        if (entry.scopeKey === scopeKey) failedPreparationRecovery.discard(entry.id);
+      useDraftStore.getState().clearDraftInput({ draftKey });
+      await Promise.resolve();
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      __setAttachmentStoreForTests(null);
+    }
+  },
+);

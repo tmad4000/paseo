@@ -136,3 +136,19 @@ export class FailedPreparationRecovery<TAttachment> {
     this.releases.delete(id);
   }
 }
+
+export function captureDraftPreparation<TAttachment>(
+  input: SubmittedDraft<TAttachment> & {
+    recovery: PreparationRecovery<TAttachment>;
+    getDraftRevision: () => unknown;
+  },
+): { failIfChanged: (error: unknown) => void; release: () => void } {
+  const held = input.recovery.prepare(input);
+  const revision = input.getDraftRevision();
+  return {
+    failIfChanged: (error) => {
+      if (input.getDraftRevision() !== revision) held.fail(error);
+    },
+    release: held.release,
+  };
+}

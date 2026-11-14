@@ -65,7 +65,8 @@ Independent review caught gaps in the first implementation:
   discarded comments are not reconstructed.
 - Preparation failures after newer edits retain the original message and attachment references in
   an explicit memory-only recovery track. Restore refuses an occupied composer and never sends;
-  failed restores retain the copy and garbage-collection holds. Successful restore transfers images
+  failed restores retain the copy and attachment holds, including protection from explicit deletion.
+  Review/context-only edits and ABA owner updates retain the original snapshot too. Successful restore transfers images
   and immutable context/review snapshots to the composer without changing newer review comments.
 - Direct RPC receipts wait on their reserved iterator's acceptance, preserving its original error.
   A later run cannot supply another request's refusal proof. Stale-session retry resolves the same
@@ -101,11 +102,18 @@ and `session.test.ts`, alongside the real-manager receipt race and review recons
 Those new changes still require GCP validation and a server rebuild before E2E.
 
 At `98589884b07e619ddc07f905da11f115192c3e83`, the outer executor reported formatting,
-lint and server-build passes. Full typecheck, 20 app and eight server suites, four tooltip browser
-tests and eleven daemon browser flows were still in progress when this review began. Recovery-track
-and garbage-collection regressions added in `composer/submit.test.ts`,
-`composer/draft/input-draft.live.test.tsx` and `composer/attachments/workspace.test.ts` await the
-next candidate's GCP checks. No new-source or native rollout pass is claimed here.
+lint and server-build passes. The expanded server checks passed 498/499: the owned-acceptance race
+fixture passed `agentId` as the prompt, so its A-entry gate never opened. This round corrects that
+adapter without changing its assertions or timeout. The live 121-case suite and 60-second layout
+case passed on isolated retries after initial contention/setup deadline failures.
+
+At `1847a0c5fed1e5768a041c571f816760eb69d181`, lint and full workspace typecheck passed;
+formatting flagged `composer/index.tsx`. Twenty app suites and eleven daemon browser flows were
+still running when this review began. This round formats that file and adds scoped review/context
+failure cases in `composer/attachments/workspace.test.ts` and stored-byte recovery cases in
+`composer/actions.test.ts`. Those new cases and the corrected server fixture await the next
+candidate's GCP checks. Runtime server source is unchanged from the built `98589884` revision.
+No new-source or native rollout pass is claimed here.
 
 Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
 legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and

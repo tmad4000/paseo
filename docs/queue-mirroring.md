@@ -322,12 +322,13 @@ receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then s
 per-agent delivery worker that queued composer messages, reconnects and manual Retry use. Once local storage accepts the request, the
 composer finishes its submission and becomes available for the next draft. It does not wait for
 the host acknowledgement. Settlement only clears or restores the draft if no text or attachment edit
-has occurred since submission, including re-entering identical content. Storage/attachment preparation
+has occurred since submission, including re-entering identical content. Scoped workspace and review
+owner revisions participate in that decision, including edits that return to the original content. Storage/attachment preparation
 failures restore an unchanged draft with an error. If newer edits prevent restoration, the original
 text and attachment snapshot stays in **Unsent draft copies** above the composer. Explicit Queue
 uses the same recovery owner. These copies are memory-only and do not survive closing the app;
 they are never treated as saved deliveries or automatically sent. Image references remain protected
-from garbage collection until Restore draft or Discard copy succeeds. Restore draft requires the
+from garbage collection and explicit pill deletion until Restore draft or Discard copy succeeds. Restore draft requires the
 current composer to be empty and restores immutable context/review snapshots without changing newer
 review comments. It does not require the failed device write to start working.
 

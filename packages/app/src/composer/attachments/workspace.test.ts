@@ -1,3 +1,11 @@
+import { createScopedDraftRevision } from "@/composer/draft/scoped-revision";
+import { submitAgentInput } from "@/composer/submit";
+import { queueInputMessage } from "@/composer/input/state";
+import {
+  captureDraftPreparation,
+  FailedPreparationRecovery,
+} from "@/composer/submission/preparation-recovery";
+import type { ComposerAttachment } from "@/attachments/types";
 import { describe, expect, it } from "vitest";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import {
@@ -123,10 +131,12 @@ function currentReviewSnapshot() {
 }
 function heldWrite() {
   let resolve!: () => void;
-  const promise = new Promise<void>((accept) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((accept, fail) => {
     resolve = accept;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 type ReviewSnapshot = Extract<WorkspaceComposerAttachment, { kind: "review" }>;
@@ -151,6 +161,7 @@ function startReviewSubmission(
   route: ReviewSubmitPath,
   stage: ReviewPreparationStage,
   snapshot: ReviewSnapshot,
+  attachments: ComposerAttachment[] = [snapshot],
 ) {
   const pending = heldWrite();
   const entered = heldWrite();
@@ -163,12 +174,12 @@ function startReviewSubmission(
     }
     return [];
   };
-  const save = async (attachments: AgentAttachment[]) => {
+  const save = async (wireAttachments: AgentAttachment[]) => {
     if (stage === "save") {
       entered.resolve();
       await pending.promise;
     }
-    saved.push(attachments);
+    saved.push(wireAttachments);
   };
   const flush = () => hostAck.promise;
   const promise =
@@ -182,7 +193,7 @@ function startReviewSubmission(
           },
           agentId: "agent",
           text: "review",
-          attachments: [snapshot],
+          attachments,
           encodeImages,
           submission: { begin: () => {}, accept: () => {}, reject: () => "rejected" },
           outbox: {
@@ -203,7 +214,7 @@ function startReviewSubmission(
           },
           agentId: "agent",
           text: "review",
-          attachments: [snapshot],
+          attachments,
           encodeImages,
           queue: { read: () => [], write: () => {} },
           applySnapshot: () => {},
@@ -359,3 +370,190 @@ it("consumes a restored review snapshot without removing newer review comments",
   ).toBeUndefined();
   expect(useReviewDraftStore.getState().drafts[reviewKey][0].body).toBe("newer draft review");
 });
+
+function failedScopedPreparationCases() {
+  const cases: Array<{
+    route: "send" | "defaultQueue" | "explicitQueue";
+    stage: ReviewPreparationStage;
+    mutation: "review" | "reviewABA" | "context" | "contextABA" | "unchanged" | "unrelated";
+  }> = [];
+  for (const route of ["send", "defaultQueue", "explicitQueue"] as const) {
+    for (const stage of ["encode", "save"] as const) {
+      for (const mutation of [
+        "review",
+        "reviewABA",
+        "context",
+        "contextABA",
+        "unchanged",
+        "unrelated",
+      ] as const)
+        cases.push({ route, stage, mutation });
+    }
+  }
+  return cases;
+}
+
+it.each(failedScopedPreparationCases())(
+  "preserves scoped versions for $route $stage failure after $mutation without input edits",
+  async ({ route, stage, mutation }) => {
+    resetReviewDraftStore();
+    resetWorkspaceAttachmentsStore();
+    addReviewComment("first", "A review");
+    const originalReview = currentReviewSnapshot();
+    if (!originalReview) throw new Error("Missing original review");
+    const originalContext = pullRequestContextAttachment();
+    const original: ComposerAttachment[] = [originalReview, originalContext];
+    const workspace = useWorkspaceAttachmentsStore.getState();
+    const originalWorkspace = [originalReview, originalContext];
+    workspace.setWorkspaceAttachments({
+      scopeKey: "scoped-recovery",
+      attachments: originalWorkspace,
+    });
+    let text = "review";
+    let inputRevision = 0;
+    const getDraftRevision = createScopedDraftRevision({
+      getInputRevision: () => inputRevision,
+      scopeKeys: ["scoped-recovery"],
+      attachments: original,
+    });
+    const recovery = new FailedPreparationRecovery<ComposerAttachment>();
+    let preparation!: ReturnType<typeof startReviewSubmission>;
+    const persist = async () => {
+      preparation = startReviewSubmission(
+        route === "send" ? "send" : "queue",
+        stage,
+        originalReview,
+        original,
+      );
+      const result = await preparation.promise;
+      if (result && "error" in result && result.error) throw new Error(result.error);
+    };
+    const queue = async () => {
+      const held = captureDraftPreparation({
+        message: "review",
+        attachments: original,
+        recovery: recovery.forScope("agent"),
+        getDraftRevision,
+      });
+      try {
+        return await queueInputMessage(
+          { text: "review", attachments: original, cwd: "/repo" },
+          persist,
+          {
+            getDraftRevision,
+            clearDraft: () => {
+              text = "";
+              inputRevision++;
+            },
+          },
+        );
+      } catch (error) {
+        held.failIfChanged(error);
+        throw error;
+      } finally {
+        held.release();
+      }
+    };
+    const submission =
+      route === "explicitQueue"
+        ? queue().then(
+            () => "queued",
+            () => "failed",
+          )
+        : submitAgentInput({
+            message: "review",
+            attachments: original,
+            isAgentRunning: route === "defaultQueue",
+            canSubmit: true,
+            getDraftRevision,
+            recovery: recovery.forScope("agent"),
+            queueMessage: async () => {
+              await queue();
+            },
+            submitMessage: persist,
+            clearDraft: () => {
+              text = "";
+              inputRevision++;
+            },
+            setUserInput: (value) => {
+              text = value;
+              inputRevision++;
+            },
+            setAttachments: () => {},
+            setSendError: () => {},
+            setIsProcessing: () => {},
+          });
+    await preparation.entered.promise;
+    const inputBeforeEdit = inputRevision;
+    const textBeforeEdit = text;
+    const revisionBeforeEdit = getDraftRevision();
+    if (mutation === "review" || mutation === "reviewABA") {
+      const store = useReviewDraftStore.getState();
+      store.updateComment({
+        key: reviewKey,
+        id: "first",
+        updates: { body: "B review" },
+        updatedAt: useReviewDraftStore.getState().drafts[reviewKey][0].updatedAt,
+      });
+      if (mutation === "reviewABA")
+        store.updateComment({
+          key: reviewKey,
+          id: "first",
+          updates: { body: "A review" },
+          updatedAt: useReviewDraftStore.getState().drafts[reviewKey][0].updatedAt,
+        });
+    }
+    if (mutation === "context" || mutation === "contextABA") {
+      workspace.setWorkspaceAttachments({
+        scopeKey: "scoped-recovery",
+        attachments: [originalReview, { ...originalContext, text: "B context" }],
+      });
+      if (mutation === "contextABA")
+        workspace.setWorkspaceAttachments({
+          scopeKey: "scoped-recovery",
+          attachments: originalWorkspace,
+        });
+    }
+    if (mutation === "unrelated") {
+      workspace.setWorkspaceAttachments({
+        scopeKey: "other-chat",
+        attachments: [chatHistoryAttachment()],
+      });
+      useReviewDraftStore.getState().addComment({
+        key: "other-review",
+        comment: { filePath: "other.ts", side: "new", lineNumber: 1, body: "unrelated" },
+      });
+    }
+    expect(inputRevision).toBe(inputBeforeEdit);
+    const changed = mutation !== "unchanged" && mutation !== "unrelated";
+    expect(getDraftRevision() === revisionBeforeEdit).toBe(!changed);
+    const newestReview = useReviewDraftStore.getState().drafts[reviewKey];
+    const newestWorkspace =
+      useWorkspaceAttachmentsStore.getState().attachmentsByScope["scoped-recovery"];
+    preparation.pending.reject(new Error("preparation failed"));
+    expect(await submission).toBe("failed");
+    expect(useReviewDraftStore.getState().drafts[reviewKey]).toBe(newestReview);
+    expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope["scoped-recovery"]).toBe(
+      newestWorkspace,
+    );
+    expect(preparation.saved).toEqual([]);
+    if (changed) {
+      expect(text).toBe(textBeforeEdit);
+      expect(recovery.getSnapshot()).toHaveLength(1);
+      const [copy] = recovery.getSnapshot();
+      expect(copy.message).toBe("review");
+      expect(copy.attachments).toEqual(original);
+      expect(copy.attachments[0]).toBe(originalReview);
+      expect(copy.attachments[1]).toBe(originalContext);
+      const restored: ComposerAttachment[] = [];
+      await recovery.restore(copy.id, (snapshot) => {
+        restored.push(...snapshot.attachments);
+      });
+      expect(restored).toEqual(original);
+      expect(useReviewDraftStore.getState().drafts[reviewKey]).toBe(newestReview);
+    } else {
+      expect(text).toBe("review");
+      expect(recovery.getSnapshot()).toEqual([]);
+    }
+  },
+);
