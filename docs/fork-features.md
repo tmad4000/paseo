@@ -30,7 +30,10 @@ reporter. See [agent stream performance](agent-stream-performance.md) for measur
 Acceptance: hold first history response and a send acknowledgement, type/send and start a second
 draft, release them and retain the second draft. Repeat with encoding and device save held, for both
 success and failure; preserve text and attachment edits, including identical-text re-entry and edits
-that return to the cleared state. An unchanged draft still settles or restores on failure, and
+that return to the cleared state. Repeat Queue/default Send while running and explicit Queue with
+A→B→A edits and attachment changes before acceptance, including legacy local queues. Both the composer
+and input widget must retain those edits; unchanged Queue clears and Queue as new message preserves
+the composer. An unchanged draft still settles or restores on failure, and
 preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
 either delivery path and leave the original images recoverable. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
 transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
@@ -54,7 +57,7 @@ clock and delayed hydration of either outbox: new entries must still follow save
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
 `session-stream-reducers.test.ts`, `composer/actions.test.ts`, `composer/submit.test.ts`,
-`composer/draft/input-draft.live.test.tsx`, `stores/send-outbox-store/index.test.ts`,
+`composer/draft/input-draft.live.test.tsx`, `composer/input/state.test.ts`, `stores/send-outbox-store/index.test.ts`,
 `stores/send-outbox-store/model.test.ts`, `agent-message-submission.spec.ts`,
 `components/ui/tooltip.test.tsx`, `timeline/sync-status.test.tsx`, `viewed-agent-timelines.spec.ts`,
 `sidebar-workspace-mark-unread.spec.ts`, `chat-outline.spec.ts`, `performance/*.test.ts`.

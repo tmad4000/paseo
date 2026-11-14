@@ -226,6 +226,17 @@ export interface DirectSendOutbox {
   remove: (clientMessageId: string) => Promise<void>;
 }
 
+async function encodeComposerImages(
+  input: Pick<DispatchComposerAgentMessageInput, "encodeImages">,
+  images: AttachmentMetadata[],
+) {
+  const encoded = await input.encodeImages(images);
+  if ((encoded?.length ?? 0) !== images.length) {
+    throw new Error(i18n.t("composer.errors.failedToSend"));
+  }
+  return encoded ?? [];
+}
+
 async function dispatchDurableComposerAgentMessage(
   input: DispatchComposerAgentMessageInput & { outbox: DirectSendOutbox },
   clientMessageId: string,
@@ -289,23 +300,20 @@ export async function dispatchComposerAgentMessage(
   });
   input.submission.begin(input.agentId, userMessage);
   try {
-    const imagesData = await input.encodeImages(wirePayload.images);
-    if ((imagesData?.length ?? 0) !== wirePayload.images.length) {
-      throw new Error(i18n.t("composer.errors.failedToSend"));
-    }
+    const imagesData = await encodeComposerImages(input, wirePayload.images);
     if (input.outbox) {
       await dispatchDurableComposerAgentMessage(
         { ...input, outbox: input.outbox },
         clientMessageId,
         wirePayload,
-        imagesData ?? [],
+        imagesData,
       );
       return;
     }
     const options = {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
-      images: imagesData ?? [],
+      images: imagesData,
       attachments: wirePayload.attachments,
       ...(input.interrupt ? { interrupt: true } : {}),
     };

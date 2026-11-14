@@ -71,7 +71,7 @@ interface DictationTranscriptContext {
   onQueue: ((payload: MessagePayload) => void | Promise<void>) | undefined;
   onSubmit: (payload: MessagePayload) => void;
   replaceText: (text: string) => void;
-  getLiveText?: () => string;
+  getDraftRevision: () => unknown;
   attachments: MessagePayload["attachments"];
   cwd: string;
   autoSend: boolean;
@@ -93,12 +93,8 @@ export function applyDictationTranscript(text: string, ctx: DictationTranscriptC
     void queueInputMessage(
       { text: nextValue, attachments: ctx.attachments, cwd: ctx.cwd },
       ctx.onQueue,
-    )
-      .then(() => {
-        if (ctx.getLiveText?.() === nextValue) ctx.replaceText("");
-        return undefined;
-      })
-      .catch(() => {});
+      { getDraftRevision: ctx.getDraftRevision, clearDraft: () => ctx.replaceText("") },
+    ).catch(() => {});
     return;
   }
 
@@ -205,9 +201,22 @@ export async function stopRealtimeVoice(ctx: StopRealtimeVoiceContext): Promise<
   await ctx.voice.stopVoice();
 }
 
+interface QueueDraftSettlement {
+  getDraftRevision: () => unknown;
+  clearDraft: () => void;
+  keepComposer?: boolean;
+}
+
 export async function queueInputMessage(
   payload: MessagePayload,
-  onQueue: (payload: MessagePayload) => void | Promise<void>,
-): Promise<void> {
-  await onQueue(payload);
+  onQueue: (payload: MessagePayload) => void | boolean | Promise<void | boolean>,
+  settlement: QueueDraftSettlement,
+): Promise<boolean> {
+  const submittedRevision = settlement.getDraftRevision();
+  const queued = await onQueue(payload);
+  if (queued === false) return false;
+  if (!settlement.keepComposer && settlement.getDraftRevision() === submittedRevision) {
+    settlement.clearDraft();
+  }
+  return true;
 }

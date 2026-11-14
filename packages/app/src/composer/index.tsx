@@ -135,7 +135,11 @@ import {
 } from "@/attachments/service";
 import { resolveAgentControlsMode } from "@/composer/agent-controls/mode";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
-import { resolveActiveSendBehavior, resolveDirectActiveTurnBehavior } from "./input/state";
+import {
+  queueInputMessage,
+  resolveActiveSendBehavior,
+  resolveDirectActiveTurnBehavior,
+} from "./input/state";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
@@ -2570,8 +2574,6 @@ function ComposerContentImpl({
     };
   }, [agentId, applyAgentQueueSnapshot, client, isConnected, serverId, supportsAgentMessageQueue]);
 
-  const latestAttachmentsRef = useRef(attachments);
-  latestAttachmentsRef.current = attachments;
   const queueSubmissionInFlight = useRef(new Set<string>());
   const queueMessage = useCallback(
     async (
@@ -2586,54 +2588,51 @@ function ComposerContentImpl({
         throw error;
       }
       queueSubmissionInFlight.current.add(submissionKey);
-      const submittedText = queuedMessage;
-      const submittedAttachments = latestAttachmentsRef.current;
-      const clearComposer = () => {
-        if (messageInputRef.current?.getText() === submittedText) {
-          messageInputRef.current?.replaceText("");
-          setUserInput("");
-        }
-        if (latestAttachmentsRef.current === submittedAttachments) {
-          setSelectedAttachments([]);
-          resetSuppression();
-        }
-        clearSentAttachments(queuedAttachments);
-      };
-
       try {
-        if (supportsAgentMessageQueue && client) {
-          const result = await queueComposerMessageOnServer({
-            client,
-            agentId,
-            text: queuedMessage,
-            attachments: queuedAttachments,
-            attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
-              supportsForgeAttachments: supportsForgeSearch,
-            }),
-            encodeImages,
-            queue: queueWriter,
-            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
-            outbox: queueOutbox,
-          });
-          if (result.error) {
-            setSendError(result.error);
-            throw new Error(result.error);
-          }
-          if (!result.queued) return false;
-          if (!options?.keepComposer) clearComposer();
-          return true;
-        }
-
-        const result = queueComposerMessage({
-          agentId,
-          text: queuedMessage,
-          attachments: queuedAttachments,
-          queue: queueWriter,
-        });
-        if (!result.queued) return false;
-
-        if (!options?.keepComposer) clearComposer();
-        return true;
+        const queued = await queueInputMessage(
+          { text: queuedMessage, attachments: queuedAttachments, cwd },
+          async () => {
+            if (supportsAgentMessageQueue && client) {
+              const result = await queueComposerMessageOnServer({
+                client,
+                agentId,
+                text: queuedMessage,
+                attachments: queuedAttachments,
+                attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+                  supportsForgeAttachments: supportsForgeSearch,
+                }),
+                encodeImages,
+                queue: queueWriter,
+                applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+                outbox: queueOutbox,
+              });
+              if (result.error) {
+                setSendError(result.error);
+                throw new Error(result.error);
+              }
+              return Boolean(result.queued);
+            }
+            return Boolean(
+              queueComposerMessage({
+                agentId,
+                text: queuedMessage,
+                attachments: queuedAttachments,
+                queue: queueWriter,
+              }).queued,
+            );
+          },
+          {
+            getDraftRevision: textSource.getRevision ?? textSource.getSnapshot,
+            keepComposer: options?.keepComposer,
+            clearDraft: () => {
+              replaceUserInput("");
+              setSelectedAttachments([]);
+              resetSuppression();
+            },
+          },
+        );
+        if (queued && !options?.keepComposer) clearSentAttachments(queuedAttachments);
+        return queued;
       } finally {
         queueSubmissionInFlight.current.delete(submissionKey);
       }
@@ -2643,12 +2642,14 @@ function ComposerContentImpl({
       applyAgentQueueSnapshot,
       clearSentAttachments,
       client,
+      cwd,
+      textSource,
+      replaceUserInput,
       queueOutbox,
       queueWriter,
       resetSuppression,
       serverId,
       setSelectedAttachments,
-      setUserInput,
       supportsAgentMessageQueue,
       supportsForgeSearch,
     ],
@@ -3739,6 +3740,7 @@ function ComposerContentImpl({
                 <StableMessageInput
                   ref={messageInputRef}
                   value={textSource.getSnapshot()}
+                  getDraftRevision={textSource.getRevision ?? textSource.getSnapshot}
                   onChangeText={setUserInput}
                   onSubmit={handleSubmit}
                   hasExternalContent={hasExternalContent}

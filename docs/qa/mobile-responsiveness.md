@@ -56,14 +56,24 @@ Independent review caught gaps in the first implementation:
   not trigger an implicit retry. Recovery releases ordering ownership only after persistence succeeds.
 - Broadcast results distinguish device-pending saves from confirmed host delivery.
 - Shared submit settlement checks draft revisions across encoding and storage, including text and
-  attachment edits that return to identical content. Both delivery paths reject incomplete image
-  encoding before persisting or sending.
+  attachment edits that return to identical content. Queue callbacks in the root composer, input
+  widget and dictation use the same revision guard; unchanged acceptance still clears, while
+  Queue as new message retains the composer. Both delivery paths reject incomplete image encoding
+  before persisting or sending.
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
 
-The draft-revision and image-completeness regressions were added after `3b8a8adc` in
-`composer/draft/input-draft.live.test.tsx`, `composer/submit.test.ts` and `composer/actions.test.ts`.
-Their execution is pending the outer executor's GCP checks; prior receipts do not validate these repairs.
+The outer executor's GCP checks at `ab71376b3bfe9dc3b8072fa61b894a22c6edb7d7` passed 302 tests
+across 11 unit suites, formatting and app typecheck. Lint reported three errors in the dispatch
+function and direct-settlement case setup; this review refactors those sites without suppressions.
+The original nine browser flows passed at `3b8a8adc`; the expanded browser batch at `ab71376b`
+was still running when this review began.
+
+The queue-settlement regressions in `composer/draft/input-draft.live.test.tsx` and
+`composer/input/state.test.ts`, plus this round's lint repairs, await the outer executor's GCP checks.
+Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
+legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and
+Queue as new message.
 
 The executable regressions use real store operations and held/failing storage to check ordering,
 restart recovery, exclusion, cancellation, independent agents and automatic wake-ups. Dependency

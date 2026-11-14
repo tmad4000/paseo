@@ -254,6 +254,11 @@ iOS suspension, or app restart cannot lose the item before the daemon knows abou
 The outbox (`packages/app/src/stores/queue-outbox-store/`) persists the full wire
 payload — image bytes included — before clearing the draft or attempting delivery.
 Encoding or storage failure keeps the draft and attachments and displays an error.
+Queue acceptance clears only the submitted edit revision. This applies to default Send while running,
+explicit Queue and auto-queued dictation, including legacy local queues. A text or attachment edit
+that returns to identical content still belongs to the newer draft. The composer and input widget
+must share that rule because either can finish an asynchronous queue callback. Queue as new message
+keeps the composer untouched.
 A failed send keeps its durable entry and visible row for retry; after repeated
 failures the client shows one attention message and continues retrying.
 

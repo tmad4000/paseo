@@ -10,7 +10,16 @@ import type {
   UserComposerAttachment,
 } from "@/attachments/types";
 import { submitAgentInput } from "@/composer/submit";
-import { dispatchComposerAgentMessage, type DirectSendOutbox } from "@/composer/actions";
+import {
+  dispatchComposerAgentMessage,
+  queueComposerMessage,
+  queueComposerMessageOnServer,
+  type DirectSendOutbox,
+  type QueueOutboxWriter,
+  type QueuedComposerMessage,
+} from "@/composer/actions";
+import { queueInputMessage } from "@/composer/input/state";
+import type { MessagePayload } from "@/composer/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
 const { asyncStorage } = vi.hoisted(() => ({
@@ -622,6 +631,42 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+type PreparationStage = "encode" | "save";
+type PreparationOutcome = "success" | "failure";
+const DIRECT_SETTLEMENT_EDITS = [
+  "text",
+  "text-aba",
+  "same-text",
+  "add",
+  "remove",
+  "attachment-aba",
+  "store",
+  "unchanged",
+] as const;
+interface DirectSettlementCase {
+  stage: PreparationStage;
+  outcome: PreparationOutcome;
+  edit: (typeof DIRECT_SETTLEMENT_EDITS)[number];
+  behavior: "clear" | "preserve-and-lock";
+}
+
+function createDirectSettlementCases(): DirectSettlementCase[] {
+  const cases: DirectSettlementCase[] = [];
+  for (const stage of ["encode", "save"] as const) {
+    for (const outcome of ["success", "failure"] as const) {
+      for (const edit of DIRECT_SETTLEMENT_EDITS) {
+        cases.push({ stage, outcome, edit, behavior: "clear" });
+      }
+      cases.push({ stage, outcome, edit: "unchanged", behavior: "preserve-and-lock" });
+    }
+  }
+  return cases;
+}
+
+function encodeImageMetadata(image: AttachmentMetadata) {
+  return { data: image.id, mimeType: image.mimeType };
+}
+
 describe("draft settlement through submission and device save", () => {
   beforeEach(() => {
     asyncStorage.clear();
@@ -629,32 +674,8 @@ describe("draft settlement through submission and device save", () => {
     useDraftStore.setState({ drafts: {}, createModalDraft: null });
   });
 
-  const cases = (["encode", "save"] as const).flatMap((stage) =>
-    (["success", "failure"] as const).flatMap((outcome) =>
-      (
-        [
-          "text",
-          "text-aba",
-          "same-text",
-          "add",
-          "remove",
-          "attachment-aba",
-          "store",
-          "unchanged",
-        ] as const
-      ).map((edit) => ({ stage, outcome, edit, behavior: "clear" as const })),
-    ),
-  );
-
-  const lockedCases = (["encode", "save"] as const).flatMap((stage) =>
-    (["success", "failure"] as const).map((outcome) => ({
-      stage,
-      outcome,
-      edit: "unchanged" as const,
-      behavior: "preserve-and-lock" as const,
-    })),
-  );
-  it.each([...cases, ...lockedCases])(
+  const cases = createDirectSettlementCases();
+  it.each(cases)(
     "retains $edit edits during $stage $outcome ($behavior)",
     async ({ stage, outcome, edit, behavior }) => {
       let latest: ReturnType<typeof useAgentInputDraft> | null = null;
@@ -726,7 +747,7 @@ describe("draft settlement through submission and device save", () => {
                   entered.resolve();
                   await pending.promise;
                 }
-                return images.map((image) => ({ data: image.id, mimeType: image.mimeType }));
+                return images.map(encodeImageMetadata);
               },
               submission: { begin, reject, accept: vi.fn() },
               outbox: {
@@ -826,6 +847,285 @@ describe("draft settlement through submission and device save", () => {
           "agent",
           begin.mock.calls[0][1].clientMessageId,
         );
+      }
+      hostAck.resolve();
+    },
+  );
+});
+
+type QueuePreparationStage = PreparationStage | "legacy";
+type QueueEntryPath = "default" | "input" | "keep";
+const QUEUE_SETTLEMENT_EDITS = [
+  "text",
+  "aba",
+  "add",
+  "remove",
+  "attachment-aba",
+  "unchanged",
+] as const;
+interface QueueSettlementCase {
+  stage: QueuePreparationStage;
+  outcome: PreparationOutcome;
+  edit: (typeof QUEUE_SETTLEMENT_EDITS)[number];
+  route: QueueEntryPath;
+}
+const QUEUE_PREPARATIONS: Array<Pick<QueueSettlementCase, "stage" | "outcome">> = [
+  { stage: "encode", outcome: "success" },
+  { stage: "encode", outcome: "failure" },
+  { stage: "save", outcome: "success" },
+  { stage: "save", outcome: "failure" },
+  { stage: "legacy", outcome: "success" },
+  { stage: "legacy", outcome: "failure" },
+];
+
+function createQueueSettlementCases(): QueueSettlementCase[] {
+  const cases: QueueSettlementCase[] = [];
+  for (const route of ["default", "input"] as const) {
+    for (const preparation of QUEUE_PREPARATIONS) {
+      for (const edit of QUEUE_SETTLEMENT_EDITS) {
+        cases.push({ ...preparation, edit, route });
+      }
+    }
+  }
+  for (const preparation of QUEUE_PREPARATIONS) {
+    cases.push({ ...preparation, edit: "unchanged", route: "keep" });
+  }
+  return cases;
+}
+
+type LiveDraft = ReturnType<typeof useAgentInputDraft>;
+async function mountQueueDraft() {
+  let latest: LiveDraft | null = null;
+  function draft(): LiveDraft {
+    if (!latest) throw new Error("Draft not mounted");
+    return latest;
+  }
+  function Probe() {
+    latest = useAgentInputDraft({ draftKey: "draft:queued-settlement" });
+    return null;
+  }
+  const root = createTestRoot(document.getElementById("root")!);
+  const queryClient = new QueryClient();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Probe />
+      </QueryClientProvider>,
+    );
+  });
+  return draft;
+}
+
+function startQueueSubmission(
+  route: QueueEntryPath,
+  payload: MessagePayload,
+  draft: () => LiveDraft,
+  onQueue: () => Promise<boolean>,
+  clearInput: () => void,
+) {
+  const getDraftRevision = () => draft().textSource.getRevision!();
+  if (route === "default") {
+    return submitAgentInput({
+      message: payload.text,
+      attachments: payload.attachments,
+      isAgentRunning: true,
+      canSubmit: true,
+      getDraftRevision,
+      queueMessage: async () => {
+        await onQueue();
+      },
+      submitMessage: async () => {
+        throw new Error("Queued send was dispatched directly");
+      },
+      clearDraft: () => {
+        throw new Error("Shared submit cleared the queued draft independently");
+      },
+      setUserInput: () => {
+        throw new Error("Shared submit replaced queued input");
+      },
+      setAttachments: () => {
+        throw new Error("Shared submit replaced queued attachments");
+      },
+      setSendError: () => {},
+      setIsProcessing: () => {},
+    });
+  }
+  if (route === "keep") return onQueue();
+  return queueInputMessage(payload, onQueue, {
+    getDraftRevision,
+    clearDraft: clearInput,
+  });
+}
+
+function queueSubmissionFailure() {
+  return "failed";
+}
+
+describe("Queue draft settlement", () => {
+  beforeEach(() => {
+    asyncStorage.clear();
+    document.body.innerHTML = "<div id='root'></div>";
+    useDraftStore.setState({ drafts: {}, createModalDraft: null });
+  });
+
+  it.each(createQueueSettlementCases())(
+    "preserves $edit through $route Queue during $stage $outcome",
+    async ({ stage, outcome, edit, route }) => {
+      const draft = await mountQueueDraft();
+      const original: UserComposerAttachment[] = [
+        {
+          kind: "image",
+          metadata: {
+            id: "queued-image",
+            storageKey: "queued-image",
+            storageType: "web-indexeddb",
+            mimeType: "image/png",
+            createdAt: 1,
+          },
+        },
+      ];
+      const added = createWorkspaceFileAttachment({ path: "added.ts" });
+      await act(async () => {
+        draft().replaceText("A");
+        draft().setAttachments(original);
+      });
+      const payload: MessagePayload = { text: "A", attachments: original, cwd: "/repo" };
+      const pending = deferred<void>();
+      const entered = deferred<void>();
+      const hostAck = deferred<void>();
+      const saved: Parameters<QueueOutboxWriter["add"]>[0][] = [];
+      let queues = new Map<string, QueuedComposerMessage[]>();
+      const queue = {
+        read: (agentId: string) => queues.get(agentId) ?? [],
+        write: (
+          update: (
+            previous: Map<string, QueuedComposerMessage[]>,
+          ) => Map<string, QueuedComposerMessage[]>,
+        ) => {
+          if (stage === "legacy" && outcome === "failure") throw new Error("legacy save failed");
+          queues = update(queues);
+        },
+      };
+      const flush = vi.fn(() => hostAck.promise);
+      const clearRoot = vi.fn(() => {
+        draft().editText("");
+        draft().setAttachments([]);
+      });
+      const clearInput = vi.fn(() => draft().editText(""));
+      const enqueue = async () => {
+        if (stage === "legacy") {
+          entered.resolve();
+          return Boolean(
+            queueComposerMessage({ agentId: "agent", text: "A", attachments: original, queue })
+              .queued,
+          );
+        }
+        const result = await queueComposerMessageOnServer({
+          client: {
+            enqueueAgentMessage: async () => {
+              throw new Error("Queue waited for host acknowledgement");
+            },
+            removeQueuedAgentMessage: async () => ({ agentId: "agent", revision: 1, items: [] }),
+            getQueuedAgentMessageImages: async () => [],
+          },
+          agentId: "agent",
+          text: "A",
+          attachments: original,
+          encodeImages: async (images) => {
+            if (stage === "encode") {
+              entered.resolve();
+              await pending.promise;
+            }
+            return images.map(encodeImageMetadata);
+          },
+          queue,
+          applySnapshot: () => {},
+          outbox: {
+            serverId: "queue-settlement",
+            add: async (entry) => {
+              if (stage === "save") {
+                entered.resolve();
+                await pending.promise;
+              }
+              saved.push(entry);
+            },
+            remove: async () => {},
+            flush,
+          },
+        });
+        if (result.error) throw new Error(result.error);
+        return Boolean(result.queued);
+      };
+      const onQueue = () =>
+        queueInputMessage(payload, enqueue, {
+          getDraftRevision: () => draft().textSource.getRevision!(),
+          clearDraft: clearRoot,
+          keepComposer: route === "keep",
+        });
+      let settlement!: Promise<unknown>;
+      await act(async () => {
+        settlement = startQueueSubmission(route, payload, draft, onQueue, clearInput).catch(
+          queueSubmissionFailure,
+        );
+        if (stage !== "legacy") await entered.promise;
+        switch (edit) {
+          case "text":
+            draft().editText("B");
+            break;
+          case "aba":
+            draft().editText("B");
+            draft().editText("A");
+            break;
+          case "add":
+            draft().setAttachments([...original, added]);
+            break;
+          case "remove":
+            draft().setAttachments([]);
+            break;
+          case "attachment-aba":
+            draft().setAttachments([]);
+            draft().setAttachments(original);
+            break;
+          case "unchanged":
+            break;
+        }
+        if (outcome === "failure" && stage !== "legacy")
+          pending.reject(new Error("queue preparation failed"));
+        else pending.resolve();
+        let expectedResult: boolean | string = true;
+        if (route === "default") expectedResult = "queued";
+        if (outcome === "failure") expectedResult = "failed";
+        expect(await settlement).toBe(expectedResult);
+        draft().textSource.getRevision!();
+      });
+      const shouldClear = edit === "unchanged" && outcome === "success" && route !== "keep";
+      let expectedText = "A";
+      if (edit === "text") expectedText = "B";
+      if (shouldClear) expectedText = "";
+      let expectedAttachments = original;
+      if (shouldClear || edit === "remove") expectedAttachments = [];
+      if (edit === "add") expectedAttachments = [...original, added];
+      expect(draft().textSource.getSnapshot()).toBe(expectedText);
+      expect(draft().attachments).toEqual(expectedAttachments);
+      expect(clearRoot).toHaveBeenCalledTimes(shouldClear ? 1 : 0);
+      expect(clearInput).not.toHaveBeenCalled();
+      if (outcome === "success" && stage !== "legacy") {
+        expect(saved).toEqual([
+          expect.objectContaining({
+            agentId: "agent",
+            text: "A",
+            images: [{ data: "queued-image", mimeType: "image/png" }],
+          }),
+        ]);
+        expect(flush).toHaveBeenCalledTimes(1);
+      } else {
+        expect(saved).toEqual([]);
+        expect(flush).not.toHaveBeenCalled();
+      }
+      if (stage === "legacy" && outcome === "success") {
+        expect(queue.read("agent")).toEqual([
+          expect.objectContaining({ text: "A", attachments: original }),
+        ]);
       }
       hostAck.resolve();
     },

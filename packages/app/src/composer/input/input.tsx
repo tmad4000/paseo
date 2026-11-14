@@ -127,6 +127,7 @@ export interface ComposerKeyPressEvent {
 
 export interface MessageInputProps {
   value: string;
+  getDraftRevision: () => unknown;
   onChangeText: (text: string) => void;
   onSubmit: (payload: MessagePayload) => void | Promise<void>;
   /** When true, the submit button is enabled even without text or images (e.g. external attachment selected). */
@@ -1150,20 +1151,25 @@ interface QueueMessageContext {
   replaceText: (text: string) => void;
   onMinimizeHeight: () => void;
   getLiveText: () => string;
+  getDraftRevision: () => unknown;
+  keepComposer: boolean;
 }
 
 function queueMessageImpl(ctx: QueueMessageContext): void {
   if (!ctx.onQueue) return;
   const trimmed = ctx.value.trim();
   if (!trimmed && ctx.attachments.length === 0) return;
-  void queueInputMessage({ text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd }, ctx.onQueue)
+  void queueInputMessage(
+    { text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd },
+    ctx.onQueue,
+    {
+      getDraftRevision: ctx.getDraftRevision,
+      clearDraft: () => ctx.replaceText(""),
+      keepComposer: ctx.keepComposer,
+    },
+  )
     .then(() => {
-      if (ctx.getLiveText() === ctx.value) {
-        ctx.replaceText("");
-        ctx.onMinimizeHeight();
-      } else if (ctx.getLiveText().length === 0) {
-        ctx.onMinimizeHeight();
-      }
+      if (!ctx.keepComposer && ctx.getLiveText().length === 0) ctx.onMinimizeHeight();
       return undefined;
     })
     .catch(() => {});
@@ -1252,6 +1258,7 @@ function computeSendButtonState(input: SendButtonStateInput): SendButtonStateOut
 
 interface ResolvedMessageInputProps {
   value: string;
+  getDraftRevision: () => unknown;
   onChangeText: (text: string) => void;
   onSubmit: (payload: MessagePayload) => void | Promise<void>;
   hasExternalContent: boolean;
@@ -1302,6 +1309,7 @@ interface ResolvedMessageInputProps {
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
   return {
     value: props.value,
+    getDraftRevision: props.getDraftRevision,
     onChangeText: props.onChangeText,
     onSubmit: props.onSubmit,
     hasExternalContent: props.hasExternalContent ?? false,
@@ -1395,6 +1403,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isSubmitDisabled,
       isSubmitLoading,
       preserveHeightOnSubmit,
+      getDraftRevision,
       attachments,
       cwd,
       attachmentMenuItems,
@@ -1571,13 +1580,22 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           onQueue,
           onSubmit,
           replaceText,
-          getLiveText: () => textInputRef.current?.getText() ?? valueRef.current,
+          getDraftRevision,
           attachments,
           cwd,
           autoSend,
         });
       },
-      [replaceText, onSubmit, onQueue, attachments, cwd, isAgentRunning, defaultSendBehavior],
+      [
+        replaceText,
+        onSubmit,
+        onQueue,
+        attachments,
+        cwd,
+        isAgentRunning,
+        defaultSendBehavior,
+        getDraftRevision,
+      ],
     );
 
     const handleDictationError = useCallback(
@@ -1800,9 +1818,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           onQueue,
           replaceText,
           onMinimizeHeight: minimizeInputHeight,
+          getDraftRevision,
+          keepComposer: preserveHeightOnSubmit,
           getLiveText: () => textInputRef.current?.getText() ?? valueRef.current,
         }),
-      [attachments, cwd, onQueue, replaceText, minimizeInputHeight],
+      [
+        attachments,
+        cwd,
+        onQueue,
+        replaceText,
+        minimizeInputHeight,
+        getDraftRevision,
+        preserveHeightOnSubmit,
+      ],
     );
 
     const handleDefaultSendAction = useCallback(() => {
