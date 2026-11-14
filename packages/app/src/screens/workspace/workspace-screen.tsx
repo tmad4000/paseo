@@ -105,6 +105,11 @@ import { useAgentViewStore } from "@/stores/agent-view-store";
 import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { useVisibleAgentIds } from "./visible-agent-ids";
 import {
+  TabLocalSplitsWorkspace,
+  useTabLocalStripTabs,
+  useTabLocalVisibleAgentIds,
+} from "@/tab-local-splits/workspace-integration";
+import {
   getHostRuntimeStore,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
@@ -2098,10 +2103,18 @@ function WorkspaceScreenContent({
     () => isMobile || isFocusModeEnabled || !supportsDesktopPaneSplits(),
     [isFocusModeEnabled, isMobile],
   );
-  const visibleAgentIds = useVisibleAgentIds({
+  const paneVisibleAgentIds = useVisibleAgentIds({
     layout: workspaceLayout,
     tabs: uiTabs,
     routeFocused: isRouteFocused,
+    focusedPaneOnly: syncFocusedPaneOnly,
+  });
+  // Agents in a tab-local split's leaves are on screen beside their host.
+  const visibleAgentIds = useTabLocalVisibleAgentIds({
+    workspaceKey: persistenceKey,
+    layout: workspaceLayout,
+    agentIds: paneVisibleAgentIds,
+    isCompact: isMobile,
     focusedPaneOnly: syncFocusedPaneOnly,
   });
   useEffect(() => {
@@ -2250,6 +2263,12 @@ function WorkspaceScreenContent({
     () => focusedPaneTabState.tabs.map((tab) => tab.descriptor),
     [focusedPaneTabState.tabs],
   );
+  // Tab cycling and Cmd+1-9 walk the strip, which shows a tab-local split as one tab.
+  const stripTabs = useTabLocalStripTabs({
+    workspaceKey: persistenceKey,
+    tabs,
+    isCompact: isMobile,
+  });
   const allActivityTabs = useMemo<WorkspaceTabDescriptor[]>(
     () =>
       uiTabs.map((tab) => ({
@@ -3502,18 +3521,18 @@ function WorkspaceScreenContent({
           }
           return true;
         case "workspace.tab.navigate-index": {
-          const next = tabs[action.index - 1] ?? null;
+          const next = stripTabs[action.index - 1] ?? null;
           if (next?.tabId) {
             navigateToTabId(next.tabId);
           }
           return true;
         }
         case "workspace.tab.navigate-relative": {
-          if (tabs.length > 0) {
-            const currentIndex = tabs.findIndex((tab) => tab.tabId === activeTabId);
+          if (stripTabs.length > 0) {
+            const currentIndex = stripTabs.findIndex((tab) => tab.tabId === activeTabId);
             const fromIndex = currentIndex >= 0 ? currentIndex : 0;
-            const nextIndex = (fromIndex + action.delta + tabs.length) % tabs.length;
-            const next = tabs[nextIndex] ?? null;
+            const nextIndex = (fromIndex + action.delta + stripTabs.length) % stripTabs.length;
+            const next = stripTabs[nextIndex] ?? null;
             if (next?.tabId) {
               navigateToTabId(next.tabId);
             }
@@ -3533,7 +3552,7 @@ function WorkspaceScreenContent({
       handleCreateTerminal,
       focusedPaneTabState.pane?.id,
       navigateToTabId,
-      tabs,
+      stripTabs,
     ],
   );
 
@@ -4508,6 +4527,15 @@ function WorkspaceScreenContent({
           onFindInChat={handleFindInChat}
         />
       ) : null}
+
+      <TabLocalSplitsWorkspace
+        workspaceKey={persistenceKey}
+        serverId={normalizedServerId}
+        workspaceId={normalizedWorkspaceId}
+        enabled={rendersDesktopSplitContent}
+        routeFocused={isRouteFocused}
+        onCloseTab={handleCloseTabById}
+      />
 
       {shouldRenderDesktopPaneFallback ? (
         <NewTabLauncherProvider value={newTabLauncher}>

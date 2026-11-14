@@ -1292,6 +1292,7 @@ export const ja: TranslationResources = {
         pullRequest: "プルリクエスト",
         terminalProfilesMenu: "ターミナルプロファイル",
         editTerminalProfiles: "プロファイルを編集",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "サイドパネルを開く",

@@ -1296,6 +1296,7 @@ export const ptBR: TranslationResources = {
         pullRequest: "Pull request",
         terminalProfilesMenu: "Perfis de terminal",
         editTerminalProfiles: "Editar perfis",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "Abrir painel lateral",

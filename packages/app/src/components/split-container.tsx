@@ -100,6 +100,9 @@ import { RenderProfile } from "@/utils/render-profiler";
 import { isNative } from "@/constants/platform";
 import { panelTargetSupportsHost } from "@/plugins/workspace-panels/locations";
 import { useViewPaneActions } from "@/views/view-pane-actions";
+import { useTabLocalPane } from "@/tab-local-splits/use-tab-local-pane";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 
 interface SplitContainerProps {
   layout: WorkspaceLayout;
@@ -463,6 +466,21 @@ export function SplitContainer({
     [maximizePane, maximizedPaneId],
   );
   const restoreSplit = useCallback(() => setMaximizedPane(null), []);
+  // Fork: Zoom leaf (Cmd/Ctrl+Shift+Enter) falls through to Maximize pane outside a composite.
+  useKeyboardActionHandler({
+    handlerId: buildWorkspaceKeyboardHandlerId({
+      name: "workspace-pane-maximize",
+      serverId: normalizedServerId,
+      workspaceId: normalizedWorkspaceId,
+    }),
+    actions: ["workspace.tab.zoom-leaf"] as const,
+    enabled: isWorkspaceFocused && workspaceHasMultiplePanes && !focusModeEnabled,
+    priority: 100,
+    handle: () => {
+      if (focusedPaneId) handleTogglePaneMaximized(focusedPaneId);
+      return focusedPaneId !== null;
+    },
+  });
   useRevealPaneBehindMaximized({
     root: mainRoot,
     maximizedPaneId,
@@ -1260,8 +1278,9 @@ function SplitPaneView({
     [pane.id, workspaceKey],
   );
   const tabsDropDataSet = useMemo(() => ({ sidebarDropTabs: pane.id }), [pane.id]);
+  const isViewPane = Boolean(useViewPaneActions());
   // Views dim panes you are not working in, like iTerm's inactive split panes.
-  const dimInactivePane = Boolean(useViewPaneActions()) && workspaceHasMultiplePanes && !isFocused;
+  const dimInactivePane = isViewPane && workspaceHasMultiplePanes && !isFocused;
   const paneState = useMemo(
     () =>
       deriveWorkspacePaneState({
@@ -1272,6 +1291,22 @@ function SplitPaneView({
   );
   const paneTabs = useMemo(() => paneState.tabs.map((tab) => tab.descriptor), [paneState.tabs]);
   const activeTabDescriptor = paneState.activeTab?.descriptor ?? null;
+  // Fork: tab-local splits. Members leave the strip; their host renders the composite.
+  const tabLocal = useTabLocalPane({
+    enabled: !isViewPane,
+    workspaceKey,
+    paneId: pane.id,
+    paneTabs,
+    activeTabId: activeTabDescriptor?.tabId ?? null,
+    unreadTabIds,
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    isWorkspaceFocused,
+    buildPaneContentModel,
+    onFocusPane: stableOnFocusPane,
+    onCloseTab,
+  });
+  const stripTabs = tabLocal.stripTabs;
   // Off by default in the fork: tabs keep their opened/dragged order instead of jumping to the
   // front whenever their chat gets activity. Unread dots still show what changed.
   const sortTabsByRecentActivity = useSettings((settings) => settings.sortTabsByActivity);
@@ -1280,25 +1315,27 @@ function SplitPaneView({
     () =>
       (tabRowActivity
         ? sortTabsByActivity(
-            paneTabs.map((tab) => ({ tab })),
+            stripTabs.map((tab) => ({ tab })),
             tabRowActivity,
           )
-        : paneTabs.map((tab) => ({ tab }))
+        : stripTabs.map((tab) => ({ tab }))
       ).map(({ tab }) => ({
         tab,
-        isActive: tab.key === activeTabDescriptor?.key,
+        isActive: tab.key === tabLocal.activeTabId,
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
-        unread: unreadTabIds.has(tab.tabId),
-        seen: unreadTabIds.get(tab.tabId) === "seen",
+        unread: tabLocal.unreadTabIds.has(tab.tabId),
+        seen: tabLocal.unreadTabIds.get(tab.tabId) === "seen",
+        tabLocal: tabLocal.chipByTabId.get(tab.tabId),
       })),
     [
-      activeTabDescriptor?.key,
+      tabLocal.activeTabId,
+      tabLocal.chipByTabId,
+      tabLocal.unreadTabIds,
       tabRowActivity,
       closingTabIds,
       hoveredCloseTabKey,
-      paneTabs,
-      unreadTabIds,
+      stripTabs,
     ],
   );
   const displayedPaneTabs = useMemo(
@@ -1341,17 +1378,18 @@ function SplitPaneView({
   }, [stableOnFocusPane, pane.id]);
 
   const paneId = pane.id;
+  const { expandForBulkClose } = tabLocal;
   const handleCloseTabsToLeft = useCallback(
-    (tabId: string) => onCloseTabsToLeft(tabId, displayedPaneTabs),
-    [displayedPaneTabs, onCloseTabsToLeft],
+    (tabId: string) => onCloseTabsToLeft(tabId, expandForBulkClose(tabId, displayedPaneTabs)),
+    [displayedPaneTabs, expandForBulkClose, onCloseTabsToLeft],
   );
   const handleCloseTabsToRight = useCallback(
-    (tabId: string) => onCloseTabsToRight(tabId, displayedPaneTabs),
-    [displayedPaneTabs, onCloseTabsToRight],
+    (tabId: string) => onCloseTabsToRight(tabId, expandForBulkClose(tabId, displayedPaneTabs)),
+    [displayedPaneTabs, expandForBulkClose, onCloseTabsToRight],
   );
   const handleCloseOtherTabs = useCallback(
-    (tabId: string) => onCloseOtherTabs(tabId, paneTabs),
-    [onCloseOtherTabs, paneTabs],
+    (tabId: string) => onCloseOtherTabs(tabId, expandForBulkClose(tabId, stripTabs)),
+    [expandForBulkClose, onCloseOtherTabs, stripTabs],
   );
   const handleReorderTabs = useCallback(
     (nextTabs: WorkspaceTabDescriptor[]) => {
@@ -1393,7 +1431,7 @@ function SplitPaneView({
             normalizedWorkspaceId={normalizedWorkspaceId}
             setHoveredCloseTabKey={setHoveredCloseTabKey}
             onNavigateTab={onNavigateTab}
-            onCloseTab={onCloseTab}
+            onCloseTab={tabLocal.closeTab}
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
@@ -1435,14 +1473,15 @@ function SplitPaneView({
         >
           <WorkspacePanelHost
             paneId={pane.id}
-            tabs={paneTabs}
-            activeTabId={activeTabDescriptor?.tabId ?? null}
+            tabs={stripTabs}
+            activeTabId={tabLocal.activeTabId}
             normalizedServerId={normalizedServerId}
             normalizedWorkspaceId={normalizedWorkspaceId}
             isWorkspaceFocused={isWorkspaceFocused}
             isPaneFocused={isFocused}
             onFocusPane={stableOnFocusPane}
             buildPaneContentModel={buildPaneContentModel}
+            tabContent={tabLocal.tabContent}
           />
           <SplitDropZone
             paneId={pane.id}

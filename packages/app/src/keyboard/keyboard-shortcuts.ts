@@ -199,6 +199,9 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "workspace-pane-move-tab-up",
     "workspace-pane-move-tab-down",
     "workspace-pane-close",
+    "workspace-tab-split-local-right",
+    "workspace-tab-split-local-below",
+    "workspace-tab-zoom-leaf",
   ],
   layout: ["toggle-left-sidebar", "toggle-right-sidebar", "toggle-both-sidebars", "toggle-focus"],
   "agent-input": [
@@ -248,6 +251,9 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-pane-move-tab-up": "settings.shortcuts.help.moveTabUp",
   "workspace-pane-move-tab-down": "settings.shortcuts.help.moveTabDown",
   "workspace-pane-close": "settings.shortcuts.help.closePane",
+  "workspace-tab-split-local-right": "workspace.tabs.actions.tabLocal.splitRight",
+  "workspace-tab-split-local-below": "workspace.tabs.actions.tabLocal.splitBelow",
+  "workspace-tab-zoom-leaf": "workspace.tabs.actions.tabLocal.zoomLeaf",
   "workspace-terminal-new": "settings.shortcuts.help.newTerminal",
   "search-files": "settings.shortcuts.help.searchFiles",
   "toggle-command-center": "settings.shortcuts.help.toggleCommandCenter",
@@ -1074,6 +1080,74 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-pane-close",
       section: "tabs-panes",
       label: "Close pane",
+    },
+  },
+  // --- Tab-local splits (fork). Upstream keeps Cmd+\ for Split pane; the inner scope takes Alt. ---
+  // No `terminal: false`, like the pane shortcuts, so they fire with a terminal leaf focused.
+  {
+    id: "workspace-tab-split-local-right-cmd-alt-backslash",
+    action: "workspace.tab.split-local.right",
+    combo: "Cmd+Alt+\\",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "workspace-tab-split-local-right",
+      section: "tabs-panes",
+      label: "Split this tab right",
+    },
+  },
+  {
+    id: "workspace-tab-split-local-right-ctrl-alt-backslash",
+    action: "workspace.tab.split-local.right",
+    combo: "Ctrl+Alt+\\",
+    when: { mac: false, commandCenter: false },
+    help: {
+      id: "workspace-tab-split-local-right",
+      section: "tabs-panes",
+      label: "Split this tab right",
+    },
+  },
+  {
+    id: "workspace-tab-split-local-below-cmd-alt-shift-backslash",
+    action: "workspace.tab.split-local.below",
+    combo: "Cmd+Alt+Shift+\\",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "workspace-tab-split-local-below",
+      section: "tabs-panes",
+      label: "Split this tab below",
+    },
+  },
+  {
+    id: "workspace-tab-split-local-below-ctrl-alt-shift-backslash",
+    action: "workspace.tab.split-local.below",
+    combo: "Ctrl+Alt+Shift+\\",
+    when: { mac: false, commandCenter: false },
+    help: {
+      id: "workspace-tab-split-local-below",
+      section: "tabs-panes",
+      label: "Split this tab below",
+    },
+  },
+  {
+    id: "workspace-tab-zoom-leaf-cmd-shift-enter",
+    action: "workspace.tab.zoom-leaf",
+    combo: "Cmd+Shift+Enter",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "workspace-tab-zoom-leaf",
+      section: "tabs-panes",
+      label: "Zoom leaf",
+    },
+  },
+  {
+    id: "workspace-tab-zoom-leaf-ctrl-shift-enter",
+    action: "workspace.tab.zoom-leaf",
+    combo: "Ctrl+Shift+Enter",
+    when: { mac: false, commandCenter: false },
+    help: {
+      id: "workspace-tab-zoom-leaf",
+      section: "tabs-panes",
+      label: "Zoom leaf",
     },
   },
   // --- New terminal ---

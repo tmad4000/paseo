@@ -1296,6 +1296,7 @@ export const fr: TranslationResources = {
         pullRequest: "Demande de fusion",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "Ouvrir le panneau latéral",

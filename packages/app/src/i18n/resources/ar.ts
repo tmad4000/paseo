@@ -1280,6 +1280,7 @@ export const ar: TranslationResources = {
         pullRequest: "طلب السحب",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+        tabLocal: en.workspace.tabs.actions.tabLocal,
       },
       explorerSidebar: {
         open: "افتح اللوحة الجانبية",
