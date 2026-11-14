@@ -191,6 +191,7 @@ export function cancelComposerAgent(input: CancelComposerAgentInput): Promise<vo
 }
 
 export interface DispatchComposerAgentMessageInput {
+  serverId?: string;
   client: ComposerSendClient;
   agentId: string;
   text: string;
@@ -302,13 +303,21 @@ export async function dispatchComposerAgentMessage(
   }
   try {
     const imagesData = await input.encodeImages(wirePayload.images);
-    const result = await input.client.sendAgentMessage(input.agentId, input.text, {
+    const send = () => input.client.sendAgentMessage(input.agentId, input.text, {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
       images: imagesData ?? [],
       attachments: wirePayload.attachments,
       ...(input.interrupt ? { interrupt: true } : {}),
     });
+    const result = input.serverId
+      ? await (await import("@/stores/delivery-outboxes")).runOrderedAdmission({
+          serverId: input.serverId,
+          agentId: input.agentId,
+          itemId: clientMessageId,
+          run: send,
+        })
+      : await send();
     if (result?.queued) {
       // Queue admission is not provider submission. Retire only the optimistic
       // bubble; reject preserves a canonical echo that raced the RPC response.

@@ -32,7 +32,9 @@ draft, release them and retain the second draft; verify refusal and storage fail
 transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
 then release A and verify host delivery order A then B. Transport loss and unknown outcomes must
 retain the barrier across rehydration; retry/discard must wake delivery, while cancellation and other
-agents remain available. User-error toasts temporarily replace passive sync status in the same alert above
+agents remain available. Repeat the admission check through Find/Send and thread Send Back; routed
+draft escrow and expected destination checks must survive the wait. Restart with a backward device
+clock and delayed hydration of either outbox: new entries must still follow saved ones. User-error toasts temporarily replace passive sync status in the same alert above
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
 `session-stream-reducers.test.ts`, `composer/actions.test.ts`, `stores/send-outbox-store/index.test.ts`,

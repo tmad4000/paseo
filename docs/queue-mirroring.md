@@ -337,6 +337,16 @@ for that agent even after a flush returns or the app reloads. A definitive refus
 Retry uses A's identical ID and payload; definitive settlement or explicit Discard wakes the worker.
 Other agents continue independently. Queue removal intents can reach the host while delivery is
 blocked, without admitting the canceled payload. Local saving and typing never wait on this worker.
+Find/Send's active routed admissions join that worker with their existing draft escrow and destination
+checks. A held routed item remains recoverable after restart; an in-memory admission does not grant
+reconnect permission to an undispatched item. Send Back stores its full quoted answer in the queue
+outbox before returning. Stream replies, broadcast and legacy composer/direct-routing admissions
+also wait behind older unresolved device sends. Explicit Send now for a host-owned queue item keeps
+its steering behavior.
+
+New creation times are allocated only after both outboxes hydrate, using the greatest saved creation
+time as the counter floor. Restarting with a clock that moved backward cannot put a new item before
+an unresolved saved request.
 The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the
 host unreachable, before its features are known, can still store a send first. The reconnect flush
 itself checks the live features, so a downgraded daemon is never sent retries it cannot dedupe.

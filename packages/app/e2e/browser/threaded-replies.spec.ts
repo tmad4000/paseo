@@ -1,6 +1,7 @@
 import { expect, test } from "../support/fixtures";
 import { awaitAssistantMessage } from "../support/helpers/agent-stream";
 import { expectChatHistoryAttachment } from "../support/helpers/assistant-fork";
+import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { closeWorkspaceAgentTab } from "../support/helpers/archive-tab";
 import {
@@ -31,6 +32,7 @@ test.describe("Threaded replies", () => {
   });
 
   test("replies in a thread beside the main chat and sends the answer back", async ({ page }) => {
+    const gate = await installDaemonWebSocketGate(page);
     session = await seedMockAgentWorkspace({
       repoPrefix: "threaded-replies-",
       title: "Thread parent",
@@ -69,15 +71,41 @@ test.describe("Threaded replies", () => {
     await expect(chip).toHaveText("1 reply", { timeout: 30_000 });
     await page.screenshot({ path: test.info().outputPath("threaded-replies-open.png") });
 
+    const firstPrompt = "Main-chat A precedes the thread answer.";
+    gate.holdNextClientRequest("send_agent_message_request");
+    const parentComposer = page.getByRole("textbox", { name: COMPOSER }).first();
+    await parentComposer.fill(firstPrompt);
+    await parentComposer.press("Enter");
+    await gate.waitForHeldClientRequest();
+    await expect(parentComposer).toHaveValue("");
+
     // Send to main queues the thread's answer in the parent, quoted, without interrupting it.
     await page.getByTestId("thread-origin-menu").click();
     const sendBack = page.getByTestId("thread-send-to-main");
     await expect(sendBack).toBeVisible({ timeout: 30_000 });
     await expect(sendBack).not.toHaveAttribute("aria-disabled", "true");
     await sendBack.click();
+    await expect.poll(() => page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null");
+      return Object.values(saved?.state?.entries ?? {}).some((value) =>
+        (value as { text?: string }).text?.startsWith("From the side thread"),
+      );
+    })).toBe(true);
+    expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
+    expect((await session.client.listQueuedAgentMessages(session.agentId)).items).toEqual([]);
+    await parentComposer.fill("Keep this newer parent draft.");
+    gate.releaseHeldClientRequest();
     await expect(
       page.getByTestId("user-message").filter({ hasText: "From the side thread" }).first(),
     ).toBeVisible({ timeout: 60_000 });
+
+    const first = page.getByTestId("user-message").filter({ hasText: firstPrompt });
+    const answer = page.getByTestId("user-message").filter({ hasText: "From the side thread" }).first();
+    await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    await expect(answer.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    const answerElement = await answer.elementHandle();
+    expect(await first.evaluate((element, next) => Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING), answerElement)).toBe(true);
+    await expect(parentComposer).toHaveValue("Keep this newer parent draft.");
 
     await page
       .getByTestId(`workspace-tab-agent_${thread.id}`)

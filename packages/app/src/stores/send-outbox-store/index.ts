@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
-import { nextDeliveryCreatedAt } from "@/stores/delivery-order";
+import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
 import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
@@ -114,6 +114,7 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
         add: (entry) =>
           serializeQueueOperation(MUTATION_KEY, async () => {
             await awaitSendOutboxHydration();
+            await awaitDeliveryOrderHydration();
             writesInFlight.add(entry.clientMessageId);
             set((state) => ({
               entries: {

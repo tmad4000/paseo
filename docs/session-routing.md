@@ -212,7 +212,12 @@ Workspace moves cannot interleave with destination validation and durable new-it
 checks accepted item IDs and durable receipts before that guard, so retries after an accepted send
 remain idempotent even if the destination subsequently moves or is deleted. Pending receipts retain
 uncertain ownership. Fresh device items stay held out of reconnect delivery through draft/outbox
-checkpoints; the current host selection is checked again before direct delivery. Every routed enqueue,
+checkpoints; the current host selection is checked again before direct delivery. Active queue
+admissions share the device's per-agent delivery worker with ordinary Send. They retain their held
+item and original draft while an earlier direct send is unresolved, then recheck current host
+eligibility and supply the original expected destination IDs at dispatch. Retry or discard of the
+older send wakes an active admission; restarting the app still requires the existing recovery flow
+for an undispatched held routed item. Every routed enqueue,
 including reconnect retries, requires `sessionSearch` and `agentMessageQueue` from the current
 connection at the serialized dispatch boundary, after any awaited durable writes. A saved routed
 item stays pending after a host rollback until that host can validate its expected destination again;

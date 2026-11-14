@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
-import { nextDeliveryCreatedAt } from "@/stores/delivery-order";
+import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
 import {
@@ -35,6 +35,7 @@ interface QueueOutboxActions {
   rejections: Record<string, string>;
   reject: (itemId: string, message: string) => void;
   acknowledgements: Record<string, { queued: boolean }>;
+  getAcknowledgement: (itemId: string) => { queued: boolean } | undefined;
   acknowledge: (itemId: string, snapshot: AgentQueueSnapshot) => Promise<boolean>;
   add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
   remove: (itemId: string) => void;
@@ -201,6 +202,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           },
         })),
       acknowledgements: {},
+      getAcknowledgement: (itemId) => get().acknowledgements[itemId],
       acknowledge: (itemId, snapshot) =>
         serializeQueueOperation(JSON.stringify(["routing-ack", itemId]), async () => {
           await awaitOutboxHydration();
@@ -261,6 +263,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
       add: async (entry) =>
         serializeQueueOperation("queue-outbox-mutation", async () => {
           await awaitOutboxHydration();
+            await awaitDeliveryOrderHydration();
           if (entry.routingOrigin && !get().entries[entry.itemId]) {
             const { useDraftStore, awaitDraftHydration, flushDraftPersistStorageDurably } =
               await import("@/stores/draft-store");

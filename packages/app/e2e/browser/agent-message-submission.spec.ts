@@ -1405,7 +1405,7 @@ test.describe("Agent message submission", () => {
       await gate.waitForHeldClientRequest();
       expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
         text: firstPrompt,
-        activeTurnBehavior: "steer",
+        activeTurnBehavior: "steer_only",
       });
       await expectComposerDraft(page, "");
       await queueMessage(page, secondPrompt);

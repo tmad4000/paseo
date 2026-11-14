@@ -1,4 +1,5 @@
 import { dispatchComposerAgentMessage } from "@/composer/actions";
+import { createDirectSendOutbox } from "@/composer/submission/direct-send-outbox";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { getHostRuntimeStore, isHostRuntimeConnected } from "@/runtime/host-runtime";
 import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
@@ -50,6 +51,8 @@ export async function runBroadcast(
       try {
         if (entry.delivery === "send") {
           await dispatchComposerAgentMessage({
+            serverId: entry.serverId,
+            outbox: createDirectSendOutbox(entry.serverId, client),
             client,
             agentId: entry.agentId,
             text: trimmed,

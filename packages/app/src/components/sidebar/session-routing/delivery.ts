@@ -4,6 +4,7 @@ import type {
   QueueOutboxFlushClient,
 } from "@/stores/queue-outbox-store/model";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
+import { runOrderedAdmission } from "@/stores/delivery-outboxes";
 import type { Recipient } from "./model";
 import { AgentQueueDestinationChangedError } from "@getpaseo/client/internal/daemon-client";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -47,6 +48,7 @@ export async function deliverDirectRoutedPrompt(
   if (!input.isHostEligible()) throw new DirectRouteDeliveryError("host");
   const activeTurnBehavior = input.mode === "steer" ? "steer_only" : "interrupt";
   await dispatchComposerAgentMessage({
+    serverId: input.recipient.serverId,
     client: {
       uploadFile: (value) => input.client.uploadFile(value),
       sendAgentMessage: async (agentId, text, options) => {
@@ -101,6 +103,7 @@ export interface RouteDeliveryInput {
   isHostEligible: () => boolean;
   outbox: {
     getEntry: (itemId: string) => Promise<PendingQueueEnqueue | undefined>;
+    getAcknowledgement?: (itemId: string) => { queued: boolean } | undefined;
     markRoutingDispatched: (itemId: string) => Promise<void>;
     add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
     removeDurably: (itemId: string, preserveRemovalIntent?: boolean) => Promise<void>;
@@ -112,9 +115,11 @@ export interface RouteDeliveryInput {
 export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ queued: boolean }> {
   const { recipient, text, itemId } = input;
   return serializeQueueOperation(
-    JSON.stringify(["dispatch", recipient.serverId, recipient.agentId]),
+    JSON.stringify(["route-prepare", recipient.serverId, recipient.agentId]),
     async () => {
       const existing = await input.outbox.getEntry(itemId);
+      const acknowledged = input.outbox.getAcknowledgement?.(itemId);
+      if (!existing && acknowledged) return { status: "acknowledged" as const, result: acknowledged };
       if (existing?.removalRequested || (input.requireExisting && !existing))
         throw new Error("Delivery canceled or no longer pending.");
       const enqueue = existing ?? {
@@ -134,12 +139,45 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       };
       if (!existing) await input.outbox.add(enqueue);
       const current = await input.outbox.getEntry(itemId);
-      if (!current || current.removalRequested)
+      if (!current) {
+        const acknowledged = input.outbox.getAcknowledgement?.(itemId);
+        if (acknowledged) return { status: "acknowledged" as const, result: acknowledged };
         throw new Error("Delivery cancellation is pending.");
+      }
+      if (current.removalRequested) throw new Error("Delivery cancellation is pending.");
       if (!input.isHostEligible()) {
         if (!existing) await input.outbox.removeDurably(itemId);
         throw new Error("The selected host was excluded. Choose a destination again.");
       }
+      return { status: "pending" as const, enqueue, existing, current };
+    },
+  ).then((prepared) => {
+    if (prepared.status === "acknowledged") return prepared.result;
+    const { enqueue, existing, current } = prepared;
+    return runOrderedAdmission({
+    serverId: recipient.serverId,
+    agentId: recipient.agentId,
+    itemId,
+    createdAt: current.createdAt,
+    client: input.client,
+    isPending: async () => {
+      const entry = await input.outbox.getEntry(itemId);
+      return Boolean((entry && !entry.removalRequested) || (!entry && input.outbox.getAcknowledgement?.(itemId)));
+    },
+    run: () => serializeQueueOperation(
+      JSON.stringify(["dispatch", recipient.serverId, recipient.agentId]),
+      async () => {
+        const pending = await input.outbox.getEntry(itemId);
+        if (!pending) {
+          const acknowledged = input.outbox.getAcknowledgement?.(itemId);
+          if (acknowledged) return acknowledged;
+          throw new Error("Delivery cancellation is pending.");
+        }
+        if (pending.removalRequested) throw new Error("Delivery cancellation is pending.");
+        if (!input.isHostEligible()) {
+          if (!existing) await input.outbox.removeDurably(itemId);
+          throw new Error("The selected host was excluded. Choose a destination again.");
+        }
       let snapshot: AgentQueueSnapshot;
       try {
         const request = input.client.enqueueAgentMessage(enqueue);
@@ -160,6 +198,8 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       if ((await input.outbox.getEntry(itemId))?.removalRequested)
         throw new Error("Delivery cancellation is pending.");
       return { queued: snapshot.items.some((item) => item.id === itemId) };
-    },
-  );
+      },
+    ),
+    });
+  });
 }

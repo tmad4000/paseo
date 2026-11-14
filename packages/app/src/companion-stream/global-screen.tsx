@@ -1,3 +1,4 @@
+import { runOrderedAdmission } from "@/stores/delivery-outboxes";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -632,14 +633,20 @@ export function GlobalStreamCard({
     async (replyTo: CompanionEntry, text: string) => {
       if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
       const quoted = buildReplyQuote(replyTo.text);
-      const result = await client.sendAgentMessage(
+      const messageId = globalThis.crypto.randomUUID();
+      const result = await runOrderedAdmission({
+        serverId: row.serverId,
+        agentId: row.agentId,
+        itemId: messageId,
+        run: () => client.sendAgentMessage(
         row.agentId,
         quoted ? `${quoted}\n\n${text}` : text,
-        { messageId: globalThis.crypto.randomUUID() },
-      );
+        { messageId },
+      )
+      });
       return { queued: result.queued };
     },
-    [client, connection, row.agentId, t],
+    [client, connection, row.serverId, row.agentId, t],
   );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {

@@ -2474,6 +2474,7 @@ function ComposerContentImpl({
         targetAgentId,
       ).isActive;
       await dispatchComposerAgentMessage({
+        serverId,
         client,
         agentId: targetAgentId,
         text,

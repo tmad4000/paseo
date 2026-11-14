@@ -72,7 +72,23 @@ already parked unknown outcome blocks later direct sends. The daemon-backed
 B's persisted device entry and absence from the host, keeps a newer draft editable, then releases A
 and checks canonical A-before-B delivery.
 
-These additions have not been executed in this M4 review/fix phase. The outer executor must run
+The next source review found two remaining gaps: Find/Send and Send Back could still bypass the
+worker, and restarting with a backward device clock could allocate an earlier creation time. Active
+routed admissions now join the worker without releasing their undispatched hold or draft escrow;
+Send Back saves in the queue outbox. The caller audit also coordinated broadcast, Stream replies,
+direct routing and legacy composer delivery. New creation order observes both hydrated outboxes.
+Host queue Send now keeps its explicit steering path.
+
+Added unit cases cover routed admission behind held/unknown A, retry/discard wake-up, exclusion
+revalidation, cancellation, Send Back, and all four older/newer outbox combinations with a backward
+clock and delayed reads. Daemon-backed routing and threaded-reply regressions now hold A before host
+dispatch, assert B remains device-only, and check canonical A-before-B order plus newer draft
+preservation. The composer queue regression expects the actual capable-host `steer_only` behavior;
+its ordering assertions are unchanged.
+
+The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
+`c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing
+receipt for this source. These additions have not been executed in this M4 review/fix phase. The outer executor must run
 focused unit/browser regressions and formatting/typecheck/lint on the existing GCP task. Earlier
 passing receipts and the screenshot above do not validate this repair. Native rollout remains deferred.
 
