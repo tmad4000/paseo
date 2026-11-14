@@ -186,6 +186,28 @@ Chromium DOM rerun passed. `intentional-focus-static.result` and `intentional-fo
 both record exit zero. The initial lint finding was a missing `type` on the new test button and was
 corrected before these results.
 
+Root's ownership review adds separate real-DOM cases for an existing input/button explicitly focused
+by a command before cleanup, alongside the new-control autofocus cases during the closing commit.
+The pre-cleanup regression fails with the ownership guard removed; all **10 DOM tests** pass with it,
+including retained closing input, newer overlay, reopening, once-only return and zero ancestor scroll.
+The five-line product guard is unchanged. `precleanup-focus-red.log` and `precleanup-focus-green.log`
+retain the comparison; the unchanged full-app split/explorer acceptance results above still apply.
+
+### Separate plugin retry qualification
+
+CI run `43576238248`, shard three: **172 passed, 9 skipped, 1 flaky on retry**. The plugin-buttons
+observation-release case failed its first attempt and passed unchanged on retry. The failed artifact
+has no trace, only a snapshot after fixture teardown; it does not establish an empty captured owner ID.
+The helper's second/recovered owner captures can precede asynchronous observation readiness, but this
+remains a hypothesis for that failure. The retry trace captured nonempty owner IDs.
+
+The first local focused attempt failed earlier: its pre-cleanup trace shows plugin header buttons
+rendered while the agent pane remains loading, before the composer exposes Run review. A bounded
+probe of the same setup assertion and observation-lifetime checks then passed, capturing successful
+agent-directory and timeline readiness. This is not a full unchanged plugin-buttons flow pass and
+does not prove the earlier delay's cause. `plugin-prerequisite.log`, events and traces are retained
+outside tracked source. No plugin code or test changed; no product cleanup defect was established.
+
 ## Platform and acceptance boundaries
 
 | Surface                                                    | Evidence / remaining boundary                                                        |

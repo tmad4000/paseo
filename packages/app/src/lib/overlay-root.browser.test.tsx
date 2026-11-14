@@ -176,7 +176,7 @@ describe("useWebOverlayRegistration in the browser", () => {
   });
 
   it.each(["input", "button"] as const)(
-    "preserves intentionally focused %s outside the closing scope",
+    "preserves a new %s auto-focused during the closing commit",
     async (destinationFocus) => {
       flushSync(() => root.render(<RetainedOverlayHarness active />));
       await nextFrame();
@@ -193,6 +193,28 @@ describe("useWebOverlayRegistration in the browser", () => {
       expect(document.activeElement).toBe(
         container.querySelector(`[data-testid="destination-${destinationFocus}"]`),
       );
+      expect(openerFocusCalls).toBe(0);
+    },
+  );
+
+  it.each(["input", "button"] as const)(
+    "preserves a command focusing an existing %s before overlay cleanup",
+    async (tag) => {
+      const destination = document.createElement(tag);
+      document.body.append(destination);
+      flushSync(() => root.render(<RetainedOverlayHarness active />));
+      await nextFrame();
+      const originalFocus = opener.focus.bind(opener);
+      let openerFocusCalls = 0;
+      opener.focus = (options) => {
+        openerFocusCalls++;
+        originalFocus(options);
+      };
+      destination.focus();
+      expect(document.activeElement).toBe(destination);
+      flushSync(() => root.render(<RetainedOverlayHarness active={false} />));
+      await nextFrame();
+      expect(document.activeElement).toBe(destination);
       expect(openerFocusCalls).toBe(0);
     },
   );
