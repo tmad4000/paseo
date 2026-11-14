@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { SidebarDragSource } from "@/workspace-tabs/sidebar-drag-source";
 import { selectPinnedSessions, sessionPinKey, type PinnableSession } from "./model";
 
 export function PinnedSessions({ onNavigate }: { onNavigate?: () => void }) {
@@ -59,18 +60,25 @@ function PinnedSessionRow({
     onNavigate?.();
   }, [session.serverId, session.id, onNavigate]);
   const title = session.title || session.id;
+  const dropPayload = useMemo(
+    () => ({ kind: "agent" as const, serverId: session.serverId, agentId: session.id }),
+    [session.serverId, session.id],
+  );
   return (
-    <Button
-      variant="ghost"
-      size="md"
-      leftIcon={Pin}
-      style={styles.row}
-      textStyle={styles.title}
-      accessibilityLabel={t("sessionPins.open", { title, host: hostLabel })}
-      onPress={handlePress}
-    >
-      {showHost ? `${title} · ${hostLabel}` : title}
-    </Button>
+    <SidebarDragSource payload={dropPayload}>
+      <Button
+        testID={`sidebar-pinned-session-${session.id}`}
+        variant="ghost"
+        size="md"
+        leftIcon={Pin}
+        style={styles.row}
+        textStyle={styles.title}
+        accessibilityLabel={t("sessionPins.open", { title, host: hostLabel })}
+        onPress={handlePress}
+      >
+        {showHost ? `${title} · ${hostLabel}` : title}
+      </Button>
+    </SidebarDragSource>
   );
 }
 

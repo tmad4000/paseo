@@ -2,6 +2,7 @@ import { getParentAgentIdFromLabels, PARENT_AGENT_ID_LABEL } from "@getpaseo/pro
 import { resolveAgentCreatedBy } from "@getpaseo/protocol/user-message-sender";
 import { seedLegacyHumanActivity } from "./message-activity.js";
 import { restoreCompanionEntries, selectSnapshotCompanionEntries } from "./companion-stream.js";
+import { restoreAgentTasks } from "./agent-task-snapshot.js";
 import type {
   AgentListItemPayload,
   AgentSnapshotPayload,
@@ -106,6 +107,7 @@ export function toStoredAgentRecord(
     owner: agent.owner,
     artifacts: agent.artifacts ?? [],
     companionEntries: agent.companionEntries ?? [],
+    tasks: restoreAgentTasks(agent),
   } satisfies StoredAgentRecord;
 }
 
@@ -154,6 +156,7 @@ export function toAgentPayload(
     labels: agent.labels,
     artifacts: agent.artifacts ?? [],
     companionEntries: selectSnapshotCompanionEntries(agent.companionEntries ?? []),
+    tasks: restoreAgentTasks(agent),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -273,6 +276,7 @@ export function buildStoredAgentPayload(
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],
     companionEntries: selectSnapshotCompanionEntries(restoreCompanionEntries(record)),
+    tasks: restoreAgentTasks(record),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

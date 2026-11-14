@@ -14,6 +14,10 @@ import { z } from "zod";
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { createAgentMcpServer } from "./mcp-server.js";
 import { createPaseoToolCatalog } from "./tools/paseo-tools.js";
+import {
+  PASEO_READ_ONLY_TOOL_NAMES,
+  PASEO_STREAM_BOOKKEEPING_TOOL_NAMES,
+} from "./tools/tool-annotations.js";
 import { AgentManager, type ManagedAgent } from "./agent-manager.js";
 import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -64,7 +68,8 @@ import { createGitMutationService } from "../session/git-mutation/git-mutation-s
 import type { GeneratedWorkspaceName } from "../worktree-branch-name-generator.js";
 import type { ForgeService } from "../../services/forge-service.js";
 import { areEquivalentPaths } from "../../utils/path.js";
-import type { TerminalManager } from "../../terminal/terminal-manager.js";
+import { createTerminalManager, type TerminalManager } from "../../terminal/terminal-manager.js";
+import { createWorkerTerminalManager } from "../../terminal/worker-terminal-manager.js";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { MutableDaemonConfigSchema, type AgentProfile } from "@getpaseo/protocol/messages";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
@@ -1197,6 +1202,168 @@ describe("Stream quote MCP tool", () => {
 
 describe("terminal MCP tools", () => {
   const logger = createTestLogger();
+
+  it.each<[string, string, string, boolean]>([
+    ["Down", "\x1b[B", "", false],
+    ["Up", "\x1b[A", "", false],
+    ["Left", "\x1b[D", "", false],
+    ["Right", "\x1b[C", "", false],
+    ["PageUp", "\x1b[5~", "", false],
+    ["PageDown", "\x1b[6~", "", false],
+    ["Home", "\x1b[H", "", false],
+    ["End", "\x1b[F", "", false],
+    ["Insert", "\x1b[2~", "", false],
+    ["Delete", "\x1b[3~", "", false],
+    ["F1", "\x1bOP", "", false],
+    ["F5", "\x1b[15~", "", false],
+    ["F12", "\x1b[24~", "", false],
+    ["S-Tab", "\x1b[Z", "", false],
+    ["C-r", "\x12", "", false],
+    ["M-b", "\x1bb", "", false],
+    ["C-M-Left", "\x1b[1;7D", "", false],
+    ["C-S-Up", "\x1b[1;6A", "", false],
+    ["C-Space", "\x00", "", false],
+    ["Enter", "\r", "", false],
+    ["Tab", "\t", "", false],
+    ["Escape", "\x1b", "", false],
+    ["Space", " ", "", false],
+    ["BSpace", "\x7f", "", false],
+    ["C-c", "\x03", "", false],
+    ["C-d", "\x04", "", false],
+    ["C-z", "\x1a", "", false],
+    ["C-l", "\x0c", "", false],
+    ["C-a", "\x01", "", false],
+    ["C-e", "\x05", "", false],
+    ["Down", "\x1bOB", "\x1b[?1h", false],
+    ["S-Enter", "\x1b[13;2u", "\x1b[=1;1u", false],
+    ["C-Enter", "\x1b[13;28;13;1;8;1_", "\x1b[?9001h", false],
+    ["echo hello\r", "echo hello\r", "", false],
+    ["\x1b[B", "\x1b[B", "", false],
+    ["UnknownKey", "UnknownKey", "", false],
+    ["constructor", "constructor", "", false],
+    ["__proto__", "__proto__", "", false],
+    ["", "", "", false],
+    ["Down", "Down", "\x1b[?1h", true],
+    ["C-r", "C-r", "", true],
+    ["S-Tab", "S-Tab", "", true],
+  ])(
+    "sends terminal token %j as %j (preamble=%j, literal=%s)",
+    async (keys, data, preamble, literal) => {
+      const { agentManager, agentStorage } = createTestDeps();
+      const send = vi.fn();
+      const terminalManager = createTerminalManagerStub({
+        getTerminal: vi.fn().mockReturnValue({
+          send,
+          getReplayPreamble: () => preamble,
+        }),
+      });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createClaudeOnlyManager(),
+        terminalManager,
+        logger,
+      });
+
+      try {
+        const response = await registeredTool(server, "send_terminal_keys").handler({
+          terminalId: "term-1",
+          keys,
+          literal,
+        });
+        expect(response.structuredContent).toEqual({ success: true });
+        expect(send).toHaveBeenCalledExactlyOnceWith({ type: "input", data });
+      } finally {
+        await server.close();
+      }
+    },
+  );
+
+  it.each([
+    ["in-process", createTerminalManager],
+    ["worker", createWorkerTerminalManager],
+  ] as const)(
+    "delivers MCP key tokens through %s after terminal input modes change",
+    async (_name, createManager) => {
+      const { agentManager, agentStorage } = createTestDeps();
+      const terminalManager = createManager();
+      const terminal = await terminalManager.createTerminal({
+        cwd: process.cwd(),
+        workspaceId: "ws-terminal-keys",
+        command: process.execPath,
+        args: [
+          "-e",
+          `process.stdin.setRawMode(true);
+         process.stdout.write("READY\\r\\n");
+         process.stdin.on("data", data => {
+           if (data.toString() === "application") {
+             process.stdout.write("\\x1b[?1hAPPLICATION_READY\\r\\n");
+             return;
+           }
+           if (data.toString() === "normal") {
+             process.stdout.write("\\x1b[?1lNORMAL_READY\\r\\n");
+             return;
+           }
+           process.stdout.write("HEX:" + data.toString("hex") + "\\r\\n");
+         });`,
+        ],
+      });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createClaudeOnlyManager(),
+        terminalManager,
+        logger,
+      });
+
+      let output = "";
+      const unsubscribe = terminal.subscribe((message) => {
+        if (message.type === "output") {
+          output += message.data;
+        }
+      });
+      try {
+        await vi.waitFor(
+          async () => {
+            const capture = await terminalManager.captureTerminal(terminal.id);
+            expect(capture.lines).toContain("READY");
+          },
+          { timeout: 5000 },
+        );
+        const tool = registeredTool(server, "send_terminal_keys");
+        await tool.handler({ terminalId: terminal.id, keys: "application", literal: true });
+        await vi.waitFor(() => expect(output).toContain("APPLICATION_READY"));
+        for (const [keys, hex] of [
+          ["Down", "1b4f42"],
+          ["Up", "1b4f41"],
+          ["Left", "1b4f44"],
+          ["Right", "1b4f43"],
+          ["PageDown", "1b5b367e"],
+          ["S-Tab", "1b5b5a"],
+          ["C-r", "12"],
+          ["M-b", "1b62"],
+        ]) {
+          await tool.handler({ terminalId: terminal.id, keys });
+          await vi.waitFor(async () => {
+            const capture = await terminalManager.captureTerminal(terminal.id);
+            expect(capture.lines.join("\n")).toContain(`HEX:${hex}`);
+          });
+        }
+        await tool.handler({ terminalId: terminal.id, keys: "normal", literal: true });
+        await vi.waitFor(() => expect(output).toContain("NORMAL_READY"));
+        await tool.handler({ terminalId: terminal.id, keys: "Down" });
+        await vi.waitFor(async () => {
+          const capture = await terminalManager.captureTerminal(terminal.id);
+          expect(capture.lines).toContain("HEX:1b5b42");
+        });
+      } finally {
+        unsubscribe();
+        await server.close();
+        await terminalManager.killTerminalAndWait(terminal.id);
+        terminalManager.killAll();
+      }
+    },
+  );
 
   it("captures terminal output through the terminal manager authority", async () => {
     const { agentManager, agentStorage } = createTestDeps();
@@ -2494,7 +2661,7 @@ describe("create_agent MCP tool", () => {
       });
       expect(readPaseoWorktreeMetadata(agentCwd)).toMatchObject({
         version: 1,
-        baseRefName: "existing-feature",
+        baseRefName: "main",
       });
       expect(generateCalls).toBe(1);
       expect(workspaceGitService.getSnapshot).not.toHaveBeenCalled();
@@ -6722,6 +6889,90 @@ describe("tab MCP tools", () => {
       ]);
     } finally {
       await client.close();
+    }
+  });
+});
+
+describe("MCP tool annotations", () => {
+  const logger = createTestLogger();
+
+  // Registered only when the host wires the matching dependency (e.g. the agent queue).
+  const CONDITIONALLY_REGISTERED = new Set<string>(["list_queue"]);
+
+  const GATED_TOOL_NAMES = [
+    "create_agent",
+    "send_agent_prompt",
+    "respond_to_permission",
+    "kill_agent",
+    "archive_agent",
+    "set_agent_mode",
+    "update_agent",
+    "create_schedule",
+    "send_terminal_keys",
+    // Read-shaped, but can start a provider session.
+    "get_agent_activity",
+    "inspect_provider",
+  ];
+
+  it("marks read-only and Stream bookkeeping tools so MCP clients skip approval, and leaves the rest gated", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue({
+      id: "agent-1",
+      cwd: REPO_CWD,
+      workspaceId: BROWSER_WORKSPACE_ID,
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      browserToolsEnabled: false,
+      callerAgentId: "agent-1",
+      logger,
+    });
+
+    const client = await connectInMemoryMcpClient(server);
+    try {
+      const listedTools = await client.listTools();
+      const byName = new Map(listedTools.tools.map((tool) => [tool.name, tool]));
+
+      for (const name of PASEO_READ_ONLY_TOOL_NAMES) {
+        const tool = byName.get(name);
+        if (CONDITIONALLY_REGISTERED.has(name) && !tool) continue;
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations, `${name} annotations`).toEqual({
+          readOnlyHint: true,
+          openWorldHint: false,
+        });
+      }
+
+      for (const name of PASEO_STREAM_BOOKKEEPING_TOOL_NAMES) {
+        const tool = byName.get(name);
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations, `${name} annotations`).toEqual({
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        });
+      }
+
+      const annotatedNames = new Set<string>([
+        ...PASEO_READ_ONLY_TOOL_NAMES,
+        ...PASEO_STREAM_BOOKKEEPING_TOOL_NAMES,
+      ]);
+      for (const tool of listedTools.tools) {
+        if (annotatedNames.has(tool.name)) continue;
+        expect(tool.annotations, `${tool.name} stays unannotated`).toBeUndefined();
+      }
+
+      for (const name of GATED_TOOL_NAMES) {
+        const tool = byName.get(name);
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(tool?.annotations?.readOnlyHint, `${name} readOnlyHint`).not.toBe(true);
+        expect(tool?.annotations?.destructiveHint, `${name} destructiveHint`).not.toBe(false);
+      }
+    } finally {
+      await client.close();
+      await server.close();
     }
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { GestureResponderEvent } from "react-native";
 import { Pressable, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -26,6 +26,7 @@ import {
   useDropdownMenuClose,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { MENU_ITEM_HEIGHT } from "@/components/ui/menu/menu-geometry";
 import { useToast } from "@/contexts/toast-context";
 import { openServiceUrl } from "@/utils/open-service-url";
@@ -547,6 +548,7 @@ export function WorkspaceScriptsButton({
 }: WorkspaceScriptsButtonProps): ReactElement | null {
   const { t } = useTranslation();
   const toast = useToast();
+  const [menuOpen, setMenuOpen] = useState(false);
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const activeConnection = useHostRuntimeSnapshot(serverId)?.activeConnection ?? null;
   const preferredRouteKind = useWorkspaceServiceRoutePreferencesStore(
@@ -679,27 +681,34 @@ export function WorkspaceScriptsButton({
   return (
     <View style={styles.row}>
       <View style={presentation === "ghost" ? styles.ghostButtonFrame : styles.splitButton}>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            testID="workspace-scripts-button"
-            style={triggerStyle}
-            accessibilityRole="button"
-            accessibilityLabel={t("workspace.scripts.accessibility.trigger")}
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <IconTooltip
+            // Labelled buttons explain themselves; the icon-only header button does not.
+            label={hideLabels ? t("workspace.scripts.accessibility.trigger") : null}
+            disabled={menuOpen}
+            wrap={false}
           >
-            <View style={styles.splitButtonContent}>
-              <ThemedPlay
-                size={triggerIconSize}
-                uniProps={triggerPlayMapping}
-                {...triggerPlayProps}
-              />
-              {!hideLabels && (
-                <Text style={styles.splitButtonText}>{t("workspace.scripts.title")}</Text>
-              )}
-              {presentation === "split" ? (
-                <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
-              ) : null}
-            </View>
-          </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              testID="workspace-scripts-button"
+              style={triggerStyle}
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.scripts.accessibility.trigger")}
+            >
+              <View style={styles.splitButtonContent}>
+                <ThemedPlay
+                  size={triggerIconSize}
+                  uniProps={triggerPlayMapping}
+                  {...triggerPlayProps}
+                />
+                {!hideLabels && (
+                  <Text style={styles.splitButtonText}>{t("workspace.scripts.title")}</Text>
+                )}
+                {presentation === "split" ? (
+                  <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
+                ) : null}
+              </View>
+            </DropdownMenuTrigger>
+          </IconTooltip>
           <DropdownMenuContent
             align="end"
             minWidth={200}

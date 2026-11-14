@@ -64,6 +64,7 @@ The generated project contains:
 ```text
 my-plugin/
   paseo-plugin.json
+  OVERVIEW.md
   package.json
   tsconfig.json
   index.client.tsx
@@ -468,34 +469,70 @@ The callback receives the same context as the matching Command Center item plus 
 A pill is a per-agent button in the composer track bar next to Tasks and Subagents. Add and remove pills from the client entry lifecycle. `addComposerPill` exists on `PluginClientContext`.
 
 ```tsx
+import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+
 export function contributeClient(client: PluginClientContext) {
-  const pills = new Map<string, () => void>();
-  const unsubscribe = client.paseo.agents.subscribe((update) => {
-    if (update.kind !== "upsert" || !update.agent.workspaceId) return;
-    const { id: agentId, workspaceId } = update.agent;
-    pills.get(agentId)?.();
+  const pills = new Map<string, PluginButtonRegistration>();
+  const lifetime = new AbortController();
+  const register = (agent: { id: string; workspaceId?: string | null }) => {
+    if (lifetime.signal.aborted || !agent.workspaceId) return;
+    const agentId = agent.id;
+    const workspaceId = agent.workspaceId;
+    pills.get(agentId)?.remove();
     pills.set(
       agentId,
       client.addComposerPill({
         id: "review",
-        title: "Open review",
         workspaceId,
         agentId,
-        Component: ReviewPill,
-        async onPress() {
-          client.openPanel("review", { workspaceId, agentId });
+        button: {
+          title: "Open review",
+          icon: "Scan",
+          label: "Review",
+          behavior: {
+            kind: "action",
+            onPress() {
+              client.openPanel("review", { workspaceId, agentId });
+            },
+          },
         },
       }),
     );
-  });
+  };
+  const removeAll = () => {
+    for (const pill of pills.values()) pill.remove();
+    pills.clear();
+  };
+  // An owned list subscription delivers existing agents, then updates, and a fresh snapshot after a reconnect.
+  void client.paseo.agents
+    .list({ subscribe: {}, signal: lifetime.signal })
+    .then(({ subscription }) => {
+      subscription.subscribe({
+        snapshot: ({ entries }) => {
+          removeAll();
+          for (const { agent } of entries) register(agent);
+        },
+        update: (message) => {
+          if (message.type !== "agent_update") return;
+          const update = message.payload;
+          if (update.kind === "upsert") return register(update.agent);
+          pills.get(update.agentId)?.remove();
+          pills.delete(update.agentId);
+        },
+      });
+      return undefined;
+    })
+    .catch((error) => {
+      if (!lifetime.signal.aborted) console.error("Agent observation failed", error);
+    });
   return () => {
-    unsubscribe();
-    for (const remove of pills.values()) remove();
+    lifetime.abort();
+    removeAll();
   };
 }
 ```
 
-Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The component owns its icon and text; Paseo owns the pressable, chrome, pending state, error reporting, and placement. Removal functions are idempotent, and Paseo removes every pill when the plugin, client entrypoint, or host connection is torn down.
+Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The `button` descriptor sets the icon, label, and behavior; Paseo owns the pressable, chrome, pending state, error reporting, and placement. `addComposerPill` returns a registration with `update()` and `remove()`. `remove()` is idempotent, and Paseo removes every pill when the plugin, client entrypoint, or host connection is torn down.
 
 ## Transform and render timeline items
 
@@ -590,6 +627,48 @@ If the user asks to disable the global switch, set `pluginsEnabled` to `false`, 
 Do not edit a local config when the target is a remote daemon. Perform the edit on the daemon machine, or ask the user to use **Settings → Plugins → Enable plugins**. `paseo reload --host <url>` reloads the remote daemon's own file but does not edit it.
 
 When the same sidebar contribution exists on several connected hosts, Paseo shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
+
+## Publishing a listing
+
+Write `OVERVIEW.md` beside `paseo-plugin.json` for the plugin page inside Paseo.
+It helps someone decide whether to install your plugin; the install command is already at
+the top of that page. A README assumes a GitHub audience and carries installation
+instructions, technical details, and badges. Long, AI-generated READMEs make people read
+past that material to understand what a plugin does.
+
+`OVERVIEW.md` is required to list your plugin in the registry. Commit it beside
+`paseo-plugin.json` in the source repository at the pinned commit. The registry resolves it
+relative to the manifest, under `pluginPath` for monorepos. Include it in the published npm
+package too; the scaffold's `files` list includes it. Replace the scaffold's guidance comment
+with useful facts before publishing.
+
+The repository overview takes precedence over a registry import stopgap. Online validation
+fails when the pinned commit has no `OVERVIEW.md`, except for unchanged imported records
+that already carry `plugins/<owner>/<slug>.md` in the registry repository. Every version bump
+requires a repository overview and removes the stopgap in the same PR. A bump without the
+repository overview fails validation. Neither README files nor a `paseo-listing.json`
+`readme` override supplies the overview.
+
+Author overviews and registry stopgaps follow the same content contract, in this order.
+Choose headings only when they help; length follows complexity. A theme needs one paragraph.
+
+1. Explain what the plugin is and does in plain terms first.
+2. Explain how it works only when that is not obvious.
+3. Explain setup when needed: settings, accounts, tokens, providers, external tools, or other
+   plugins. Include applicable daemon version and operating system requirements. Setup
+   guidance is allowed; installation instructions are not.
+4. Explain capabilities and settings worth understanding, what each option does, what the
+   plugin reads or sends and where, permissions, and known limits.
+
+Use sentence case and plain factual language, with no em dashes. Omit installation commands,
+badges, changelog, contributing or license sections, marketing, and unsupported claims.
+Avoid implementation filler such as empty cleanup functions, catalogs of theme-token fields,
+or lists of absent features. Keep only what helps someone choose the plugin.
+
+If your plugin is an unchanged imported record, you can propose an author-written overview
+to replace the registry stopgap. Do not add import credit to your own `OVERVIEW.md`.
+
+See [Your listing page](https://paseo.sh/docs/plugins/publishing.md#your-listing-page).
 
 ## Typecheck and manage
 

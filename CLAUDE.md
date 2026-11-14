@@ -40,6 +40,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/queue-mirroring.md](docs/queue-mirroring.md)                   | Moving the composer message queue onto the daemon so it mirrors across devices and drains with no client attached              |
 | [docs/session-routing.md](docs/session-routing.md) | Existing-chat Find/Send, scope isolation, tool-free matching, and delivery recovery |
 | [docs/quick-launch.md](docs/quick-launch.md) | Quick launch: starting an agent from a dialog without leaving the current one, default destination, one-request creation |
+| [docs/move-chat-workspace.md](docs/move-chat-workspace.md) | Move to workspace: moving a chat to Asides, a new or an existing workspace without changing its identity or cwd |
 | [docs/agent-tab-control.md](docs/agent-tab-control.md)               | MCP open_tab/close_tab over the ui.command push, and the queue-instead-of-interrupt busy-send policy                           |
 | [docs/workspace-describe.md](docs/workspace-describe.md) | MCP describe_workspace / `paseo workspace describe`: what the other chats in a workspace are on, derived without starting providers |
 | [docs/chat-links.md](docs/chat-links.md) | Links track and Peek: every URL in a chat by origin, iframe/WebView preview, fallback card, Open and Jump |

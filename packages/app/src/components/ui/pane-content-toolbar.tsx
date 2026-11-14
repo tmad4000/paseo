@@ -116,7 +116,7 @@ export function ToolbarButton({
 
   if (kind === "menu") {
     return (
-      <Tooltip delayDuration={300} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
+      <Tooltip delayDuration={0} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
         <TooltipTrigger asChild triggerRefProp="triggerRef">
           <DropdownMenuTrigger
             {...props}
@@ -136,7 +136,7 @@ export function ToolbarButton({
   }
 
   return (
-    <Tooltip delayDuration={300} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
+    <Tooltip delayDuration={0} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
       <TooltipTrigger
         {...props}
         disabled={disabled}

@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "Premier message",
     loading: "Chargement du premier message…",
@@ -341,6 +342,7 @@ export const fr: TranslationResources = {
       groupInOneList: "Afficher les chats en une seule liste",
       showAllSessions: "Afficher toutes les sessions",
       groupAsSessions: "Afficher les chats en sessions",
+      groupAsTabs: "Afficher les onglets ouverts dans la barre latérale",
       modelGroupLabel: "Modèle",
       modelSearchKeywords:
         "changer de modèle modifier le modèle définir le modèle sélectionner le modèle",
@@ -474,6 +476,10 @@ export const fr: TranslationResources = {
       queueEditFailed: "Impossible de modifier le message en file d’attente",
       steerRequiresUpdatedHost:
         "Mettez à jour cet hôte Paseo pour orienter le message sans interrompre le tour actif.",
+      steerRefusedStillQueued:
+        "L'agent ne peut pas recevoir de message en cours de tour pour l'instant. Il reste en file d'attente et sera envoyé à la fin du tour.",
+      queuedOutcomeUnknown:
+        "Paseo n'a pas pu confirmer que ce message a atteint l'agent ; il ne le renverra donc pas de lui-même. Réessayez Envoyer maintenant quand l'agent est inactif, ou redémarrez l'agent.",
       failedToCreateAgent: "Échec de la création de l'agent",
       noHostSelected: "Aucun hôte sélectionné",
       initialPromptRequired: "Une invite initiale est requise",
@@ -549,6 +555,16 @@ export const fr: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Cet agent a atteint sa limite",
+      description:
+        "Choisissez un autre agent. Un brouillon de reprise inclura l’historique de ce chat dans le même espace de travail ; vérifiez-le, puis envoyez-le pour continuer.",
+      chooseAnother: "Choisissez un autre fournisseur pour ce transfert.",
+      prepare: "Préparer le transfert",
+      preparing: "Préparation…",
+      noAlternatives:
+        "Aucun autre fournisseur n’est disponible sur cet hôte. Activez-en un dans ses paramètres ou attendez la réinitialisation de la limite.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -913,6 +929,7 @@ export const fr: TranslationResources = {
       reply: "Répondre",
       forkMenu: "Dupliquer le message",
       forkInNewTab: "Dupliquer dans un nouvel onglet",
+      forkInSplitPane: "Bifurquer dans un panneau partagé",
       forkInNewWorkspace: "Dupliquer dans un nouvel espace de travail",
       forkUnavailable: "Mettez l'hôte à jour pour utiliser ceci.",
       forkMissingWorkspace: "Cet agent n'est pas dans un espace de travail.",
@@ -1013,6 +1030,7 @@ export const fr: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Chargement de l'espace de travail",
       connecting: "De liaison",
@@ -1192,6 +1210,12 @@ export const fr: TranslationResources = {
       loading: "Chargement...",
       modified: "Modifications non enregistrées",
       newActivity: "Nouvelle activité",
+      seenNotRead: "Vu, non lu",
+      agentRunning: "Agent en cours",
+      needsInput: "Attend une réponse",
+      readLayerUnread: "Non lu",
+      seenLayerNotSeen: "Pas vu depuis la dernière activité",
+      seenLayerSeen: "Vu",
       loadingAgentTitle: "Titre d'agent de chargement",
       fallback: {
         newAgent: "Nouvel agent",
@@ -1265,6 +1289,9 @@ export const fr: TranslationResources = {
         splitDown: "Diviser le volet vers le bas",
         splitRightWithSession: "Diviser à droite avec une session…",
         splitDownWithSession: "Diviser en bas avec une session…",
+        dropSessionOtherHost:
+          "Seules les sessions de cet hôte peuvent être déposées ici. Utilisez une vue pour mélanger les hôtes.",
+        dropSessionNoSession: "Cet espace de travail n'a aucune session à ouvrir.",
         changes: "Modifications",
         files: "Fichiers",
         pullRequest: "Demande de fusion",
@@ -1738,9 +1765,14 @@ export const fr: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Actions de révision pour {{title}}",
+    needsInputSessions: "Intervention requise ({{count}})",
+    needsInputSince: "Intervention requise depuis {{time}}",
+    sessionActions: "Actions de session pour {{title}}",
     reviewSessions: "À examiner ({{count}})",
     openTabs_one: "{{count}} onglet ouvert",
     openTabs: "{{count}} onglets ouverts",
+    agentTasks: "Tâches de l'agent : {{completed}} sur {{total}} terminées",
+    agentActiveTask: "En cours : {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1863,6 +1895,7 @@ export const fr: TranslationResources = {
         status: "Statut",
         list: "Une seule liste",
         sessions: "Sessions",
+        tabs: "Onglets",
         labels: "Libellés",
       },
       titleSource: {
@@ -1981,6 +2014,14 @@ export const fr: TranslationResources = {
       status: {
         serviceRunning: "Service {{name}} en cours",
         serviceUnhealthy: "Service {{name}} en échec",
+        indicator: {
+          loading: "Démarrage",
+          running: "En cours : un agent s’exécute",
+          needs_input: "Vous attend : un agent attend une autorisation ou une réponse",
+          attention: "Terminé : nouveaux résultats non lus",
+          failed: "Erreur : un agent s’est arrêté sur une erreur",
+          done: "Inactif : rien de nouveau",
+        },
         creating: "Création...",
       },
       checks: {
@@ -1994,6 +2035,8 @@ export const fr: TranslationResources = {
       actions: {
         markAsRead: "Marquer comme lu",
         markAsReadNamed: "Marquer {{name}} comme lu",
+        markAsReadHint:
+          "Marquer comme lu : efface l’indicateur terminé/erreur de cet espace de travail",
         menu: "ActionsWorkspace",
         newWorkspace: "Nouvel espace de travail",
         showMore: "Afficher plus",
@@ -3025,6 +3068,13 @@ export const fr: TranslationResources = {
         label: "Marquer les discussions comme lues à l'ouverture",
         description:
           "Désactivé, une discussion reste non lue jusqu'à ce que vous la marquiez comme lue ou lui envoyiez un message",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "Onglets",
+        label: "Trier les onglets par activité récente",
+        description:
+          "Activé, le chat le plus récemment actif passe en tête de la rangée d’onglets. Désactivé, les onglets restent là où vous les avez placés",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

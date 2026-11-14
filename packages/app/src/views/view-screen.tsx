@@ -10,11 +10,13 @@ import { getHostRuntimeStore, isHostRuntimeConnected } from "@/runtime/host-runt
 import { buildWorkspacePaneContentModel } from "@/screens/workspace/workspace-pane-content";
 import {
   reconcileTabActivity,
+  collectUnreadTabStates,
   type TabActivityState,
 } from "@/screens/workspace/workspace-tab-activity";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { useSessionStore } from "@/stores/session-store";
 import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
+import { useTabSeenDwell } from "@/screens/workspace/use-tab-seen-dwell";
 import { collectAllPanes } from "@/stores/workspace-layout-actions";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import {
@@ -107,16 +109,30 @@ function ViewScreenContent({ viewId }: { viewId: string }) {
     );
   }, [view]);
   const tabReadPolicy = useTabReadPolicy(descriptors, null);
+  const seenDwellCandidate = useMemo(() => {
+    if (!view) return null;
+    const focusedPane = collectAllPanes(view.layout.root).find(
+      (pane) => pane.id === view.layout.focusedPaneId && !pane.hidden,
+    );
+    const tab = descriptors.find((entry) => entry.tabId === focusedPane?.focusedTabId);
+    if (!tab || tab.target.kind !== "agent" || !tab.scope) return null;
+    return { tabId: tab.tabId, serverId: tab.scope.serverId, agentId: tab.target.agentId };
+  }, [descriptors, view]);
+  const dwelledTabIds = useTabSeenDwell({ candidate: seenDwellCandidate, enabled: true });
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
-      reconcileTabActivity(previous, descriptors, activityByAgentId, viewedTabIds, tabReadPolicy),
+      reconcileTabActivity(
+        previous,
+        descriptors,
+        activityByAgentId,
+        viewedTabIds,
+        tabReadPolicy,
+        dwelledTabIds,
+      ),
     );
-  }, [activityByAgentId, descriptors, tabReadPolicy, viewedTabIds]);
-  const unreadTabIds = useMemo(
-    () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
-    [tabActivity],
-  );
+  }, [activityByAgentId, descriptors, dwelledTabIds, tabReadPolicy, viewedTabIds]);
+  const unreadTabIds = useMemo(() => collectUnreadTabStates(tabActivity), [tabActivity]);
 
   const copy = useCallback(
     async (value: string, copiedLabel: string) => {

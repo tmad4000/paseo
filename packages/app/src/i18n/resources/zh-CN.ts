@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "第一条消息",
     loading: "正在加载第一条消息…",
@@ -336,6 +337,7 @@ export const zhCN: TranslationResources = {
       groupInOneList: "以单一列表显示聊天",
       showAllSessions: "显示所有会话",
       groupAsSessions: "以会话显示聊天",
+      groupAsTabs: "在侧边栏显示打开的标签页",
       modelGroupLabel: "模型",
       modelSearchKeywords: "切换模型 更改模型 设置模型 选择模型",
       thinkingGroupLabel: "思考",
@@ -460,6 +462,10 @@ export const zhCN: TranslationResources = {
       queueReorderFailed: "无法重新排序消息。请重试。",
       queueEditFailed: "编辑排队消息失败",
       steerRequiresUpdatedHost: "请更新此 Paseo 主机，以便在不中断当前任务的情况下引导消息。",
+      steerRefusedStillQueued:
+        "智能体在当前回合进行中无法接收消息。消息仍在队列中，将在回合结束时发送。",
+      queuedOutcomeUnknown:
+        "Paseo 无法确认此消息是否已送达智能体，因此不会自动重新发送。请在智能体空闲后再次尝试“立即发送”，或重启智能体。",
       failedToCreateAgent: "创建 Agent 失败",
       noHostSelected: "未选择 Host",
       initialPromptRequired: "初始 prompt 必填",
@@ -534,6 +540,16 @@ export const zhCN: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "此代理已达到使用上限",
+      description:
+        "请选择其他代理。将在同一工作区创建包含此聊天记录的继续工作草稿；请检查后发送以继续。",
+      chooseAnother: "请选择其他提供商接手。",
+      prepare: "准备交接",
+      preparing: "正在准备…",
+      noAlternatives:
+        "此主机没有其他可用的提供商。请在主机设置中启用一个，或等待此代理的限额重置。",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -890,6 +906,7 @@ export const zhCN: TranslationResources = {
       reply: "回复",
       forkMenu: "分叉消息",
       forkInNewTab: "分叉到新标签页",
+      forkInSplitPane: "在拆分窗格中分叉",
       forkInNewWorkspace: "分叉到新工作区",
       forkUnavailable: "请更新主机以使用此功能。",
       forkMissingWorkspace: "此 Agent 不在工作区中。",
@@ -990,6 +1007,7 @@ export const zhCN: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "正在加载 workspace",
       connecting: "正在连接",
@@ -1169,6 +1187,12 @@ export const zhCN: TranslationResources = {
       loading: "正在加载...",
       modified: "未保存的更改",
       newActivity: "新活动",
+      seenNotRead: "已查看，未读",
+      agentRunning: "智能体运行中",
+      needsInput: "需要输入",
+      readLayerUnread: "未读",
+      seenLayerNotSeen: "最近活动后未查看",
+      seenLayerSeen: "已查看",
       loadingAgentTitle: "正在加载 Agent 标题",
       fallback: {
         newAgent: "新建 Agent",
@@ -1241,6 +1265,8 @@ export const zhCN: TranslationResources = {
         splitDown: "向下拆分窗格",
         splitRightWithSession: "向右拆分并放入会话…",
         splitDownWithSession: "向下拆分并放入会话…",
+        dropSessionOtherHost: "这里只能放入此主机的会话。要混合多个主机，请使用视图。",
+        dropSessionNoSession: "该工作区没有可打开的会话。",
         changes: "更改",
         files: "文件",
         pullRequest: "拉取请求",
@@ -1678,9 +1704,14 @@ export const zhCN: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} 的审阅操作",
+    needsInputSessions: "需要输入 ({{count}})",
+    needsInputSince: "自 {{time}} 起需要输入",
+    sessionActions: "{{title}} 的会话操作",
     reviewSessions: "审阅 ({{count}})",
     openTabs_one: "{{count}} 个打开的标签页",
     openTabs: "{{count}} 个打开的标签页",
+    agentTasks: "代理任务：已完成 {{completed}}/{{total}}",
+    agentActiveTask: "进行中：{{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1803,6 +1834,7 @@ export const zhCN: TranslationResources = {
         status: "状态",
         list: "单一列表",
         sessions: "会话",
+        tabs: "标签页",
         labels: "标签",
       },
       titleSource: {
@@ -1918,6 +1950,14 @@ export const zhCN: TranslationResources = {
       status: {
         serviceRunning: "服务 {{name}} 运行中",
         serviceUnhealthy: "服务 {{name}} 异常",
+        indicator: {
+          loading: "正在启动",
+          running: "运行中：有代理正在运行",
+          needs_input: "需要你处理：代理正在等待授权或回复",
+          attention: "已完成：有未读的新输出",
+          failed: "错误：代理因错误停止",
+          done: "空闲：没有新内容",
+        },
         creating: "正在创建...",
       },
       checks: {
@@ -1931,6 +1971,7 @@ export const zhCN: TranslationResources = {
       actions: {
         markAsRead: "标记为已读",
         markAsReadNamed: "将 {{name}} 标记为已读",
+        markAsReadHint: "标记为已读：清除此工作区的完成/错误提示",
         menu: "Workspace 操作",
         newWorkspace: "新建 workspace",
         showMore: "显示更多",
@@ -2918,6 +2959,12 @@ export const zhCN: TranslationResources = {
         section: "已读状态",
         label: "打开聊天时标记为已读",
         description: "关闭后，聊天会保持未读，直到你将其标记为已读或向其发送消息",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "标签页",
+        label: "按最近活动排序标签页",
+        description: "开启后，最近有活动的聊天会移到标签栏最前面。关闭后，标签页保持在你放置的位置",
       },
       autoExpandReasoning: {
         label: "始终展开推理过程",

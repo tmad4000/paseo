@@ -1,99 +1,108 @@
-# Workspace tab search verification
+# Workspace tab switcher verification
 
-Source: `feat/workspace-tab-search`, 2026-11-05. Design obtained from Astra session
-`d92f0e2b-7f3c-4f9c-a2e9-c657ed151dde` before implementation. The final design and later four-finding review were also read through
-`paseo logs --filter text --tail 3` and the expanded `--tail 10` on continuation. Not installed or deployed.
+Delivery: `feat/workspace-tab-search`, `pspin-45p`; design record `pspin-787.7`.
+Origin conversation: `a82679b1-b694-44c5-8b11-78724154835e`. Implementation owner:
+`e07e83f3-bdfb-4eb1-acea-b12d0d1d1e89`. Fable's reviewed design is evidence; Jacob's
+approved corrections use stable strip/layout order, not agent-only MRU.
 
-## Source checks
+The original commits through `eec783c4b` remain in history and on
+`archive/workspace-tab-search-eec783c4b`. This branch reconciles them with canonical main
+`9ae1aafe2f16798ac35dab9176790bc8662601c5`. Current delivery head, Git tree and source-manifest
+hash are recorded on the PR and retained cloud job after commit; those records identify the tested
+snapshot without embedding a self-referential commit hash in this file.
 
-- `npm run build:app-deps` — passed.
-- `npm run build:server` — passed, including client/protocol declarations and CLI.
-- `npm run format` — passed; later edits formatted through `format:files`.
-- `npm run lint` — passed, zero warnings/errors.
-- `npm run typecheck` — passed across all workspaces using rebuilt declarations and the reused
-  dependency overlay described below. App typecheck repeated after app edits. This does not
-  establish a clean, lockfile-installed baseline.
-- `npm run test --workspace=@getpaseo/app -- --project unit src/workspace-tabs/model.test.ts src/workspace-tabs/explorer-sidebar.test.ts src/keyboard/keyboard-shortcuts.test.ts src/desktop/browser/shortcuts.test.ts src/command-center/workspace-contributions.test.ts src/components/ui/combobox.test.tsx src/components/ui/combobox-keyboard.test.ts src/components/ui/combobox-options.test.ts src/lib/overlay-root.test.tsx src/screens/workspace/visible-agent-ids.test.ts --bail=1 --maxWorkers=1`
-  — **10 files, 235 tests passed**. No full local test suite ran.
+## Environment and source checks
 
-The 235-test batch above covers review commit `256110c2e`. The navigation-return follow-up ran
-`search-selection.test.tsx` and `explorer-sidebar.test.ts` with `--bail=1 --maxWorkers=1`:
-**2 files, 10 tests passed**. Its hook regression failed before the fix with `explorer` instead of
-`main` after returning to the original tab. Targeted lint and app typecheck also passed.
+Validation runs on `jacob-dev-1` as unprivileged `dev`, under
+`/home/dev/agent-jobs/paseo-tab-switcher-pspin-45p/`. `owner.txt`, job lock, logs and explicit result
+files identify this task. Source and dependencies stay in its `src/`; source transfer excludes Mac
+`node_modules`, credentials, environment files and application state. No existing session or service
+was restarted. No release, deployment or installed-app update is part of this work.
 
-The tests cover every tab kind and saved pane/tab order, hidden Explorer inclusion, unchanged
-existing shortcut cases, desktop/browser scope, saved overrides and chord prefixes, Electron guest
-shortcut policy, Command Center dispatch, title-versus-context matching, live result identity and
-existing overlay focus/composition behavior. The shared Combobox DOM tests exercise focused-result
-Enter, modified text-selection arrows and IME Enter in desktop and compact branches. They stub
-native animation/sheet presentation and floating geometry; they do not establish browser geometry,
-visual quality or native sheet behavior.
+- Existing lockfile: `npm ci --ignore-scripts --no-audit --no-fund`, followed by the repository's
+  `npm run postinstall` and native `npm rebuild node-pty esbuild`. No manifest, lockfile or dependency
+  version changed. This is a clean Linux dependency tree, independent of the earlier mixed Mac
+  symlinks. The Mac's shared dependencies were not installed into or mutated.
+- `npm run build:app-deps` and `npm run build:server`: passed. The initial direct-Node invocation of
+  postinstall lacked npm's executable PATH and failed; it was corrected before either build was
+  counted. `build.result` now records actual exit zero.
+- `npm run format`: passed. Later changed files use `format:files`.
+- `npm run lint`: passed with zero warnings/errors after resolving new JSX-prop and nesting findings.
+- Final `npm run typecheck`: passed across every workspace, after locale fallbacks and the web
+  focus boundary corrections. `final.result` records `state=exited`, `rc=0` for the full final gate.
+- Focused source batch: keyboard registry 160, descriptor/search model 3, Electron guest shortcut
+  policy 16, Command Center contributions 16, settings storage 82 tests passed. An outdated
+  close-on-keyboard-focus expectation failed in the initial batch and was corrected. The follow-up
+  passed **5 files / 175 tests**, including shortcut contexts, trailing controls, query handoff state,
+  Combobox identity and the A → B → A hook regression. This is not a full local suite.
 
-## Dependency baseline limitation
+The legacy hook test logs an IndexedDB-unavailable background attachment-GC warning in JSDOM; its
+assertion passes. Real browser lifecycle coverage below is the interaction evidence. The earlier
+November 5 mixed-dependency checks are historical only and are superseded by this clean cloud run;
+no claim of a pristine historical Mac baseline or historical zero cache writes is made.
 
-No installs or dependency package-content edits were run. Verification reused symlinks into existing
-dependency trees rather than a fresh lockfile install. The bounded direct-dependency audit found
-these mismatches; it did not audit transitive resolution or establish a pristine baseline:
+## Real browser evidence
 
-| Package scope       | Dependency                       | Lockfile | Reused version |
-| ------------------- | -------------------------------- | -------- | -------------- |
-| App and server      | `markdown-it`                    | 14.3.2   | 10.0.0         |
-| App and server      | `@types/markdown-it`             | 14.2.0   | 14.1.2         |
-| Protocol and server | `semver`                         | 7.8.5    | 7.7.4          |
-| Server              | `@anthropic-ai/claude-agent-sdk` | 0.3.246  | 0.3.220        |
-| Server              | `esbuild`                        | 0.25.12  | 0.27.3         |
-
-The passing checks apply to that mixed dependency tree. Initial declaration/dependency failures
-were resolved by local builds and links to already installed packages; they were not verified as
-feature regressions against a clean baseline. No manifest or lockfile was changed.
-
-The inspected shared caches predated this task, but no pre-run write snapshot exists, so historical
-zero writes cannot be certified. Known writable `.vite`/`.cache` links in this worktree's overlay
-were replaced with local directories. Follow-up checks use worktree-local temporary and npm cache
-paths. The task's known temporary edit script was moved from `/tmp` into local evidence. Further
-dependency investigation is deferred per the user's instruction.
-
-## Astra review follow-up
-
-- The navigation-return regression uses the real selection hook: Explorer → another main tab →
-  original main tab. It failed before the fix; stale temporary selection is now cleared when its
-  presentation becomes invalid, so returning cannot resurrect it.
-- Explorer-hosted ordinary tabs now use the compact single-pane presentation without moving the
-  tab or changing durable main-pane focus. Timeline visibility follows the presented pane. Actual
-  store/model regression tests cover both an agent and a terminal, plus close races.
-- Focused result buttons own Enter/Space, instead of activating a different highlighted row. The
-  shared Combobox DOM regression covers desktop and compact paths.
-- Compact and desktop text-editing modifier guards preserve Shift/Option/Ctrl/Cmd navigation;
-  composition Enter remains with the input. DOM tests cover both paths.
-- Saved shortcut conflicts are checked against the current platform; non-Mac overrides cannot
-  suppress Mac search. Tests also cover saved multi-key chord prefixes and guest forwarding.
-
-## UI boundary
-
-The focused command was:
+The final combined run passed **6/6 flows** against the frozen, formatted source. Command:
 
 ```sh
-m4-workspace run paseo-tab-search -- npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/workspace-tab-search.spec.ts
+npm run test:e2e --workspace=@getpaseo/app -- \
+  e2e/browser/workspace-tab-search.spec.ts e2e/browser/workspace-tab-activity.spec.ts \
+  --grep 'workspace title search|compact search presents|keyboard footer|compact titles and read controls' \
+  --workers=1
 ```
 
-Metro timed out during its first bundle warmup, before UI assertions. The approval gate rejected
-execution of the retry. The continuation's one-worker retry was also rejected before execution;
-its temporary Metro worker setting was restored with no config diff. No successful browser
-screenshots or real-browser interaction receipt exist. The test
-services were reaped by the workspace runner; the installed daemon was not restarted.
+Reviewable captures: [wide switcher](workspace-tab-search/switcher-desktop.png),
+[compact switcher](workspace-tab-search/switcher-compact.png),
+[compact Explorer](workspace-tab-search/compact-explorer-agent.png),
+[after A → B → A](workspace-tab-search/compact-explorer-no-resurrection.png),
+[desktop handoff](workspace-tab-search/handoff-desktop.png),
+[compact handoff](workspace-tab-search/handoff-compact.png),
+[normal and long titles](workspace-tab-search/titles-normal-long.png),
+[unread active](workspace-tab-search/titles-unread-active.png),
+[hover](workspace-tab-search/titles-hovered.png),
+[keyboard focus](workspace-tab-search/titles-keyboard-focused.png),
+[narrow](workspace-tab-search/titles-narrow.png),
+[regular ellipsis](workspace-tab-search/titles-regular-ellipsis.png).
 
-| Surface                                                      | Verified interaction                                           |
-| ------------------------------------------------------------ | -------------------------------------------------------------- |
-| Browser desktop / compact                                    | Pending: 3-case spec added, warmup timed out; retries rejected |
-| Electron macOS / Windows / Linux                             | Pending: shortcut forwarding has unit coverage only            |
-| Native iOS / Android, hardware/software keyboard, large text | Pending                                                        |
+Use the existing app Playwright harness with one worker and task-local `TMPDIR`. It starts its own
+mock-provider daemon and Metro, then tears them down; it does not target the installed daemon.
+Logs, traces, screenshots and results are retained in the cloud job and this checkout's
+`.dev/tab-switcher-20261114/` evidence directory.
 
-Browser builds are explicitly deferred while disk/swap is critical. After that constraint clears,
-run the focused spec, inspect both viewport screenshots, then smoke-test native sheets and installed
-Electron before release acceptance. The spec includes compact Explorer-hosted agent selection and
-Tab-to-result activation, separately from arrow highlight. Also exercise a named terminal, browser title, plugin label,
-file path, hidden Explorer, duplicate titles, live rename/close and the shortcut from a guest browser
-and composer. New search strings currently use English fallback in other locales.
+The title-density flow passed in real Chromium and its screenshots were inspected by implementation
+and origin reviewers. It asserts computed `textOverflow: clip`, a fade only when `scrollWidth` exceeds
+`clientWidth`, fitting short/medium titles with no fade, unchanged chip width through unread/hover/
+keyboard/read states, a fixed close target after marking read, and regular `ellipsis` after opting
+out and reloading. Captures cover normal/long, unread-active, hover, keyboard focus, narrow width and
+the setting off. Full accessible names and existing title tooltips are retained.
 
-Artifacts from this checkout are retained under `.dev/evidence/workspace-tab-search/`; they are
-local verification records, not an installed-build or CI receipt.
+Both desktop and compact **keyboard footer handoff** flows passed with matching results present:
+native Tab reaches the footer, Enter opens Cmd+K with the typed query, subsequent typing stays in
+the global search input, and Escape restores the original invoker. The footer carries the same
+native-action marker as result buttons, so Enter cannot activate an unrelated highlighted tab.
+It says **Search sessions and workspaces…**; it does not claim Cmd+K indexes every kind of tab.
+
+Picker reveal rechecks cover real title filtering, independently tabbable result activation, Escape
+and drafts, empty results, modified text-selection arrows, maximized-pane reveal, compact Explorer
+and external main navigation A → B → A. Initial runs exposed test-fixture assumptions: title ranking
+put Implementation before Distinctive, and resizing after a localStorage write overwrote the seeded
+layout. The tests now use the observed native Tab order and seed before hydration. Keyboard opening
+also keeps the composer focused until overlay capture; compact web retains the app's established
+policy disabling global shortcuts and uses visible entry points.
+
+## Platform and acceptance boundaries
+
+| Surface                                                    | Evidence / remaining boundary                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Chromium web, wide and compact                             | Real app/daemon flows above; exact final results and snapshot manifest in the PR/job |
+| Electron guest forwarding                                  | Unit coverage; installed Electron interaction remains untested                       |
+| Native iOS/Android, hardware/software keyboard, large text | Untested; requires device acceptance                                                 |
+| Desktop macOS/Windows/Linux packaged app                   | Not installed or restarted in this task                                              |
+
+The browser fixtures use agent tabs for interaction checks. Saved-pane enumeration covers all tab
+kinds; titles reuse the existing tab-strip/sidebar descriptor resolver. Native presentation, arbitrary
+plugin panels, live non-agent content and packaged Electron require their normal release acceptance.
+The feature register remains the release checklist. New labels use the repository's English fallback
+in locales without a translation. Merge waits for origin's independent PR review; release/deployment
+needs its own authorization.

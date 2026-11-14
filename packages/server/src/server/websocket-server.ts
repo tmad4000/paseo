@@ -7,7 +7,7 @@ import { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
-import { hostname as getHostname } from "node:os";
+import { getHostName } from "./host-name.js";
 import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { AgentManager, AgentMetricsSnapshot } from "./agent/agent-manager.js";
@@ -23,6 +23,7 @@ import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-m
 import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
 import {
   type ServerInfoStatusPayload,
+  type ScriptStatusUpdateMessage,
   type SessionOutboundMessage,
   type WorkspaceSetupSnapshot,
   type WSHelloMessage,
@@ -250,6 +251,7 @@ function createFallbackWorkspaceGitService(): WorkspaceGitService {
     suggestBranchesForCwd: async () => [],
     listStashes: async () => [],
     listWorktrees: async () => [],
+    invalidateWorktrees: () => {},
     getProjectSlug: async (cwd: string) => {
       const snapshot = createFallbackWorkspaceGitSnapshot(cwd);
       return deriveProjectSlug(cwd, snapshot.git.isGit ? snapshot.git.remoteUrl : null);
@@ -1048,6 +1050,12 @@ export class VoiceAssistantWebSocketServer {
     }
   }
 
+  public publishScriptStatusUpdate(message: ScriptStatusUpdateMessage): void {
+    for (const session of this.listSessions()) {
+      session.emitServerMessage(message);
+    }
+  }
+
   public publishSpeechReadiness(readiness: SpeechReadinessSnapshot | null): void {
     this.updateServerCapabilities(buildServerCapabilities({ readiness }));
   }
@@ -1542,6 +1550,7 @@ export class VoiceAssistantWebSocketServer {
           ),
         );
       },
+      publishScriptStatusUpdate: (message) => this.publishScriptStatusUpdate(message),
       downloadTokenStore: this.downloadTokenStore,
       pushNotifications: this.pushNotifications,
       paseoHome: this.paseoHome,
@@ -1883,7 +1892,7 @@ export class VoiceAssistantWebSocketServer {
       status: "server_info",
       protocolVersion: WS_PROTOCOL_VERSION,
       serverId: this.serverId,
-      hostname: getHostname(),
+      hostname: getHostName(),
       version: this.daemonVersion,
       permissions: session.getPermissions(),
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
@@ -1895,8 +1904,10 @@ export class VoiceAssistantWebSocketServer {
         workspaceRequestReceipts: true,
         creationLifecycle: true,
         hubAgentRpc: true,
-        // COMPAT(directorySync): added in v0.3.x, remove gate after 2027-02-12.
-        directorySync: true,
+        // Temporarily use the paginated compatibility path: directory sync snapshots
+        // are unbounded and can exceed the encrypted relay's frame limit. Restore
+        // this capability once sync snapshots support bounded transfer (pspin-a9r).
+        directorySync: false,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
@@ -2019,6 +2030,7 @@ export class VoiceAssistantWebSocketServer {
         providerUsageList: true,
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
         agentDetach: true,
+        agentWorkspaceMove: true,
         // COMPAT(agentThinkingUpdate): added in v0.2.4, remove gate after 2027-01-28.
         agentThinkingUpdate: true,
         // COMPAT(daemonDiagnostics): added in v0.1.100, remove gate after 2026-12-25 once daemon floor >= v0.1.100.

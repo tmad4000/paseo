@@ -99,7 +99,7 @@ Archive is a **soft delete**: the agent record stays on disk with `archivedAt` s
 Archive sets `archivedAt`, invokes the provider's native archive hook, and cascades to managed
 children.
 
-`create_agent_request` can opt an agent into `autoArchive`. In that mode the daemon archives the agent after the first terminal turn event (`turn_completed`, `turn_failed`, or `turn_canceled`). When the agent owns an isolated workspace, auto-archive archives that workspace too; the managed worktree is removed when its final workspace reference is gone.
+`create_agent_request` can opt an agent into `autoArchive`. In that mode the daemon archives the agent after the first terminal turn event (`turn_completed`, `turn_failed`, or `turn_canceled`). When the agent owns an isolated workspace, auto-archive archives that workspace too; the managed worktree is removed when no active workspace or unarchived chat still references it (see [moving chats](move-chat-workspace.md)).
 
 Archiving runs through `AgentManager.archiveAgent` (`packages/server/src/server/agent/agent-manager.ts`):
 
@@ -133,11 +133,12 @@ lifecycle queue. Resume chooses its history or interactive purpose from the dura
 entering that queue. Shutdown must finish before the manager releases runtime ownership; a failed
 close retains the runtime for cleanup and blocks replacement through that close operation.
 
-Authoritative timeline catch-up can use a runtime-only `history` resume purpose. For Codex, that
-purpose initializes a temporary app-server, reads the persisted thread and child histories, and
-releases the process before returning. It never loads, resumes, or unarchives a native thread,
-including legacy records whose native archive failed. The retained history session contains only
-the read results. Interactive resume remains responsible for repairing a provider session archived
+Authoritative timeline catch-up can use a runtime-only `history` resume purpose. The retained
+history session contains only the read results and must release its provider process once replay
+finishes. Codex reads the persisted thread and child histories on a temporary app-server and never
+loads, resumes, or unarchives a native thread, including legacy records whose native archive failed.
+ACP providers spawn the CLI, replay the session through `session/load`, and terminate the process
+before returning. Interactive resume remains responsible for repairing a provider session archived
 outside Paseo while its Paseo agent is active.
 
 Provider session connection owns every process it spawns until the session is registered with
@@ -228,6 +229,40 @@ restores the old focus-driven reads; the choice is per device (`AppSettings.mark
 - Each check is labelled with what it reads ("Mark ‹name› as read"). The sidebar check appears on
   hover, on keyboard focus within the row, and always on touch, where it is a 44pt target. On web
   it has no button role because the row is already a `<button>`, the same as the row's kebab.
+- **Seen vs read.** Between "new" and "read" sits a third, device-local level: _seen, not read_.
+  A tab counts as seen once it has been the focused pane's tab, in a focused window, for
+  `TAB_SEEN_DWELL_MS` (1.5 s) without interruption, so flicking through tabs with Ctrl+Tab does
+  not count. Seen is automatic and cheap; read stays a deliberate act (check, menu, sent prompt).
+  The tab icon draws read and seen as **two independent, overlapping circles**: a **hollow ring**
+  is the read layer (unread until marked read; settable by hand), and a **filled dot** in front
+  of it is the seen layer (activity this device has not looked at yet). New = ring + dot, seen
+  but unread = ring only, read = nothing; accent colour normally, red when the agent failed.
+  They sit in the icon's bottom-right corner when it is free and move to the top-right while
+  the running ring or needs-input alert holds that corner, so read status stays visible while
+  an agent works (`resolveTabStatusMarks` in `screens/workspace/workspace-tab-status-marks.ts`).
+  Sidebar session and workspace rows draw the filled/ring level on their status badge (a
+  workspace row rings only when every chat with readable attention in it was seen).
+- **Running and needs input together.** An agent can be working while it needs you (a pending
+  permission, or a manual "Needs input" mark). The status bucket ranks needs_input first, so
+  tabs carry a separate running flag (`PanelDescriptor.statusRunning`; `SidebarSessionRow.running`)
+  and show both: the running ring in the bottom-right corner and the red needs-input alert at
+  the top-left. Needs input is drawn red (danger colour) in the fork; failed shares the colour
+  but is always a dot, never the alert glyph.
+  - Seen marks live next to the read marks (`seenThroughByAgentKey` in
+    `stores/agent-read-marks-store.ts`), per device, never on the host. They record the _seen
+    clock_: the agent's last activity (`agentSeenClock`). New activity, including a turn
+    finishing, brings the filled dot back. "Mark as unread" changes only the read layer: it
+    restores the ring and leaves what this device has seen alone.
+  - Seen never clears host attention: `hasClearableAgentAttention` still means "not read", the
+    read check still shows on seen tabs, and other devices still show it unread.
+  - With "Mark chats read when opened" on, viewing already reads, so the seen level never appears.
+  - Test IDs: `workspace-tab-unread-<key>` marks any unread pair (with `data-read-state` =
+    `new` | `seen`); `workspace-tab-seen-<key>` is the lone read ring when seen,
+    `workspace-tab-unseen-<key>` the filled seen-layer dot, `workspace-tab-running-<key>` and
+    `workspace-tab-needs-input-<key>` the status marks.
+  - Code: `reconcileTabActivity`'s `readState`, `useTabSeenDwell`
+    (`screens/workspace/use-tab-seen-dwell.ts`) and `useAgentSeenNotRead` /
+    `useWorkspaceSeenNotRead` (`workspace/use-agent-seen.ts`).
 - The policy lives in `shouldClearAgentAttention` (`packages/app/src/utils/agent-attention.ts`),
   `reconcileTabActivity` (`packages/app/src/screens/workspace/workspace-tab-activity.ts`),
   `workspace/mark-read.ts`, and the host's `isReadClearable`
@@ -458,3 +493,29 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                             |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.
+
+## Continuing after a provider usage limit
+
+The chat shows **This agent reached its limit** for a direct usage/rate-limit
+notice in its latest retained turn outcome (including Claude notices reported as
+completed), or a terminal error before any outcome was captured. It is hidden
+while a turn is starting/running and a newer outcome retires an old notice. Pins,
+asks, ordinary discussion of limits and tool HTTP 429 errors do not trigger it.
+The original provider notice remains visible, including any reset time it supplied.
+The neutral alert style keeps its heading readable in both light and dark themes.
+
+Choose a different provider/model and **Prepare handoff**. This uses the existing
+host `agentForkContext` capability and model picker to open a continuation draft
+beside the source chat, or as a new tab on compact layouts. The source workspace
+and directory are retained. The standard chat-history attachment links to the
+source; the editable prompt asks the successor to reconcile the live workspace
+and source asks before resuming unfinished work. The user sends the draft to
+start the successor. Preparing a draft never starts a provider or marks asks done.
+
+Provider-specific modes, thinking levels and feature flags are cleared at the
+handoff boundary; the target draft resolves its normal provider settings. The
+source session, its asks, pending messages, approvals and history remain intact.
+The attachment contains the history retained by the existing fork-context API,
+not a guarantee of complete provider history or a model-written summary. This is
+explicit handoff, not automatic fallback, and does not change provider error
+classification or release/install a running daemon.

@@ -241,6 +241,7 @@ export interface WorkspaceGitService {
     cwdOrRepoRoot: string,
     options?: WorkspaceGitReadOptions,
   ): Promise<WorkspaceGitWorktreeInfo[]>;
+  invalidateWorktrees(): void;
   getProjectSlug(cwd: string, options?: WorkspaceGitReadOptions): Promise<string>;
   resolveRepoRoot(cwd: string, options?: WorkspaceGitReadOptions): Promise<string>;
   resolveDefaultBranch(cwdOrRepoRoot: string, options?: WorkspaceGitReadOptions): Promise<string>;
@@ -601,6 +602,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly disposeController = new AbortController();
   private disposed = false;
   private disposePromise: Promise<void> | null = null;
+  private readonly pendingRefreshes = new Set<Promise<WorkspaceGitRuntimeSnapshot>>();
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -764,6 +766,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
     });
+    const cached = this.peekSnapshot(normalizedCwd);
+    if (cached && cached.git.isGit !== status.isGit) {
+      // A fresh checkout read discovered a repository transition. Keep the
+      // shared snapshot current before exposing the new project capability.
+      await this.getSnapshot(normalizedCwd, {
+        force: true,
+        includeForge: false,
+        reason: "checkout-classification-changed",
+      });
+    }
     if (!status.isGit) {
       return checkoutLiteFromGitSnapshot(normalizedCwd, {
         isGit: false,
@@ -918,6 +930,13 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       : (snapshot.git.repoRoot ?? resolve(cwd));
   }
 
+  invalidateWorktrees(): void {
+    this.assertNotDisposed();
+    // Checkout paths can cache the same list under different roots, including bare repos.
+    // Detach in-flight reads too, so a pre-mutation result cannot refill the cache.
+    this.worktreeListCache.clear();
+  }
+
   async resolveDefaultBranch(
     cwdOrRepoRoot: string,
     options?: WorkspaceGitReadOptions,
@@ -1040,7 +1059,12 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.workingTreeWatchResolutions.clear();
     this.workingTreeWatchAliases.clear();
     this.snapshotUpdatedListeners.clear();
-    this.disposePromise = this.fileObserver.close();
+    // Unsubscribing can remove a target while its Git command still owns the cwd.
+    // Stop admission first, then drain those refreshes before releasing the service.
+    this.disposePromise = Promise.all([
+      this.fileObserver.close(),
+      Promise.allSettled(this.pendingRefreshes),
+    ]).then(() => undefined);
     return this.disposePromise;
   }
 
@@ -3044,11 +3068,13 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     }
 
     const promise = this.runWorkspaceRefreshLoop(target, request).finally(() => {
+      this.pendingRefreshes.delete(promise);
       const state = target.refreshState;
       if (state.status === "in-flight" && state.promise === promise) {
         target.refreshState = { status: "idle" };
       }
     });
+    this.pendingRefreshes.add(promise);
     target.refreshState = {
       status: "in-flight",
       promise,

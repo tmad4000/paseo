@@ -328,10 +328,10 @@ it("forwards workspace tab search from an Electron guest without reserving brows
     expect(
       desktop.prefixes.some(
         (prefix) =>
-          prefix.code === "KeyO" && prefix.shift && (isMac ? prefix.meta : prefix.control),
+          prefix.code === "KeyK" && prefix.shift && (isMac ? prefix.meta : prefix.control),
       ),
     ).toBe(true);
     const web = buildBrowserKeyboardPolicy({ bindings, isMac, isDesktop: false });
-    expect(web.prefixes.some((prefix) => prefix.code === "KeyO" && prefix.shift)).toBe(false);
+    expect(web.prefixes.some((prefix) => prefix.code === "KeyK" && prefix.shift)).toBe(true);
   }
 });

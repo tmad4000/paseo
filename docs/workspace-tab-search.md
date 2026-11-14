@@ -1,39 +1,37 @@
 # Workspace tab search
 
-**Search workspace tabs** searches the current workspace's existing tabs by their displayed title,
-then subtitle and path. Use the search button in the desktop header, the compact active-tab
-dropdown, or Command Center. Electron also defaults to Cmd+Shift+O on macOS and Ctrl+Shift+O on
-Windows/Linux. Browser web leaves those bookmark/library shortcuts alone. A saved custom binding
-that occupies the new default takes precedence; the effective shortcut is shown in help and tooltips.
-Cmd/Ctrl+Shift+A remains New agent. Adjacent-tab navigation keeps its focused-pane order.
+**Switch tab…** finds every open tab in the current workspace across panes, including hidden
+Explorer and panes covered by a maximized pane. Use the workspace header button/menu, compact
+active-title picker, or Command Center action. The new picker does not widen global Cmd+K's scope.
+Its footer, **Search sessions and workspaces…**, passes the query to the existing Command Center;
+that surface does not index all terminal, browser, or file tabs.
 
-Results cover the saved pane tree, including the side pane, hidden Explorer and panes covered by
-maximization. The traversal deliberately does not use `collectAllPanes`: that helper omits hidden
-panes. Empty panes add no results. Saved cross-project Views have their own layout and are outside
-this search's scope.
+The default is Cmd+Shift+K on macOS and Ctrl+Shift+K on Windows/Linux desktop. Non-Mac browser web
+uses the existing Alt+Shift fallback pattern (Alt+Shift+K), preserving Firefox's console shortcut.
+Use Settings → Shortcuts to rebind it. Applicable saved overrides, including chord prefixes, take
+precedence over a new default. Keep the original binding IDs so existing search overrides survive.
+New-agent and adjacent-tab shortcuts keep their meanings.
 
-Resolve titles through the panel descriptor path used by the tab strip. Rendering a row with the
-real title while filtering a generic fallback label makes named sessions and terminals impossible
-to find. Mount descriptors only while the picker is open; do not mount panel content or start
-providers to populate search. Filtering stays local. Pane context distinguishes duplicate titles.
+Empty query follows saved strip/layout order across all tab kinds. It does not use agent-only
+visit history as tab MRU. The current tab stays in that order and is tagged **Current**; its initial
+highlight is selection, not a promise of a previous-tab shortcut. Repeating the picker action keeps
+the query and highlighted identity. Live metadata updates retain that identity; editing the query
+chooses a new match. Pane labels disambiguate duplicate titles without introducing pane tiers.
+Saved cross-project Views have their own layout and are outside this workspace picker.
 
-Selection reveals the existing tab in its own pane through normal workspace focus. Explorer uses
-its existing dock/compact overlay contract for Files, Changes and pull requests. Compact search
-presents ordinary content already stored in Explorer through the single-pane renderer, while
-keeping the saved main-pane focus and tab placement. Returning to main navigation or leaving compact
-presentation clears that transient selection. Covered panes use the shared
-[maximized-pane reveal](expo-router.md#maximized-panes). Do not reopen a result after its tab closes.
-On web, apply the jump after the picker returns invocation focus, so an old composer's focus handler
-cannot pull focus back to the previous pane.
+Resolve titles through the same panel descriptor path as the tab strip and sidebar Tabs grouping.
+Mount descriptors only while open, never panel content or providers. This keeps live terminal,
+browser, plugin and chat titles consistent without starting a session to populate search.
 
-The shared Combobox owns arrows, Enter, Escape, focus trapping and return. Search opts into stable
-result identity and search/list accessibility semantics. Live metadata changes retain the highlighted
-tab by ID; a changed query chooses a new match. Current-tab selection remains separate from keyboard
-highlight. A focused result button owns Enter/Space; arrows from the search field use the list
-highlight. Compact touch opens for browsing without forcing the software keyboard.
+Enter reveals the existing tab in its own pane, using shared maximized-pane reveal. Explorer's
+Files/Changes/PR keep their existing overlay contract. Compact ordinary Explorer content uses
+transient single-pane presentation without moving the tab or changing saved main focus. Main-pane
+navigation permanently invalidates that presentation: A → B → A must not resurrect it. A tab
+closed during selection is not reopened. On web, jump after invocation focus has returned so the
+previous composer cannot reclaim the old pane. Escape restores the invoker and preserves drafts.
+Focused result buttons own Enter/Space; modified input arrows and composition remain text editing.
+Compact touch opens for browsing without forcing the software keyboard.
 
-Source checks cover all tab kinds, hidden-pane inclusion, default/custom shortcut ownership and
-Electron guest forwarding. `workspace-tab-search.spec.ts` exercises real title filtering, draft
-preservation, keyboard cancellation/selection, empty results and reveal across desktop/compact panes.
-See the [verification receipt](qa/workspace-tab-search.md) for passed source checks and the pending
-browser, native and installed Electron acceptance work.
+See the [verification receipt](qa/workspace-tab-search.md) for source/browser evidence and native
+and installed Electron boundaries. Delivery reuses `pspin-45p`; `pspin-787.7` and Fable's review are
+design evidence. Tab MRU, Cmd+K redesign and broader scopes remain deferred.

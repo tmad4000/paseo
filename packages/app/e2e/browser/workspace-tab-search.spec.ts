@@ -7,6 +7,7 @@ import {
   setPaneHiddenInLayout,
   splitPaneEmptyInLayout,
 } from "@/stores/workspace-layout-actions";
+import { getServerId } from "../support/helpers/server-id";
 import { test, expect } from "../support/fixtures";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 
@@ -51,8 +52,15 @@ for (const compact of [false, true]) {
         .getByTestId(compact ? "workspace-tab-switcher-trigger" : "workspace-tab-search-trigger")
         .filter({ visible: true })
         .first();
-      await trigger.click();
       const search = page.getByRole("combobox", { name: "Search tabs…" });
+      // The app's established compact-web policy disables global shortcuts.
+      if (!compact) {
+        await page.keyboard.press("Alt+Shift+k");
+        await expect(search).toBeVisible();
+        await search.press("Escape");
+        await expect(composer).toBeFocused();
+      }
+      await trigger.click();
       await expect(search).toBeVisible();
       await search.fill("Distinctive design");
       await expect(page.getByRole("option")).toHaveCount(1);
@@ -66,11 +74,27 @@ for (const compact of [false, true]) {
       await trigger.click();
       await search.fill("session");
       await expect(page.getByRole("option")).toHaveCount(2);
+      const beforeRepeat = await search.getAttribute("aria-activedescendant");
+      await search.press("Alt+Shift+k");
+      await expect(search).toHaveValue("session");
+      await expect(search).toHaveAttribute("aria-activedescendant", beforeRepeat!);
+      // Modified arrows belong to text selection, in both desktop and compact frames.
+      const highlighted = await search.getAttribute("aria-activedescendant");
+      await search.press("Shift+ArrowDown");
+      await expect(search).toHaveAttribute("aria-activedescendant", highlighted!);
       await search.press("ArrowDown");
       await search.press("Tab");
-      const firstResult = page.getByRole("button", { name: /^Distinctive design session,/ });
-      await expect(firstResult).toBeFocused();
-      await firstResult.press("Enter");
+      // Title ranking puts Implementation first for this query. ArrowDown highlights
+      // Distinctive, then native Tab focuses Implementation independently.
+      const focusedResult = page.getByRole("button", { name: /^Implementation session,/ });
+      await expect(focusedResult).toBeFocused();
+      await focusedResult.press("Enter");
+      await expect(search).toHaveCount(0);
+      if (compact) await expect(trigger).toContainText("Implementation session");
+      // Prove cross-pane reveal separately from native focused-row activation.
+      await trigger.click();
+      await search.fill("Distinctive design");
+      await search.press("Enter");
       await expect(search).toHaveCount(0);
       if (compact) await expect(trigger).toContainText("Distinctive design session");
       else {
@@ -106,6 +130,14 @@ test("compact search presents an agent saved in hidden Explorer without moving i
     title: "Main canvas session",
   });
   try {
+    const other = await workspace.client.createAgent({
+      provider: "mock",
+      cwd: workspace.cwd,
+      workspaceId: workspace.workspaceId,
+      title: "Other main session",
+      modeId: "load-test",
+      model: "e2e-fast-stream",
+    });
     const guest = await workspace.client.createAgent({
       provider: "mock",
       cwd: workspace.cwd,
@@ -141,7 +173,7 @@ test("compact search presents an agent saved in hidden Explorer without moving i
       layout = split.layout;
       explorerId = split.paneId;
     }
-    layout = setPaneHiddenInLayout({ layout, paneId: explorerId, hidden: false })!;
+    layout = setPaneHiddenInLayout({ layout, paneId: explorerId, hidden: false }) ?? layout;
     const tabId = collectAllTabs(layout.root).find(
       (tab) => tab.target.kind === "agent" && tab.target.agentId === guest.id,
     )!.tabId;
@@ -163,7 +195,8 @@ test("compact search presents an agent saved in hidden Explorer without moving i
       [key]: explorerId,
     };
     const persisted = WorkspaceLayoutPersistedStateSchema.parse(stored.state);
-    await page.evaluate(
+    // Seed before hydration: resizing the mounted app can persist its old in-memory layout.
+    await page.addInitScript(
       (value) => localStorage.setItem("workspace-layout-state", value),
       JSON.stringify({ ...stored, state: persisted }),
     );
@@ -186,7 +219,76 @@ test("compact search presents an agent saved in hidden Explorer without moving i
     const savedLayout = saved.state.layoutByWorkspace[key];
     expect(savedLayout.focusedPaneId).toBe(mainPaneId);
     expect(findPaneById(savedLayout.root, explorerId)?.tabIds).toContain(tabId);
+    // Navigate outside the tab picker: E was shown over saved A; visit B and return to A.
+    // The transient E override must be discarded during the detour, not merely ignored.
+    for (const [id, title] of [
+      [other.id, "Other main session"],
+      [workspace.agentId, "Main canvas session"],
+    ]) {
+      await page.getByRole("button", { name: "Open menu", exact: true }).click();
+      await page.getByTestId("sidebar-search").click();
+      const center = page.getByTestId("command-center-panel");
+      await expect(center).toBeVisible();
+      await center.getByTestId("command-center-input").fill(title);
+      await center.getByTestId(`command-center-agent-${getServerId()}:${id}`).click();
+      await expect(center).not.toBeVisible();
+      await expect(trigger).toContainText(title);
+    }
+    await page.screenshot({ path: testInfo.outputPath("compact-explorer-no-resurrection.png") });
   } finally {
     await workspace.cleanup();
   }
 });
+
+for (const compact of [false, true]) {
+  test(`keyboard footer carries the query into global session search (${compact ? "compact" : "desktop"})`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: compact ? 390 : 1400, height: 900 });
+    const workspace = await seedMockAgentWorkspace({
+      repoPrefix: "tab-footer-",
+      title: "Footer source session",
+    });
+    try {
+      await openAgentRoute(page, workspace);
+      const trigger = page
+        .getByTestId(compact ? "workspace-tab-switcher-trigger" : "workspace-tab-search-trigger")
+        .first();
+      const invoker = compact ? trigger : page.getByTestId("workspace-header-menu-trigger").first();
+      await invoker.click();
+      if (!compact) {
+        const menuAction = page.getByTestId("workspace-header-switch-tab");
+        await expect(menuAction).toContainText("Switch tab");
+        await menuAction.click();
+      }
+      const search = page.getByRole("combobox", { name: "Search tabs…" });
+      await search.fill("Footer source");
+      const footer = page.getByTestId("workspace-tab-search-sessions");
+      for (
+        let step = 0;
+        step < 8 && !(await footer.evaluate((node) => node === document.activeElement));
+        step++
+      ) {
+        await page.keyboard.press("Tab");
+      }
+      await expect(footer).toBeFocused();
+      await footer.press("Enter");
+      const center = page.getByTestId("command-center-panel");
+      const globalSearch = center.getByTestId("command-center-input");
+      await expect(globalSearch).toHaveValue("Footer source");
+      await expect(globalSearch).toBeFocused();
+      await page.keyboard.type(" session");
+      await expect(globalSearch).toHaveValue("Footer source session");
+      await expect(
+        center.getByTestId(`command-center-agent-${getServerId()}:${workspace.agentId}`),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("footer-query-handoff.png") });
+      await page.keyboard.press("Escape");
+      await expect(center).not.toBeVisible();
+      await expect(invoker).toBeFocused();
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}

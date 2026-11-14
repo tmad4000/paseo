@@ -7,6 +7,7 @@ import { ArrowUpRight, Blocks, Check, Settings2 } from "lucide-react-native";
 import type { AgentSkillOperation, AgentSkillsStatus } from "@getpaseo/protocol/messages";
 import type { TFunction } from "i18next";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -145,14 +146,16 @@ export function AgentSkillsSection({ serverId }: { serverId: string }) {
             </Text>
           </View>
           <View style={styles.actionsRow}>
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={chooseIcon}
-              onPress={handleOpen}
-              disabled={skills.status === null || skills.isWorking}
-              accessibilityLabel={t("settings.host.skills.choose")}
-            />
+            <IconTooltip label={t("settings.host.skills.choose")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={chooseIcon}
+                onPress={handleOpen}
+                disabled={skills.status === null || skills.isWorking}
+                accessibilityLabel={t("settings.host.skills.choose")}
+              />
+            </IconTooltip>
             {hasSelected ? (
               <SkillsActions
                 state={state}

@@ -40,3 +40,12 @@ describe("keyboard-shortcuts-store", () => {
     expect(useKeyboardShortcutsStore.getState().capturingShortcut).toBe(true);
   });
 });
+
+it("carries an initial query into the command center without leaking it into the next open", () => {
+  const store = useKeyboardShortcutsStore.getState();
+  store.setCommandCenterOpen(true, null, "release notes");
+  expect(useKeyboardShortcutsStore.getState().commandCenterInitialQuery).toBe("release notes");
+  store.setCommandCenterOpen(false);
+  store.setCommandCenterOpen(true);
+  expect(useKeyboardShortcutsStore.getState().commandCenterInitialQuery).toBe("");
+});

@@ -16,6 +16,8 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { iconButtonChromeStyle } from "@/components/ui/icon-button-chrome";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
+import { setCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import { isWeb } from "@/constants/platform";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
@@ -32,6 +34,7 @@ import { collectWorkspaceTabSearchEntries, type WorkspaceTabSearchEntry } from "
 import { filterAndRankComboboxOptions } from "@/components/ui/combobox-options";
 import type { Theme } from "@/styles/theme";
 
+const actionDataSet = { comboboxAction: "true" };
 const ThemedSearch = withUnistyles(Search);
 const mutedColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -122,8 +125,9 @@ export function WorkspaceTabSearchPicker({
     });
   }, []);
   const openPicker = useCallback((keyboard = false) => {
+    // Repeated invocations keep the current query/highlight, including through live updates.
     setKeyboardInvocation(keyboard);
-    Keyboard.dismiss();
+    if (!keyboard) Keyboard.dismiss();
     setOpen(true);
   }, []);
   useEffect(() => {
@@ -239,6 +243,19 @@ export function WorkspaceTabSearchPicker({
     },
     [onSelect, workspaceKey],
   );
+  const searchSessions = useCallback(() => {
+    const initialQuery = query;
+    setOpen(false);
+    const openCenter = () => {
+      if (isWeb)
+        setCommandCenterFocusRestoreElement(
+          document.activeElement instanceof HTMLElement ? document.activeElement : null,
+        );
+      useKeyboardShortcutsStore.getState().setCommandCenterOpen(true, null, initialQuery);
+    };
+    if (isWeb) requestAnimationFrame(openCenter);
+    else openCenter();
+  }, [query]);
   const label = t("workspace.tabs.search.action");
   const triggerState = useMemo(() => ({ expanded: open }), [open]);
   const handleTriggerPress = useCallback(() => openPicker(), [openPicker]);
@@ -255,12 +272,17 @@ export function WorkspaceTabSearchPicker({
         {!compactTrigger ? (
           <Text style={styles.title}>{t("workspace.tabs.search.title")}</Text>
         ) : null}
+        {shortcutKeys ? (
+          <View style={styles.shortcutHint}>
+            <Shortcut chord={shortcutKeys} />
+          </View>
+        ) : null}
         <Text style={styles.context} accessibilityLiveRegion="polite">
           {workspaceName} · {t("workspace.tabs.search.results", { count: visibleCount })}
         </Text>
       </View>
     ),
-    [compactTrigger, t, visibleCount, workspaceName],
+    [compactTrigger, shortcutKeys, t, visibleCount, workspaceName],
   );
   const trigger = (
     <Pressable
@@ -289,6 +311,24 @@ export function WorkspaceTabSearchPicker({
         </TooltipContent>
       </Tooltip>
     );
+  const broaderSearchFooter = useMemo(
+    () => (
+      <Pressable
+        accessibilityRole="button"
+        testID="workspace-tab-search-sessions"
+        dataSet={actionDataSet}
+        onPress={searchSessions}
+        style={styles.broaderSearch}
+      >
+        <Text style={styles.broaderSearchLabel}>
+          {t("workspace.tabs.search.sessions", {
+            defaultValue: "Search sessions and workspaces…",
+          })}
+        </Text>
+      </Pressable>
+    ),
+    [searchSessions, t],
+  );
   return (
     <View>
       {triggerNode}
@@ -320,6 +360,7 @@ export function WorkspaceTabSearchPicker({
           hasUnresolvedTitles ? t("workspace.tabs.loading") : t("workspace.tabs.search.empty")
         }
         stickyHeader={summary}
+        footer={broaderSearchFooter}
         desktopMinWidth={440}
         desktopPreventInitialFlash
         preserveActiveOption
@@ -331,6 +372,9 @@ export function WorkspaceTabSearchPicker({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  broaderSearch: { minHeight: 44, justifyContent: "center", paddingHorizontal: theme.spacing[3] },
+  broaderSearchLabel: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  shortcutHint: { position: "absolute", top: theme.spacing[3], right: theme.spacing[3] },
   keyboardAnchor: { position: "absolute", top: 8, right: 8, width: 1, height: 1 },
   compactTrigger: {
     minHeight: 44,

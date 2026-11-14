@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "最初のメッセージ",
     loading: "最初のメッセージを読み込み中…",
@@ -341,6 +342,7 @@ export const ja: TranslationResources = {
       groupInOneList: "チャットを1つのリストで表示",
       showAllSessions: "すべてのセッションを表示",
       groupAsSessions: "チャットをセッションとして表示",
+      groupAsTabs: "サイドバーに開いているタブを表示",
       modelGroupLabel: "モデル",
       modelSearchKeywords: "モデルを切り替え モデルを変更 モデルを設定 モデルを選択",
       thinkingGroupLabel: "思考",
@@ -472,6 +474,10 @@ export const ja: TranslationResources = {
       queueEditFailed: "キューのメッセージを編集できませんでした",
       steerRequiresUpdatedHost:
         "実行中のターンを中断せずに誘導するには、この Paseo ホストを更新してください。",
+      steerRefusedStillQueued:
+        "エージェントは現在ターンの途中でメッセージを受け取れません。メッセージはキューに残り、ターン終了時に送信されます。",
+      queuedOutcomeUnknown:
+        "このメッセージがエージェントに届いたか Paseo で確認できなかったため、自動では再送しません。エージェントがアイドルになってから「今すぐ送信」をもう一度試すか、エージェントを再起動してください。",
       failedToCreateAgent: "エージェントの作成に失敗しました",
       noHostSelected: "ホストが選択されていません",
       initialPromptRequired: "初期プロンプトが必要です",
@@ -547,6 +553,16 @@ export const ja: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "このエージェントは利用上限に達しました",
+      description:
+        "別のエージェントを選択してください。同じワークスペースにこのチャットの履歴を含む継続用の下書きを作成します。確認して送信すると再開します。",
+      chooseAnother: "引き継ぎ先には別のプロバイダーを選択してください。",
+      prepare: "引き継ぎを準備",
+      preparing: "準備中…",
+      noAlternatives:
+        "このホストで利用できる他のプロバイダーはありません。ホスト設定で有効にするか、利用上限のリセットをお待ちください。",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -908,6 +924,7 @@ export const ja: TranslationResources = {
       reply: "返信",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
+      forkInSplitPane: "分割ペインでフォーク",
       forkInNewWorkspace: "新しいワークスペースにフォーク",
       forkUnavailable: "これを使用するにはホストを更新してください。",
       forkMissingWorkspace: "このエージェントはワークスペース内にありません。",
@@ -1008,6 +1025,7 @@ export const ja: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "ワークスペースを読み込み中",
       connecting: "接続中",
@@ -1188,6 +1206,12 @@ export const ja: TranslationResources = {
       loading: "読み込み中...",
       modified: "未保存の変更",
       newActivity: "新しいアクティビティ",
+      seenNotRead: "表示済み・未読",
+      agentRunning: "エージェント実行中",
+      needsInput: "入力が必要",
+      readLayerUnread: "未読",
+      seenLayerNotSeen: "最後のアクティビティ以降未表示",
+      seenLayerSeen: "表示済み",
       loadingAgentTitle: "エージェントタイトルを読み込み中",
       fallback: {
         newAgent: "新しいエージェント",
@@ -1261,6 +1285,9 @@ export const ja: TranslationResources = {
         splitDown: "下にペインを分割",
         splitRightWithSession: "セッションを右に分割表示…",
         splitDownWithSession: "セッションを下に分割表示…",
+        dropSessionOtherHost:
+          "ここにドロップできるのはこのホストのセッションだけです。複数のホストを並べるにはビューを使ってください。",
+        dropSessionNoSession: "このワークスペースには開くセッションがありません。",
         changes: "変更",
         files: "ファイル",
         pullRequest: "プルリクエスト",
@@ -1712,9 +1739,14 @@ export const ja: TranslationResources = {
   },
   sidebar: {
     reviewActions: "{{title}} のレビュー操作",
+    needsInputSessions: "入力が必要 ({{count}})",
+    needsInputSince: "{{time}} から入力が必要",
+    sessionActions: "{{title}} のセッション操作",
     reviewSessions: "レビュー ({{count}})",
     openTabs_one: "{{count}} 個の開いているタブ",
     openTabs: "{{count}} 個の開いているタブ",
+    agentTasks: "エージェントのタスク: {{total}} 件中 {{completed}} 件完了",
+    agentActiveTask: "実行中: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1837,6 +1869,7 @@ export const ja: TranslationResources = {
         status: "ステータス",
         list: "1つのリスト",
         sessions: "セッション",
+        tabs: "タブ",
         labels: "ラベル",
       },
       titleSource: {
@@ -1955,6 +1988,14 @@ export const ja: TranslationResources = {
       status: {
         serviceRunning: "サービス {{name}} 実行中",
         serviceUnhealthy: "サービス {{name}} 異常",
+        indicator: {
+          loading: "起動中",
+          running: "実行中：エージェントが動作しています",
+          needs_input: "対応が必要：エージェントが許可または回答を待っています",
+          attention: "完了：未読の新しい出力があります",
+          failed: "エラー：エージェントがエラーで停止しました",
+          done: "アイドル：新着なし",
+        },
         creating: "作成中...",
       },
       checks: {
@@ -1968,6 +2009,7 @@ export const ja: TranslationResources = {
       actions: {
         markAsRead: "既読にする",
         markAsReadNamed: "{{name}} を既読にする",
+        markAsReadHint: "既読にする：このワークスペースの完了/エラー表示を消します",
         menu: "ワークスペースアクション",
         newWorkspace: "新しいワークスペース",
         showMore: "さらに表示",
@@ -2981,6 +3023,13 @@ export const ja: TranslationResources = {
         section: "既読状態",
         label: "チャットを開いたときに既読にする",
         description: "オフの場合、既読にするかメッセージを送信するまでチャットは未読のままです",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "タブ",
+        label: "最近のアクティビティでタブを並べ替える",
+        description:
+          "オンにすると、最新のアクティビティがあるチャットがタブ列の先頭に移動します。オフにすると、タブは配置した場所に留まります",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

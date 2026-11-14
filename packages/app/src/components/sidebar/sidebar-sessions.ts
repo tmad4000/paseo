@@ -22,6 +22,8 @@ export interface SidebarSessionRow {
   projectName: string;
   workspaceName: string;
   statusBucket: SidebarStateBucket;
+  /** Working right now, even when `statusBucket` is needs_input, so both marks can show. */
+  running: boolean;
   /** The sort's clock: when the row last moved under `recent`/`user`/`assistant`, or its start. */
   sortAt: Date;
   /** What the trailing timestamp shows: the start date under `started`, else last activity. */
@@ -91,6 +93,7 @@ export function buildSidebarSessionRows(input: BuildSidebarSessionRowsInput): Si
           labels: agent.labels,
           attentionReason: agent.attentionReason,
         }),
+        running: workspaceAgentStatus(agent) === "running",
         sortAt,
         displayAt: input.sortMode === "started" ? agent.createdAt : clocks.conversation,
         workspaceIndex: workspace.index,

@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Mic, MicOff, PhoneOff, Square } from "lucide-react-native";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { FOOTER_HEIGHT } from "@/constants/layout";
 import { useVoiceTelemetry } from "@/contexts/voice-context";
 import type { Theme } from "@/styles/theme";
@@ -170,53 +171,65 @@ export function RealtimeVoiceOverlay({
 
         <View style={styles.actionsContainer}>
           {isAgentRunning && onCancelAgent && (
-            <Pressable
-              onPress={onCancelAgent}
-              disabled={isCancellingAgent}
-              accessibilityRole="button"
-              accessibilityLabel={t("realtimeVoice.actions.interruptAgent", {
-                defaultValue: "Interrupt agent",
-              })}
-              style={stopButtonStyle}
+            <IconTooltip
+              label={t("realtimeVoice.actions.interruptAgent", { defaultValue: "Interrupt agent" })}
+              wrap={false}
             >
-              {isCancellingAgent ? (
-                <ThemedSpinner size="small" uniProps={spinnerProps} />
-              ) : (
-                <ThemedSquare uniProps={squareProps} strokeWidth={2.5} />
-              )}
-            </Pressable>
+              <Pressable
+                onPress={onCancelAgent}
+                disabled={isCancellingAgent}
+                accessibilityRole="button"
+                accessibilityLabel={t("realtimeVoice.actions.interruptAgent", {
+                  defaultValue: "Interrupt agent",
+                })}
+                style={stopButtonStyle}
+              >
+                {isCancellingAgent ? (
+                  <ThemedSpinner size="small" uniProps={spinnerProps} />
+                ) : (
+                  <ThemedSquare uniProps={squareProps} strokeWidth={2.5} />
+                )}
+              </Pressable>
+            </IconTooltip>
           )}
 
-          <Pressable
-            onPress={onToggleMute}
-            disabled={isSwitching || isMuteSwitching}
-            accessibilityState={muteAccessibilityState}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isMuted ? t("realtimeVoice.actions.unmute") : t("realtimeVoice.actions.mute")
-            }
-            style={muteButtonStyle}
+          <IconTooltip
+            label={isMuted ? t("realtimeVoice.actions.unmute") : t("realtimeVoice.actions.mute")}
+            wrap={false}
           >
-            {isMuted ? (
-              <ThemedMicOff uniProps={whiteIconProps} strokeWidth={2.5} />
-            ) : (
-              <ThemedMic uniProps={foregroundIconProps} strokeWidth={2.5} />
-            )}
-          </Pressable>
+            <Pressable
+              onPress={onToggleMute}
+              disabled={isSwitching || isMuteSwitching}
+              accessibilityState={muteAccessibilityState}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isMuted ? t("realtimeVoice.actions.unmute") : t("realtimeVoice.actions.mute")
+              }
+              style={muteButtonStyle}
+            >
+              {isMuted ? (
+                <ThemedMicOff uniProps={whiteIconProps} strokeWidth={2.5} />
+              ) : (
+                <ThemedMic uniProps={foregroundIconProps} strokeWidth={2.5} />
+              )}
+            </Pressable>
+          </IconTooltip>
 
-          <Pressable
-            onPress={onStop}
-            disabled={isSwitching}
-            accessibilityRole="button"
-            accessibilityLabel={t("realtimeVoice.actions.stop")}
-            style={stopButtonStyle}
-          >
-            {isSwitching ? (
-              <ThemedSpinner size="small" uniProps={spinnerProps} />
-            ) : (
-              <ThemedPhoneOff uniProps={whiteIconProps} strokeWidth={2.5} />
-            )}
-          </Pressable>
+          <IconTooltip label={t("realtimeVoice.actions.stop")} wrap={false}>
+            <Pressable
+              onPress={onStop}
+              disabled={isSwitching}
+              accessibilityRole="button"
+              accessibilityLabel={t("realtimeVoice.actions.stop")}
+              style={stopButtonStyle}
+            >
+              {isSwitching ? (
+                <ThemedSpinner size="small" uniProps={spinnerProps} />
+              ) : (
+                <ThemedPhoneOff uniProps={whiteIconProps} strokeWidth={2.5} />
+              )}
+            </Pressable>
+          </IconTooltip>
         </View>
       </View>
     </View>

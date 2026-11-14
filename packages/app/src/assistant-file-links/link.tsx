@@ -1,3 +1,5 @@
+import { isSessionLink } from "@/navigation/session-link";
+import { SessionMarkdownLink } from "@/navigation/session-markdown-link";
 import { useMemo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -25,6 +27,26 @@ const MARKDOWN_CODE_LINK_DATASET = {
 } as const;
 
 export function AssistantMarkdownLink({
+  source,
+  style,
+  monoSurface,
+  children,
+}: AssistantMarkdownLinkProps) {
+  if (isSessionLink(source.href)) {
+    return (
+      <SessionMarkdownLink href={source.href} title={source.title} style={style}>
+        {children}
+      </SessionMarkdownLink>
+    );
+  }
+  return (
+    <AssistantFileMarkdownLink source={source} style={style} monoSurface={monoSurface}>
+      {children}
+    </AssistantFileMarkdownLink>
+  );
+}
+
+function AssistantFileMarkdownLink({
   source,
   style,
   monoSurface,

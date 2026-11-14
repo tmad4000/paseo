@@ -248,7 +248,7 @@ buildNpmPackage {
   meta = {
     description = "Paseo desktop app (Electron wrapper)";
     homepage = "https://github.com/getpaseo/paseo";
-    license = lib.licenses.agpl3Plus;
+    license = lib.licenses.asl20;
     mainProgram = "paseo-desktop";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };

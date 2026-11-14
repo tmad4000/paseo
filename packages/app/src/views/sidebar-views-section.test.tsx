@@ -9,6 +9,11 @@ const navigation = vi.hoisted(() => ({
   events: [] as string[],
   navigate: vi.fn((route: string) => navigation.events.push(route)),
 }));
+// Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
+vi.mock("@/components/ui/icon-tooltip", () => ({
+  IconTooltip: ({ children }: { children: unknown }) => children,
+}));
+
 vi.mock("expo-router", () => ({
   router: { navigate: navigation.navigate, push: vi.fn() },
   usePathname: () => navigation.pathname,

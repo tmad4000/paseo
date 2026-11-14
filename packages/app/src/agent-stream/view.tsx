@@ -5,6 +5,7 @@ import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { MessageReplyScope } from "@/components/reply/composer-quote";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import React, {
   forwardRef,
   memo,
@@ -45,6 +46,7 @@ import {
   MessageOuterSpacingProvider,
   type InlinePathTarget,
 } from "@/components/message";
+import { SelectableLinkText } from "@/components/selectable-link-text";
 import { PlanCard } from "@/components/plan-card";
 import { isUnreconciledLocalUserMessage, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
@@ -578,6 +580,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agent: context,
         workspaceId: context.workspaceId,
         target,
+        layoutWorkspaceId: threadsHost?.layoutWorkspaceId,
       });
     });
 
@@ -1293,15 +1296,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             {(!isNearBottom || isTimelineDetached) && (
               <View style={scrollToBottomContainerStyle} pointerEvents="box-none">
                 <Animated.View entering={scrollIndicatorFadeIn} exiting={scrollIndicatorFadeOut}>
-                  <Pressable
-                    style={stylesheet.scrollToBottomButton}
+                  <ScrollToBottomButton
+                    label={t("agentStream.scrollToBottom")}
                     onPress={scrollToBottom}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("agentStream.scrollToBottom")}
-                    testID="scroll-to-bottom-button"
-                  >
-                    <ChevronDown size={24} color={stylesheet.scrollToBottomIcon.color} />
-                  </Pressable>
+                  />
                 </Animated.View>
               </View>
             )}
@@ -1311,6 +1309,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
   },
 );
+
+function ScrollToBottomButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        style={stylesheet.scrollToBottomButton}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        testID="scroll-to-bottom-button"
+      >
+        <ChevronDown size={24} color={stylesheet.scrollToBottomIcon.color} />
+      </Pressable>
+    </IconTooltip>
+  );
+}
 
 function agentCapabilityFlagsEqual(
   left: AgentCapabilityFlags | undefined,
@@ -1747,9 +1761,11 @@ function PermissionRequestCard({
 
   return (
     <View style={permissionStyles.container}>
-      <Text style={permissionStyles.title}>{title}</Text>
+      <SelectableLinkText style={permissionStyles.title}>{title}</SelectableLinkText>
 
-      {description ? <Text style={permissionStyles.description}>{description}</Text> : null}
+      {description ? (
+        <SelectableLinkText style={permissionStyles.description}>{description}</SelectableLinkText>
+      ) : null}
 
       {planMarkdown ? (
         <PlanCard

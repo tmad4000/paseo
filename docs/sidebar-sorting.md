@@ -54,6 +54,42 @@ In messages tier and find-or-start are unchanged. A row opens its chat in its ho
 does not mark it read; the row's check and menu do that, as review rows do. Keyboard workspace
 shortcuts number only the pinned workspaces in this mode.
 
+## Tabs grouping
+
+Tabs grouping lists every open tab (chats, terminals, files, browsers, plugin panels) instead of
+workspaces below the pinned section, in one headerless list across hosts. Rows come from this
+device's tab layouts (`packages/app/src/components/sidebar/sidebar-tabs.ts`), so the order is the
+sidebar's workspace order under the chosen sort, then each workspace's pane and tab order. Empty
+new-tab placeholders are left out. A row opens its workspace with that tab focused.
+
+Tab layouts live on the device, not the host. A workspace never opened on this device has no
+layout, so its unarchived top-level chats stand in for its tabs until you open it. Listing the
+tabs another device has open needs host-side layout sync, which does not exist yet.
+
+The find field keeps the workspaces it would keep in the other modes (names and tab titles) and
+lists all their tabs. Non-chat tab titles come from each panel's descriptor hook, which a pure
+builder cannot call, so the filter does not narrow to single tabs.
+
+## Sessions needing input
+
+Workspace rows expose **Needs input (N)** with up to three exact session titles and an
+expansion control for the rest. Collapse is saved per host and workspace on this device.
+The preview appears in project, status and one-list grouping, including pinned workspaces.
+Search keeps its title-match rows instead of the preview.
+
+Permission requests and manual Needs input markers both count, including blocked child
+sessions that normally live under their parent. Selecting a row opens that exact session;
+it does not approve a permission or clear its Needs input marker. Resolved requests leave
+the preview as the host directory updates. Review previews keep their separate collapse state.
+
+While any of its sessions needs input, a workspace row's trailing time shows when the newest one
+started needing input instead of general activity, in every sort and grouping. Each preview row
+shows its own compact time, and rows sort newest first. A hover tooltip and the accessibility
+label read **Needing input since …**. A permission edge's attention timestamp wins; otherwise the
+time is the session's last activity, which the host stamps on the permission request or manual
+marker itself and which stays put while the session waits. Before the session directory loads,
+the host's needs-input bucket entry time stands in. Other rows keep the time described above.
+
 ## Reviewing sessions
 
 Workspace sorting and tab order are separate. The horizontal tab strip keeps its saved pane order;

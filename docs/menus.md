@@ -211,6 +211,7 @@ compact sheets are unchanged. Use a plain View to track mouse movement and never
 The New Tab (+) button uses the same preview for its split choices
 (`screens/workspace/new-tab-split-preview.tsx`). Because its click opens a different menu, the
 preview is a second, context-only menu around the button: hover, long-press and right-click open
-the split choices, and a press still opens New Tab. It attaches `useHoverSafeZone` only while the
+the split choices, and a press still opens New Tab. The New Tab menu itself also ends with
+Split pane right / Split pane down (`workspace-new-tab-menu.tsx`), so a plain click can split too. It attaches `useHoverSafeZone` only while the
 preview is open, since every pane renders a + button, and waits for the pointer to leave before
 offering again after a choice.

@@ -10,6 +10,7 @@ import {
   AgentFeatureSchema,
   AgentStatusSchema,
   AgentMessageActivitySchema,
+  AgentTaskItemPayloadSchema,
 } from "../messages.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
@@ -86,6 +87,8 @@ const STORED_AGENT_SCHEMA = z.object({
   owner: AgentOwnerSchema.optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
   companionEntries: z.array(CompanionEntrySchema).optional(),
+  /** The agent's latest task list; see agent-task-snapshot.ts. */
+  tasks: z.array(AgentTaskItemPayloadSchema).optional(),
   // Stream tags pinned in this chat. Not on the live agent: snapshots carry the stored value forward.
   pinnedStreamTags: z.array(z.string()).optional(),
 });
@@ -107,6 +110,16 @@ export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
   return STORED_AGENT_SCHEMA.parse(value);
 }
 
+export interface AgentSnapshotOptions {
+  title?: string | null;
+  internal?: boolean;
+  workspaceId?: string;
+}
+
+export interface AgentStorageOptions {
+  writeRecord?: (filePath: string, record: StoredAgentRecord) => Promise<void>;
+}
+
 export class AgentStorage {
   private cache: Map<string, StoredAgentRecord> = new Map();
   private pathById: Map<string, string> = new Map();
@@ -119,9 +132,11 @@ export class AgentStorage {
   private baseDir: string;
   private loadPromise: Promise<StoredAgentRecord[]> | null = null;
   private logger: Logger;
+  private readonly writeRecordFile: (filePath: string, record: StoredAgentRecord) => Promise<void>;
 
-  constructor(baseDir: string, logger: Logger) {
+  constructor(baseDir: string, logger: Logger, options?: AgentStorageOptions) {
     this.baseDir = baseDir;
+    this.writeRecordFile = options?.writeRecord ?? writeJsonFileAtomic;
     this.logger = logger.child({ module: "agent", component: "agent-storage" });
   }
 
@@ -131,12 +146,13 @@ export class AgentStorage {
 
   async list(): Promise<StoredAgentRecord[]> {
     await this.load();
-    return Array.from(this.cache.values());
+    return Array.from(this.cache.values(), (record) => ({ ...record }));
   }
 
   async get(agentId: string): Promise<StoredAgentRecord | null> {
     await this.load();
-    return this.cache.get(agentId) ?? null;
+    const record = this.cache.get(agentId);
+    return record ? { ...record } : null;
   }
 
   async listByProviderSession(
@@ -144,28 +160,34 @@ export class AgentStorage {
     providerHandleId: string,
   ): Promise<StoredAgentRecord[]> {
     await this.load();
-    return Array.from(this.cache.values()).filter(
-      (record) =>
-        record.persistence?.provider === provider &&
-        (record.persistence.sessionId === providerHandleId ||
-          record.persistence.nativeHandle === providerHandleId),
-    );
+    return Array.from(this.cache.values())
+      .filter(
+        (record) =>
+          record.persistence?.provider === provider &&
+          (record.persistence.sessionId === providerHandleId ||
+            record.persistence.nativeHandle === providerHandleId),
+      )
+      .map((record) => Object.assign({}, record));
   }
 
   async listByWorkspace(workspaceId: string): Promise<StoredAgentRecord[]> {
     await this.load();
-    return Array.from(this.cache.values()).filter((record) => record.workspaceId === workspaceId);
+    return Array.from(this.cache.values())
+      .filter((record) => record.workspaceId === workspaceId)
+      .map((record) => Object.assign({}, record));
   }
 
   async findByDaemonExecution(owner: DaemonAgentOwner): Promise<StoredAgentRecord | null> {
     await this.load();
     const agentId = this.daemonAgentIdsByExecution.get(daemonExecutionKey(owner));
-    return agentId ? (this.cache.get(agentId) ?? null) : null;
+    const record = agentId ? this.cache.get(agentId) : null;
+    return record ? { ...record } : null;
   }
 
   async upsert(record: StoredAgentRecord): Promise<void> {
+    const nextRecord = { ...record };
     await this.load();
-    await this.queueRecordWrite(record);
+    await this.queueRecordWrite(nextRecord);
   }
 
   private queueRecordWrite(record: StoredAgentRecord): Promise<void> {
@@ -177,15 +199,17 @@ export class AgentStorage {
     mutate: (existing: StoredAgentRecord | null) => StoredAgentRecord,
   ): Promise<void> {
     const prev = this.pendingWrites.get(agentId) ?? Promise.resolve();
-    const next = prev.then(async () => {
-      if (this.deleting.has(agentId)) {
-        return undefined;
-      }
+    const next = prev
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.deleting.has(agentId)) {
+          return undefined;
+        }
 
-      const record = mutate(this.cache.get(agentId) ?? null);
-      await this.writeRecord(record);
-      return undefined;
-    });
+        const record = mutate(this.cache.get(agentId) ?? null);
+        await this.writeRecord(record);
+        return undefined;
+      });
 
     const tracked = next.finally(() => {
       if (this.pendingWrites.get(agentId) === tracked) {
@@ -198,11 +222,12 @@ export class AgentStorage {
   }
 
   private async writeRecord(record: StoredAgentRecord): Promise<void> {
-    const agentId = record.id;
-    const nextPath = this.buildRecordPath(record);
+    const committed = { ...record };
+    const agentId = committed.id;
+    const nextPath = this.buildRecordPath(committed);
     const previousPath = this.pathById.get(agentId);
 
-    await writeJsonFileAtomic(nextPath, record);
+    await this.writeRecordFile(nextPath, committed);
     this.addIndexedPath(agentId, nextPath);
 
     if (previousPath && previousPath !== nextPath) {
@@ -214,8 +239,8 @@ export class AgentStorage {
       this.removeIndexedPath(agentId, previousPath);
     }
 
-    this.cache.set(agentId, record);
-    this.indexOwner(record);
+    this.cache.set(agentId, committed);
+    this.indexOwner(committed);
     this.pathById.set(agentId, nextPath);
   }
 
@@ -250,10 +275,8 @@ export class AgentStorage {
     this.pathsById.delete(agentId);
   }
 
-  async applySnapshot(
-    agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
-  ): Promise<void> {
+  async applySnapshot(agent: ManagedAgent, options?: AgentSnapshotOptions): Promise<void> {
+    const workspaceId = options?.workspaceId;
     await this.load();
     const hasTitleOverride =
       options !== undefined && Object.prototype.hasOwnProperty.call(options, "title");
@@ -272,6 +295,7 @@ export class AgentStorage {
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
       }
+      record.workspaceId = workspaceId ?? existing?.workspaceId ?? record.workspaceId;
       if (existing?.pinnedStreamTags) record.pinnedStreamTags = existing.pinnedStreamTags;
       return record;
     });
@@ -294,12 +318,10 @@ export class AgentStorage {
 
   async setTitle(agentId: string, title: string): Promise<void> {
     await this.load();
-    await this.waitForPendingWrite(agentId);
-    const record = await this.get(agentId);
-    if (!record) {
-      throw new Error(`Agent ${agentId} not found`);
-    }
-    await this.upsert({ ...record, title });
+    await this.queueRecordMutation(agentId, (existing) => {
+      if (!existing) throw new Error(`Agent ${agentId} not found`);
+      return { ...existing, title };
+    });
   }
 
   async flush(): Promise<void> {
@@ -449,10 +471,6 @@ export class AgentStorage {
       this.daemonAgentIdsByExecution.delete(key);
     }
     this.daemonExecutionKeysByAgentId.delete(agentId);
-  }
-
-  private async waitForPendingWrite(agentId: string): Promise<void> {
-    await (this.pendingWrites.get(agentId) ?? Promise.resolve()).catch(() => undefined);
   }
 }
 

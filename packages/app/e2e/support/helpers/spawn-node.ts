@@ -28,7 +28,7 @@ export function spawnTsx(entrypoint: string, args: string[], options: SpawnOptio
  * grandchildren holding the listening port and the next run fails to bind.
  * `taskkill /T` walks the tree; POSIX keeps the SIGTERM-then-SIGKILL ladder.
  */
-export async function killProcessTree(child: ChildProcess | null): Promise<void> {
+export async function killProcessTree(child: ChildProcess | null, graceMs = 5_000): Promise<void> {
   if (!child || hasExited(child)) return;
   const exited = once(child, "exit").then(() => undefined);
 
@@ -61,7 +61,7 @@ export async function killProcessTree(child: ChildProcess | null): Promise<void>
   }
 
   child.kill("SIGTERM");
-  if (await waitForExitOrTimeout(exited, 5_000)) return;
+  if (await waitForExitOrTimeout(exited, graceMs)) return;
 
   child.kill("SIGKILL");
   if (!(await waitForExitOrTimeout(exited, 5_000))) {

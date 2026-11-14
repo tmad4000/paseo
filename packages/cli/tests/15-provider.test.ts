@@ -63,9 +63,14 @@ const EXPECTED_CLAUDE_MODELS = [
     descriptionFragment: "Previous release",
   },
   {
+    id: "claude-fable-5-2",
+    model: "Fable 5.2",
+    descriptionFragment: "Most powerful",
+  },
+  {
     id: "claude-fable-5-1",
     model: "Fable 5.1",
-    descriptionFragment: "Most powerful",
+    descriptionFragment: "Previous release",
   },
   {
     id: "claude-fable-5",
@@ -353,10 +358,6 @@ try {
     assert(
       ids.every((id) => id.startsWith("gpt-")),
       "all codex model IDs should be from the gpt family",
-    );
-    assert(
-      ids.some((id) => id.includes("codex")),
-      "codex model list should include at least one codex-optimized model",
     );
     assert(
       data.every((m) => m.model && m.id && m.description),

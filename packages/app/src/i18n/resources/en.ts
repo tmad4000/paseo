@@ -1,4 +1,22 @@
 export const en = {
+  sessionLinks: {
+    open: "Open session",
+    openBeside: "Open session beside",
+    openWindow: "Open session in new window",
+    windowUnavailable: "New window unavailable here — use Open session",
+    copy: "Copy link",
+    errors: {
+      invalid: "This session link is invalid.",
+      unknownHost: "This session link points to a host that is not saved here.",
+      unavailable: "Unable to open this session. Check the host connection and try again.",
+      notFound: "This session was not found on the linked host.",
+      sideUnavailable:
+        "Open beside is unavailable for this session. Use Open session or, when supported, Open session in new window.",
+      windowUnavailable:
+        "New windows are unavailable here. Use Open session or Open session beside.",
+      copy: "Unable to copy this link.",
+    },
+  },
   firstMessage: {
     title: "First message",
     loading: "Loading first message…",
@@ -334,6 +352,7 @@ export const en = {
       groupInOneList: "Show chats in one list",
       showAllSessions: "Show all sessions",
       groupAsSessions: "Show chats as sessions",
+      groupAsTabs: "Show open tabs in the sidebar",
       modelGroupLabel: "Model",
       modelSearchKeywords: "switch model change model set model select model",
       thinkingGroupLabel: "Thinking",
@@ -463,6 +482,10 @@ export const en = {
       queueEditFailed: "Failed to edit queued message",
       steerRequiresUpdatedHost:
         "Update this Paseo host to steer without interrupting its active turn.",
+      steerRefusedStillQueued:
+        "The agent can't take a message mid-turn right now. It's still queued and will send when the turn ends.",
+      queuedOutcomeUnknown:
+        "Paseo couldn't confirm whether this message reached the agent, so it won't resend it on its own. Try Send now again once the agent is idle, or restart the agent.",
       failedToCreateAgent: "Failed to create agent",
       noHostSelected: "No host selected",
       initialPromptRequired: "Initial prompt is required",
@@ -537,6 +560,16 @@ export const en = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "This agent reached its limit",
+      description:
+        "Choose another agent. A continuation draft will include this chat’s history in the same workspace; review it, then send to continue.",
+      chooseAnother: "Choose a different provider for this handoff.",
+      prepare: "Prepare handoff",
+      preparing: "Preparing…",
+      noAlternatives:
+        "No other providers are available on this host. Enable one in host settings, or wait for this agent’s limit to reset.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -899,6 +932,7 @@ export const en = {
       reply: "Reply",
       forkMenu: "Fork chat from here",
       forkInNewTab: "Fork in a new tab",
+      forkInSplitPane: "Fork in a split pane",
       forkInNewWorkspace: "Fork in a new workspace",
       forkUnavailable: "Update the host to use this.",
       forkMissingWorkspace: "This agent is not in a workspace.",
@@ -999,6 +1033,20 @@ export const en = {
     },
   },
   workspace: {
+    moveChat: {
+      menu: "Move to workspace…",
+      title: "Move chat",
+      destination: "Destination",
+      asides: "Asides",
+      asidesDescription: "Shared catch-all on this host",
+      newWorkspace: "New workspace…",
+      name: "Workspace name",
+      preserved: "History and the original working directory stay with this chat.",
+      move: "Move chat",
+      moving: "Moving…",
+      moved: "Moved to {{workspace}}",
+      open: "Open chat",
+    },
     route: {
       loading: "Loading workspace",
       connecting: "Connecting",
@@ -1178,6 +1226,12 @@ export const en = {
       loading: "Loading...",
       modified: "Unsaved changes",
       newActivity: "New activity",
+      seenNotRead: "Seen, not read",
+      agentRunning: "Agent running",
+      needsInput: "Needs input",
+      readLayerUnread: "Unread",
+      seenLayerNotSeen: "Not seen since last activity",
+      seenLayerSeen: "Seen",
       loadingAgentTitle: "Loading agent title",
       fallback: {
         newAgent: "New agent",
@@ -1189,8 +1243,8 @@ export const en = {
         workspace: "Workspace",
       },
       search: {
-        action: "Search workspace tabs",
-        title: "Workspace tabs",
+        action: "Switch tab…",
+        title: "Switch tab",
         placeholder: "Search tabs…",
         empty: "No matching tabs",
         pane: "Pane {{number}}",
@@ -1261,6 +1315,9 @@ export const en = {
         splitDown: "Split pane down",
         splitRightWithSession: "Split right with session…",
         splitDownWithSession: "Split down with session…",
+        dropSessionOtherHost:
+          "Only sessions from this host can be dropped here. Use a View to mix hosts.",
+        dropSessionNoSession: "That workspace has no session to open.",
         changes: "Changes",
         files: "Files",
         pullRequest: "Pull request",
@@ -1717,9 +1774,14 @@ export const en = {
   },
   sidebar: {
     reviewActions: "Review actions for {{title}}",
+    needsInputSessions: "Needs input ({{count}})",
+    needsInputSince: "Needing input since {{time}}",
+    sessionActions: "Session actions for {{title}}",
     reviewSessions: "Review ({{count}})",
     openTabs_one: "{{count}} open tab",
     openTabs: "{{count}} open tabs",
+    agentTasks: "Agent tasks: {{completed}} of {{total}} done",
+    agentActiveTask: "Now: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1842,6 +1904,7 @@ export const en = {
         status: "Status",
         list: "One list",
         sessions: "Sessions",
+        tabs: "Tabs",
         labels: "Labels",
       },
       titleSource: {
@@ -1959,6 +2022,14 @@ export const en = {
       status: {
         serviceRunning: "Service {{name}} running",
         serviceUnhealthy: "Service {{name}} unhealthy",
+        indicator: {
+          loading: "Starting up",
+          running: "Working: an agent is running",
+          needs_input: "Needs you: an agent is waiting for permission or an answer",
+          attention: "Finished: new output you haven't read",
+          failed: "Error: an agent stopped with an error",
+          done: "Idle: nothing new",
+        },
         creating: "Creating...",
       },
       checks: {
@@ -1972,6 +2043,7 @@ export const en = {
       actions: {
         markAsRead: "Mark as read",
         markAsReadNamed: "Mark {{name}} as read",
+        markAsReadHint: "Mark as read: clears this workspace's finished/error indicator",
         menu: "Workspace actions",
         newWorkspace: "New workspace",
         showMore: "Show more",
@@ -3114,6 +3186,17 @@ export const en = {
         section: "Read status",
         label: "Mark chats read when opened",
         description: "When off, a chat stays unread until you mark it read or send it a message",
+      },
+      compactTabTitles: {
+        label: "Compact tab titles",
+        description:
+          "Fade long tab titles instead of showing truncation dots. Full titles remain in tooltips.",
+      },
+      sortTabsByActivity: {
+        section: "Tabs",
+        label: "Sort tabs by recent activity",
+        description:
+          "When on, the chat with the latest activity moves to the front of the tab row. When off, tabs stay where you put them",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

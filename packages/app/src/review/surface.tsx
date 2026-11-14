@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import {
   EditingTextInput as TextInput,
   type EditingTextInputHandle,
@@ -74,16 +75,19 @@ export function InlineReviewAddButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const { t } = useTranslation();
+  // Callers position the button through `style`, so it stays the direct layout child.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={t("review.comment.add")}
-      hitSlop={SMALL_ACTION_HIT_SLOP}
-      onPress={onPress}
-      style={[styles.gutterActionVisual, style]}
-    >
-      <ThemedPlus size={16} strokeWidth={2.4} uniProps={accentForegroundIconColorMapping} />
-    </Pressable>
+    <IconTooltip label={t("review.comment.add")} wrap={false}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("review.comment.add")}
+        hitSlop={SMALL_ACTION_HIT_SLOP}
+        onPress={onPress}
+        style={[styles.gutterActionVisual, style]}
+      >
+        <ThemedPlus size={16} strokeWidth={2.4} uniProps={accentForegroundIconColorMapping} />
+      </Pressable>
+    </IconTooltip>
   );
 }
 
@@ -386,26 +390,30 @@ function CommentRow({
         {comment.body}
       </Text>
       <View style={styles.commentActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("review.comment.edit")}
-          testID={`review-comment-edit-${comment.id}`}
-          hitSlop={SMALL_ACTION_HIT_SLOP}
-          onPress={handleEdit}
-          style={iconButtonStyle}
-        >
-          <ThemedPencil size={14} uniProps={foregroundMutedIconColorMapping} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("review.comment.delete")}
-          testID={`review-comment-delete-${comment.id}`}
-          hitSlop={SMALL_ACTION_HIT_SLOP}
-          onPress={handleDelete}
-          style={iconButtonDestructiveStyle}
-        >
-          <ThemedTrash2 size={14} uniProps={destructiveIconColorMapping} />
-        </Pressable>
+        <IconTooltip label={t("review.comment.edit")} wrap={false}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("review.comment.edit")}
+            testID={`review-comment-edit-${comment.id}`}
+            hitSlop={SMALL_ACTION_HIT_SLOP}
+            onPress={handleEdit}
+            style={iconButtonStyle}
+          >
+            <ThemedPencil size={14} uniProps={foregroundMutedIconColorMapping} />
+          </Pressable>
+        </IconTooltip>
+        <IconTooltip label={t("review.comment.delete")} wrap={false}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("review.comment.delete")}
+            testID={`review-comment-delete-${comment.id}`}
+            hitSlop={SMALL_ACTION_HIT_SLOP}
+            onPress={handleDelete}
+            style={iconButtonDestructiveStyle}
+          >
+            <ThemedTrash2 size={14} uniProps={destructiveIconColorMapping} />
+          </Pressable>
+        </IconTooltip>
       </View>
     </View>
   );

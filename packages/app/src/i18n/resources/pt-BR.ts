@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "Primeira mensagem",
     loading: "Carregando a primeira mensagem…",
@@ -342,6 +343,7 @@ export const ptBR: TranslationResources = {
       groupInOneList: "Mostrar chats em uma única lista",
       showAllSessions: "Mostrar todas as sessões",
       groupAsSessions: "Mostrar chats como sessões",
+      groupAsTabs: "Mostrar abas abertas na barra lateral",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "trocar modelo mudar modelo definir modelo selecionar modelo",
       thinkingGroupLabel: "Raciocínio",
@@ -473,6 +475,10 @@ export const ptBR: TranslationResources = {
       queueEditFailed: "Falha ao editar mensagem na fila",
       steerRequiresUpdatedHost:
         "Atualize este host do Paseo para orientar sem interromper a tarefa em andamento.",
+      steerRefusedStillQueued:
+        "O agente não pode receber uma mensagem no meio do turno agora. Ela continua na fila e será enviada quando o turno terminar.",
+      queuedOutcomeUnknown:
+        "O Paseo não conseguiu confirmar se esta mensagem chegou ao agente, então não vai reenviá-la sozinho. Tente Enviar agora de novo quando o agente estiver ocioso ou reinicie o agente.",
       failedToCreateAgent: "Falha ao criar agente",
       noHostSelected: "Nenhum host selecionado",
       initialPromptRequired: "O prompt inicial é obrigatório",
@@ -547,6 +553,16 @@ export const ptBR: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Este agente atingiu o limite",
+      description:
+        "Escolha outro agente. Um rascunho de continuação incluirá o histórico deste chat no mesmo espaço de trabalho; revise e envie para continuar.",
+      chooseAnother: "Escolha outro provedor para esta transferência.",
+      prepare: "Preparar transferência",
+      preparing: "Preparando…",
+      noAlternatives:
+        "Não há outros provedores disponíveis neste host. Ative um nas configurações ou aguarde a redefinição do limite.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -913,6 +929,7 @@ export const ptBR: TranslationResources = {
       reply: "Responder",
       forkMenu: "Bifurcar mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
+      forkInSplitPane: "Bifurcar em um painel dividido",
       forkInNewWorkspace: "Bifurcar em um novo workspace",
       forkUnavailable: "Atualize o host para usar isto.",
       forkMissingWorkspace: "Este agente não está em um workspace.",
@@ -1013,6 +1030,7 @@ export const ptBR: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Carregando workspace",
       connecting: "Conectando",
@@ -1193,6 +1211,12 @@ export const ptBR: TranslationResources = {
       loading: "Carregando...",
       modified: "Alterações não salvas",
       newActivity: "Nova atividade",
+      seenNotRead: "Visto, não lido",
+      agentRunning: "Agente em execução",
+      needsInput: "Precisa de resposta",
+      readLayerUnread: "Não lido",
+      seenLayerNotSeen: "Não visto desde a última atividade",
+      seenLayerSeen: "Visto",
       loadingAgentTitle: "Carregando título do agente",
       fallback: {
         newAgent: "Novo agente",
@@ -1265,6 +1289,9 @@ export const ptBR: TranslationResources = {
         splitDown: "Dividir painel abaixo",
         splitRightWithSession: "Dividir à direita com sessão…",
         splitDownWithSession: "Dividir para baixo com sessão…",
+        dropSessionOtherHost:
+          "Somente sessões deste host podem ser soltas aqui. Use uma visualização para misturar hosts.",
+        dropSessionNoSession: "Esse espaço de trabalho não tem sessão para abrir.",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",
@@ -1731,9 +1758,14 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Ações de revisão para {{title}}",
+    needsInputSessions: "Precisa de intervenção ({{count}})",
+    needsInputSince: "Precisa de intervenção desde {{time}}",
+    sessionActions: "Ações da sessão {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} aba aberta",
     openTabs: "{{count}} abas abertas",
+    agentTasks: "Tarefas do agente: {{completed}} de {{total}} concluídas",
+    agentActiveTask: "Agora: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1856,6 +1888,7 @@ export const ptBR: TranslationResources = {
         status: "Status",
         list: "Lista única",
         sessions: "Sessões",
+        tabs: "Abas",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -1973,6 +2006,14 @@ export const ptBR: TranslationResources = {
       status: {
         serviceRunning: "Serviço {{name}} em execução",
         serviceUnhealthy: "Serviço {{name}} com falha",
+        indicator: {
+          loading: "Iniciando",
+          running: "Trabalhando: um agente está em execução",
+          needs_input: "Precisa de você: um agente aguarda permissão ou resposta",
+          attention: "Concluído: há saída nova não lida",
+          failed: "Erro: um agente parou com um erro",
+          done: "Ocioso: nada novo",
+        },
         creating: "Criando...",
       },
       checks: {
@@ -1986,6 +2027,8 @@ export const ptBR: TranslationResources = {
       actions: {
         markAsRead: "Marcar como lido",
         markAsReadNamed: "Marcar {{name}} como lido",
+        markAsReadHint:
+          "Marcar como lido: limpa o indicador de concluído/erro deste espaço de trabalho",
         menu: "Ações do workspace",
         newWorkspace: "Novo workspace",
         showMore: "Mostrar mais",
@@ -3003,6 +3046,13 @@ export const ptBR: TranslationResources = {
         label: "Marcar chats como lidos ao abrir",
         description:
           "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "Abas",
+        label: "Ordenar abas por atividade recente",
+        description:
+          "Quando ativado, o chat com a atividade mais recente vai para o início da fileira de abas. Quando desativado, as abas ficam onde você as colocou",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

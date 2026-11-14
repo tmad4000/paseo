@@ -1,3 +1,5 @@
+import type { WorkspaceRegistry } from "../workspace-registry.js";
+import { runWorkspaceMutation } from "../workspace-mutations.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -85,6 +87,7 @@ import {
   type AgentSessionConfig,
   type SteerResult,
   type AgentStreamEvent,
+  type AgentTaskItem,
   type AgentTimelineItem,
   type AgentUsage,
   type AgentRuntimeInfo,
@@ -92,8 +95,13 @@ import {
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
+import {
+  restoreAgentTasks,
+  sameAgentTaskSnapshot,
+  toAgentTaskSnapshot,
+} from "./agent-task-snapshot.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
-import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import type { StoredAgentRecord, AgentStorage, AgentSnapshotOptions } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -130,6 +138,7 @@ import {
 import { AgentArtifactCollector } from "./artifacts/collector.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { extractAttention } from "../persistence-hooks.js";
+import { steerRejectedError } from "./prompt-not-submitted.js";
 
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
@@ -243,10 +252,13 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
     provider: record.provider,
     cwd: record.cwd,
   };
+  // lastModeId is the last live mode — it also covers provider-side switches
+  // that never reach record.config.modeId.
+  const modeId = record.lastModeId ?? record.config?.modeId;
+  if (modeId != null) config.modeId = modeId;
   if (!record.config) {
     return config;
   }
-  if (record.config.modeId != null) config.modeId = record.config.modeId;
   if (record.config.model != null) config.model = record.config.model;
   if (record.config.thinkingOptionId != null) {
     config.thinkingOptionId = record.config.thinkingOptionId;
@@ -534,6 +546,8 @@ interface ManagedAgentBase {
   labels: Record<string, string>;
   artifacts: AgentArtifact[];
   companionEntries?: CompanionEntry[];
+  /** The agent's latest task list, from its most recent `todo` timeline item. */
+  tasks?: AgentTaskItem[];
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -635,6 +649,12 @@ function limitAgentStreamEventContent(event: AgentStreamEvent): AgentStreamEvent
 interface WriteLabelsResult {
   record: StoredAgentRecord | null;
   live: boolean;
+}
+
+interface AgentWorkspaceMoveInput {
+  workspaceId: string;
+  expectedWorkspaceId: string;
+  workspaceRegistry: Pick<WorkspaceRegistry, "get">;
 }
 
 interface AgentMetadataPatch {
@@ -1520,6 +1540,7 @@ export class AgentManager {
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1556,6 +1577,7 @@ export class AgentManager {
       artifacts?: AgentArtifact[];
       attention?: AttentionState;
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1602,7 +1624,7 @@ export class AgentManager {
       {
         reason: "resume",
         purpose,
-        workspaceId: options?.workspaceId ?? null,
+        workspaceId: options?.workspaceId ?? record?.workspaceId ?? null,
       },
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
@@ -1615,6 +1637,7 @@ export class AgentManager {
     await this.requireExternalMcpSupport(session, storedConfig);
     return this.registerSession(session, storedConfig, resolvedAgentId, {
       ...options,
+      workspaceId: options?.workspaceId ?? record?.workspaceId,
       persistence: handle,
       restoring: true,
     });
@@ -1811,6 +1834,7 @@ export class AgentManager {
         artifacts: existing.artifacts,
         restoring: true,
         companionEntries: existing.companionEntries,
+        tasks: existing.tasks,
       });
     } catch (error) {
       if (closedExisting) {
@@ -2134,6 +2158,7 @@ export class AgentManager {
         labels: record.labels,
         artifacts: record.artifacts ?? [],
         companionEntries: restoreCompanionEntries(record),
+        tasks: restoreAgentTasks(record),
       },
     });
   }
@@ -2507,20 +2532,47 @@ export class AgentManager {
       return;
     }
 
-    await this.writeStoredMetadata(agentId, updates);
+    const updated = await this.writeStoredMetadata(agentId, updates);
+    if (!updated.internal) this.dispatchStoredAgentState(updated);
+  }
+
+  async moveAgentToWorkspace(agentId: string, input: AgentWorkspaceMoveInput): Promise<void> {
+    return this.runLifecycleMutation(agentId, () =>
+      runWorkspaceMutation(input.workspaceRegistry, async () => {
+        const stored = await this.requireRegistry().get(agentId);
+        const agent = this.getAgent(agentId) ?? stored;
+        if (!stored || !agent || stored.archivedAt)
+          throw new Error("Chat is unavailable or archived");
+        const isCommittedRetry =
+          stored.workspaceId === input.workspaceId && agent.workspaceId === input.workspaceId;
+        if (
+          !isCommittedRetry &&
+          (agent.workspaceId !== input.expectedWorkspaceId ||
+            stored.workspaceId !== input.expectedWorkspaceId)
+        )
+          throw new Error("Chat has already moved. Reopen its tab and try again.");
+        const source = await input.workspaceRegistry.get(input.expectedWorkspaceId);
+        if (!source || source.archivedAt) throw new Error("Source workspace is unavailable");
+        const destination = await input.workspaceRegistry.get(input.workspaceId);
+        if (!destination || destination.archivedAt)
+          throw new Error("Destination workspace is unavailable or archived");
+        if (!isCommittedRetry)
+          await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
+      }),
+    );
   }
 
   private async moveAgentToWorkspaceUnlocked(agentId: string, workspaceId: string): Promise<void> {
     const agent = this.agents.get(agentId);
-    if (!agent) {
-      return;
-    }
-    if (agent.workspaceId === workspaceId) {
-      return;
-    }
+    if (!agent) return;
+    const next = { ...agent, workspaceId };
+    this.touchUpdatedAt(next);
+    await this.persistSnapshot(next, { workspaceId });
+    const stored = await this.requireRegistry().get(agentId);
+    if (stored?.workspaceId !== workspaceId)
+      throw new Error("Workspace placement was not persisted");
     agent.workspaceId = workspaceId;
-    this.touchUpdatedAt(agent);
-    await this.persistSnapshot(agent);
+    if (agent.updatedAt.getTime() < next.updatedAt.getTime()) agent.updatedAt = next.updatedAt;
     this.emitState(agent, { persist: false });
   }
 
@@ -3085,7 +3137,13 @@ export class AgentManager {
     // An unavailable answer is only safe to fall back from while this admission
     // still owns the active turn. Never let an A admission replace a later B.
     if (result.status === "unavailable" && agent.activeTurnId !== expectedTurnId) {
-      throw new Error("Active turn changed before steering could be delivered");
+      // Only a refusal before provider handoff proves nothing was delivered.
+      if (result.deliveryUnknown) {
+        throw new Error(
+          "Provider submission outcome unknown: the active turn changed during steering",
+        );
+      }
+      throw steerRejectedError("Active turn changed before steering could be delivered");
     }
     return result;
   }
@@ -3833,6 +3891,7 @@ export class AgentManager {
       owner?: AgentOwner;
       artifacts?: AgentArtifact[];
       companionEntries?: CompanionEntry[];
+      tasks?: AgentTaskItem[];
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3848,6 +3907,11 @@ export class AgentManager {
         options?.initialTitle ?? null,
       );
 
+      const workspaceId = await this.resolveRegistrationWorkspaceId(
+        resolvedAgentId,
+        options?.workspaceId,
+      );
+      const registrationOptions = { ...options, workspaceId };
       const now = new Date();
       const { durableTimelineHasRows } = await this.initializeAgentTimelineForRegister({
         agentId: resolvedAgentId,
@@ -3861,7 +3925,7 @@ export class AgentManager {
         config,
         now,
         durableTimelineHasRows,
-        options,
+        options: registrationOptions,
       });
 
       // Read history before publishing the agent: a provider failure must leave the
@@ -3893,6 +3957,7 @@ export class AgentManager {
       this.assertAgentRegistrationActive(managed);
       await this.persistSnapshot(managed, {
         title: initialPersistedTitle,
+        workspaceId: managed.workspaceId,
       });
       this.assertAgentRegistrationActive(managed);
       if (!options?.publishWhenReady) {
@@ -4013,6 +4078,7 @@ export class AgentManager {
           owner?: AgentOwner;
           artifacts?: AgentArtifact[];
           companionEntries?: CompanionEntry[];
+          tasks?: AgentTaskItem[];
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -4056,6 +4122,7 @@ export class AgentManager {
       labels: options?.labels ?? {},
       artifacts: resolveInitialArtifacts(options?.artifacts),
       companionEntries: restoreCompanionEntries(options),
+      tasks: restoreAgentTasks(options),
     } as ActiveManagedAgent;
   }
 
@@ -4121,6 +4188,11 @@ export class AgentManager {
 
   private emitClosedAgent(agent: ManagedAgentClosed, options?: { persist?: boolean }): void {
     this.emitState(agent, options);
+    if (!agent.internal) {
+      this.pluginLifecycle?.emit("agent.closed", {
+        agent: describeHookAgent({ ...agent, title: agent.config.title }),
+      });
+    }
   }
   private subscribeToSession(agent: ActiveManagedAgent): void {
     if (agent.unsubscribeSession) {
@@ -4265,6 +4337,13 @@ export class AgentManager {
     );
   }
 
+  private async resolveRegistrationWorkspaceId(
+    agentId: string,
+    workspaceId?: string,
+  ): Promise<string | undefined> {
+    return workspaceId ?? (await this.registry?.get(agentId))?.workspaceId;
+  }
+
   private async resolveInitialPersistedTitle(
     agentId: string,
     config: AgentSessionConfig,
@@ -4283,7 +4362,7 @@ export class AgentManager {
 
   private async persistSnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: AgentSnapshotOptions,
   ): Promise<void> {
     if (!this.registry) {
       return;
@@ -4302,6 +4381,19 @@ export class AgentManager {
     return this.registry;
   }
 
+  /**
+   * Provider-side mode switches (ACP current_mode_update, in-session
+   * commands, permission-driven transitions) must land in config.modeId too —
+   * reloadAgentSession and the persisted record derive the resumed session's
+   * mode from it, so leaving it stale silently downgrades the mode on resume.
+   */
+  private applyObservedMode(agent: ActiveManagedAgent, modeId: string | null): void {
+    agent.currentModeId = modeId;
+    if (modeId != null) {
+      agent.config.modeId = modeId;
+    }
+  }
+
   private async refreshSessionState(
     agent: ActiveManagedAgent,
     options?: { emit?: boolean },
@@ -4314,7 +4406,7 @@ export class AgentManager {
     }
 
     try {
-      agent.currentModeId = await agent.session.getCurrentMode();
+      this.applyObservedMode(agent, await agent.session.getCurrentMode());
     } catch {
       agent.currentModeId = null;
     }
@@ -4521,6 +4613,14 @@ export class AgentManager {
     }
   }
 
+  /** Keeps the snapshot's task list in step with the provider's latest `todo` item. */
+  private applyTaskSnapshot(agent: ActiveManagedAgent, items: readonly AgentTaskItem[]): void {
+    const next = toAgentTaskSnapshot(items);
+    if (sameAgentTaskSnapshot(agent.tasks, next)) return;
+    agent.tasks = next;
+    this.emitState(agent);
+  }
+
   private mergeHistoricalMessageActivity(
     agent: ActiveManagedAgent,
     events: Iterable<Extract<AgentStreamEvent, { type: "timeline" }>>,
@@ -4721,7 +4821,7 @@ export class AgentManager {
         this.emitState(agent);
         return undefined;
       case "mode_changed":
-        agent.currentModeId = event.currentModeId;
+        this.applyObservedMode(agent, event.currentModeId);
         agent.availableModes = event.availableModes;
         if (agent.runtimeInfo) {
           agent.runtimeInfo = { ...agent.runtimeInfo, modeId: event.currentModeId };
@@ -4737,7 +4837,7 @@ export class AgentManager {
             agent.cwd,
           );
         }
-        agent.currentModeId = event.runtimeInfo.modeId ?? agent.currentModeId;
+        this.applyObservedMode(agent, event.runtimeInfo.modeId ?? agent.currentModeId);
         flags.shouldDispatchEvent = false;
         this.emitState(agent);
         return undefined;
@@ -4824,6 +4924,10 @@ export class AgentManager {
       flags.shouldDispatchEvent = false;
       flags.shouldNotifyWaiters = false;
       return;
+    }
+
+    if (event.item.type === "todo") {
+      this.applyTaskSnapshot(agent, event.item.items);
     }
 
     if (options?.fromHistory) {

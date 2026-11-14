@@ -1,3 +1,12 @@
+import {
+  createPersistedWorkspaceRecord,
+  createPersistedProjectRecord,
+  FileBackedWorkspaceRegistry,
+  FileBackedProjectRegistry,
+  type WorkspaceRegistry,
+} from "../workspace-registry.js";
+import { moveAgentWorkspace } from "./workspace-move.js";
+import { writeJsonFileAtomic } from "../atomic-file.js";
 import { describe, expect, test, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -194,6 +203,21 @@ class RecordingTimelineStore implements AgentTimelineStore {
       this.memory.initialize(agentId, { rows });
     }
   }
+}
+
+function placementWorkspaceRegistry(cwd: string): Pick<WorkspaceRegistry, "get"> {
+  return {
+    get: async (workspaceId) =>
+      createPersistedWorkspaceRecord({
+        workspaceId,
+        projectId: "project",
+        cwd,
+        kind: "directory",
+        displayName: workspaceId,
+        createdAt: "2026-11-13T00:00:00.000Z",
+        updatedAt: "2026-11-13T00:00:00.000Z",
+      }),
+  };
 }
 
 function createFeature(args: { id: string; label: string; value: boolean }): AgentFeature {
@@ -4881,9 +4905,17 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   await storage.upsert(before);
   expect(manager.getAgent(snapshot.id)).toBeNull();
 
+  const movedWorkspaceIds: Array<string | undefined> = [];
+  const unsubscribe = manager.subscribe(
+    (event) => {
+      if (event.type === "agent_state") movedWorkspaceIds.push(event.agent.workspaceId);
+    },
+    { replayState: false },
+  );
   const upsertSpy = vi.spyOn(storage, "upsert");
 
   await manager.updateAgentMetadata(snapshot.id, {
+    workspaceId: "asides",
     title: "Stored title",
     labels: { role: "worker" },
   });
@@ -4891,8 +4923,345 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   expect(upsertSpy).toHaveBeenCalledTimes(1);
   const after = await storage.get(snapshot.id);
   expect(after?.title).toBe("Stored title");
+  expect(after?.workspaceId).toBe("asides");
+  expect(movedWorkspaceIds).toEqual(["asides"]);
+  unsubscribe();
   expect(after?.labels).toEqual({ surface: "mobile", role: "worker" });
   expect(Date.parse(after!.updatedAt)).toBeGreaterThan(Date.parse(before!.updatedAt));
+});
+
+test.each([true, false])(
+  "workspace placement rechecks archive state in the lifecycle lane (live=%s)",
+  async (isLive) => {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-archive-race-"));
+    const storage = new AgentStorage(join(workdir, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: storage,
+      logger,
+    });
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "source",
+    });
+    if (!isLive) await manager.closeAgent(agent.id);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const blocking = manager.runLifecycleMutation(agent.id, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const archiving = manager.archiveSnapshot(agent.id, "2026-11-13T00:00:00.000Z");
+    const moving = manager.moveAgentToWorkspace(agent.id, {
+      workspaceRegistry: placementWorkspaceRegistry(workdir),
+      expectedWorkspaceId: "source",
+      workspaceId: "destination",
+    });
+    const rejected = expect(moving).rejects.toThrow("Chat is unavailable or archived");
+    release.resolve();
+    try {
+      await Promise.all([blocking, archiving, rejected]);
+      expect(await storage.get(agent.id)).toMatchObject({
+        workspaceId: "source",
+        archivedAt: expect.any(String),
+      });
+      expect(manager.getAgent(agent.id)).toBeNull();
+    } finally {
+      release.resolve();
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("workspace placement rechecks ownership after queued metadata changes", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-stale-race-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: "source",
+  });
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const blocking = manager.runLifecycleMutation(agent.id, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const first = manager.updateAgentMetadata(agent.id, { workspaceId: "other" });
+  const moving = manager.moveAgentToWorkspace(agent.id, {
+    workspaceRegistry: placementWorkspaceRegistry(workdir),
+    expectedWorkspaceId: "source",
+    workspaceId: "destination",
+  });
+  const rejected = expect(moving).rejects.toThrow("Chat has already moved");
+  release.resolve();
+  try {
+    await Promise.all([blocking, first, rejected]);
+    expect(await storage.get(agent.id)).toMatchObject({ workspaceId: "other", cwd: workdir });
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test.each([true, false])(
+  "workspace placement preserves the conversation state (live=%s)",
+  async (isLive) => {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-workspace-state-"));
+    const storage = new AgentStorage(join(workdir, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: storage,
+      logger,
+    });
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "source",
+    });
+    await manager.updateAgentMetadata(agent.id, { labels: { [PARENT_AGENT_ID_LABEL]: "parent" } });
+    if (!isLive) await manager.closeAgent(agent.id);
+    const before = await storage.get(agent.id);
+    const live = manager.getAgent(agent.id);
+    const permission = {
+      id: "approval",
+      provider: "codex" as const,
+      kind: "tool" as const,
+      name: "shell",
+    };
+    live?.pendingPermissions.set(permission.id, permission);
+    try {
+      await manager.moveAgentToWorkspace(agent.id, {
+        workspaceRegistry: placementWorkspaceRegistry(workdir),
+        expectedWorkspaceId: "source",
+        workspaceId: "destination",
+      });
+      const after = await storage.get(agent.id);
+      expect(after).toMatchObject({
+        id: agent.id,
+        cwd: workdir,
+        workspaceId: "destination",
+        labels: before!.labels,
+        persistence: before!.persistence,
+      });
+      expect(after?.archivedAt).toBeFalsy();
+      const current = manager.getAgent(agent.id);
+      expect(current?.session ?? null).toBe(live?.session ?? null);
+      if (isLive) expect(current?.pendingPermissions.get(permission.id)).toEqual(permission);
+    } finally {
+      if (manager.getAgent(agent.id)) await manager.closeAgent(agent.id);
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
+test.each([true, false])(
+  "workspace placement failures and retries preserve live, cached and durable state (live=%s)",
+  async (isLive) => {
+    const workdir = mkdtempSync(join(tmpdir(), "workspace-persistence-retry-"));
+    const storagePath = join(workdir, "agents");
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    let failures = 0;
+    let destinationWrites = 0;
+    const timelineStore = new RecordingTimelineStore();
+    const storage = new AgentStorage(storagePath, logger, {
+      writeRecord: async (filePath, record) => {
+        if (record.workspaceId === "destination") {
+          destinationWrites += 1;
+          if (failures > 0) {
+            failures -= 1;
+            if (failures === 1) {
+              entered.resolve();
+              await release.promise;
+            }
+            throw new Error("Injected placement write failure");
+          }
+        }
+        await writeJsonFileAtomic(filePath, record);
+      },
+    });
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: storage,
+      durableTimelineStore: timelineStore,
+      logger,
+    });
+    const workspaceRegistry = new FileBackedWorkspaceRegistry(
+      join(workdir, "workspaces.json"),
+      logger,
+    );
+    const projectRegistry = new FileBackedProjectRegistry(join(workdir, "projects.json"), logger);
+    const timestamp = "2026-11-13T00:00:00.000Z";
+    const source = createPersistedWorkspaceRecord({
+      workspaceId: "source",
+      projectId: "project",
+      cwd: workdir,
+      kind: "directory",
+      displayName: "Source",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await workspaceRegistry.upsert(source);
+    await workspaceRegistry.upsert({ ...source, workspaceId: "destination", title: "Asides" });
+    await projectRegistry.upsert(
+      createPersistedProjectRecord({
+        projectId: "project",
+        rootPath: workdir,
+        kind: "non_git",
+        displayName: "Project",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "source",
+      labels: { [PARENT_AGENT_ID_LABEL]: "parent" },
+    });
+    await manager.appendTimelineItem(agent.id, {
+      type: "user_message",
+      text: "Keep this conversation",
+    });
+    await manager.setAgentMode(agent.id, "plan");
+    await manager.flush();
+    if (!isLive) await manager.closeAgent(agent.id);
+    const live = manager.getAgent(agent.id);
+    const permission = {
+      id: "approval",
+      provider: "codex" as const,
+      kind: "tool" as const,
+      name: "shell",
+    };
+    live?.pendingPermissions.set(permission.id, permission);
+    live?.availableModes.push({ id: "plan", label: "Plan" });
+    const before = await storage.get(agent.id);
+    const timeline = await timelineStore.getCommittedRows(agent.id);
+    expect(timeline.some((row) => row.item.type === "user_message")).toBe(true);
+    const input = {
+      agentId: agent.id,
+      expectedWorkspaceId: "source",
+      destination: { kind: "existing" as const, workspaceId: "destination" },
+    };
+    const deps = {
+      agentManager: manager,
+      agentStorage: storage,
+      workspaceRegistry,
+      projectRegistry,
+      workspaceProvisioning: {
+        createWorkspaceForDirectory: async () => {
+          throw new Error("Unexpected workspace creation");
+        },
+      },
+    };
+    const updates: string[] = [];
+    const unsubscribe = manager.subscribe(
+      (event) => {
+        if (event.type === "agent_state" && event.agent.workspaceId)
+          updates.push(event.agent.workspaceId);
+      },
+      { replayState: false },
+    );
+    failures = 2;
+    const first = moveAgentWorkspace(deps, input);
+    const firstRejected = expect(first).rejects.toThrow("Injected placement write failure");
+    await entered.promise;
+    try {
+      expect(manager.getAgent(agent.id)?.workspaceId ?? "source").toBe("source");
+      expect((await storage.get(agent.id))?.workspaceId).toBe("source");
+      expect((await new AgentStorage(storagePath, logger).get(agent.id))?.workspaceId).toBe(
+        "source",
+      );
+    } finally {
+      release.resolve();
+    }
+    try {
+      await firstRejected;
+      expect(await storage.get(agent.id)).toEqual(before);
+      expect(updates).toEqual([]);
+      const uncommitted = await storage.get(agent.id);
+      if (!uncommitted) throw new Error("Missing agent record");
+      uncommitted.workspaceId = "destination";
+      if (live)
+        vi.spyOn(manager, "getAgent").mockReturnValueOnce({ ...live, workspaceId: "destination" });
+      await expect(moveAgentWorkspace(deps, input)).rejects.toThrow(
+        "Injected placement write failure",
+      );
+      expect(updates).toEqual([]);
+      expect(await storage.get(agent.id)).toEqual(before);
+      const destination = await moveAgentWorkspace(deps, input);
+      expect(destination.workspaceId).toBe("destination");
+      expect(destinationWrites).toBe(3);
+      failures = 1;
+      await moveAgentWorkspace(deps, input);
+      expect(destinationWrites).toBe(3);
+      const persisted = await new AgentStorage(storagePath, logger).get(agent.id);
+      expect(persisted).toMatchObject({
+        id: agent.id,
+        cwd: workdir,
+        workspaceId: "destination",
+        persistence: before!.persistence,
+        labels: before!.labels,
+      });
+      expect(await timelineStore.getCommittedRows(agent.id)).toEqual(timeline);
+      const current = manager.getAgent(agent.id);
+      expect(current?.session ?? null).toBe(live?.session ?? null);
+      if (live) {
+        expect(current?.pendingPermissions.get(permission.id)).toEqual(permission);
+        expect(current?.currentModeId).toBe(live.currentModeId);
+        expect(current?.availableModes).toEqual(live.availableModes);
+      }
+    } finally {
+      failures = 0;
+      unsubscribe();
+      if (manager.getAgent(agent.id)) await manager.closeAgent(agent.id);
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("workspace placement remains authoritative when a stored provider session is resumed without a placement override", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "workspace-resume-placement-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: "source",
+  });
+  await manager.moveAgentToWorkspace(agent.id, {
+    workspaceId: "destination",
+    expectedWorkspaceId: "source",
+    workspaceRegistry: placementWorkspaceRegistry(workdir),
+  });
+  await manager.closeAgent(agent.id);
+  const reopened = new AgentStorage(storagePath, logger);
+  const stored = await reopened.get(agent.id);
+  if (!stored?.persistence) throw new Error("Missing persisted session");
+  const restored = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: reopened,
+    logger,
+  });
+  try {
+    const resumed = await restored.resumeAgentFromPersistence(
+      stored.persistence,
+      { provider: "codex", cwd: workdir },
+      agent.id,
+    );
+    expect(resumed.workspaceId).toBe("destination");
+    expect((await reopened.get(agent.id))?.workspaceId).toBe("destination");
+    expect((await new AgentStorage(storagePath, logger).get(agent.id))?.workspaceId).toBe(
+      "destination",
+    );
+  } finally {
+    if (restored.getAgent(agent.id)) await restored.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("persists live mode, model, and thinking changes without an external snapshot subscriber", async () => {
@@ -5070,6 +5439,7 @@ test("setAgentThinkingOption surfaces a failed state read and keeps the previous
 
 test("session config drift events update state through the stream channel", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-session-config-events-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
   let capturedSession: TestAgentSession | null = null;
   class ConfigEventClient extends TestAgentClient {
     override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
@@ -5082,6 +5452,7 @@ test("session config drift events update state through the stream channel", asyn
     clients: {
       codex: new ConfigEventClient(),
     },
+    registry: storage,
     logger,
     idFactory: () => "00000000-0000-4000-8000-000000000133",
   });
@@ -5136,6 +5507,7 @@ test("session config drift events update state through the stream channel", asyn
 
   const agent = manager.getAgent(snapshot.id);
   expect(agent?.currentModeId).toBe("build");
+  expect(agent?.config.modeId).toBe("build");
   expect(agent?.config.thinkingOptionId).toBe("high");
   expect(agent?.availableModes).toEqual([
     { id: "plan", label: "Plan" },
@@ -5147,6 +5519,10 @@ test("session config drift events update state through the stream channel", asyn
     thinkingOptionId: "high",
   });
   expect(streams.map((event) => event.type)).toEqual([]);
+
+  const persisted = await storage.get(snapshot.id);
+  expect(persisted?.lastModeId).toBe("build");
+  expect(persisted?.config?.modeId).toBe("build");
 });
 
 test("setLabels merges and persists labels", async () => {
@@ -9323,6 +9699,7 @@ test("respondToPermission updates currentModeId after plan approval", async () =
   class PlanModeTestClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+    resumedModeId: string | null | undefined;
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -9332,14 +9709,19 @@ test("respondToPermission updates currentModeId after plan approval", async () =
       return new PlanModeTestSession();
     }
 
-    async resumeSession(): Promise<AgentSession> {
+    async resumeSession(
+      _handle: AgentPersistenceHandle,
+      overrides?: Partial<AgentSessionConfig>,
+    ): Promise<AgentSession> {
+      this.resumedModeId = overrides?.modeId;
       return new PlanModeTestSession();
     }
   }
 
+  const client = new PlanModeTestClient();
   const manager = new AgentManager({
     clients: {
-      codex: new PlanModeTestClient(),
+      codex: client,
     },
     registry: storage,
     logger,
@@ -9383,6 +9765,13 @@ test("respondToPermission updates currentModeId after plan approval", async () =
   await manager.flush();
   const persisted = await storage.get(snapshot.id);
   expect(persisted?.lastModeId).toBe("acceptEdits");
+
+  // The provider-managed switch must also reach config.modeId — otherwise a
+  // reload resumes the session with the stale creation-time mode ("plan").
+  expect(persisted?.config?.modeId).toBe("acceptEdits");
+  const reloaded = await manager.reloadAgentSession(snapshot.id);
+  expect(reloaded.config.modeId).toBe("acceptEdits");
+  expect(client.resumedModeId).toBe("acceptEdits");
 });
 
 test("respondToPermission refreshes features and runtime info after provider-managed plan approval", async () => {
@@ -12506,4 +12895,65 @@ describe("clearAgentAttention as a read", () => {
     await manager.clearAgentAttention(agent.id);
     expect(agent.attention).toEqual({ requiresAttention: false });
   });
+});
+
+test("the agent's latest task list rides on its snapshot and survives reopen", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-task-snapshot-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const session = new TestAgentSession({ provider: "codex", cwd: workdir });
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  let agentId: string | undefined;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    expect(toAgentPayload(manager.getAgent(agent.id)!).tasks).toEqual([]);
+    session.pushEvent({ type: "turn_started", provider: "codex", turnId: "plan" });
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      turnId: "plan",
+      item: {
+        type: "todo",
+        items: [
+          { id: "0", text: "Read the code", status: "completed", completed: true },
+          { id: "1", text: "Write tests", status: "in_progress", completed: false },
+        ],
+      },
+    });
+    await vi.waitFor(() => expect(manager.getAgent(agent.id)?.tasks).toHaveLength(2));
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      turnId: "plan",
+      item: {
+        type: "todo",
+        items: [
+          { id: "0", text: "Read the code", status: "completed", completed: true },
+          { id: "1", text: "Write tests", status: "completed", completed: true },
+          { id: "2", text: "Open the PR", status: "pending", completed: false },
+        ],
+      },
+    });
+    await manager.flush();
+    const tasks = manager.getAgent(agent.id)?.tasks;
+    expect(tasks?.map((task) => task.status)).toEqual(["completed", "completed", "pending"]);
+    expect(toAgentPayload(manager.getAgent(agent.id)!).tasks).toEqual(tasks);
+    session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "plan" });
+    await manager.flush();
+    await manager.closeAgent(agent.id);
+    await storage.flush();
+    expect((await storage.get(agent.id))?.tasks).toEqual(tasks);
+    await ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+    expect(manager.getAgent(agent.id)?.tasks).toEqual(tasks);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });

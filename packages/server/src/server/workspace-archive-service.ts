@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { runWorkspaceMutation } from "./workspace-mutations.js";
 
 import type { Logger } from "pino";
 
@@ -18,7 +19,7 @@ import type {
   WorkspaceArchiveContext,
   WorkspaceRegistry,
 } from "./workspace-registry.js";
-import { createRealpathAwarePathMatcher } from "../utils/path.js";
+import { isRealpathInsideRoot, createRealpathAwarePathMatcher } from "../utils/path.js";
 import { runWithGitCommandPriority } from "../utils/run-git-command.js";
 import { WorkspaceAutomationBlockedError } from "./workspace-automation-gate.js";
 
@@ -32,18 +33,16 @@ export interface ArchiveDependencies {
   // Base directory that may hold worktrees across repositories.
   paseoWorktreesBaseRoot?: string;
   github: ForgeService;
-  workspaceGitService: Pick<WorkspaceGitService, "getSnapshot">;
+  workspaceGitService: Pick<WorkspaceGitService, "getSnapshot" | "invalidateWorktrees">;
   agentManager: Pick<AgentManager, "listAgents" | "getAgent" | "archiveAgent" | "archiveSnapshot">;
-  agentStorage: Pick<AgentStorage, "listByWorkspace">;
+  agentStorage: Pick<AgentStorage, "list" | "listByWorkspace">;
   // Resolves the worktree at a path to its workspaceId for archive-by-path. The
   // path uniquely identifies a worktree workspace; this is a directory lookup for
   // the archive target, not status/ownership.
   findWorkspaceIdForCwd: (cwd: string) => Promise<string | null>;
   getWorkspace?: (workspaceId: string) => Promise<PersistedWorkspaceRecord | null>;
-  // Active (non-archived) workspaces, used to decide whether the workspace being
-  // archived is the last reference to its backing worktree directory, and to
-  // break a same-cwd tie in favor of the worktree-kind record when archiving by
-  // path (no explicit workspaceId).
+  // Active workspace references also break a same-cwd tie in favor of the
+  // worktree-kind record when archiving by path (no explicit workspaceId).
   listActiveWorkspaces: () => Promise<ActiveWorkspaceRef[]>;
   archiveWorkspaceRecord: (workspaceId: string) => Promise<void>;
   emitWorkspaceUpdatesForWorkspaceIds: (workspaceIds: Iterable<string>) => Promise<void>;
@@ -117,14 +116,14 @@ export async function resolveWorkspaceIdAtPath(
   return dependencies.findWorkspaceIdForCwd(targetPath);
 }
 
-// Resolves the in-scope record set, tears each down
-// (agents + terminals + record), then removes the backing directory iff it is
-// Paseo-owned AND no active workspace still references it.
+// Backing-directory retention rules: docs/move-chat-workspace.md.
 export async function archiveByScope(
   dependencies: ArchiveDependencies,
   request: ArchiveByScopeRequest,
 ): Promise<ArchiveResult> {
-  return runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request));
+  return runWorkspaceMutation(dependencies.agentManager, () =>
+    runWithGitCommandPriority("high", () => archiveByScopeWithPriority(dependencies, request)),
+  );
 }
 
 async function archiveByScopeWithPriority(
@@ -408,6 +407,7 @@ async function maybeRemoveDirectory(
       paseoHome: dependencies.paseoHome,
       worktreesBaseRoot: dependencies.paseoWorktreesBaseRoot,
     });
+    dependencies.workspaceGitService.invalidateWorktrees();
     dependencies.github.invalidate({ cwd: backing.path });
     return true;
   } catch (error) {
@@ -512,14 +512,13 @@ export async function archiveWorkspaceContents(
   return archivedAgents;
 }
 
-// True when, after archiving
-// the in-scope records, no active workspace still points at targetDir. Derived
-// from records each call — no stored counter.
+// Derive retention from current records on each call, without a stored counter.
+// Retention rules: docs/move-chat-workspace.md.
 async function isDirectoryUnreferenced(
   activeWorkspaces: ActiveWorkspaceRef[],
   targetDir: string,
   archivedWorkspaceIds: ReadonlySet<string>,
-  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot">,
+  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot" | "agentStorage">,
 ): Promise<boolean> {
   const target = resolve(targetDir);
   const matchesTarget = createRealpathAwarePathMatcher(target);
@@ -528,7 +527,8 @@ async function isDirectoryUnreferenced(
     const backingDirectory = await resolveWorkspaceBackingDirectory(workspace, dependencies);
     if (matchesTarget(backingDirectory.path)) return false;
   }
-  return true;
+  const agents = await dependencies.agentStorage.list();
+  return !agents.some((agent) => !agent.archivedAt && isRealpathInsideRoot(target, agent.cwd));
 }
 
 export async function killTerminalsForWorkspace(

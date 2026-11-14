@@ -39,7 +39,7 @@ async function createClaudeConfigDirWithRawSettings(settings: string): Promise<s
   return configDir;
 }
 
-function createCatalogClient(claudeCodeVersion = "2.1.280"): ClaudeAgentClient {
+function createCatalogClient(claudeCodeVersion = "2.1.319"): ClaudeAgentClient {
   return new ClaudeAgentClient({
     logger: createTestLogger(),
     resolveVersion: async () => claudeCodeVersion,
@@ -52,6 +52,7 @@ describe("getClaudeModels", () => {
     expect(models.map((m) => m.id)).toEqual([
       "claude-opus-5-5",
       "claude-opus-5",
+      "claude-fable-5-2",
       "claude-fable-5-1",
       "claude-fable-5",
       "claude-fable-5[1m]",
@@ -85,6 +86,7 @@ describe("getClaudeModels", () => {
       new Map([
         ["claude-opus-5-5", 1_000_000],
         ["claude-opus-5", 1_000_000],
+        ["claude-fable-5-2", 1_000_000],
         ["claude-fable-5-1", 1_000_000],
         ["claude-fable-5", 1_000_000],
         ["claude-fable-5[1m]", 1_000_000],
@@ -185,6 +187,7 @@ describe("getClaudeModels", () => {
     ["claude-sonnet-5-20260101", true, "high"],
     ["claude-fable-5", false, "high"],
     ["claude-fable-5-1", false, "high"],
+    ["claude-fable-5-2", false, "medium"],
     ["claude-haiku-4-5", false, undefined],
     ["openrouter/anthropic/claude-opus-4-8", false, undefined],
     [null, false, undefined],
@@ -397,6 +400,33 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
     expect(models.map((model) => model.id)).not.toContain("claude-opus-5[1m]");
     expect(models.map((model) => model.id)).not.toContain("claude-opus-5");
   });
+
+  it("keeps version-gated models when the probe command cannot identify Claude Code", async () => {
+    const configDir = await createClaudeConfigDir({});
+    const wrapperDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-wrapper-"));
+    const wrapperPath = path.join(wrapperDir, "wrapper");
+    await fs.writeFile(wrapperPath, 'console.log("cux 0.4.1");\n');
+    try {
+      const client = new ClaudeAgentClient({
+        logger: createTestLogger(),
+        runtimeSettings: {
+          command: { mode: "replace", argv: [process.execPath, wrapperPath] },
+          env: { CLAUDE_CONFIG_DIR: configDir },
+        },
+        discoverModels: async () => [],
+      });
+
+      const { models } = await client.fetchCatalog({
+        scope: "workspace",
+        cwd: configDir,
+        force: false,
+      });
+
+      expect(models.map((model) => model.id)).toContain("claude-opus-5-5");
+    } finally {
+      await fs.rm(wrapperDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("normalizeClaudeRuntimeModelId", () => {
@@ -562,6 +592,30 @@ describe("Claude Fable 5.1 catalog", () => {
     expect(findClaudeModel("claude-fable-5-1[1m]")?.id).toBe("claude-fable-5-1");
     expect(findClaudeModel("claude-fable-5-1-20260901")?.id).toBe("claude-fable-5-1");
     expect(findClaudeModel("claude-fable-5-1-20260901[1m]")?.id).toBe("claude-fable-5-1");
+  });
+});
+
+describe("Claude Fable 5.2 catalog (code-6cm)", () => {
+  it("offers one Fable 5.2 entry with a 1M context window and medium default effort", () => {
+    const fable52 = getClaudeModels().filter((model) => model.id.startsWith("claude-fable-5-2"));
+    expect(
+      fable52.map(({ id, label, contextWindowMaxTokens }) => ({
+        id,
+        label,
+        contextWindowMaxTokens,
+      })),
+    ).toEqual([{ id: "claude-fable-5-2", label: "Fable 5.2", contextWindowMaxTokens: 1_000_000 }]);
+    expect(fable52[0].defaultThinkingOptionId).toBe("medium");
+  });
+
+  it("is available from Claude Code 2.1.319", () => {
+    expect(getClaudeModels("2.1.318").map((model) => model.id)).not.toContain("claude-fable-5-2");
+    expect(getClaudeModels("2.1.319").map((model) => model.id)).toContain("claude-fable-5-2");
+  });
+
+  it("resolves dated Fable 5.2 IDs to the catalog entry", () => {
+    expect(findClaudeModel("claude-fable-5-2-20261101")?.id).toBe("claude-fable-5-2");
+    expect(findClaudeModel("claude-fable-5-2[1m]")?.id).toBe("claude-fable-5-2");
   });
 });
 

@@ -1142,7 +1142,7 @@ describe("workspace-layout-store actions", () => {
     });
   });
 
-  it("closes a split through its sole New tab but keeps the final visible split", () => {
+  it("closes a split through its sole New tab and replaces the final blank identity", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     store.openTab({
@@ -1167,11 +1167,10 @@ describe("workspace-layout-store actions", () => {
     store.closeTab(workspaceKey, findPaneById(layout.root, "main")?.focusedTabId as string);
     layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
     const finalNewTabId = findPaneById(layout.root, "main")?.focusedTabId as string;
-    const before = layout;
-
     store.closeTab(workspaceKey, finalNewTabId);
-
-    expect(workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey]).toBe(before);
+    layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneById(layout.root, "main")).not.toBeNull();
+    expect(collectAllTabs(layout.root).some((tab) => tab.tabId === finalNewTabId)).toBe(false);
   });
 
   it.each(["hideExplorerSidebar", "showExplorerSidebar"] as const)(
@@ -3298,6 +3297,23 @@ describe("workspace-layout-store actions", () => {
     expect(mainTab?.target).toEqual({ kind: "new_tab" });
     expect(findPaneById(layout.root, "main")?.focusedTabId).toBe(mainTab?.tabId);
     expect(findPaneById(layout.root, "explorer")?.hidden).toBe(true);
+  });
+
+  it("closing the final blank tab removes its identity while retaining a usable workspace", () => {
+    const workspaceKey = createWorkspaceKey();
+    workspaceLayoutStore.setState({
+      layoutByWorkspace: { [workspaceKey]: createWorkspaceLayoutWithExplorerSidebar() },
+      explorerSidebarPaneIdByWorkspace: { [workspaceKey]: "explorer" },
+    });
+    const before = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const tabId = collectAllTabs(before.root).find((tab) => tab.target.kind === "new_tab")!.tabId;
+    workspaceLayoutStore.getState().closeTab(workspaceKey, tabId);
+    const after = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(collectAllTabs(after.root).some((tab) => tab.tabId === tabId)).toBe(false);
+    expect(findPaneById(after.root, "main")).not.toBeNull();
+    expect(collectAllTabs(after.root).filter((tab) => tab.target.kind === "new_tab")).toHaveLength(
+      1,
+    );
   });
 
   it("persists explicit agent opens per workspace", () => {

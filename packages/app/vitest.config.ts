@@ -71,6 +71,8 @@ export default defineConfig({
   // so it scans the native files and dies on imports react-native-web has no answer for.
   // Unbundled, the same imports go through the resolver below and land on the web files.
   optimizeDeps: {
+    // Expo Clipboard ships JSX in .js files, which the dependency optimizer scans.
+    esbuildOptions: { loader: { ".js": "jsx" } },
     // Bundle the CJS dependencies of the excluded gesture-handler package for the browser.
     include: [
       "react/jsx-runtime",
@@ -120,6 +122,10 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../relay/src/index.ts"),
       },
       { find: "@", replacement: path.resolve(__dirname, "src") },
+      {
+        find: /^expo-clipboard$/,
+        replacement: path.resolve(__dirname, "test-stubs/expo-clipboard.ts"),
+      },
       // The Expo module ships from build/, which unit tests never produce; resolve the
       // source entry so vi.mock has a module id to replace.
       {

@@ -2,6 +2,7 @@
 
 The **Links track** lists every http(s) link in a chat so you can find a mock, an artifact or a
 pull request again without scrolling, and **Peek** shows the page without leaving the chat.
+For session URLs rendered in messages, see [session links in chat](expo-router.md#session-links-rendered-in-chat).
 
 ![Links panel, 1440px](chat-links/chat-links-1440.png)
 

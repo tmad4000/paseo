@@ -4,6 +4,7 @@ import { Scan, ZoomIn, ZoomOut } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import {
   iconButtonChromeGlyphSize,
   iconButtonChromeStyle,
@@ -95,20 +96,23 @@ function ViewportToolbarButton({
       }),
     [disabled, isCompact, visible],
   );
+  // No wrapper View: hidden buttons must stay click-through for the content underneath.
   return (
-    <Pressable
-      accessibilityLabel={action.label}
-      accessibilityRole="button"
-      disabled={disabled}
-      hitSlop={isCompact ? 6 : 4}
-      onPress={action.onPress}
-      style={buttonStyle}
-      testID={action.testID}
-    >
-      {({ hovered }) => (
-        <Icon size={iconSize} color={hovered ? styles.iconHovered.color : styles.icon.color} />
-      )}
-    </Pressable>
+    <IconTooltip label={action.label} disabled={!visible || disabled} wrap={false}>
+      <Pressable
+        accessibilityLabel={action.label}
+        accessibilityRole="button"
+        disabled={disabled}
+        hitSlop={isCompact ? 6 : 4}
+        onPress={action.onPress}
+        style={buttonStyle}
+        testID={action.testID}
+      >
+        {({ hovered }) => (
+          <Icon size={iconSize} color={hovered ? styles.iconHovered.color : styles.icon.color} />
+        )}
+      </Pressable>
+    </IconTooltip>
   );
 }
 

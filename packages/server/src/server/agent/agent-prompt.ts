@@ -12,6 +12,7 @@ import type { AgentStorage } from "./agent-storage.js";
 import type { AgentQueueService } from "../agent-queue/service.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
+import { steerRejectedError } from "./prompt-not-submitted.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
 
@@ -59,7 +60,7 @@ async function steerOrReplaceActiveRun(
     const activeAgent = agentManager.getAgent(agentId);
     if (!activeAgent?.activeForegroundTurnId && !activeAgent?.activeTurnId) {
       if (agentManager.hasInFlightRun(agentId)) {
-        throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+        throw steerRejectedError();
       }
       return null;
     }
@@ -70,7 +71,13 @@ async function steerOrReplaceActiveRun(
     if (result.status === "accepted") {
       return { disposition: "steered" };
     }
-    throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+    if (result.deliveryUnknown) {
+      // The provider already holds the prompt; keep the receipt guarded as outcome-unknown.
+      throw new Error(
+        "Provider submission outcome unknown: the active turn changed during steering",
+      );
+    }
+    throw steerRejectedError();
   }
   if (options?.activeTurnBehavior !== "steer") {
     return null;
@@ -98,7 +105,7 @@ async function startOrReplaceRun(
   replaced: boolean;
 }> {
   if (options?.activeTurnBehavior === "steer_only" && agentManager.hasInFlightRun(agentId)) {
-    throw new Error("The active turn cannot accept a steer. It was not interrupted.");
+    throw steerRejectedError();
   }
   const replaced = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
   let iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>;

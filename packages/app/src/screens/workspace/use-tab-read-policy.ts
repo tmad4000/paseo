@@ -17,6 +17,7 @@ export function useTabReadPolicy(
 ): TabReadPolicy {
   const viewingMarksRead = useSettings((settings) => settings.markReadOnOpen);
   const readThroughByAgentKey = useAgentReadMarksStore((state) => state.readThroughByAgentKey);
+  const seenThroughByAgentKey = useAgentReadMarksStore((state) => state.seenThroughByAgentKey);
   // A joined id list keeps the selector's result stable across unrelated session updates.
   const attentionKey = useSessionStore(
     useCallback(
@@ -41,13 +42,29 @@ export function useTabReadPolicy(
   );
   return useMemo(() => {
     const readThroughByAgentId = new Map<string, number>();
+    const seenThroughByAgentId = new Map<string, number>();
     for (const tab of tabs) {
       if (tab.target.kind !== "agent") continue;
       const serverId = tab.scope?.serverId ?? fallbackServerId;
       if (!serverId) continue;
-      const readThrough = readThroughByAgentKey.get(agentReadMarkKey(serverId, tab.target.agentId));
+      const key = agentReadMarkKey(serverId, tab.target.agentId);
+      const readThrough = readThroughByAgentKey.get(key);
       if (readThrough !== undefined) readThroughByAgentId.set(tab.target.agentId, readThrough);
+      const seenThrough = seenThroughByAgentKey.get(key);
+      if (seenThrough !== undefined) seenThroughByAgentId.set(tab.target.agentId, seenThrough);
     }
-    return { viewingMarksRead, readThroughByAgentId, attentionAgentIds };
-  }, [attentionAgentIds, fallbackServerId, readThroughByAgentKey, tabs, viewingMarksRead]);
+    return {
+      viewingMarksRead,
+      readThroughByAgentId,
+      attentionAgentIds,
+      seenThroughByAgentId,
+    };
+  }, [
+    attentionAgentIds,
+    fallbackServerId,
+    readThroughByAgentKey,
+    seenThroughByAgentKey,
+    tabs,
+    viewingMarksRead,
+  ]);
 }

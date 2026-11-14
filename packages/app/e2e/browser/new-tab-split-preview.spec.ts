@@ -62,4 +62,44 @@ test.describe("New Tab split preview", () => {
       await agent.cleanup();
     }
   });
+
+  test("a plain click on + offers Split right / Split down at the foot of the New Tab menu", async ({
+    page,
+  }) => {
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "new-tab-menu-split-",
+      title: "Split from the New Tab menu",
+    });
+    try {
+      await agent.client.waitForAgentUpsert(agent.agentId, (s) => s.status === "idle");
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expect(page.getByRole("textbox", { name: COMPOSER })).toBeEditable({
+        timeout: 30_000,
+      });
+      const plusButtons = page.getByTestId("workspace-new-tab-button").filter({ visible: true });
+      await expect(plusButtons).toHaveCount(1);
+
+      await plusButtons.first().click();
+      const menu = page.getByTestId("workspace-new-tab-menu");
+      await expect(menu).toBeVisible();
+      await expect(menu.getByTestId("workspace-new-tab-menu-split-right")).toContainText(
+        "Split pane right",
+      );
+      await expect(menu.getByTestId("workspace-new-tab-menu-split-down")).toContainText(
+        "Split pane down",
+      );
+      await page.screenshot({ path: test.info().outputPath("new-tab-menu-split.png") });
+      await menu.getByTestId("workspace-new-tab-menu-split-right").click();
+      await expect(plusButtons).toHaveCount(2, { timeout: 15_000 });
+      await expect(page.getByTestId("workspace-new-tab-menu")).toHaveCount(0);
+      await expect(page.getByRole("textbox", { name: COMPOSER })).toHaveCount(1);
+
+      await page.mouse.move(5, 400);
+      await plusButtons.nth(1).click();
+      await page.getByTestId("workspace-new-tab-menu-split-down").click();
+      await expect(plusButtons).toHaveCount(3, { timeout: 15_000 });
+    } finally {
+      await agent.cleanup();
+    }
+  });
 });

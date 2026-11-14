@@ -5,6 +5,7 @@ import { Plus, Server, Settings } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { Combobox, ComboboxItem, type ComboboxProps } from "@/components/ui/combobox";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useHostRuntimeSnapshot, type ActiveConnection } from "@/runtime/host-runtime";
 import { orderHostsLocalFirst } from "@/types/host-connection";
@@ -90,14 +91,16 @@ export function HostPickerOption({
   const trailingSlot = useMemo(() => {
     if (!onOpenHostSettings) return undefined;
     return (
-      <Pressable
-        onPress={handleSettingsPress}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${label} settings`}
-      >
-        <Settings size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-      </Pressable>
+      <IconTooltip label={`Open ${label} settings`} wrap={false}>
+        <Pressable
+          onPress={handleSettingsPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${label} settings`}
+        >
+          <Settings size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      </IconTooltip>
     );
   }, [
     handleSettingsPress,

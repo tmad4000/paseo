@@ -472,20 +472,27 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Tab management ---
-  // Desktop only: browser web reserves these combinations for its bookmarks/library.
+  // Keep binding IDs stable for saved overrides from the first workspace-search design.
   {
     id: "workspace-tab-search-cmd-shift-o-mac-desktop",
     action: "workspace.tab.search",
-    combo: "Cmd+Shift+O",
-    when: { mac: true, desktop: true, commandCenter: false },
-    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Search workspace tabs" },
+    combo: "Cmd+Shift+K",
+    when: { mac: true, commandCenter: false },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
   },
   {
     id: "workspace-tab-search-ctrl-shift-o-non-mac-desktop",
     action: "workspace.tab.search",
-    combo: "Ctrl+Shift+O",
+    combo: "Ctrl+Shift+K",
     when: { mac: false, desktop: true, commandCenter: false, terminal: false },
-    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Search workspace tabs" },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
+  },
+  {
+    id: "workspace-tab-search-alt-shift-k-non-mac-web",
+    action: "workspace.tab.search",
+    combo: "Alt+Shift+K",
+    when: { mac: false, desktop: false, commandCenter: false, terminal: false },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
   },
   {
     id: "workspace-tab-new-cmd-t-mac",
@@ -1485,6 +1492,24 @@ function shortcutChordsOverlap(a: KeyCombo[], b: KeyCombo[], isMac: boolean): bo
   );
 }
 
+function shortcutContextsOverlap(a: ParsedShortcutBinding, b: ParsedShortcutBinding): boolean {
+  for (const isMac of [true, false]) {
+    for (const isDesktop of [true, false]) {
+      for (const focusScope of ["other", "message-input", "editable", "terminal"] as const) {
+        const overlap = [true, false].some((commandCenterOpen) => {
+          const context = { isMac, isDesktop, focusScope, commandCenterOpen };
+          return (
+            matchesKeyboardShortcutContext(a.when, context) &&
+            matchesKeyboardShortcutContext(b.when, context)
+          );
+        });
+        if (overlap) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShortcutBinding[] {
   const effective = DEFAULT_BINDINGS.map(function (binding) {
     const override = overrides[binding.id];
@@ -1520,7 +1545,7 @@ export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShor
     const occupied = effective.some(
       (other) =>
         other.id !== binding.id &&
-        helpMatchesPlatform(other.when, { isMac: binding.when?.mac === true, isDesktop: true }) &&
+        shortcutContextsOverlap(other, binding) &&
         typeof overrides[other.id] === "string" &&
         other.parsedChord.length > 0 &&
         shortcutChordsOverlap(other.parsedChord, binding.parsedChord, binding.when?.mac === true),

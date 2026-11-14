@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "Primer mensaje",
     loading: "Cargando el primer mensaje…",
@@ -343,6 +344,7 @@ export const es: TranslationResources = {
       groupInOneList: "Mostrar chats en una sola lista",
       showAllSessions: "Mostrar todas las sesiones",
       groupAsSessions: "Mostrar chats como sesiones",
+      groupAsTabs: "Mostrar pestañas abiertas en la barra lateral",
       modelGroupLabel: "Modelo",
       modelSearchKeywords: "cambiar modelo modificar modelo establecer modelo seleccionar modelo",
       thinkingGroupLabel: "Razonamiento",
@@ -474,6 +476,10 @@ export const es: TranslationResources = {
       queueEditFailed: "No se pudo editar el mensaje en cola",
       steerRequiresUpdatedHost:
         "Actualiza este host de Paseo para dirigir el mensaje sin interrumpir el turno activo.",
+      steerRefusedStillQueued:
+        "El agente no puede recibir un mensaje a mitad de turno ahora. Sigue en cola y se enviará cuando termine el turno.",
+      queuedOutcomeUnknown:
+        "Paseo no pudo confirmar si este mensaje llegó al agente, así que no lo reenviará por sí solo. Vuelve a probar Enviar ahora cuando el agente esté inactivo, o reinicia el agente.",
       failedToCreateAgent: "No se pudo crear el agente",
       noHostSelected: "Ningún anfitrión seleccionado",
       initialPromptRequired: "Se requiere aviso inicial",
@@ -549,6 +555,16 @@ export const es: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Este agente alcanzó su límite",
+      description:
+        "Elige otro agente. Un borrador de continuación incluirá el historial de este chat en el mismo espacio de trabajo; revísalo y envíalo para continuar.",
+      chooseAnother: "Elige otro proveedor para esta transferencia.",
+      prepare: "Preparar transferencia",
+      preparing: "Preparando…",
+      noAlternatives:
+        "No hay otros proveedores disponibles en este host. Activa uno en sus ajustes o espera a que se restablezca el límite.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -915,6 +931,7 @@ export const es: TranslationResources = {
       reply: "Responder",
       forkMenu: "Bifurcar mensaje",
       forkInNewTab: "Bifurcar en una pestaña nueva",
+      forkInSplitPane: "Bifurcar en un panel dividido",
       forkInNewWorkspace: "Bifurcar en un espacio de trabajo nuevo",
       forkUnavailable: "Actualiza el host para usar esto.",
       forkMissingWorkspace: "Este agente no está en un espacio de trabajo.",
@@ -1015,6 +1032,7 @@ export const es: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Cargando espacio de trabajo",
       connecting: "Conectando",
@@ -1195,6 +1213,12 @@ export const es: TranslationResources = {
       loading: "Cargando...",
       modified: "Cambios sin guardar",
       newActivity: "Nueva actividad",
+      seenNotRead: "Visto, sin leer",
+      agentRunning: "Agente en ejecución",
+      needsInput: "Necesita tu respuesta",
+      readLayerUnread: "Sin leer",
+      seenLayerNotSeen: "No visto desde la última actividad",
+      seenLayerSeen: "Visto",
       loadingAgentTitle: "Título del agente de carga",
       fallback: {
         newAgent: "Nuevo agente",
@@ -1268,6 +1292,9 @@ export const es: TranslationResources = {
         splitDown: "Dividir panel hacia abajo",
         splitRightWithSession: "Dividir a la derecha con sesión…",
         splitDownWithSession: "Dividir hacia abajo con sesión…",
+        dropSessionOtherHost:
+          "Aquí solo se pueden soltar sesiones de este host. Usa una vista para combinar hosts.",
+        dropSessionNoSession: "Ese espacio de trabajo no tiene ninguna sesión para abrir.",
         changes: "Cambios",
         files: "Archivos",
         pullRequest: "Solicitud de extracción",
@@ -1742,9 +1769,14 @@ export const es: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Acciones de revisión para {{title}}",
+    needsInputSessions: "Necesita intervención ({{count}})",
+    needsInputSince: "Necesita intervención desde {{time}}",
+    sessionActions: "Acciones de sesión para {{title}}",
     reviewSessions: "Revisar ({{count}})",
     openTabs_one: "{{count}} pestaña abierta",
     openTabs: "{{count}} pestañas abiertas",
+    agentTasks: "Tareas del agente: {{completed}} de {{total}} hechas",
+    agentActiveTask: "Ahora: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1867,6 +1899,7 @@ export const es: TranslationResources = {
         status: "Estado",
         list: "Una sola lista",
         sessions: "Sesiones",
+        tabs: "Pestañas",
         labels: "Etiquetas",
       },
       titleSource: {
@@ -1984,6 +2017,14 @@ export const es: TranslationResources = {
       status: {
         serviceRunning: "Servicio {{name}} en ejecución",
         serviceUnhealthy: "Servicio {{name}} con fallos",
+        indicator: {
+          loading: "Iniciando",
+          running: "Trabajando: un agente está en ejecución",
+          needs_input: "Te necesita: un agente espera un permiso o una respuesta",
+          attention: "Terminado: hay resultados nuevos sin leer",
+          failed: "Error: un agente se detuvo con un error",
+          done: "Inactivo: nada nuevo",
+        },
         creating: "Creando...",
       },
       checks: {
@@ -1997,6 +2038,8 @@ export const es: TranslationResources = {
       actions: {
         markAsRead: "Marcar como leído",
         markAsReadNamed: "Marcar {{name}} como leído",
+        markAsReadHint:
+          "Marcar como leído: borra el indicador de terminado/error de este espacio de trabajo",
         menu: "AccionesWorkspace",
         newWorkspace: "Nuevo espacio de trabajo",
         showMore: "Mostrar más",
@@ -3022,6 +3065,13 @@ export const es: TranslationResources = {
         label: "Marcar chats como leídos al abrirlos",
         description:
           "Si está desactivado, un chat sigue sin leer hasta que lo marques como leído o le envíes un mensaje",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "Pestañas",
+        label: "Ordenar pestañas por actividad reciente",
+        description:
+          "Si está activado, el chat con la actividad más reciente pasa al principio de la fila de pestañas. Si está desactivado, las pestañas se quedan donde las pusiste",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

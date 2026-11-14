@@ -114,7 +114,7 @@ would discard chat drafts and expanded diff state despite retaining the IDs.
 The Expo Router stack is not the user-facing Back history. Workspace tab and
 pane focus, plus the compact/desktop explorer view, live in Zustand stores and
 do not create routes. `src/navigation/focus-history.ts` therefore owns the
-in-memory recency stack, while `focus-history-runtime.tsx` observes the active
+client-persisted recency stack, while `focus-history-runtime.tsx` observes the active
 route and those existing stores and restores through their normal actions.
 
 Keep the location observer at the app shell so workspace switches and app-wide
@@ -134,6 +134,12 @@ attention routing to open an unrelated session. This exception does not change
 resource equality or the allocation of fresh empty tabs. Regression coverage
 lives in `focus-history.test.ts` and `focus-history-runtime.test.ts`.
 
+Closing the final blank New tab leaves the empty workspace for the nearest useful
+Back-history visit, or `/sessions` when none remains. Other blank tabs and the
+`/new` flow are skipped. Forget the closed blank tab in both history directions;
+it has no resource identity to reopen. Closing a blank split pane still stays in
+the workspace and reveals its surviving sibling.
+
 The chevron beside each header Back/Forward arrow opens every retained entry in
 that direction (up to the focus-history model's 50-entry bound), nearest first.
 The arrow itself still moves one step. Right-click and long-press open the same
@@ -142,8 +148,17 @@ over either control for 350 ms previews the full menu without moving editor focu
 or dismissing the keyboard. Moving away closes the preview; activating the
 chevron promotes it to a keyboard-focused menu. A multi-step menu jump moves every
 skipped location to the opposite stack, so Forward retraces them in order. This
-focus history is in memory; the separate Recent sessions clock menu uses the
-persisted visit list and survives reload.
+focus history survives reloads and app restarts through AsyncStorage under
+`paseo:focus-history` (version 1), independently of the Recent sessions clock
+menu's persisted visit list. Both bounded stacks and the current location are
+saved; in-flight restores are not. Writes are serialized so a slow older save
+cannot overwrite newer focus. The app-shell observer waits for history and
+workspace-layout hydration before recording workspace focus. Its first
+observation of the restored tab reconciles launch-time pane/view defaults
+without adding a visit or discarding Forward; a different tab or route is a new
+visit. Invalid stored data starts an empty history; unavailable storage leaves
+navigation working in memory. Persistence is device-local and does not depend
+on daemon connectivity.
 
 A history row for a workspace location shows that workspace's open tab count
 with the same mark the sidebar row uses (`WorkspaceTabCountBadge`), so you can
@@ -176,12 +191,13 @@ targets.
 
 - Notifications carry `serverId`, `workspaceId`, and `agentId`. Route them
   directly to the workspace with the agent open intent.
-- Agent URLs carry only `serverId` and `agentId`. Route them through
+- Agent URLs received outside chat carry only `serverId` and `agentId`. Route them through
   `/h/[serverId]/agent/[agentId]`; that route waits for the named host, resolves
   the agent's workspace from the host, and then opens the agent there.
 
 Both paths converge on `navigateToAgent()`. Do not make notification routing
 guess a workspace, and do not add a workspace to the stable agent URL format.
+For activation inside chat, see [session links rendered in chat](#session-links-rendered-in-chat).
 
 ## Copied workspace and tab links
 
@@ -195,6 +211,35 @@ desktop uses `paseo-fork://h/...` rather than its internal renderer origin.
 Desktop's navigation inbox handles both session and workspace targets, including
 links received before a window is ready. These are navigation links for devices
 already paired to the host, not invitations or public shares.
+
+## Session links rendered in chat
+
+Chat session links (`paseo-fork://h/<server>/agent/<agent>`, plus legacy `paseo://`)
+use the protocol agent deep-link parser and the saved host registry. They never pass
+through the HTTP/HTTPS external opener or change its allowlist. A known cached agent
+or an exact target-host lookup supplies the workspace; malformed links, unknown hosts,
+missing agents and offline cold lookups show an error without creating connections or
+changing host authentication.
+
+The inline web link retains its real href and native anchor keyboard behavior. Click
+or Enter opens the session in the current window. Cmd/Ctrl/middle click requests a
+new window only when `window.supportsAgentTarget === true` and `openNew` is available.
+The `agentNavigation.ready` handshake predates targeted windows and does not establish
+support. Without window support, these gestures request the ordinary side pane.
+Shift-click explicitly requests a window and explains if unavailable.
+
+Side requests require the target's workspace to be active and hydrated, simultaneous
+panes to be supported, and the source tab to remain visible. Compact layouts, desktop
+Focus mode, self-links and requests originating in the remembered side pane reject
+side placement without changing the layout. The originating tab identifies its pane
+independently of global focus, including for an unfocused context menu. These checks
+run again after resolving the target. Unsupported side requests explain that the user
+can open the session normally or in a supported new window.
+
+Right-click the link for Open session, Open session beside (wide layouts), Open session
+in new window, and Copy link alongside Save to Stream. An unsupported window action is
+disabled and directs the user to Open session. On native, long-press the message to find
+its session links; native text spans keep their existing selection and tap handling.
 
 ## Params
 

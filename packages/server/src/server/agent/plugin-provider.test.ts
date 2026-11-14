@@ -431,6 +431,63 @@ describe("PluginAgentClientRegistry", () => {
     expect(eventsOfType(events, "turn_failed")).toHaveLength(1);
   });
 
+  test("leaves a completed session without a failure when its plugin provider is removed", async () => {
+    const harness = createProviderHarness();
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const session = await registry.clients()[harness.registration.id]!.createSession({
+      provider: harness.registration.id,
+      cwd: "/workspace",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.run("hello", { clientMessageId: "completed-message" });
+    expect(eventsOfType(events, "turn_completed")).toHaveLength(1);
+
+    registry.replace([]);
+    await harness.waitForClose();
+
+    expect(eventsOfType(events, "turn_failed")).toEqual([]);
+    await expect(
+      session.startTurn("after reload", { clientMessageId: "after-reload" }),
+    ).rejects.toBeInstanceOf(StaleProviderSessionError);
+  });
+
+  test("fails an accepted turn that has not started when its plugin provider is removed", async () => {
+    const harness = createProviderHarness({
+      handleInput: async (input, emit) => {
+        if (input.type !== "session.prompt") return false;
+        emit({
+          type: "session.prompt_result",
+          sessionId: input.sessionId,
+          clientMessageId: input.prompt.clientMessageId,
+          result: { type: "turn", turnId: "accepted-turn" },
+        });
+        return true;
+      },
+    });
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const session = await registry.clients()[harness.registration.id]!.createSession({
+      provider: harness.registration.id,
+      cwd: "/workspace",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await expect(
+      session.startTurn("hello", { clientMessageId: "accepted-message" }),
+    ).resolves.toEqual({ turnId: "accepted-turn" });
+
+    registry.replace([]);
+    await harness.waitForClose();
+
+    expect(eventsOfType(events, "turn_failed")).toEqual([
+      expect.objectContaining({ error: "Provider connection closed" }),
+    ]);
+  });
+
   test("closes a stale session after its plugin provider is replaced", async () => {
     const old = createProviderHarness();
     const next = createProviderHarness();
@@ -594,6 +651,102 @@ describe("PluginAgentClientRegistry", () => {
     registry.replace([]);
     await expect.poll(harness.closeCount).toBe(1);
     expect(harness.inputs.map((input) => input.type)).toContain("session.close");
+  });
+
+  test("delivers a supported steer to the active turn", async () => {
+    const harness = createProviderHarness({
+      capabilities: [...CAPABILITIES, "prompt.steer"],
+      handleInput: async (input, emit) => {
+        if (input.type !== "session.prompt") return false;
+        emit({
+          type: "session.prompt_result",
+          sessionId: input.sessionId,
+          clientMessageId: input.prompt.clientMessageId,
+          result: { type: "steer", turnId: "turn-1" },
+        });
+        return true;
+      },
+    });
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const client = registry.clients()[harness.registration.id]!;
+    const session = await client.createSession({ provider: harness.registration.id, cwd: "/tmp" });
+    try {
+      await expect(
+        session.steerActiveTurn!("follow up", {
+          expectedTurnId: "turn-1",
+          clientMessageId: "steer-1",
+          clearPendingPermissions: true,
+        }),
+      ).resolves.toEqual({ status: "accepted" });
+      expect(harness.inputs.find((input) => input.type === "session.prompt")).toMatchObject({
+        prompt: {
+          delivery: "steer",
+          clientMessageId: "steer-1",
+          input: { type: "message", content: [{ type: "text", text: "follow up" }] },
+          clearPendingPermissions: true,
+        },
+      });
+    } finally {
+      await session.close();
+      registry.replace([]);
+    }
+  });
+
+  test("marks a steer the plugin received but did not apply to the turn as delivery-unknown", async () => {
+    const harness = createProviderHarness({
+      capabilities: [...CAPABILITIES, "prompt.steer"],
+      handleInput: async (input, emit) => {
+        if (input.type !== "session.prompt") return false;
+        emit({
+          type: "session.prompt_result",
+          sessionId: input.sessionId,
+          clientMessageId: input.prompt.clientMessageId,
+          result: { type: "turn", turnId: "turn-2" },
+        });
+        return true;
+      },
+    });
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const session = await registry.clients()[harness.registration.id]!.createSession({
+      provider: harness.registration.id,
+      cwd: "/tmp",
+    });
+    try {
+      await expect(
+        session.steerActiveTurn!("follow up", { expectedTurnId: "turn-1" }),
+      ).resolves.toEqual({ status: "unavailable", deliveryUnknown: true });
+    } finally {
+      await session.close();
+      registry.replace([]);
+    }
+  });
+
+  test("returns unavailable when steering a provider without prompt.steer capability", async () => {
+    const harness = createProviderHarness({
+      capabilities: [
+        "prompt.message",
+        "session.configure",
+        "session.persistence",
+        "session.subsession",
+        "permission",
+      ],
+    });
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const session = await registry.clients()[harness.registration.id]!.createSession({
+      provider: harness.registration.id,
+      cwd: "/workspace",
+    });
+    try {
+      const result = await session.steerActiveTurn!("hello", { expectedTurnId: "turn-1" });
+      expect(result).toEqual({ status: "unavailable" });
+      expect(harness.inputs.filter((input) => input.type === "session.prompt")).toHaveLength(0);
+    } finally {
+      await session.close();
+      registry.replace([]);
+    }
   });
 });
 

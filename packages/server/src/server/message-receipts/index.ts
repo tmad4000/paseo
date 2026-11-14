@@ -4,6 +4,7 @@ import path from "node:path";
 import pLimit from "p-limit";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "../atomic-file.js";
+import { isPromptNotSubmittedError } from "../agent/prompt-not-submitted.js";
 
 const ReceiptSchema = z.object({
   fingerprint: z.string(),
@@ -38,6 +39,11 @@ interface SendMessageInput {
 /** Owns message delivery receipts; creation is owned by CreationService. */
 export class MessageReceipts {
   private readonly pending = new Map<string, Promise<void>>();
+  /**
+   * Receipts left pending by a dispatch this process started, so its in-memory
+   * timeline saw the outcome. Cleared once the receipt is settled either way.
+   */
+  private readonly dispatchedHere = new Set<string>();
   /** Bumped on every write so a caller never joins a scan that predates it. */
   private writeGeneration = 0;
   private inflightScan: { generation: number; records: Promise<Receipt[]> } | null = null;
@@ -202,7 +208,17 @@ export class MessageReceipts {
     } else {
       await this.mutate(() => rm(file, { force: true }));
     }
+    this.dispatchedHere.delete(key);
     return true;
+  }
+
+  /**
+   * True when this process wrote the pending receipt and attempted the dispatch. A
+   * receipt left by an earlier daemon process may belong to a prompt the provider
+   * accepted just before a crash, before the timeline was persisted.
+   */
+  dispatchedByThisProcess(agentId: string, messageId: string): boolean {
+    return this.dispatchedHere.has(digest(["send", agentId, messageId]));
   }
 
   send(input: SendMessageInput): Promise<void> {
@@ -242,21 +258,22 @@ export class MessageReceipts {
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.write(file, { ...receipt, state: "pending" });
+    this.dispatchedHere.add(key);
     try {
       await input.send();
     } catch (error) {
-      // A competing run rejected the synchronous reservation before provider dispatch.
-      // This is the only post-receipt error safe to retry automatically.
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        (error.code === "AGENT_RUN_BUSY" || error.code === "AGENT_PROMPT_NOT_SUBMITTED")
-      ) {
+      // Errors that prove the provider never received the prompt (a lost run
+      // reservation, failed preparation, a refused steer) leave nothing to
+      // deduplicate, so the same message id may be sent again. Anything else
+      // may have reached the provider and stays guarded as outcome-unknown.
+      if (isPromptNotSubmittedError(error)) {
         await this.mutate(() => rm(file, { force: true }));
+        this.dispatchedHere.delete(key);
       }
       throw error;
     }
     await this.write(file, { ...receipt, state: "completed" });
+    this.dispatchedHere.delete(key);
   }
 }
 

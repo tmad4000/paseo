@@ -12,6 +12,8 @@ import {
   Text,
   StyleSheet as RNStyleSheet,
   type PressableStateCallbackType,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from "react-native";
 import {
   EditingTextInput as TextInput,
@@ -86,6 +88,7 @@ import {
   queueComposerMessageOnServer,
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
+  queuedSendNowErrorMessage,
   updateQueuedComposerMessage,
   removeQueuedComposerMessageLocally,
   reorderQueuedComposerMessagesLocally,
@@ -106,6 +109,7 @@ import {
 } from "@/voice/preferred-voice";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
@@ -1275,7 +1279,32 @@ function QueuedMessageRow({
   const commitFromUI = useCallback(() => {
     void handleSave("commit").catch(() => {});
   }, [handleSave]);
+  const handleEditKeyPress = useCallback(
+    (
+      event: NativeSyntheticEvent<
+        TextInputKeyPressEventData & {
+          metaKey?: boolean;
+          ctrlKey?: boolean;
+          shiftKey?: boolean;
+          altKey?: boolean;
+          isComposing?: boolean;
+          keyCode?: number;
+          repeat?: boolean;
+        }
+      >,
+    ) => {
+      const key = event.nativeEvent;
+      if (!isWeb || detached || key.isComposing || key.keyCode === 229) return;
+      if (key.key !== "Enter" || !(key.metaKey || key.ctrlKey) || key.shiftKey || key.altKey)
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!key.repeat) commitFromUI();
+    },
+    [commitFromUI, detached],
+  );
   const removesOnSave = !draft.trim() && item.attachments.length === 0;
+  const commitLabel = removesOnSave ? removeLabel : saveLabel;
   const removeFromUI = useCallback(() => {
     void handleRemove().catch(() => {});
   }, [handleRemove]);
@@ -1302,6 +1331,7 @@ function QueuedMessageRow({
           initialValue={draft}
           onChangeText={preserveDraft}
           onBlur={saveFromUI}
+          onKeyPress={handleEditKeyPress}
           multiline
           autoFocus
           editable={!isSaving}
@@ -1345,26 +1375,36 @@ function QueuedMessageRow({
             >
               <Text style={styles.queueEditTextButtonLabel}>{cancelLabel}</Text>
             </Pressable>
-            <Pressable
-              onPress={commitFromUI}
-              disabled={isSaving}
-              style={[
-                styles.queueEditTextButton,
-                removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={removesOnSave ? removeLabel : saveLabel}
-            >
-              <Text
-                style={
-                  removesOnSave
-                    ? styles.queueEditRemoveButtonLabel
-                    : styles.queueEditSaveButtonLabel
-                }
-              >
-                {removesOnSave ? removeLabel : saveLabel}
-              </Text>
-            </Pressable>
+            <Tooltip enabledOnDesktop enabledOnMobile={false}>
+              <TooltipTrigger asChild>
+                <Pressable
+                  onPress={commitFromUI}
+                  disabled={isSaving}
+                  style={[
+                    styles.queueEditTextButton,
+                    removesOnSave ? styles.queueEditRemoveButton : styles.queueEditSaveButton,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={commitLabel}
+                >
+                  <Text
+                    style={
+                      removesOnSave
+                        ? styles.queueEditRemoveButtonLabel
+                        : styles.queueEditSaveButtonLabel
+                    }
+                  >
+                    {commitLabel}
+                  </Text>
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent testID="queued-message-save-tooltip">
+                <View style={styles.tooltipRow}>
+                  <Text style={styles.tooltipText}>{commitLabel}</Text>
+                  <Shortcut keys={["mod", "Enter"]} />
+                </View>
+              </TooltipContent>
+            </Tooltip>
           </View>
         )}
       </View>
@@ -1402,15 +1442,17 @@ function QueuedMessageRow({
         />
         {!isPending && (
           <>
-            <Pressable
-              onPress={handleEdit}
-              disabled={isRemoving}
-              style={styles.queueActionButton}
-              accessibilityLabel={editLabel}
-              accessibilityRole="button"
-            >
-              <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
+            <IconTooltip label={editLabel} wrap={false}>
+              <Pressable
+                onPress={handleEdit}
+                disabled={isRemoving}
+                style={styles.queueActionButton}
+                accessibilityLabel={editLabel}
+                accessibilityRole="button"
+              >
+                <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+              </Pressable>
+            </IconTooltip>
             <Pressable
               onPress={sendFromUI}
               disabled={isRemoving}
@@ -1422,19 +1464,21 @@ function QueuedMessageRow({
             </Pressable>
           </>
         )}
-        <Pressable
-          onPress={removeFromUI}
-          disabled={isRemoving}
-          style={styles.queueActionButton}
-          accessibilityLabel={removeLabel}
-          accessibilityRole="button"
-        >
-          {isRemoving ? (
-            <ThemedAttachmentSpinner size={18} uniProps={iconForegroundMutedMapping} />
-          ) : (
-            <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-          )}
-        </Pressable>
+        <IconTooltip label={removeLabel} wrap={false}>
+          <Pressable
+            onPress={removeFromUI}
+            disabled={isRemoving}
+            style={styles.queueActionButton}
+            accessibilityLabel={removeLabel}
+            accessibilityRole="button"
+          >
+            {isRemoving ? (
+              <ThemedAttachmentSpinner size={18} uniProps={iconForegroundMutedMapping} />
+            ) : (
+              <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+            )}
+          </Pressable>
+        </IconTooltip>
       </View>
     </View>
   );
@@ -1473,18 +1517,21 @@ function QueuedMessageGrip({
   }
   // dnd-kit's attributes make this the focusable sortable handle (Space to lift, arrows to move).
   const { attributes, listeners, setActivatorNodeRef } = dragHandleProps ?? NO_DRAG_HANDLE_PROPS;
+  // The tooltip hovers a wrapper View so it never touches dnd-kit's handle ref or listeners.
   return (
-    <View
-      {...attributes}
-      {...listeners}
-      ref={setActivatorNodeRef as unknown as Ref<View>}
-      dataSet={KEYBOARD_OWNER_DATASET}
-      accessibilityLabel={label}
-      style={styles.queueDragHandle}
-      testID={`queued-message-drag-${itemId}`}
-    >
-      {icon}
-    </View>
+    <IconTooltip label={label}>
+      <View
+        {...attributes}
+        {...listeners}
+        ref={setActivatorNodeRef as unknown as Ref<View>}
+        dataSet={KEYBOARD_OWNER_DATASET}
+        accessibilityLabel={label}
+        style={styles.queueDragHandle}
+        testID={`queued-message-drag-${itemId}`}
+      >
+        {icon}
+      </View>
+    </IconTooltip>
   );
 }
 
@@ -3071,7 +3118,7 @@ function ComposerContentImpl({
           const snapshot = await client.sendQueuedAgentMessageNow(agentId, id);
           applyAgentQueueSnapshot(serverId, snapshot);
         } catch (error) {
-          setSendError(error instanceof Error ? error.message : t("composer.errors.failedToSend"));
+          setSendError(queuedSendNowErrorMessage(error, t("composer.errors.failedToSend")));
         }
         return;
       }

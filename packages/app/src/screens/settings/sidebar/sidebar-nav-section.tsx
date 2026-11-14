@@ -14,6 +14,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Switch } from "@/components/ui/switch";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -107,24 +108,28 @@ function SidebarNavRow({
         <NavItemShortcut item={item} />
       </View>
       <View style={styles.rowActions}>
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveUpIcon}
-          onPress={handleMoveUp}
-          disabled={isFirst}
-          accessibilityLabel={t("settings.appearance.sidebar.moveUp")}
-          testID={`sidebar-nav-move-up-${item.key}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveDownIcon}
-          onPress={handleMoveDown}
-          disabled={isLast}
-          accessibilityLabel={t("settings.appearance.sidebar.moveDown")}
-          testID={`sidebar-nav-move-down-${item.key}`}
-        />
+        <IconTooltip label={t("settings.appearance.sidebar.moveUp")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveUpIcon}
+            onPress={handleMoveUp}
+            disabled={isFirst}
+            accessibilityLabel={t("settings.appearance.sidebar.moveUp")}
+            testID={`sidebar-nav-move-up-${item.key}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.appearance.sidebar.moveDown")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveDownIcon}
+            onPress={handleMoveDown}
+            disabled={isLast}
+            accessibilityLabel={t("settings.appearance.sidebar.moveDown")}
+            testID={`sidebar-nav-move-down-${item.key}`}
+          />
+        </IconTooltip>
         <Switch
           value={item.visible}
           onValueChange={handleVisibleChange}

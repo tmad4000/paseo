@@ -33,6 +33,9 @@ import type { Theme } from "@/styles/theme";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import { SessionStatusIndicator } from "./project-leading-visual";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { STATUS_BUCKET_LABELS } from "@/hooks/sidebar-status-view-model";
+import { useAgentSeenNotRead } from "@/workspace/use-agent-seen";
 import { getSidebarRowBackdrop } from "./sidebar-row-backdrop";
 import { sidebarSessionMeta, type SidebarSessionRow } from "./sidebar-sessions";
 import { WorkspaceTimestamp } from "./workspace-trailing";
@@ -120,6 +123,7 @@ const SessionRow = memo(function SessionRow({
   const isTouch = isNative || isCompact;
   const { archiveAgent } = useArchiveAgent();
   const [renaming, setRenaming] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const title = row.title ?? t("workspace.tabs.fallback.agent");
   const meta = sidebarSessionMeta(row, hostLabel);
   const pinned = useSessionStore((state) => {
@@ -169,6 +173,7 @@ const SessionRow = memo(function SessionRow({
     [row.agentId, row.serverId, t],
   );
   const testBase = `sidebar-session-${row.serverId}-${row.agentId}`;
+  const seenNotRead = useAgentSeenNotRead(row.serverId, row.agentId);
   const menuItems = (
     <>
       {readAction.canMarkRead ? (
@@ -217,13 +222,24 @@ const SessionRow = memo(function SessionRow({
           style={rowStyle}
           testID={testBase}
         >
-          <SessionStatusIndicator statusBucket={row.statusBucket} backdrop={backdrop}>
-            <ThemedProviderGlyph
-              provider={row.provider}
-              serverId={row.serverId}
-              uniProps={foregroundMutedColorMapping}
-            />
-          </SessionStatusIndicator>
+          <IconTooltip
+            // Done draws no badge, so there is no status mark to explain.
+            label={row.statusBucket === "done" ? null : STATUS_BUCKET_LABELS[row.statusBucket]}
+            side="right"
+          >
+            <SessionStatusIndicator
+              statusBucket={row.statusBucket}
+              running={row.running}
+              backdrop={backdrop}
+              seen={seenNotRead}
+            >
+              <ThemedProviderGlyph
+                provider={row.provider}
+                serverId={row.serverId}
+                uniProps={foregroundMutedColorMapping}
+              />
+            </SessionStatusIndicator>
+          </IconTooltip>
           <View style={styles.body}>
             <Text style={styles.title} numberOfLines={1}>
               {title}
@@ -239,25 +255,33 @@ const SessionRow = memo(function SessionRow({
         </ContextMenuContent>
       </ContextMenu>
       {readAction.canMarkRead ? (
-        <Pressable
-          hitSlop={isTouch ? 6 : 4}
-          style={isTouch ? styles.touchAction : styles.action}
-          accessibilityRole={isWeb ? undefined : "button"}
-          accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name: title })}
-          onPress={readAction.markRead}
-          testID={`${testBase}-read`}
-        >
-          {renderMarkReadIcon}
-        </Pressable>
+        <IconTooltip label={t("sidebar.workspace.actions.markAsRead")} wrap={false}>
+          <Pressable
+            hitSlop={isTouch ? 6 : 4}
+            style={isTouch ? styles.touchAction : styles.action}
+            accessibilityRole={isWeb ? undefined : "button"}
+            accessibilityLabel={t("sidebar.workspace.actions.markAsReadNamed", { name: title })}
+            onPress={readAction.markRead}
+            testID={`${testBase}-read`}
+          >
+            {renderMarkReadIcon}
+          </Pressable>
+        </IconTooltip>
       ) : null}
-      <DropdownMenu compactMode="sheet">
-        <DropdownMenuTrigger
-          accessibilityLabel={t("sidebarSessions.actions", { title })}
-          style={isTouch ? styles.touchAction : styles.action}
-          testID={`${testBase}-actions`}
+      <DropdownMenu compactMode="sheet" open={actionsOpen} onOpenChange={setActionsOpen}>
+        <IconTooltip
+          label={t("sidebarSessions.actions", { title })}
+          disabled={actionsOpen}
+          wrap={false}
         >
-          <ThemedMoreVertical size={14} uniProps={foregroundMutedColorMapping} />
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            accessibilityLabel={t("sidebarSessions.actions", { title })}
+            style={isTouch ? styles.touchAction : styles.action}
+            testID={`${testBase}-actions`}
+          >
+            <ThemedMoreVertical size={14} uniProps={foregroundMutedColorMapping} />
+          </DropdownMenuTrigger>
+        </IconTooltip>
         <DropdownMenuContent pages={pages} sheetTitle={title}>
           {menuItems}
         </DropdownMenuContent>

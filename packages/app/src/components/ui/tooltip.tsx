@@ -250,6 +250,11 @@ export function Tooltip({
   const isCompact = useIsCompactFormFactor();
   const enabled = isCompact ? enabledOnMobile : enabledOnDesktop;
 
+  // A disabled tooltip (e.g. its menu is open) must not come back open on its own when re-enabled.
+  useEffect(() => {
+    if (!enabled) setIsOpen(false);
+  }, [enabled, setIsOpen]);
+
   const value = useMemo<TooltipContextValue>(
     () => ({
       open: isOpen,
@@ -313,6 +318,12 @@ export function TooltipTrigger({
       clearOpenTimer();
     };
   }, [clearOpenTimer]);
+
+  // Pressing a menu trigger disables its tooltip without running our onPress (the trigger owns
+  // its press), so a hover-delay timer still pending must be cancelled here.
+  useEffect(() => {
+    if (!ctx.enabled) clearOpenTimer();
+  }, [ctx.enabled, clearOpenTimer]);
 
   const handleHoverIn = useCallback(
     (e?: unknown) => {

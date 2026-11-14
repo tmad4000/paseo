@@ -92,6 +92,12 @@ export interface AppSettings {
   chatOutlineEnabled: boolean;
   /** Opening, leaving or focusing a chat marks it read. Fork default off: read is explicit. */
   markReadOnOpen: boolean;
+  /**
+   * Reorder a pane's tab row so the most recently active chat sits first. Fork default off:
+   * tabs keep the order they were opened or dragged into.
+   */
+  sortTabsByActivity: boolean;
+  compactTabTitles: boolean;
   vimKeybindings: boolean;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
@@ -149,6 +155,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   toolCallDetailLevel: "overview",
   chatOutlineEnabled: true,
   markReadOnOpen: false,
+  sortTabsByActivity: false,
+  compactTabTitles: true,
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
@@ -247,6 +255,8 @@ const StoredAppSettingsSchema = z
     compactToolCalls: z.boolean().optional().catch(undefined),
     chatOutlineEnabled: z.boolean().catch(true),
     markReadOnOpen: z.boolean().catch(false),
+    sortTabsByActivity: z.boolean().catch(false),
+    compactTabTitles: z.boolean().catch(true),
     vimKeybindings: z.boolean().catch(false),
     openInSidePane: z
       .object({

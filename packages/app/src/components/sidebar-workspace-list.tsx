@@ -1,4 +1,7 @@
-import { WorkspaceReviewList } from "@/components/sidebar/workspace-review-list";
+import {
+  WorkspaceNeedsInputList,
+  WorkspaceReviewList,
+} from "@/components/sidebar/workspace-review-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
@@ -93,6 +96,7 @@ import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
+import type { SidebarTabRow } from "@/components/sidebar/sidebar-tabs";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import {
   SidebarWorkspaceContextMenu,
@@ -120,6 +124,7 @@ import {
   SidebarWorkspaceTrailingActionOverlay,
   SidebarWorkspaceTrailingActionSlot,
 } from "@/components/sidebar/sidebar-workspace-row-content";
+import { SidebarDragSource } from "@/workspace-tabs/sidebar-drag-source";
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { SidebarProjectEmptyState } from "@/components/sidebar/empty-states";
 import {
@@ -135,6 +140,7 @@ import {
 } from "@/components/sidebar/workspace-trailing";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -342,30 +348,33 @@ export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewS
     ? [prBadgeStyles.text, prBadgeStyles.textHovered]
     : prBadgeStyles.text;
   const presentation = getForgePresentation(normalizeForge(hint.forge));
+  const label = t("workspace.git.pr.accessibility.pullRequest", {
+    number: hint.number,
+    context: presentation.changeRequestContext,
+  });
 
   return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t("workspace.git.pr.accessibility.pullRequest", {
-        number: hint.number,
-        context: presentation.changeRequestContext,
-      })}
-      hitSlop={4}
-      onPressIn={handlePressIn}
-      onPress={handlePress}
-      onHoverIn={handleHoverIn}
-      onHoverOut={handleHoverOut}
-      style={pressableStyle}
-    >
-      {isHovered ? (
-        <ThemedExternalLink size={12} uniProps={foregroundColorMapping} />
-      ) : (
-        <PullRequestStateIcon state={hint.state} size={12} />
-      )}
-      <Text style={textStyle} numberOfLines={1}>
-        {hint.number}
-      </Text>
-    </Pressable>
+    <IconTooltip label={label} wrap={false}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={label}
+        hitSlop={4}
+        onPressIn={handlePressIn}
+        onPress={handlePress}
+        onHoverIn={handleHoverIn}
+        onHoverOut={handleHoverOut}
+        style={pressableStyle}
+      >
+        {isHovered ? (
+          <ThemedExternalLink size={12} uniProps={foregroundColorMapping} />
+        ) : (
+          <PullRequestStateIcon state={hint.state} size={12} />
+        )}
+        <Text style={textStyle} numberOfLines={1}>
+          {hint.number}
+        </Text>
+      </Pressable>
+    </IconTooltip>
   );
 }
 
@@ -506,17 +515,20 @@ function ProjectKebabMenu({
   removeProjectStatus: "idle" | "pending" | "success";
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu compactMode="sheet">
-      <DropdownMenuTrigger
-        hitSlop={8}
-        style={projectKebabStyle}
-        accessibilityRole={platformIsWeb ? undefined : "button"}
-        accessibilityLabel={t("sidebar.project.actions.menu")}
-        testID={`sidebar-project-kebab-${projectViewKey}`}
-      >
-        {renderKebabTriggerIcon}
-      </DropdownMenuTrigger>
+    <DropdownMenu compactMode="sheet" open={open} onOpenChange={setOpen}>
+      <IconTooltip label={t("sidebar.project.actions.menu")} disabled={open} wrap={false}>
+        <DropdownMenuTrigger
+          hitSlop={8}
+          style={projectKebabStyle}
+          accessibilityRole={platformIsWeb ? undefined : "button"}
+          accessibilityLabel={t("sidebar.project.actions.menu")}
+          testID={`sidebar-project-kebab-${projectViewKey}`}
+        >
+          {renderKebabTriggerIcon}
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="end" width={220} sheetTitle={t("sidebar.project.actions.menu")}>
         <ProjectMenuItems
           surface="dropdown"
@@ -1158,100 +1170,112 @@ function WorkspaceRowInner({
   }, [interaction]);
 
   const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const dropPayload = useMemo(
+    () => ({
+      kind: "workspace" as const,
+      serverId: workspace.serverId,
+      workspaceId: workspace.workspaceId,
+    }),
+    [workspace.serverId, workspace.workspaceId],
+  );
 
   return (
-    <SidebarWorkspaceRowFrame workspace={workspace} isDragging={isDragging}>
-      {({ isHovered, contextMenuOpen, onContextMenuOpenChange, hoverHandlers }) => {
-        const isDesktop = !isTouchPlatform;
-        const serviceSummary = isDesktop ? selectWorkspaceServiceSummary(workspace.scripts) : null;
-        const workspaceRowStyle = getProjectWorkspaceRowStyle({
-          isDragging,
-          isPressed,
-          selected,
-          isHovered,
-        });
-        const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
-        return (
-          <View
-            {...dragAttributes}
-            {...dragHandleProps?.listeners}
-            ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
-            style={styles.workspaceRowContainer}
-            {...hoverHandlers}
-          >
-            <SidebarWorkspaceContextMenu
-              contextMenuOpen={contextMenuOpen}
-              onContextMenuOpenChange={onContextMenuOpenChange}
-              workspace={workspace}
-              leadingProjectName={leadingProjectName}
-              hostBadgeLabel={hostBadge?.label}
-              workspaceKey={workspace.workspaceKey}
-              onCopyPath={onCopyPath}
-              onCopyBranchName={onCopyBranchName}
-              onRename={onRename}
-              onMarkAsRead={onMarkAsRead}
-              onMarkAsUnread={onMarkAsUnread}
-              onArchive={onArchive}
-              archiveLabel={archiveLabel}
-              archiveStatus={archiveStatus}
-              archivePendingLabel={archivePendingLabel}
-              archiveShortcutKeys={archiveShortcutKeys}
-              isPinned={isPinned}
-              onTogglePin={onTogglePin}
-              openInFileManagerPath={workspace.workspaceDirectory}
-              disabled={isArchiving}
-              aria-selected={selected}
-              accessibilityRole="button"
-              accessibilityState={accessibilityState}
-              style={workspaceRowStyle}
-              highlightStyle={styles.workspaceRowPressed}
-              onPressIn={handleWorkspacePressIn}
-              onTouchMove={interaction.handleTouchMove}
-              onPressOut={handleWorkspacePressOut}
-              onPress={handlePress}
-              testID={`sidebar-workspace-row-${workspace.workspaceKey}`}
+    <SidebarDragSource payload={dropPayload}>
+      <SidebarWorkspaceRowFrame workspace={workspace} isDragging={isDragging}>
+        {({ isHovered, contextMenuOpen, onContextMenuOpenChange, hoverHandlers }) => {
+          const isDesktop = !isTouchPlatform;
+          const serviceSummary = isDesktop
+            ? selectWorkspaceServiceSummary(workspace.scripts)
+            : null;
+          const workspaceRowStyle = getProjectWorkspaceRowStyle({
+            isDragging,
+            isPressed,
+            selected,
+            isHovered,
+          });
+          const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
+          return (
+            <View
+              {...dragAttributes}
+              {...dragHandleProps?.listeners}
+              ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+              style={styles.workspaceRowContainer}
+              {...hoverHandlers}
             >
-              <SidebarWorkspaceRowContent
+              <SidebarWorkspaceContextMenu
+                contextMenuOpen={contextMenuOpen}
+                onContextMenuOpenChange={onContextMenuOpenChange}
                 workspace={workspace}
-                hostBadge={hostBadge}
                 leadingProjectName={leadingProjectName}
-                leadingProjectIconDataUri={leadingProjectIconDataUri}
-                serviceSummary={serviceSummary}
-                backdrop={backdrop}
-                isHovered={isHovered}
-                isLoading={isArchiving || isCreating}
-                isCreating={isCreating}
-                shortcutNumber={shortcutNumber}
-                showShortcutBadge={showShortcutBadge}
-                reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+                hostBadgeLabel={hostBadge?.label}
+                workspaceKey={workspace.workspaceKey}
+                onCopyPath={onCopyPath}
+                onCopyBranchName={onCopyBranchName}
+                onRename={onRename}
+                onMarkAsRead={onMarkAsRead}
+                onMarkAsUnread={onMarkAsUnread}
+                onArchive={onArchive}
+                archiveLabel={archiveLabel}
+                archiveStatus={archiveStatus}
+                archivePendingLabel={archivePendingLabel}
+                archiveShortcutKeys={archiveShortcutKeys}
+                isPinned={isPinned}
+                onTogglePin={onTogglePin}
+                openInFileManagerPath={workspace.workspaceDirectory}
+                disabled={isArchiving}
+                aria-selected={selected}
+                accessibilityRole="button"
+                accessibilityState={accessibilityState}
+                style={workspaceRowStyle}
+                highlightStyle={styles.workspaceRowPressed}
+                onPressIn={handleWorkspacePressIn}
+                onTouchMove={interaction.handleTouchMove}
+                onPressOut={handleWorkspacePressOut}
+                onPress={handlePress}
+                testID={`sidebar-workspace-row-${workspace.workspaceKey}`}
               >
-                <WorkspaceRowRightGroup
+                <SidebarWorkspaceRowContent
                   workspace={workspace}
+                  hostBadge={hostBadge}
+                  leadingProjectName={leadingProjectName}
+                  leadingProjectIconDataUri={leadingProjectIconDataUri}
+                  serviceSummary={serviceSummary}
                   backdrop={backdrop}
                   isHovered={isHovered}
-                  isTouchPlatform={isTouchPlatform}
+                  isLoading={isArchiving || isCreating}
                   isCreating={isCreating}
-                  showShortcutBadge={showShortcutBadge}
                   shortcutNumber={shortcutNumber}
-                  archiveLabel={archiveLabel}
-                  archiveStatus={archiveStatus}
-                  archivePendingLabel={archivePendingLabel}
-                  archiveShortcutKeys={archiveShortcutKeys}
-                  onArchive={onArchive}
-                  onCopyBranchName={onCopyBranchName}
-                  onCopyPath={onCopyPath}
-                  onRename={onRename}
-                  onMarkAsRead={onMarkAsRead}
-                  onMarkAsUnread={onMarkAsUnread}
-                  isPinned={isPinned}
-                  onTogglePin={onTogglePin}
-                />
-              </SidebarWorkspaceRowContent>
-            </SidebarWorkspaceContextMenu>
-          </View>
-        );
-      }}
-    </SidebarWorkspaceRowFrame>
+                  showShortcutBadge={showShortcutBadge}
+                  reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+                >
+                  <WorkspaceRowRightGroup
+                    workspace={workspace}
+                    backdrop={backdrop}
+                    isHovered={isHovered}
+                    isTouchPlatform={isTouchPlatform}
+                    isCreating={isCreating}
+                    showShortcutBadge={showShortcutBadge}
+                    shortcutNumber={shortcutNumber}
+                    archiveLabel={archiveLabel}
+                    archiveStatus={archiveStatus}
+                    archivePendingLabel={archivePendingLabel}
+                    archiveShortcutKeys={archiveShortcutKeys}
+                    onArchive={onArchive}
+                    onCopyBranchName={onCopyBranchName}
+                    onCopyPath={onCopyPath}
+                    onRename={onRename}
+                    onMarkAsRead={onMarkAsRead}
+                    onMarkAsUnread={onMarkAsUnread}
+                    isPinned={isPinned}
+                    onTogglePin={onTogglePin}
+                  />
+                </SidebarWorkspaceRowContent>
+              </SidebarWorkspaceContextMenu>
+            </View>
+          );
+        }}
+      </SidebarWorkspaceRowFrame>
+    </SidebarDragSource>
   );
 }
 
@@ -1490,6 +1514,11 @@ function WorkspaceRowItem({
         drag={drag ?? noop}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       <WorkspaceReviewList
         serverId={workspace.serverId}
@@ -2024,12 +2053,16 @@ export function SidebarWorkspaceList({
   // see and falls back to "all projects" when nothing matches, so it either keeps at least one
   // project or is not applied at all — it can narrow this list but never empty it.
   // Sessions grouping filters chats, not workspaces, so its rows decide whether anything matched.
-  const { sessionRows } = useSidebarModel();
+  const { sessionRows, tabRows } = useSidebarModel();
   const sessionsMode = groupMode === "sessions";
+  const tabsMode = groupMode === "tabs";
+  let visibleRowCount = projects.length;
+  if (sessionsMode) visibleRowCount = sessionRows.length;
+  else if (tabsMode) visibleRowCount = tabRows.length;
   const sidebarFilterEmpty =
     (hasActiveLabelFilter || hasActiveSearchFilter) &&
     hasProjectsBeforeFilter &&
-    (sessionsMode ? sessionRows.length === 0 : projects.length === 0);
+    visibleRowCount === 0;
 
   // Project mode is the one that keeps its project headers; every other grouping mode is a flat
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
@@ -2051,6 +2084,7 @@ export function SidebarWorkspaceList({
         sidebarFilterEmpty={sidebarFilterEmpty}
         searchActive={hasActiveSearchFilter}
         sessionRows={sessionsMode ? sessionRows : undefined}
+        tabRows={tabsMode ? tabRows : undefined}
         parentGestureRef={parentGestureRef}
         dragGestureHostActive={dragGestureHostActive}
       />
@@ -2106,6 +2140,7 @@ function SidebarGroupedModeList({
   sidebarFilterEmpty,
   searchActive,
   sessionRows,
+  tabRows,
   parentGestureRef,
   dragGestureHostActive,
 }: {
@@ -2123,6 +2158,7 @@ function SidebarGroupedModeList({
   sidebarFilterEmpty: boolean;
   searchActive: boolean;
   sessionRows?: readonly SidebarSessionRow[];
+  tabRows?: readonly SidebarTabRow[];
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }) {
@@ -2152,6 +2188,7 @@ function SidebarGroupedModeList({
       sidebarFilterEmpty={sidebarFilterEmpty}
       searchActive={searchActive}
       sessionRows={sessionRows}
+      tabRows={tabRows}
       parentGestureRef={parentGestureRef}
       dragGestureHostActive={dragGestureHostActive}
     />

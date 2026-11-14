@@ -1699,6 +1699,113 @@ test("archive emits an authoritative agent_update upsert for subscribed clients"
   });
 });
 
+test.each([true, false])(
+  "moving a chat publishes and returns its current projection (live=%s)",
+  async (isLive) => {
+    const emitted: SessionOutboundMessage[] = [];
+    const timestamp = "2026-11-13T00:00:00.000Z";
+    const source = createPersistedWorkspaceRecord({
+      workspaceId: "source",
+      projectId: "project",
+      cwd: REPO_CWD,
+      kind: "directory",
+      displayName: "Source",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const destination = { ...source, workspaceId: "destination", title: "Aside" };
+    const project = createPersistedProjectRecord({
+      projectId: "project",
+      rootPath: REPO_CWD,
+      kind: "non_git",
+      displayName: "Project",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    let stored = makeStoredAgent({
+      id: "moved-chat",
+      cwd: REPO_CWD,
+      workspaceId: source.workspaceId,
+      updatedAt: timestamp,
+    });
+    const live = makeManagedAgent({
+      id: stored.id,
+      cwd: stored.cwd,
+      workspaceId: source.workspaceId,
+      lifecycle: "idle",
+      updatedAt: timestamp,
+    });
+    const permission = {
+      id: "approval",
+      provider: "codex" as const,
+      kind: "tool" as const,
+      name: "shell",
+      title: "Run command?",
+    };
+    live.pendingPermissions.set(permission.id, permission);
+    live.currentModeId = "plan";
+    live.availableModes = [{ id: "plan", label: "Plan" }];
+    live.capabilities.supportsStreaming = false;
+    const session = createSessionForWorkspaceTests({
+      onMessage: (message) => emitted.push(message),
+      agentStorage: { get: async () => stored, list: async () => [stored] },
+      agentManager: {
+        getAgent: () => (isLive ? live : null),
+        listAgents: () => (isLive ? [live] : []),
+        moveAgentToWorkspace: async (_id: string, patch: { workspaceId: string }) => {
+          stored = { ...stored, workspaceId: patch.workspaceId };
+          live.workspaceId = patch.workspaceId;
+        },
+      },
+    });
+    session.workspaceRegistry.list = async () => [source, destination];
+    session.workspaceRegistry.get = async (id: string) =>
+      id === source.workspaceId ? source : destination;
+    session.workspaceRegistry.update = async (_id, update) => update(source);
+    session.projectRegistry.get = async () => project;
+    session.projectRegistry.list = async () => [project];
+    await activateAgentUpdatesSubscription(session, "move-observer");
+    emitted.length = 0;
+    await session.handleMessage({
+      type: "agent.workspace.move.request",
+      requestId: "move-chat",
+      agentId: stored.id,
+      expectedWorkspaceId: source.workspaceId,
+      destination: { kind: "existing", workspaceId: destination.workspaceId },
+    });
+    const response = findByType(emitted, "agent.workspace.move.response").payload;
+    expect(response.error).toBeNull();
+    expect(response.agent).toMatchObject({
+      id: stored.id,
+      cwd: stored.cwd,
+      workspaceId: destination.workspaceId,
+      archivedAt: null,
+    });
+    const updates = filterByType(emitted, "agent_update");
+    expect(updates).toHaveLength(1);
+    const update = updates[0].payload;
+    expect(update.kind).toBe("upsert");
+    if (update.kind !== "upsert") throw new Error("Missing moved agent snapshot");
+    expect(update.agent).toEqual(response.agent);
+    if (isLive) {
+      expect(response.agent).toMatchObject({
+        status: "idle",
+        pendingPermissions: [permission],
+        currentModeId: "plan",
+        availableModes: live.availableModes,
+        capabilities: live.capabilities,
+      });
+      expect(live.pendingPermissions.get(permission.id)).toEqual(permission);
+    } else {
+      expect(response.agent).toMatchObject({
+        status: "closed",
+        pendingPermissions: [],
+        availableModes: [],
+      });
+    }
+  },
+);
+
 test("workspace clear attention clears stored-only agents and responds", async () => {
   const emitted: SessionOutboundMessage[] = [];
   const workspace = createPersistedWorkspaceRecord({
@@ -3571,7 +3678,7 @@ test("fetch_agent_request still resolves archived historical agents", async () =
   session.resolveAgentIdentifier = async (identifier: string) =>
     identifier === "Archived History Agent"
       ? { ok: true, agentId: agent.id }
-      : { ok: false, error: `Agent not found: ${identifier}` };
+      : { ok: false, notFound: true, error: `Agent not found: ${identifier}` };
   session.getAgentPayloadById = async (agentId: string) => (agentId === agent.id ? agent : null);
   session.buildProjectPlacementForWorkspaceId = async () => ({
     projectKey: "proj-history-detail",
@@ -4054,6 +4161,65 @@ test("project.remove.request archives active workspaces and removes the project 
     removedProjectId: project.projectId,
   });
 });
+
+test.each([false, true])(
+  "removes later-page empty projects from subscriptions with sync=%s",
+  async (sync) => {
+    const emitted: SessionOutboundMessage[] = [];
+    const session = createSessionForWorkspaceTests({
+      onMessage: (message) => emitted.push(message),
+    });
+    const records = ["a", "b"].map((id) =>
+      createPersistedProjectRecord({
+        projectId: id,
+        rootPath: `/tmp/${id}`,
+        kind: "non_git",
+        displayName: id,
+        createdAt: "2026-03-01T12:00:00.000Z",
+        updatedAt: "2026-03-01T12:00:00.000Z",
+      }),
+    );
+    const projects = new Map(records.map((project) => [project.projectId, project]));
+    session.projectRegistry.get = async (id: string) => projects.get(id) ?? null;
+    session.projectRegistry.list = async () => Array.from(projects.values());
+    session.projectRegistry.remove = async (id: string) => {
+      projects.delete(id);
+    };
+    session.workspaceRegistry.list = async () => [];
+    session.workspaceRegistry.get = async () => null;
+    await session.handleMessage({
+      type: "fetch_workspaces_request",
+      requestId: "first",
+      page: { limit: 1 },
+      subscribe: { subscriptionId: "sub" },
+      ...(sync ? { sync: {} } : {}),
+    });
+    const first = findByType(emitted, "fetch_workspaces_response")!.payload;
+    expect(first.emptyProjects.map((project) => project.projectId)).toEqual(["a"]);
+    expect(first.pageInfo.hasMore).toBe(true);
+    await session.handleMessage({
+      type: "fetch_workspaces_request",
+      requestId: "second",
+      page: { limit: 1, cursor: first.pageInfo.nextCursor! },
+      ...(sync ? { sync: {} } : {}),
+    });
+    const second = filterByType(emitted, "fetch_workspaces_response").at(-1)!.payload;
+    expect(second.emptyProjects.map((project) => project.projectId)).toEqual(["b"]);
+    expect(second.pageInfo.hasMore).toBe(false);
+    await session.handleMessage({
+      type: "project.remove.request",
+      requestId: "remove",
+      projectId: "b",
+    });
+    expect(filterByType(emitted, "workspace_update")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ kind: "remove", removedProjectId: "b" }),
+        }),
+      ]),
+    );
+  },
+);
 
 test("project.remove.request removes an already-empty project", async () => {
   const emitted: SessionOutboundMessage[] = [];

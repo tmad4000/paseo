@@ -11,7 +11,10 @@ import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostFeature } from "@/runtime/host-features";
-import { generateDraftId } from "@/stores/draft-keys";
+import { generateDraftId, buildDraftStoreKey } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
+import { buildHandoffDraftSetup, buildHandoffPrompt } from "@/hooks/provider-limit";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useSessionStore } from "@/stores/session-store";
 import {
@@ -64,6 +67,8 @@ export interface ForkAgentRequest {
   agent: ForkAgentSource;
   workspaceId?: string;
   target: AssistantForkTarget;
+  /** Explicit alternate provider selection; opens a reviewable continuation draft. */
+  handoff?: { provider: AgentProvider; modelId: string };
   boundary?: ForkAgentBoundary;
   /**
    * For a thread: the workspace whose layout shows the chat, when the chat is a session from
@@ -123,6 +128,12 @@ function buildForkDraftSetup(agent: ForkAgentSource): WorkspaceDraftTabSetup | u
   };
 }
 
+function resolveForkDraftSetup(request: ForkAgentRequest, sameProviderMessage: string) {
+  if (!request.handoff) return buildForkDraftSetup(request.agent);
+  if (request.handoff.provider === request.agent.provider) throw new Error(sameProviderMessage);
+  return buildHandoffDraftSetup({ cwd: request.agent.cwd, ...request.handoff });
+}
+
 function buildForkDraftTabTarget(
   setup: WorkspaceDraftTabSetup | undefined,
   draftId: string,
@@ -158,17 +169,65 @@ async function openThreadDraft(input: {
   if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
   const draftId = await input.prepareForkDraft();
   useThreadDraftStore.getState().setOrigin(draftId, { parentAgentId: request.agentId, anchor });
-  const target = buildForkDraftTabTarget(input.draftSetup, draftId);
-  // Compact layouts have no side pane, and a main chat shown as a split from another workspace
-  // cannot host a draft of its own workspace here: open the thread in that workspace instead.
+  openDraftBeside({
+    serverId: input.serverId,
+    workspaceId: threadWorkspaceId,
+    workspaceKey,
+    layoutWorkspaceId: request.layoutWorkspaceId,
+    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+    isCompact: input.isCompact,
+  });
+}
+
+/** Fork in a split pane: the fork draft opens beside the chat, which stays open in its pane. */
+async function openSplitPaneDraft(input: {
+  serverId: string;
+  request: ForkAgentRequest;
+  draftSetup: WorkspaceDraftTabSetup | undefined;
+  prepareForkDraft: () => Promise<string>;
+  missingWorkspaceMessage: string;
+  isCompact: boolean;
+}): Promise<void> {
+  const { workspaceId, layoutWorkspaceId } = input.request;
+  if (!workspaceId) throw new Error(input.missingWorkspaceMessage);
+  const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId: input.serverId, workspaceId });
+  if (!workspaceKey) throw new Error(input.missingWorkspaceMessage);
+  const draftId = await input.prepareForkDraft();
+  openDraftBeside({
+    serverId: input.serverId,
+    workspaceId,
+    workspaceKey,
+    layoutWorkspaceId,
+    target: buildForkDraftTabTarget(input.draftSetup, draftId),
+    isCompact: input.isCompact,
+  });
+}
+
+/**
+ * Open a fork or thread draft in a pane beside the chat. Compact layouts have no side pane, and a
+ * main chat shown as a split from another workspace cannot host a draft of its own workspace
+ * there: both open the draft as the visible tab of its own workspace instead.
+ */
+function openDraftBeside(input: {
+  serverId: string;
+  workspaceId: string;
+  workspaceKey: string;
+  layoutWorkspaceId?: string;
+  target: WorkspaceTabTarget;
+  isCompact: boolean;
+}): void {
   const shownElsewhere = Boolean(
-    request.layoutWorkspaceId && request.layoutWorkspaceId !== threadWorkspaceId,
+    input.layoutWorkspaceId && input.layoutWorkspaceId !== input.workspaceId,
   );
   if (input.isCompact || shownElsewhere) {
-    navigateToWorkspace({ serverId: input.serverId, workspaceId: threadWorkspaceId, target });
+    navigateToWorkspace({
+      serverId: input.serverId,
+      workspaceId: input.workspaceId,
+      target: input.target,
+    });
     return;
   }
-  openWorkspaceTargetBeside({ workspaceKey, target });
+  openWorkspaceTargetBeside({ workspaceKey: input.workspaceKey, target: input.target });
 }
 
 /**
@@ -197,7 +256,7 @@ export function useForkAgent(
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
-      const draftSetup = buildForkDraftSetup(agent);
+      const draftSetup = resolveForkDraftSetup(request, t("agentPanel.limitHandoff.chooseAnother"));
       const prepareForkDraft = async () => {
         const draftId = generateDraftId();
         const payload = await client.buildAgentForkContext(agentId, boundary);
@@ -212,6 +271,12 @@ export function useForkAgent(
           scopeKey: buildDraftWorkspaceAttachmentScopeKey(draftId),
           attachments: [attachment],
         });
+        if (request.handoff) {
+          useDraftStore.getState().editDraftText({
+            draftKey: buildDraftStoreKey({ serverId, agentId, draftId }),
+            text: buildHandoffPrompt({ serverId, agentId }),
+          });
+        }
         return draftId;
       };
 
@@ -223,6 +288,18 @@ export function useForkAgent(
           prepareForkDraft,
           missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
           failedMessage: t("message.actions.forkFailed"),
+          isCompact,
+        });
+        return;
+      }
+
+      if (target === "split") {
+        await openSplitPaneDraft({
+          serverId,
+          request,
+          draftSetup,
+          prepareForkDraft,
+          missingWorkspaceMessage: t("message.actions.forkMissingWorkspace"),
           isCompact,
         });
         return;

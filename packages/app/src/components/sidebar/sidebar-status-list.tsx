@@ -86,7 +86,10 @@ import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pi
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
+import { WorkspaceNeedsInputList } from "./workspace-review-list";
 import { SidebarSessionList } from "@/components/sidebar/sidebar-session-list";
+import { SidebarTabList } from "@/components/sidebar/sidebar-tab-list";
+import type { SidebarTabRow } from "@/components/sidebar/sidebar-tabs";
 import type { SidebarSessionRow } from "@/components/sidebar/sidebar-sessions";
 
 // Themed icon wrappers
@@ -140,6 +143,8 @@ interface StatusWorkspaceListProps {
    * Absent in every workspace grouping mode.
    */
   sessionRows?: readonly SidebarSessionRow[];
+  /** Tabs grouping: these tab rows replace the workspace groups. Absent in every other mode. */
+  tabRows?: readonly SidebarTabRow[];
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostActive?: boolean;
 }
@@ -159,6 +164,7 @@ export function SidebarStatusWorkspaceList({
   sidebarFilterEmpty = false,
   searchActive = false,
   sessionRows,
+  tabRows,
   parentGestureRef,
   dragGestureHostActive,
 }: StatusWorkspaceListProps) {
@@ -249,7 +255,10 @@ export function SidebarStatusWorkspaceList({
       {!sidebarFilterEmpty && sessionRows ? (
         <SidebarSessionList rows={sessionRows} onNavigate={onWorkspacePress} />
       ) : null}
-      {sidebarFilterEmpty || sessionRows ? null : (
+      {!sidebarFilterEmpty && tabRows ? (
+        <SidebarTabList rows={tabRows} onNavigate={onWorkspacePress} />
+      ) : null}
+      {sidebarFilterEmpty || sessionRows || tabRows ? null : (
         <StatusGroupList
           groups={groups}
           collapsedWorkspaceGroupKeys={
@@ -585,6 +594,11 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
         drag={drag}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
+      />
+      <WorkspaceNeedsInputList
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        onNavigate={onWorkspacePress}
       />
       <SidebarWorkspaceTabMatches
         workspaceKey={workspace.workspaceKey}

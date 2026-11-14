@@ -2,6 +2,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  sessionLinks: en.sessionLinks,
   firstMessage: {
     title: "Первое сообщение",
     loading: "Загрузка первого сообщения…",
@@ -341,6 +342,7 @@ export const ru: TranslationResources = {
       groupInOneList: "Показывать чаты одним списком",
       showAllSessions: "Показать все сессии",
       groupAsSessions: "Показывать чаты как сеансы",
+      groupAsTabs: "Показывать открытые вкладки в боковой панели",
       modelGroupLabel: "Модель",
       modelSearchKeywords: "Сменить, изменить, выбрать или установить модель",
       thinkingGroupLabel: "Мышление",
@@ -472,6 +474,10 @@ export const ru: TranslationResources = {
       queueEditFailed: "Не удалось изменить сообщение в очереди",
       steerRequiresUpdatedHost:
         "Обновите этот хост Paseo, чтобы направить сообщение, не прерывая текущий ход.",
+      steerRefusedStillQueued:
+        "Агент сейчас не может принять сообщение посреди хода. Оно остаётся в очереди и будет отправлено, когда ход завершится.",
+      queuedOutcomeUnknown:
+        "Paseo не удалось подтвердить, что это сообщение дошло до агента, поэтому оно не будет отправлено повторно автоматически. Повторите «Отправить сейчас», когда агент освободится, или перезапустите агента.",
       failedToCreateAgent: "Не удалось создать агента.",
       noHostSelected: "Хост не выбран",
       initialPromptRequired: "Необходим инициализирующий промпт",
@@ -547,6 +553,16 @@ export const ru: TranslationResources = {
     },
   },
   agentPanel: {
+    limitHandoff: {
+      title: "Этот агент достиг лимита",
+      description:
+        "Выберите другого агента. Черновик продолжения будет содержать историю этого чата в том же рабочем пространстве; проверьте и отправьте его, чтобы продолжить.",
+      chooseAnother: "Выберите другого провайдера для передачи.",
+      prepare: "Подготовить передачу",
+      preparing: "Подготовка…",
+      noAlternatives:
+        "На этом хосте нет других доступных провайдеров. Включите один в настройках хоста или дождитесь сброса лимита.",
+    },
     links: {
       pill_one: "{{count}} link",
       pill_other: "{{count}} links",
@@ -907,6 +923,7 @@ export const ru: TranslationResources = {
       reply: "Ответить",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
+      forkInSplitPane: "Ответвить в разделённой панели",
       forkInNewWorkspace: "Создать форк в новом рабочем пространстве",
       forkUnavailable: "Обновите хост, чтобы использовать эту функцию.",
       forkMissingWorkspace: "Этот агент не связан с рабочим пространством.",
@@ -1007,6 +1024,7 @@ export const ru: TranslationResources = {
     },
   },
   workspace: {
+    moveChat: en.workspace.moveChat,
     route: {
       loading: "Загрузка рабочего пространства",
       connecting: "Подключение",
@@ -1189,6 +1207,12 @@ export const ru: TranslationResources = {
       loading: "Загрузка...",
       modified: "Несохранённые изменения",
       newActivity: "Новая активность",
+      seenNotRead: "Просмотрено, не прочитано",
+      agentRunning: "Агент работает",
+      needsInput: "Нужен ответ",
+      readLayerUnread: "Не прочитано",
+      seenLayerNotSeen: "Не просмотрено после последней активности",
+      seenLayerSeen: "Просмотрено",
       loadingAgentTitle: "Загрузка названия агента",
       fallback: {
         newAgent: "Новый агент",
@@ -1261,6 +1285,9 @@ export const ru: TranslationResources = {
         splitDown: "Разделить панель снизу",
         splitRightWithSession: "Разделить вправо с сессией…",
         splitDownWithSession: "Разделить вниз с сессией…",
+        dropSessionOtherHost:
+          "Сюда можно перетащить только сессии этого хоста. Чтобы совместить хосты, используйте вид.",
+        dropSessionNoSession: "В этом рабочем пространстве нет сессии для открытия.",
         changes: "Изменения",
         files: "Файлы",
         pullRequest: "PR",
@@ -1716,9 +1743,14 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     reviewActions: "Действия проверки для {{title}}",
+    needsInputSessions: "Требуется ввод ({{count}})",
+    needsInputSince: "Требуется ввод с {{time}}",
+    sessionActions: "Действия с сеансом {{title}}",
     reviewSessions: "Проверка ({{count}})",
     openTabs_one: "Открытых вкладок: {{count}}",
     openTabs: "Открытых вкладок: {{count}}",
+    agentTasks: "Задачи агента: выполнено {{completed}} из {{total}}",
+    agentActiveTask: "Сейчас: {{task}}",
     routing: {
       findMode: "Find chats mode",
       findAction: "Find existing chats",
@@ -1841,6 +1873,7 @@ export const ru: TranslationResources = {
         status: "Статус",
         list: "Один список",
         sessions: "Сеансы",
+        tabs: "Вкладки",
         labels: "Метки",
       },
       titleSource: {
@@ -1959,6 +1992,14 @@ export const ru: TranslationResources = {
       status: {
         serviceRunning: "Сервис {{name}} запущен",
         serviceUnhealthy: "Сервис {{name}} работает некорректно",
+        indicator: {
+          loading: "Запуск",
+          running: "Работает: агент выполняется",
+          needs_input: "Нужны вы: агент ждёт разрешения или ответа",
+          attention: "Готово: есть непрочитанный результат",
+          failed: "Ошибка: агент остановился с ошибкой",
+          done: "Простой: ничего нового",
+        },
         creating: "Создание...",
       },
       checks: {
@@ -1972,6 +2013,8 @@ export const ru: TranslationResources = {
       actions: {
         markAsRead: "Отметить как прочитанное",
         markAsReadNamed: "Отметить «{{name}}» как прочитанное",
+        markAsReadHint:
+          "Отметить как прочитанное: убирает индикатор завершения/ошибки этого рабочего пространства",
         menu: "Действия рабочего пространства",
         newWorkspace: "Новое рабочее пространство",
         showMore: "Показать ещё",
@@ -2999,6 +3042,13 @@ export const ru: TranslationResources = {
         label: "Отмечать чаты прочитанными при открытии",
         description:
           "Если выключено, чат остаётся непрочитанным, пока вы не отметите его прочитанным или не отправите сообщение",
+      },
+      compactTabTitles: en.settings.general.compactTabTitles,
+      sortTabsByActivity: {
+        section: "Вкладки",
+        label: "Сортировать вкладки по недавней активности",
+        description:
+          "Если включено, чат с последней активностью перемещается в начало ряда вкладок. Если выключено, вкладки остаются там, где вы их разместили",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",

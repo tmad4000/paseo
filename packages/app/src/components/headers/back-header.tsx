@@ -6,6 +6,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ArrowLeft } from "lucide-react-native";
 import { ScreenHeader } from "./screen-header";
 import { ScreenTitle } from "./screen-title";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
 
@@ -34,14 +35,16 @@ export function BackHeader({ title, titleAccessory, rightContent, onBack }: Back
     <ScreenHeader
       left={
         <>
-          <Pressable
-            onPress={handleBack}
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel={t("common.actions.back")}
-          >
-            <ArrowLeft size={theme.iconSize.lg} color={theme.colors.foregroundMuted} />
-          </Pressable>
+          <IconTooltip label={t("common.actions.back")} side="bottom">
+            <Pressable
+              onPress={handleBack}
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.actions.back")}
+            >
+              <ArrowLeft size={theme.iconSize.lg} color={theme.colors.foregroundMuted} />
+            </Pressable>
+          </IconTooltip>
           {title && <ScreenTitle>{title}</ScreenTitle>}
           {titleAccessory}
         </>

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { getProviderIcon } from "@/components/provider-icons";
 import { isNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -322,17 +323,20 @@ function ScheduleKebabMenu({
 }): ReactElement {
   const productName = scheduleProductName(schedule);
   const productNameLower = productName.toLowerCase();
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        hitSlop={8}
-        style={kebabTriggerStyle}
-        accessibilityRole={isNative ? "button" : undefined}
-        accessibilityLabel={`${productName} actions`}
-        testID={`schedule-kebab-${schedule.id}`}
-      >
-        {renderKebabTriggerIcon}
-      </DropdownMenuTrigger>
+    <DropdownMenu onOpenChange={setMenuOpen}>
+      <IconTooltip label={`${productName} actions`} disabled={menuOpen}>
+        <DropdownMenuTrigger
+          hitSlop={8}
+          style={kebabTriggerStyle}
+          accessibilityRole={isNative ? "button" : undefined}
+          accessibilityLabel={`${productName} actions`}
+          testID={`schedule-kebab-${schedule.id}`}
+        >
+          {renderKebabTriggerIcon}
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="end" width={220}>
         <DropdownMenuItem
           leading={editLeading}

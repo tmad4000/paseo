@@ -55,6 +55,7 @@ function buildRowPresentation(row: SubagentRow, serverId: string): WorkspaceTabP
     tooltip: data.label,
     modified: false,
     icon: getProviderIcon(row.provider, serverId),
+    running: data.statusBucket === "running",
   };
 }
 

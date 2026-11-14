@@ -160,19 +160,32 @@ function parseEntryCapture(notification: string): unknown {
 
 async function loadPaseoExtensionListeners(
   extensionPath: string,
+  registerMcpServer: (name: string, config: unknown) => void = () => undefined,
 ): Promise<Map<string, PaseoExtensionListener>> {
   const listeners = new Map<string, PaseoExtensionListener>();
   const extension = (await import(pathToFileURL(extensionPath).href)) as {
     default: (piApi: {
       on: (event: string, listener: PaseoExtensionListener) => void;
+      events: { on: () => void };
       registerCommand: () => void;
+      registerMcpServer: (name: string, config: unknown) => void;
     }) => void;
   };
   extension.default({
     on: (event, listener) => listeners.set(event, listener),
+    events: { on: () => undefined },
     registerCommand: () => undefined,
+    registerMcpServer,
   });
   return listeners;
+}
+
+async function readRegisteredMcpServers(extensionPath: string): Promise<Record<string, unknown>> {
+  const servers: Record<string, unknown> = {};
+  await loadPaseoExtensionListeners(extensionPath, (name, config) => {
+    servers[name] = config;
+  });
+  return servers;
 }
 
 async function applyPaseoExtensionSystemPrompt(
@@ -1787,6 +1800,48 @@ describe("PiRpcAgentSession", () => {
     expect(session.describePersistence()?.metadata?.thinkingOptionId).toBe("off");
   });
 
+  test.each(["high", "off", "max"] as const)(
+    "publishes an extension's thinking change to %s before refreshing state",
+    async (level) => {
+      const { pi, session } = await createSession();
+      onTestFinished(() => session.close());
+      const changes: AgentStreamEvent[] = [];
+      session.subscribe((event) => {
+        if (event.type === "thinking_option_changed") {
+          expect(session.describePersistence()?.metadata?.thinkingOptionId).toBe(level);
+          changes.push(event);
+        }
+      });
+      const runtime = pi.latestSession();
+      runtime.state = { ...runtime.state, thinkingLevel: level };
+      runtime.emit({ type: "thinking_level_changed", level });
+
+      expect(changes).toEqual([
+        { type: "thinking_option_changed", provider: "pi", thinkingOptionId: level },
+      ]);
+      expect(session.describePersistence()?.metadata?.thinkingOptionId).toBe(level);
+      await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: level });
+    },
+  );
+
+  test.each([undefined, null, "invalid", 123])(
+    "ignores a thinking change with invalid level %s",
+    async (level) => {
+      const { pi, session } = await createSession();
+      onTestFinished(() => session.close());
+      const initialThinking = session.describePersistence()?.metadata?.thinkingOptionId;
+      const changes: AgentStreamEvent[] = [];
+      session.subscribe((event) => {
+        if (event.type === "thinking_option_changed") changes.push(event);
+      });
+
+      pi.latestSession().emit({ type: "thinking_level_changed", level });
+
+      expect(changes).toEqual([]);
+      expect(session.describePersistence()?.metadata?.thinkingOptionId).toBe(initialThinking);
+    },
+  );
+
   test("surfaces state refresh failures after a Pi thinking update", async () => {
     const { pi, session } = await createSession();
     onTestFinished(() => session.close());
@@ -1902,6 +1957,33 @@ describe("PiRpcAgentSession", () => {
       error: "Pi exited",
     });
   });
+
+  test.each([false, true])(
+    "rejects new turns with Reload guidance after the Pi process exits (active: %s)",
+    async (active) => {
+      const { pi, session, events } = await createSession();
+      try {
+        if (active) {
+          await session.startTurn("before crash");
+        }
+        const runtime = pi.latestSession();
+        runtime.emit({ type: "process_exit", error: "Pi exited" });
+        if (active) {
+          await expect(events.nextTurnFailure()).resolves.toMatchObject({ error: "Pi exited" });
+        }
+        const promptCount = runtime.prompts.length;
+
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await expect(session.startTurn("after crash")).rejects.toThrow(
+            "Pi process exited. Reload agent before sending another message.",
+          );
+        }
+        expect(runtime.prompts).toHaveLength(promptCount);
+      } finally {
+        await session.close();
+      }
+    },
+  );
 
   test("fails an autonomous turn when the Pi process exits before settlement", async () => {
     const { pi, events } = await createSession();
@@ -2333,6 +2415,18 @@ describe("PiRpcAgentSession steering", () => {
     await expect(session.steerActiveTurn("steer", { expectedTurnId: turnId })).rejects.toThrow(
       "Pi RPC socket closed",
     );
+  });
+
+  test("marks a steer Pi already queued as delivery-unknown when the turn ends meanwhile", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    const { turnId } = await session.startTurn("run");
+    fakeSession.afterSteerQueued = () => session.close();
+
+    const result = await session.steerActiveTurn("steer", { expectedTurnId: turnId });
+
+    expect(result).toEqual({ status: "unavailable", deliveryUnknown: true });
+    expect(fakeSession.steerCalls).toEqual([{ message: "steer", imageCount: 0 }]);
   });
 
   test("denies pending permissions that block an accepted steer", async () => {
@@ -2864,6 +2958,81 @@ describe("PiRpcAgentClient", () => {
     ]);
   });
 
+  test.each([
+    { outcome: "successful", error: null },
+    { outcome: "failed", error: new Error("summarizer failed") },
+  ])("waits for $outcome manual compaction before sending a new prompt", async ({ error }) => {
+    const { pi, session, events } = await createSession();
+    onTestFinished(() => session.close());
+    const fakeSession = pi.latestSession();
+    fakeSession.compactError = error;
+    const compactionFinished = Promise.withResolvers<void>();
+    fakeSession.compactCompletion = compactionFinished.promise;
+    const handler = session.tryHandleOutOfBand("/compact");
+    const compaction = handler!.run({ emit: () => {} });
+
+    const { turnId } = await session.startTurn("continue after compaction");
+    await flushTurnScheduling();
+    expect(fakeSession.compactRequests).toEqual([{}]);
+    expect(fakeSession.prompts).toEqual([]);
+
+    compactionFinished.resolve();
+    await compaction;
+    await flushTurnScheduling();
+    expect(fakeSession.prompts).toEqual([{ message: "continue after compaction", imageCount: 0 }]);
+
+    fakeSession.finishTurn();
+    await events.nextTurnCompletion();
+    expect(events.turnLifecycleEvents()).toContainEqual({ type: "turn_completed", turnId });
+    expect(events.eventTypes()).not.toContain("turn_failed");
+  });
+
+  test.each(["interrupt", "close"] as const)(
+    "does not send a prompt waiting on compaction after %s",
+    async (action) => {
+      const { pi, session } = await createSession();
+      onTestFinished(() => session.close());
+      const fakeSession = pi.latestSession();
+      const compactionFinished = Promise.withResolvers<void>();
+      fakeSession.compactCompletion = compactionFinished.promise;
+      const handler = session.tryHandleOutOfBand("/compact");
+      const compaction = handler!.run({ emit: () => {} });
+
+      await session.startTurn("do not send this prompt");
+      await session[action]();
+      compactionFinished.resolve();
+      await compaction;
+      await flushTurnScheduling();
+
+      expect(fakeSession.prompts).toEqual([]);
+    },
+  );
+
+  test("does not send a prompt when compaction finishes during interruption", async () => {
+    const { pi, session, events } = await createSession();
+    onTestFinished(() => session.close());
+    const fakeSession = pi.latestSession();
+    const compactionFinished = Promise.withResolvers<void>();
+    fakeSession.compactCompletion = compactionFinished.promise;
+    const clearQueueFinished = Promise.withResolvers<void>();
+    fakeSession.clearQueueCompletion = clearQueueFinished.promise;
+    const handler = session.tryHandleOutOfBand("/compact");
+    const compaction = handler!.run({ emit: () => {} });
+    const { turnId } = await session.startTurn("do not send this prompt");
+
+    const interruption = session.interrupt();
+    compactionFinished.resolve();
+    await compaction;
+    await flushTurnScheduling();
+    expect(fakeSession.controlRequests).toEqual(["clear_queue"]);
+    expect(fakeSession.prompts).toEqual([]);
+
+    clearQueueFinished.resolve();
+    await interruption;
+    expect(events.turnLifecycleEvents()).toEqual([{ type: "turn_canceled", turnId }]);
+    expect(fakeSession.prompts).toEqual([]);
+  });
+
   test("closes Pi compact loading marker when RPC rejects after compaction starts", async () => {
     const { pi, session } = await createSession();
     const fakeSession = pi.latestSession();
@@ -3129,6 +3298,102 @@ describe("PiRpcAgentClient", () => {
         { env: { PI_CODING_AGENT_DIR: agentDir } },
       ),
     ).rejects.toThrow(`Failed to parse Pi MCP config: ${configPath}`);
+  });
+
+  test("registers MCP servers through Pi's built-in MCP when pi-mcp-adapter is not loaded", async () => {
+    const pi = new FakePi();
+    pi.queueCommands([
+      {
+        name: "mcp",
+        source: "extension",
+        sourceInfo: { path: "builtin:mcp", source: "builtin" },
+      },
+    ]);
+    const session = await createClient(pi).createSession(
+      createConfig({
+        mcpServers: {
+          paseo: {
+            type: "http",
+            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            headers: { Authorization: "Bearer token" },
+          },
+          local: { type: "stdio", command: "node", args: ["server.js"], env: { KEY: "`${x}`" } },
+        },
+      }),
+    );
+
+    expect(session.capabilities.supportsMcpServers).toBe(true);
+    const actualLaunch = pi.recordedLaunches[1]!;
+    expect(actualLaunch.argv).not.toContain("--mcp-config");
+    const extensionPath = actualLaunch.extensionPaths[0]!;
+    expect(await readRegisteredMcpServers(extensionPath)).toEqual({
+      paseo: {
+        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+        headers: { Authorization: "Bearer token" },
+      },
+      local: { command: "node", args: ["server.js"], env: { KEY: "`${x}`" } },
+    });
+
+    await session.close();
+    expect(existsSync(extensionPath)).toBe(false);
+  });
+
+  test("registers the resumed session's MCP servers through Pi's built-in MCP", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+    const original = await client.createSession(createConfig());
+    const persistence = original.describePersistence()!;
+    await original.close();
+
+    pi.queueCommands([{ name: "mcp", source: "extension", sourceInfo: { path: "builtin:mcp" } }]);
+    const session = await client.resumeSession(persistence, {
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:7777/mcp/agents?callerAgentId=agent-2" },
+      },
+    });
+    onTestFinished(() => session.close());
+
+    expect(session.capabilities.supportsMcpServers).toBe(true);
+    const actualLaunch = pi.recordedLaunches.at(-1)!;
+    expect(actualLaunch.session).toBe(persistence.nativeHandle);
+    expect(actualLaunch.argv).not.toContain("--mcp-config");
+    expect(await readRegisteredMcpServers(actualLaunch.extensionPaths[0]!)).toEqual({
+      paseo: { url: "http://127.0.0.1:7777/mcp/agents?callerAgentId=agent-2" },
+    });
+  });
+
+  test("uses pi-mcp-adapter when it replaces Pi's built-in MCP", async () => {
+    const agentDir = mkdtempSync(path.join(tmpdir(), "paseo-pi-agent-"));
+    onTestFinished(() => rmSync(agentDir, { recursive: true, force: true }));
+    const pi = new FakePi();
+    pi.queueCommands([
+      { name: "mcp", source: "extension", sourceInfo: { path: "builtin:mcp" } },
+      { name: "mcp:1", source: "extension", sourceInfo: { source: "npm:pi-mcp-adapter" } },
+    ]);
+    const session = await createClient(pi).createSession(
+      createConfig({
+        mcpServers: { paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" } },
+      }),
+      { env: { PI_CODING_AGENT_DIR: agentDir } },
+    );
+    onTestFinished(() => session.close());
+
+    const actualLaunch = pi.recordedLaunches[1]!;
+    expect(actualLaunch.argv).toContain("--mcp-config");
+    expect(await readRegisteredMcpServers(actualLaunch.extensionPaths[0]!)).toEqual({});
+  });
+
+  test.each([
+    { name: "legacy", config: { type: "sse" as const, url: "https://example.com/sse" } },
+    { name: "foo.bar", config: { type: "http" as const, url: "https://example.com/mcp" } },
+  ])("rejects $name, which Pi's built-in MCP cannot register", async ({ name, config }) => {
+    const pi = new FakePi();
+    pi.queueCommands([{ name: "mcp", source: "extension", sourceInfo: { path: "builtin:mcp" } }]);
+
+    await expect(
+      createClient(pi).createSession(createConfig({ mcpServers: { [name]: config } })),
+    ).rejects.toThrow(name);
+    expect(pi.recordedLaunches).toHaveLength(1);
   });
 
   test("does not pass MCP config when pi-mcp-adapter is not loaded", async () => {

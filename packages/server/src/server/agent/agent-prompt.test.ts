@@ -22,6 +22,7 @@ import type {
   AgentSession,
   AgentStreamEvent,
 } from "./agent-sdk-types.js";
+import { isPromptNotSubmittedError } from "./prompt-not-submitted.js";
 
 interface CapturedLogger {
   logger: Logger;
@@ -694,6 +695,69 @@ test("queue acceptance waits on its own reserved provider run", async () => {
     await manager.closeAgent(agent.id);
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+test("a refused strict steer is marked as never submitted, so receipts can retry it", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "strict-steer-refused-"));
+  const client = new SlowStartAgentClient(null);
+  const manager = new AgentManager({ clients: { codex: client }, logger: createTestLogger() });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  try {
+    const running = startAgentRun(manager, agent.id, "one", createTestLogger(), {
+      replaceRunning: false,
+      awaitRunStart: true,
+    });
+    await vi.waitFor(() => expect(manager.hasInFlightRun(agent.id)).toBe(true));
+    const refusal = await startAgentRun(manager, agent.id, "steer", createTestLogger(), {
+      replaceRunning: false,
+      awaitRunStart: true,
+      activeTurnBehavior: "steer_only",
+    }).catch((error: unknown) => error);
+    expect(refusal).toMatchObject({
+      code: "AGENT_STEER_REJECTED",
+      message: "The active turn cannot accept a steer. It was not interrupted.",
+    });
+    expect(isPromptNotSubmittedError(refusal)).toBe(true);
+    client.sessions[0].release();
+    await running;
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+function steerOnlyController(result: { status: "unavailable"; deliveryUnknown?: true }) {
+  return {
+    getAgent: () => ({ activeTurnId: "turn-1", activeForegroundTurnId: "turn-1" }),
+    tryRunOutOfBand: () => false,
+    hasInFlightRun: () => true,
+    steerAgentRun: async () => result,
+  } as unknown as Parameters<typeof startAgentRun>[0];
+}
+
+test("a steer the provider never received is retryable; one it may hold is not", async () => {
+  const options = { replaceRunning: false, activeTurnBehavior: "steer_only" as const };
+  const refused = await startAgentRun(
+    steerOnlyController({ status: "unavailable" }),
+    "agent",
+    "steer",
+    createTestLogger(),
+    options,
+  ).catch((error: unknown) => error);
+  expect(isPromptNotSubmittedError(refused)).toBe(true);
+
+  const ambiguous = await startAgentRun(
+    steerOnlyController({ status: "unavailable", deliveryUnknown: true }),
+    "agent",
+    "steer",
+    createTestLogger(),
+    options,
+  ).catch((error: unknown) => error);
+  expect(ambiguous).toBeInstanceOf(Error);
+  expect(isPromptNotSubmittedError(ambiguous)).toBe(false);
+  expect((ambiguous as Error).message).toContain("outcome unknown");
 });
 
 test("queue reservation preserves a pending permission without a foreground run", async () => {

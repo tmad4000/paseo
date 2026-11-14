@@ -38,7 +38,7 @@ With a custom root, Paseo keeps the same hashed layout under that directory:
 1. Create a workspace with worktree isolation, Paseo creates the worktree and runs your setup hooks
 2. Launch one or more agents in that workspace
 3. Review the diff against the base branch
-4. Merge or archive the workspace; after the last workspace using it is archived, Paseo runs teardown and removes the worktree
+4. Merge or archive the workspace; Paseo runs teardown, then applies the [directory retention rules](https://github.com/tmad4000/paseo/blob/main/docs/move-chat-workspace.md) before removing its worktree
 
 ## Create a worktree-backed workspace
 

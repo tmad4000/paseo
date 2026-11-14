@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.10.0-beta.30 - 2026-11-13
+
+### Added
+
+- Move a chat tab to a shared Asides workspace, a new workspace, or an existing workspace while preserving its identity, history, original working directory, and Stream ([#205](https://github.com/tmad4000/paseo/pull/205))
+
+This release also includes the approval-card copying and literal URL fixes prepared for beta.29.
+
+## 0.10.0-beta.29 - 2026-11-13
+
+### Fixed
+
+- Select and copy approval-card text, and open literal URLs without losing encoded characters ([#200](https://github.com/tmad4000/paseo/pull/200))
+- Keep large and legacy directory snapshots within relay frame limits ([#198](https://github.com/tmad4000/paseo/pull/198)); includes the previously shipped beta.27 relay hotfix
+
+### Improved
+
+- Add accessible tooltips to icon controls ([#201](https://github.com/tmad4000/paseo/pull/201))
+- Navigate directly to a chat from session links
+
+This release supersedes the uninstalled beta.28 candidate.
+
+## 0.10.0-beta.25 - 2026-11-09
+
+This release supersedes the uninstalled desktop beta.24 candidate and also contains everything listed under 0.10.0-beta.24 below.
+
+### Added
+
+- Prepare a continuation handoff when an agent reaches its provider usage limit ([#188](https://github.com/tmad4000/paseo/pull/188))
+- Drag sidebar sessions into right or down splits ([#167](https://github.com/tmad4000/paseo/pull/167))
+- Open exact sessions from expandable Needs input workspace rows ([#177](https://github.com/tmad4000/paseo/pull/177))
+- Open chat Find on mobile ([#91](https://github.com/tmad4000/paseo/pull/91))
+- Fork conversations into a split pane, and split right or down from the New Tab (+) menu ([#182](https://github.com/tmad4000/paseo/pull/182), [#181](https://github.com/tmad4000/paseo/pull/181))
+- Keep each session's task checklist visible from its snapshot and show unfinished task progress in the sidebar ([#187](https://github.com/tmad4000/paseo/pull/187))
+
+### Improved
+
+- Distinguish seen from read, preserve seen when marking unread, and show running plus needs-input status together ([#178](https://github.com/tmad4000/paseo/pull/178), [#186](https://github.com/tmad4000/paseo/pull/186))
+- Show when a session started needing input ([#179](https://github.com/tmad4000/paseo/pull/179))
+- Explain sidebar row icons with tooltips and hide single-tab counts ([#165](https://github.com/tmad4000/paseo/pull/165))
+
+### Fixed
+
+- Annotate read-only and Stream MCP tools for Codex's tool-approval classification ([#184](https://github.com/tmad4000/paseo/pull/184))
+- Preserve Back and Forward focus history across restarts ([#185](https://github.com/tmad4000/paseo/pull/185))
+- Close the final blank tab without leaving an unreachable history entry ([#183](https://github.com/tmad4000/paseo/pull/183))
+- Keep the Answers pane scrollable ([#180](https://github.com/tmad4000/paseo/pull/180))
+
+## 0.10.0-beta.24 - 2026-11-05
+
+### Added
+
+- Hover a pane's New Tab (+) button to split right or down in one click ([#147](https://github.com/tmad4000/paseo/pull/147))
+- Group the sidebar by Sessions to see each conversation directly ([#166](https://github.com/tmad4000/paseo/pull/166))
+- Filter to sessions you created with Mine ([#164](https://github.com/tmad4000/paseo/pull/164))
+- Restart an agent and manage its queued messages from its tab menu ([#161](https://github.com/tmad4000/paseo/pull/161))
+- Delegated work stays visible with live child status and links back to the originating chat ([#148](https://github.com/tmad4000/paseo/pull/148))
+- Blocked tracked asks appear in Needs you ([#169](https://github.com/tmad4000/paseo/pull/169))
+
+### Improved
+
+- Tabs keep their opened or dragged order by default; Settings → Chat → Tabs offers recent-activity sorting ([#174](https://github.com/tmad4000/paseo/pull/174))
+- Command Center workspace results show their latest activity ([#163](https://github.com/tmad4000/paseo/pull/163))
+
+### Fixed
+
+- Desktop and web voice play GPT Realtime audio and recover from blocked playback ([#160](https://github.com/tmad4000/paseo/pull/160))
+- History refresh failures retain diagnostics for troubleshooting ([#141](https://github.com/tmad4000/paseo/pull/141))
+- SSH connections forward their last frame before the tunnel closes ([#175](https://github.com/tmad4000/paseo/pull/175))
+- Build validation uses supported Ubuntu runners, local relay E2E tests, and diagnostics events within retention ([#175](https://github.com/tmad4000/paseo/pull/175))
+
 ## 0.10.0-beta.23 - 2026-11-02
 
 ### Added

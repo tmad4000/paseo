@@ -1,11 +1,37 @@
 import type { WorkspaceTabDescriptor } from "./workspace-tabs-types";
 
+/**
+ * How far along a tab is from "something happened" to "dealt with":
+ * - `new`: activity (or host attention) this device has not even looked at. Filled badge.
+ * - `seen`: the tab sat on screen after that activity, but nobody marked it read. Hollow ring.
+ * - `read`: explicitly read (check, menu, sent prompt), or nothing to read. No badge.
+ */
+export type TabReadState = "new" | "seen" | "read";
+
+/** The unread tabs of a strip and which level each is at. `.has(tabId)` means "unread". */
+export type UnreadTabStates = ReadonlyMap<string, Exclude<TabReadState, "read">>;
+
+export function collectUnreadTabStates(
+  activity: ReadonlyMap<string, TabActivityState>,
+): UnreadTabStates {
+  const unread = new Map<string, Exclude<TabReadState, "read">>();
+  for (const [tabId, state] of activity) {
+    if (state.readState !== "read") unread.set(tabId, state.readState);
+  }
+  return unread;
+}
+
+/** How long a tab must stay on screen to count as seen, so Ctrl+Tab flick-through does not. */
+export const TAB_SEEN_DWELL_MS = 1500;
+
 export interface TabActivityState {
   lastActivityAt: number;
   /** Activity this strip saw land while the tab was off screen and not yet read. */
   activityUnread: boolean;
   /** What the dot shows: unread activity, or host attention the reader has not cleared. */
   unread: boolean;
+  /** `unread` split by whether this device has looked at it yet. `read` exactly when !unread. */
+  readState: TabReadState;
 }
 
 export interface TabReadPolicy {
@@ -18,6 +44,11 @@ export interface TabReadPolicy {
    * only on a read, so it carries unread across reloads, devices and strips that were not mounted.
    */
   attentionAgentIds: ReadonlySet<string>;
+  /**
+   * The seen clock (see `agentSeenClock`) each agent was seen through on this device. Optional so
+   * callers that never show the seen level can leave it out.
+   */
+  seenThroughByAgentId?: ReadonlyMap<string, number>;
 }
 
 const LEGACY_TAB_READ_POLICY: TabReadPolicy = {
@@ -26,12 +57,45 @@ const LEGACY_TAB_READ_POLICY: TabReadPolicy = {
   attentionAgentIds: new Set(),
 };
 
+/**
+ * What "seen through" is measured against: the agent's last activity. Host attention is left
+ * out on purpose — read and seen are independent layers, so "Mark as unread" (which stamps fresh
+ * attention) brings back the read ring without erasing that this device has seen the chat. New
+ * activity, including a turn finishing, moves the clock forward and so does reset seen.
+ */
+export function agentSeenClock(activityAt: number): number {
+  return activityAt;
+}
+
+function deriveTabReadState(input: {
+  unread: boolean;
+  tabId: string;
+  agentId: string;
+  lastActivityAt: number;
+  policy: TabReadPolicy;
+  dwelledTabIds: ReadonlySet<string>;
+}): TabReadState {
+  const { unread, tabId, agentId, lastActivityAt, policy, dwelledTabIds } = input;
+  if (!unread) return "read";
+  // Legacy mode reads on view, so the seen level never shows there.
+  if (policy.viewingMarksRead) return "new";
+  if (dwelledTabIds.has(tabId)) return "seen";
+  const seenThrough = policy.seenThroughByAgentId?.get(agentId) ?? 0;
+  return seenThrough > 0 && seenThrough >= agentSeenClock(lastActivityAt) ? "seen" : "new";
+}
+
 export function reconcileTabActivity(
   previous: Map<string, TabActivityState>,
   tabs: WorkspaceTabDescriptor[],
   activityByAgentId: Map<string, number>,
   viewedTabIds: Set<string>,
   policy: TabReadPolicy = LEGACY_TAB_READ_POLICY,
+  /**
+   * Tabs on screen right now for at least `TAB_SEEN_DWELL_MS`. They are seen through whatever
+   * they show, so a turn finishing in front of the reader lands as a ring without a filled flash
+   * before this device's seen mark catches up.
+   */
+  dwelledTabIds: ReadonlySet<string> = new Set(),
 ): Map<string, TabActivityState> {
   const next = new Map<string, TabActivityState>();
   for (const tab of tabs) {
@@ -50,10 +114,19 @@ export function reconcileTabActivity(
     const readByViewing = viewed && policy.viewingMarksRead;
     const activityUnread =
       !readByViewing && !explicitlyRead && (Boolean(before?.activityUnread) || movedOnUnseen);
+    const unread = activityUnread || (!readByViewing && policy.attentionAgentIds.has(agentId));
     next.set(tab.tabId, {
       lastActivityAt,
       activityUnread,
-      unread: activityUnread || (!readByViewing && policy.attentionAgentIds.has(agentId)),
+      unread,
+      readState: deriveTabReadState({
+        unread,
+        tabId: tab.tabId,
+        agentId,
+        lastActivityAt,
+        policy,
+        dwelledTabIds,
+      }),
     });
   }
   return next;

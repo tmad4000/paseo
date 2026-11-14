@@ -680,6 +680,15 @@ const ToolCallTimelineItemPayloadSchema: z.ZodType<ToolCallTimelineItem, unknown
     ToolCallCanceledPayloadSchema,
   ]);
 
+/** One entry in an agent's own task list (Claude TodoWrite/Task tools, Codex plan updates). */
+export const AgentTaskItemPayloadSchema = z.object({
+  text: z.string(),
+  completed: z.boolean(),
+  id: z.string().optional(),
+  status: z.enum(["pending", "in_progress", "completed"]).optional(),
+  activeForm: z.string().optional(),
+});
+
 // zod-aot 0.20.4 miscompiles this as a nested discriminated union by omitting
 // the inner tool_call branch from the generated outer dispatch.
 export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknown> = z.union([
@@ -703,15 +712,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
   ToolCallTimelineItemPayloadSchema,
   z.object({
     type: z.literal("todo"),
-    items: z.array(
-      z.object({
-        text: z.string(),
-        completed: z.boolean(),
-        id: z.string().optional(),
-        status: z.enum(["pending", "in_progress", "completed"]).optional(),
-        activeForm: z.string().optional(),
-      }),
-    ),
+    items: z.array(AgentTaskItemPayloadSchema),
   }),
   z.object({
     type: z.literal("error"),
@@ -871,6 +872,11 @@ export const AgentSnapshotPayloadSchema = z.object({
   providerUnavailable: z.boolean().optional(),
   artifacts: z.array(AgentArtifactSchema).optional(),
   companionEntries: z.array(CompanionEntrySchema).optional(),
+  /**
+   * The agent's latest task list (its own plan, not the user's Stream asks). Present, possibly
+   * empty, on daemons that track it; absent on older daemons.
+   */
+  tasks: z.array(AgentTaskItemPayloadSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -975,6 +981,24 @@ export const CloseItemsRequestMessageSchema = z.object({
   type: z.literal("close_items_request"),
   agentIds: z.array(z.string()).default([]),
   terminalIds: z.array(z.string()).default([]),
+  requestId: z.string(),
+});
+
+export const AgentWorkspaceMoveDestinationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("existing"), workspaceId: z.string().min(1) }),
+  z.object({
+    kind: z.literal("new"),
+    workspaceId: z.string().regex(/^wks_[a-f0-9]{16}$/),
+    title: z.string().trim().min(1).max(200),
+  }),
+  z.object({ kind: z.literal("asides") }),
+]);
+
+export const AgentWorkspaceMoveRequestSchema = z.object({
+  type: z.literal("agent.workspace.move.request"),
+  agentId: z.string(),
+  expectedWorkspaceId: z.string(),
+  destination: AgentWorkspaceMoveDestinationSchema,
   requestId: z.string(),
 });
 
@@ -4067,6 +4091,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ArchiveAgentRequestMessageSchema,
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
+  AgentWorkspaceMoveRequestSchema,
   UpdateCompanionEntryRequestMessageSchema,
   StreamListRequestSchema,
   StreamUpdateRequestSchema,
@@ -4609,6 +4634,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
         agentDetach: z.boolean().optional(),
+        // COMPAT(agentWorkspaceMove): fork feature; remove gate after 2027-05-13.
+        agentWorkspaceMove: z.boolean().optional(),
         // COMPAT(agentThinkingUpdate): added in v0.2.4, remove gate after 2027-01-28.
         agentThinkingUpdate: z.boolean().optional(),
         // COMPAT(daemonDiagnostics): added in v0.1.100, remove gate after 2026-12-25 once daemon floor >= v0.1.100.
@@ -5857,6 +5884,16 @@ export const AgentCreateResponseSchema = z.object({
     agent: AgentSnapshotPayloadSchema.nullable(),
     error: z.string().nullable(),
     creation: CreationSnapshotSchema.optional(),
+  }),
+});
+
+export const AgentWorkspaceMoveResponseSchema = z.object({
+  type: z.literal("agent.workspace.move.response"),
+  payload: z.object({
+    agent: AgentSnapshotPayloadSchema.nullable(),
+    requestId: z.string(),
+    workspace: WorkspaceDescriptorPayloadSchema.nullable(),
+    error: z.string().nullable(),
   }),
 });
 
@@ -7867,6 +7904,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   CancelAgentResponseMessageSchema,
   ClearAgentAttentionResponseMessageSchema,
   WorkspaceCreateResponseSchema,
+  AgentWorkspaceMoveResponseSchema,
   AgentCreateResponseSchema,
   WorkspaceCreationUpdateSchema,
   AgentCreationUpdateSchema,

@@ -28,6 +28,7 @@ import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-moda
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -1395,40 +1396,48 @@ function TerminalProfileRow({
         </Text>
       </View>
       <View style={terminalProfileStyles.rowActions}>
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveUpIcon}
-          onPress={handleMoveUp}
-          disabled={isFirst}
-          accessibilityLabel={t("settings.host.terminalProfiles.moveUp")}
-          testID={`terminal-profile-move-up-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={moveDownIcon}
-          onPress={handleMoveDown}
-          disabled={isLast}
-          accessibilityLabel={t("settings.host.terminalProfiles.moveDown")}
-          testID={`terminal-profile-move-down-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={editProfileIcon}
-          onPress={handleEdit}
-          accessibilityLabel={t("settings.host.terminalProfiles.editProfile")}
-          testID={`terminal-profile-edit-${profile.id}`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={removeProfileIcon}
-          onPress={handleRemove}
-          accessibilityLabel={t("settings.host.terminalProfiles.remove")}
-          testID={`terminal-profile-remove-${profile.id}`}
-        />
+        <IconTooltip label={t("settings.host.terminalProfiles.moveUp")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveUpIcon}
+            onPress={handleMoveUp}
+            disabled={isFirst}
+            accessibilityLabel={t("settings.host.terminalProfiles.moveUp")}
+            testID={`terminal-profile-move-up-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.terminalProfiles.moveDown")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={moveDownIcon}
+            onPress={handleMoveDown}
+            disabled={isLast}
+            accessibilityLabel={t("settings.host.terminalProfiles.moveDown")}
+            testID={`terminal-profile-move-down-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.terminalProfiles.editProfile")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={editProfileIcon}
+            onPress={handleEdit}
+            accessibilityLabel={t("settings.host.terminalProfiles.editProfile")}
+            testID={`terminal-profile-edit-${profile.id}`}
+          />
+        </IconTooltip>
+        <IconTooltip label={t("settings.host.terminalProfiles.remove")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={removeProfileIcon}
+            onPress={handleRemove}
+            accessibilityLabel={t("settings.host.terminalProfiles.remove")}
+            testID={`terminal-profile-remove-${profile.id}`}
+          />
+        </IconTooltip>
       </View>
     </View>
   );

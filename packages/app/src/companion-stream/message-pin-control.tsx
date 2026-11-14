@@ -1,3 +1,6 @@
+import { sessionLinkAtContextEvent } from "@/navigation/session-link-context-target";
+import { sessionLinksInMessage } from "@/navigation/session-link";
+import { SessionLinkMenuItems } from "@/navigation/session-link-menu-items";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { BookmarkPlus, Check } from "lucide-react-native";
@@ -18,6 +21,7 @@ import {
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
 import { isWeb } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import type { Theme } from "@/styles/theme";
 import { getMessageSelection } from "./message-selection";
 import { messagePinErrorMessage, type MessagePinHandler } from "./message-pin-operations";
@@ -46,6 +50,7 @@ export const MessagePinControl = memo(function MessagePinControl({
 }) {
   const { t } = useTranslation();
   const triggerRef = useRef<View | null>(null);
+  const [sessionLinks, setSessionLinks] = useState<string[]>([]);
   const [selection, setSelection] = useState<string | undefined>();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
@@ -98,10 +103,13 @@ export const MessagePinControl = memo(function MessagePinControl({
   const changeOpen = useCallback(
     (next: boolean) => {
       if (saving) return;
-      if (next) setSelection(getMessageSelection(triggerRef.current));
+      if (next) {
+        setSelection(getMessageSelection(triggerRef.current));
+        if (!isWeb) setSessionLinks(sessionLinksInMessage(getContent()));
+      }
       setOpen(next);
     },
-    [saving],
+    [saving, getContent],
   );
 
   const saveSelection = useCallback(() => {
@@ -112,54 +120,69 @@ export const MessagePinControl = memo(function MessagePinControl({
     if (draftWithTags !== null) void save(draftWithTags);
   }, [save, draftWithTags]);
 
+  const captureLink = useCallback((event: unknown) => {
+    const href = sessionLinkAtContextEvent(event);
+    setSessionLinks(href ? [href] : []);
+  }, []);
   const Item = children ? ContextMenuItem : DropdownMenuItem;
   const menuItems = (
     <>
-      {selection ? (
-        <Item disabled={saving} closeOnSelect={false} onSelect={saveSelection}>
-          {t("agentPanel.stream.pinSelection")}
-        </Item>
+      <SessionLinkMenuItems links={sessionLinks} />
+      {onPin ? (
+        <>
+          {selection ? (
+            <Item disabled={saving} closeOnSelect={false} onSelect={saveSelection}>
+              {t("agentPanel.stream.pinSelection")}
+            </Item>
+          ) : null}
+          <Item
+            disabled={saving}
+            closeOnSelect={false}
+            status={saving ? "pending" : undefined}
+            onSelect={pinMessage}
+          >
+            {t("agentPanel.stream.pinMessage")}
+          </Item>
+          <Item disabled={saving} onSelect={chooseExcerpt}>
+            {t("agentPanel.stream.pinExcerpt")}
+          </Item>
+        </>
       ) : null}
-      <Item
-        disabled={saving}
-        closeOnSelect={false}
-        status={saving ? "pending" : undefined}
-        onSelect={pinMessage}
-      >
-        {t("agentPanel.stream.pinMessage")}
-      </Item>
-      <Item disabled={saving} onSelect={chooseExcerpt}>
-        {t("agentPanel.stream.pinExcerpt")}
-      </Item>
     </>
   );
 
-  if (!onPin) return children;
+  if (!shouldRenderMessageMenu(onPin, children, getContent)) return children;
 
   return (
     <>
       {children ? (
         <ContextMenu open={open} onOpenChange={changeOpen}>
-          <ContextMenuTrigger contextOnly={isWeb} triggerRef={triggerRef}>
+          <ContextMenuTrigger
+            contextOnly={isWeb}
+            triggerRef={triggerRef}
+            onContextMenu={captureLink}
+          >
             {children}
           </ContextMenuTrigger>
           <ContextMenuContent>{menuItems}</ContextMenuContent>
         </ContextMenu>
       ) : (
         <DropdownMenu open={open} onOpenChange={changeOpen}>
-          <DropdownMenuTrigger
-            accessibilityRole="button"
-            accessibilityLabel={t("agentPanel.stream.pinToStream")}
-            disabled={saving}
-            style={[styles.trigger, containerStyle]}
-            hitSlop={8}
-          >
-            {saved ? (
-              <ThemedCheck size={16} uniProps={iconColor} />
-            ) : (
-              <ThemedBookmark size={16} uniProps={iconColor} />
-            )}
-          </DropdownMenuTrigger>
+          <IconTooltip label={t("agentPanel.stream.pinToStream")} disabled={open}>
+            <DropdownMenuTrigger
+              accessibilityRole="button"
+              accessibilityLabel={t("agentPanel.stream.pinToStream")}
+              disabled={saving}
+              style={[styles.trigger, containerStyle]}
+              hitSlop={8}
+            >
+              {saved ? (
+                <ThemedCheck size={16} uniProps={iconColor} />
+              ) : (
+                <ThemedBookmark size={16} uniProps={iconColor} />
+              )}
+            </DropdownMenuTrigger>
+          </IconTooltip>
           <DropdownMenuContent>{menuItems}</DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -264,3 +287,11 @@ export const MessagePinItem = memo(function MessagePinItem({
     </MessagePinControl>
   );
 });
+
+function shouldRenderMessageMenu(
+  onPin: MessagePinHandler | undefined,
+  children: ReactNode,
+  getContent: () => string,
+): boolean {
+  return Boolean(onPin || (children && sessionLinksInMessage(getContent()).length > 0));
+}

@@ -225,6 +225,158 @@ test("combined filtered agent lists create independent server-owned observations
   }
 });
 
+test("stale directory sync requests page snapshots and retain subscriptions", async () => {
+  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
+  let peer: SubscriptionPeer | undefined;
+  try {
+    await admin.connect();
+    const workspaces = [];
+    const agents = [];
+    for (const name of ["one", "two", "three"]) {
+      const dir = path.join(daemon.staticDir, name);
+      await mkdir(dir);
+      workspaces.push(
+        (await admin.createWorkspace({ source: { kind: "directory", path: dir } })).workspace!,
+      );
+      agents.push(await admin.createAgent({ provider: "codex", cwd: dir, title: name }));
+    }
+    peer = await SubscriptionPeer.connect(daemon.port, "stale-directory-sync");
+    const agentIds: string[] = [];
+    const workspaceIds: string[] = [];
+    const emptyProjectIds: string[] = [];
+    await peer.request({ type: "fetch_workspaces_request", requestId: "workspace-baseline" });
+    const baseline = peer.frames.flatMap((frame) =>
+      frame.type === "session" &&
+      frame.message.type === "fetch_workspaces_response" &&
+      frame.message.payload.requestId === "workspace-baseline"
+        ? [frame.message.payload]
+        : [],
+    )[0]!;
+    expect(baseline.pageInfo.hasMore).toBe(false);
+    let agentCursor: string | null = null;
+    let workspaceCursor: string | null = null;
+    let agentSubscription: string | undefined;
+    let workspaceSubscription: string | undefined;
+    for (let i = 0; i < 3; i++) {
+      await peer.request({
+        type: "fetch_agents_request",
+        requestId: `agents-${i}`,
+        page: { limit: 1, ...(agentCursor ? { cursor: agentCursor } : {}) },
+        sync: {},
+        ...(i === 0 ? { subscribe: {} } : {}),
+      });
+      const agentResponse = peer.frames.flatMap((frame) =>
+        frame.type === "session" &&
+        frame.message.type === "fetch_agents_response" &&
+        frame.message.payload.requestId === `agents-${i}`
+          ? [frame.message.payload]
+          : [],
+      )[0]!;
+      expect(agentResponse.entries).toHaveLength(1);
+      agentIds.push(agentResponse.entries[0]!.agent.id);
+      agentCursor = agentResponse.pageInfo.nextCursor;
+      expect(agentResponse.pageInfo.hasMore).toBe(i < 2);
+      agentSubscription ??= agentResponse.subscriptionId;
+    }
+    for (let i = 0; i < 20; i++) {
+      await peer.request({
+        type: "fetch_workspaces_request",
+        requestId: `workspaces-${i}`,
+        page: { limit: 1, ...(workspaceCursor ? { cursor: workspaceCursor } : {}) },
+        sync: {},
+        ...(i === 0 ? { subscribe: {} } : {}),
+      });
+      const workspaceResponse = peer.frames.flatMap((frame) =>
+        frame.type === "session" &&
+        frame.message.type === "fetch_workspaces_response" &&
+        frame.message.payload.requestId === `workspaces-${i}`
+          ? [frame.message.payload]
+          : [],
+      )[0]!;
+      expect(workspaceResponse.entries.length).toBeLessThanOrEqual(1);
+      workspaceIds.push(...workspaceResponse.entries.map((workspace) => workspace.id));
+      emptyProjectIds.push(...workspaceResponse.emptyProjects.map((project) => project.projectId));
+      workspaceCursor = workspaceResponse.pageInfo.nextCursor;
+      workspaceSubscription ??= workspaceResponse.subscriptionId;
+      expect(workspaceResponse.pageInfo.hasMore).toBe(workspaceCursor !== null);
+      if (!workspaceCursor) break;
+    }
+    expect(workspaceCursor).toBeNull();
+    expect(emptyProjectIds.sort()).toEqual(
+      baseline.emptyProjects.map((project) => project.projectId).sort(),
+    );
+    const laterWorkspaceId = workspaceIds.slice(1).find((id) => id !== workspaces[2]!.id);
+    expect(laterWorkspaceId).toEqual(expect.any(String));
+    expect(agentIds.sort()).toEqual(agents.map((agent) => agent.id).sort());
+    expect(new Set(workspaceIds).size).toBe(workspaceIds.length);
+    expect(workspaceIds).toEqual(
+      expect.arrayContaining(workspaces.map((workspace) => workspace.id)),
+    );
+    expect(workspaceIds.sort()).toEqual(baseline.entries.map((workspace) => workspace.id).sort());
+    expect(agentSubscription).toEqual(expect.any(String));
+    expect(workspaceSubscription).toEqual(expect.any(String));
+    await admin.updateAgent(agents[2]!.id, { name: "Updated agent" });
+    await admin.setWorkspaceTitle(workspaces[2]!.id, "Updated workspace");
+    await expect
+      .poll(
+        () =>
+          peer!.frames.flatMap((frame) =>
+            frame.type === "session" &&
+            (frame.message.type === "agent_update" || frame.message.type === "workspace_update")
+              ? [frame.message.payload]
+              : [],
+          ),
+        { timeout: 5000 },
+      )
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subscriptionId: agentSubscription,
+            kind: "upsert",
+            agent: expect.objectContaining({ id: agents[2]!.id, title: "Updated agent" }),
+          }),
+          expect.objectContaining({
+            subscriptionId: workspaceSubscription,
+            kind: "upsert",
+            workspace: expect.objectContaining({
+              id: workspaces[2]!.id,
+              name: "Updated workspace",
+            }),
+          }),
+        ]),
+      );
+    await peer.request({
+      type: "archive_workspace_request",
+      requestId: "archive-later",
+      workspaceId: laterWorkspaceId!,
+    });
+    await expect
+      .poll(
+        () =>
+          peer!.frames.flatMap((frame) =>
+            frame.type === "session" && frame.message.type === "workspace_update"
+              ? [frame.message.payload]
+              : [],
+          ),
+        { timeout: 5000 },
+      )
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subscriptionId: workspaceSubscription,
+            kind: "remove",
+            id: laterWorkspaceId,
+          }),
+        ]),
+      );
+  } finally {
+    peer?.close();
+    await admin.close();
+    await daemon.close();
+  }
+});
+
 test("workspace filters and identical queries coexist until their own release", async () => {
   const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });

@@ -19,6 +19,7 @@ import type { PressableStateCallbackType } from "react-native";
 import { useTranslation } from "react-i18next";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -494,33 +495,41 @@ export function PullRequestPane({
             </Button>
           </View>
           {refreshSupported ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
+            <IconTooltip
+              label={
                 isRefreshing
                   ? t("workspace.git.diff.refreshing")
                   : t("workspace.git.diff.refreshState", { brand: forgePresentation.brandLabel })
               }
-              testID="pr-pane-refresh"
-              style={toolbarRefreshButtonStyle}
-              hitSlop={8}
-              onPress={handleRefresh}
-              disabled={isRefreshing}
             >
-              <View style={styles.refreshIcon}>
-                {isRefreshing ? (
-                  <ThemedLoadingSpinner
-                    size={paneContentToolbarIconSize(isCompact)}
-                    uniProps={foregroundMutedColorMapping}
-                  />
-                ) : (
-                  <ThemedRotateCw
-                    size={paneContentToolbarIconSize(isCompact)}
-                    uniProps={foregroundMutedColorMapping}
-                  />
-                )}
-              </View>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isRefreshing
+                    ? t("workspace.git.diff.refreshing")
+                    : t("workspace.git.diff.refreshState", { brand: forgePresentation.brandLabel })
+                }
+                testID="pr-pane-refresh"
+                style={toolbarRefreshButtonStyle}
+                hitSlop={8}
+                onPress={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <View style={styles.refreshIcon}>
+                  {isRefreshing ? (
+                    <ThemedLoadingSpinner
+                      size={paneContentToolbarIconSize(isCompact)}
+                      uniProps={foregroundMutedColorMapping}
+                    />
+                  ) : (
+                    <ThemedRotateCw
+                      size={paneContentToolbarIconSize(isCompact)}
+                      uniProps={foregroundMutedColorMapping}
+                    />
+                  )}
+                </View>
+              </Pressable>
+            </IconTooltip>
           ) : null}
         </PaneContentToolbar>
 
@@ -669,7 +678,7 @@ function useRevealOnHover() {
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const actionsVisible = isHovered || menuOpen || isNative || isCompact;
-  return { actionsVisible, handlePointerEnter, handlePointerLeave, setMenuOpen };
+  return { actionsVisible, handlePointerEnter, handlePointerLeave, menuOpen, setMenuOpen };
 }
 
 function ActivityKebab({
@@ -695,17 +704,27 @@ function ActivityKebab({
   const handleOpen = useCallback(() => {
     void openExternalUrl(activity.url);
   }, [activity.url]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const handleMenuOpenChange = useCallback(
+    (open: boolean) => {
+      setMenuOpen(open);
+      onMenuOpenChange(open);
+    },
+    [onMenuOpenChange],
+  );
 
   return (
     <View style={kebabSlotStyle(visible)} pointerEvents={visible ? "auto" : "none"}>
-      <DropdownMenu onOpenChange={onMenuOpenChange}>
-        <DropdownMenuTrigger
-          hitSlop={8}
-          style={kebabTriggerStyle}
-          accessibilityLabel="Comment actions"
-        >
-          {renderKebabTriggerIcon}
-        </DropdownMenuTrigger>
+      <DropdownMenu onOpenChange={handleMenuOpenChange}>
+        <IconTooltip label="Comment actions" disabled={menuOpen}>
+          <DropdownMenuTrigger
+            hitSlop={8}
+            style={kebabTriggerStyle}
+            accessibilityLabel="Comment actions"
+          >
+            {renderKebabTriggerIcon}
+          </DropdownMenuTrigger>
+        </IconTooltip>
         <DropdownMenuContent align="end" width={200}>
           {attachEnabled && canAddPullRequestActivityToChat(activity) ? (
             <DropdownMenuItem leading={ADD_TO_CHAT_MENU_ICON} onSelect={handleAddToChat}>
@@ -1040,7 +1059,7 @@ function ThreadBlock({
   onToggleCollapsed: (entryId: string, collapsed: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const { actionsVisible, handlePointerEnter, handlePointerLeave, setMenuOpen } =
+  const { actionsVisible, handlePointerEnter, handlePointerLeave, menuOpen, setMenuOpen } =
     useRevealOnHover();
   const handleHeaderPress = useCallback(() => {
     onToggleCollapsed(thread.id, collapsed);
@@ -1077,13 +1096,15 @@ function ThreadBlock({
             pointerEvents={actionsVisible ? "auto" : "none"}
           >
             <DropdownMenu onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger
-                hitSlop={8}
-                style={kebabTriggerStyle}
-                accessibilityLabel="Thread actions"
-              >
-                {renderKebabTriggerIcon}
-              </DropdownMenuTrigger>
+              <IconTooltip label="Thread actions" disabled={menuOpen}>
+                <DropdownMenuTrigger
+                  hitSlop={8}
+                  style={kebabTriggerStyle}
+                  accessibilityLabel="Thread actions"
+                >
+                  {renderKebabTriggerIcon}
+                </DropdownMenuTrigger>
+              </IconTooltip>
               <DropdownMenuContent align="end" width={200}>
                 <DropdownMenuItem leading={OPEN_MENU_ICON} onSelect={handleOpenThread}>
                   {t("workspace.git.pr.actions.openOn", { brand: brandLabel })}

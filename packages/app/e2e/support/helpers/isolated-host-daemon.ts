@@ -26,6 +26,9 @@ export interface IsolatedHostDaemonOptions {
   publishedVersion?: string;
 }
 
+// The supervisor allows its worker 10 seconds to shut down before forcing it.
+const DAEMON_SHUTDOWN_GRACE_MS = 15_000;
+
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -178,7 +181,7 @@ export async function startIsolatedHostDaemon(
       await waitForServer(port, child);
       return child;
     } catch (error) {
-      await killProcessTree(child);
+      await killProcessTree(child, DAEMON_SHUTDOWN_GRACE_MS);
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}\nDaemon stderr:\n${stderr}`,
         { cause: error },
@@ -207,13 +210,13 @@ export async function startIsolatedHostDaemon(
     getPid: () => child.pid,
     restart: async () => {
       if (closed) throw new Error(`Cannot restart closed isolated daemon ${serverId}`);
-      await killProcessTree(child);
+      await killProcessTree(child, DAEMON_SHUTDOWN_GRACE_MS);
       child = await spawnDaemon();
     },
     close: async () => {
       if (closed) return;
       closed = true;
-      await killProcessTree(child);
+      await killProcessTree(child, DAEMON_SHUTDOWN_GRACE_MS);
       if (!options.preserveHome) {
         await rm(paseoHome, { recursive: true, force: true });
       }

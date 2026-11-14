@@ -7,6 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "@/i18n/resources/en";
 
 // Native styling and live microphone telemetry are outside this rendered UI test.
+// Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
+vi.mock("@/components/ui/icon-tooltip", () => ({
+  IconTooltip: ({ children }: { children: unknown }) => children,
+}));
+
 vi.mock("react-native-unistyles", async () => {
   const { darkTheme } = await import("@/styles/theme");
   return {

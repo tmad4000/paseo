@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceTabDescriptor } from "./workspace-tabs-types";
-import { reconcileTabActivity, sortTabsByActivity } from "./workspace-tab-activity";
+import {
+  agentSeenClock,
+  collectUnreadTabStates,
+  reconcileTabActivity,
+  sortTabsByActivity,
+} from "./workspace-tab-activity";
 
 function agentTab(id: string): WorkspaceTabDescriptor {
   return { key: id, tabId: id, kind: "agent", target: { kind: "agent", agentId: id } };
@@ -151,6 +156,173 @@ describe("workspace tab activity", () => {
       const state = reconcileTabActivity(new Map(), tabs, at(20), new Set(["a"]), legacy);
       expect(state.get("a")?.unread).toBe(false);
       expect(state.get("b")?.unread).toBe(true);
+    });
+  });
+
+  describe("seen vs read", () => {
+    const policy = (
+      input: {
+        seen?: [string, number][];
+        read?: [string, number][];
+        attention?: [string, number][];
+        legacy?: boolean;
+      } = {},
+    ) => ({
+      viewingMarksRead: input.legacy ?? false,
+      readThroughByAgentId: new Map(input.read ?? []),
+      attentionAgentIds: new Set((input.attention ?? []).map(([id]) => id)),
+      seenThroughByAgentId: new Map(input.seen ?? []),
+    });
+    const at = (time: number) =>
+      new Map([
+        ["a", time],
+        ["b", time],
+      ]);
+    const onA = new Set(["a"]);
+    const onB = new Set(["b"]);
+
+    it("starts background activity as new, with a filled badge", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy());
+      const moved = reconcileTabActivity(baseline, tabs, at(20), onA, policy());
+      expect(moved.get("b")?.readState).toBe("new");
+      expect(moved.get("a")?.readState).toBe("read");
+      expect(moved.get("c")?.readState).toBe("read");
+    });
+
+    it("does not count a visit as seen until the tab dwells (Ctrl+Tab flick-through)", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy());
+      const moved = reconcileTabActivity(baseline, tabs, at(20), onA, policy());
+      const flicked = reconcileTabActivity(moved, tabs, at(20), onB, policy());
+      expect(flicked.get("b")?.readState).toBe("new");
+      const dwelled = reconcileTabActivity(flicked, tabs, at(20), onB, policy(), onB);
+      expect(dwelled.get("b")?.readState).toBe("seen");
+      expect(dwelled.get("b")?.unread).toBe(true);
+    });
+
+    it("stays seen after leaving the tab, through this device's seen mark", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy());
+      const moved = reconcileTabActivity(baseline, tabs, at(20), onA, policy());
+      const left = reconcileTabActivity(moved, tabs, at(20), onA, policy({ seen: [["b", 20]] }));
+      expect(left.get("b")?.readState).toBe("seen");
+    });
+
+    it("goes back to new when activity lands after the seen mark", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy());
+      const moved = reconcileTabActivity(baseline, tabs, at(20), onA, policy());
+      const seen = reconcileTabActivity(moved, tabs, at(20), onA, policy({ seen: [["b", 20]] }));
+      const again = reconcileTabActivity(seen, tabs, at(30), onA, policy({ seen: [["b", 20]] }));
+      expect(again.get("b")?.readState).toBe("new");
+    });
+
+    it("keeps seen through a Mark as unread: read and seen are independent layers", () => {
+      // Seen through 20; the host then stamps fresh attention (Mark as unread) without new activity.
+      const seen = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        onA,
+        policy({ seen: [["b", 20]], attention: [["b", 25]] }),
+      );
+      expect(seen.get("b")?.unread).toBe(true);
+      expect(seen.get("b")?.readState).toBe("seen");
+      const markedUnread = reconcileTabActivity(
+        seen,
+        tabs,
+        at(20),
+        onA,
+        policy({ seen: [["b", 20]], attention: [["b", 40]] }),
+      );
+      expect(markedUnread.get("b")?.unread).toBe(true);
+      expect(markedUnread.get("b")?.readState).toBe("seen");
+    });
+
+    it("unread by hand but never seen on this device stays new", () => {
+      const marked = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        onA,
+        policy({ attention: [["b", 40]] }),
+      );
+      expect(marked.get("b")?.readState).toBe("new");
+    });
+
+    it("shows a finish watched on screen as seen, not new, without a filled flash", () => {
+      const watching = reconcileTabActivity(new Map(), tabs, at(10), onA, policy(), onA);
+      const finished = reconcileTabActivity(
+        watching,
+        tabs,
+        at(20),
+        onA,
+        policy({ attention: [["a", 20]] }),
+        onA,
+      );
+      expect(finished.get("a")?.readState).toBe("seen");
+    });
+
+    it("seen never clears host attention or read status: only an explicit read does", () => {
+      const seen = reconcileTabActivity(
+        new Map(),
+        tabs,
+        at(20),
+        onA,
+        policy({ seen: [["b", 20]], attention: [["b", 20]] }),
+      );
+      expect(seen.get("b")?.unread).toBe(true);
+      const read = reconcileTabActivity(
+        seen,
+        tabs,
+        at(20),
+        onA,
+        policy({ seen: [["b", 20]], read: [["b", 20]] }),
+      );
+      expect(read.get("b")?.readState).toBe("read");
+      expect(read.get("b")?.unread).toBe(false);
+    });
+
+    it("never shows the seen level in the legacy read-on-open mode", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy({ legacy: true }));
+      const moved = reconcileTabActivity(baseline, tabs, at(20), onA, policy({ legacy: true }));
+      const marked = reconcileTabActivity(
+        moved,
+        tabs,
+        at(20),
+        onA,
+        policy({ legacy: true, seen: [["b", 20]] }),
+        onB,
+      );
+      expect(marked.get("b")?.readState).toBe("new");
+      const visited = reconcileTabActivity(
+        marked,
+        tabs,
+        at(20),
+        onB,
+        policy({ legacy: true }),
+        onB,
+      );
+      expect(visited.get("b")?.readState).toBe("read");
+    });
+
+    it("collects only unread tabs, keyed to their level", () => {
+      const baseline = reconcileTabActivity(new Map(), tabs, at(10), onA, policy());
+      const moved = reconcileTabActivity(
+        baseline,
+        tabs,
+        at(20),
+        onA,
+        policy({ attention: [["a", 20]], seen: [["a", 20]] }),
+      );
+      const unread = collectUnreadTabStates(moved);
+      expect([...unread]).toEqual([
+        ["a", "seen"],
+        ["b", "new"],
+      ]);
+      expect(unread.has("c")).toBe(false);
+    });
+
+    it("measures seen against activity only", () => {
+      expect(agentSeenClock(10)).toBe(10);
+      expect(agentSeenClock(40)).toBe(40);
     });
   });
 

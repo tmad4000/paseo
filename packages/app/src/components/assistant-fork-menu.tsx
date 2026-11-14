@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
-import { Split } from "lucide-react-native";
+import { Columns2, Split } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   DropdownMenu,
@@ -12,8 +12,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
-/** Where a fork opens. "thread" is Reply in thread (src/threads), offered beside the menu. */
-export type AssistantForkTarget = "tab" | "workspace" | "thread";
+/**
+ * Where a fork opens. "split" opens it in a pane beside the chat (a new tab on compact layouts).
+ * "thread" is Reply in thread (src/threads), offered beside the menu.
+ */
+export type AssistantForkTarget = "tab" | "split" | "workspace" | "thread";
 
 /** The menu's own targets; Reply in thread is a separate control. */
 type AssistantForkMenuTarget = Exclude<AssistantForkTarget, "thread">;
@@ -24,6 +27,7 @@ interface AssistantForkMenuProps {
 }
 
 const ThemedSplit = withUnistyles(Split);
+const ThemedColumns2 = withUnistyles(Columns2);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -77,6 +81,10 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
     () => <ThemedSplit size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />,
     [],
   );
+  const splitPaneIcon = useMemo(
+    () => <ThemedColumns2 size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />,
+    [],
+  );
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
@@ -111,6 +119,16 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
           testID={`${testID}-new-tab`}
         >
           {t("message.actions.forkInNewTab")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          closeOnSelect={false}
+          disabled={isLocked && pendingTarget !== "split"}
+          leading={splitPaneIcon}
+          onSelect={handleSelect("split")}
+          status={pendingTarget === "split" ? "pending" : undefined}
+          testID={`${testID}-split-pane`}
+        >
+          {t("message.actions.forkInSplitPane")}
         </DropdownMenuItem>
         <DropdownMenuItem
           closeOnSelect={false}

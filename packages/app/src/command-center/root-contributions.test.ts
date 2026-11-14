@@ -23,6 +23,10 @@ function SessionsIcon(_props: CommandCenterIconProps) {
   return null;
 }
 
+function TabsIcon(_props: CommandCenterIconProps) {
+  return null;
+}
+
 function source(groupMode: SidebarGroupMode): {
   value: GroupingCommandCenterSource;
   applied: SidebarGroupMode[];
@@ -37,8 +41,15 @@ function source(groupMode: SidebarGroupMode): {
         groupByStatus: "Group by status",
         groupInOneList: "Show chats in one list",
         groupAsSessions: "Show chats as sessions",
+        groupAsTabs: "Show open tabs",
       },
-      icons: { project: ProjectIcon, status: StatusIcon, list: ListIcon, sessions: SessionsIcon },
+      icons: {
+        project: ProjectIcon,
+        status: StatusIcon,
+        list: ListIcon,
+        sessions: SessionsIcon,
+        tabs: TabsIcon,
+      },
       setGroupMode: (mode) => applied.push(mode),
     },
     applied,
@@ -57,6 +68,7 @@ describe("grouping command center contributions", () => {
       "Group by status",
       "Show chats in one list",
       "Show chats as sessions",
+      "Show open tabs",
     ]);
   });
 
@@ -65,6 +77,7 @@ describe("grouping command center contributions", () => {
       "Group by project",
       "Show chats in one list",
       "Show chats as sessions",
+      "Show open tabs",
     ]);
   });
 
@@ -73,6 +86,7 @@ describe("grouping command center contributions", () => {
       "Group by project",
       "Group by status",
       "Show chats as sessions",
+      "Show open tabs",
     ]);
   });
 
@@ -81,6 +95,16 @@ describe("grouping command center contributions", () => {
       "Group by project",
       "Group by status",
       "Show chats in one list",
+      "Show open tabs",
+    ]);
+  });
+
+  it("offers every other mode while shown as tabs", () => {
+    expect(titles("tabs")).toEqual([
+      "Group by project",
+      "Group by status",
+      "Show chats in one list",
+      "Show chats as sessions",
     ]);
   });
 
@@ -93,7 +117,7 @@ describe("grouping command center contributions", () => {
   });
 
   it("never offers the mode you are already in", () => {
-    for (const mode of ["project", "status", "list", "sessions"] as const) {
+    for (const mode of ["project", "status", "list", "sessions", "tabs"] as const) {
       expect(buildGroupingContributions(source(mode).value).map((c) => c.id)).not.toContain(
         `sidebar-grouping-${mode}`,
       );
@@ -106,8 +130,9 @@ describe("grouping command center contributions", () => {
       status: StatusIcon,
       list: ListIcon,
       sessions: SessionsIcon,
+      tabs: TabsIcon,
     };
-    for (const current of ["project", "status", "list", "sessions"] as const) {
+    for (const current of ["project", "status", "list", "sessions", "tabs"] as const) {
       const fixture = source(current);
       for (const contribution of buildGroupingContributions(fixture.value)) {
         contribution.run();
@@ -121,7 +146,7 @@ describe("grouping command center contributions", () => {
 
   it("gives each target the same id from every mode that offers it", () => {
     const idsByTarget = new Map<SidebarGroupMode, Set<string>>();
-    for (const current of ["project", "status", "list", "sessions"] as const) {
+    for (const current of ["project", "status", "list", "sessions", "tabs"] as const) {
       const fixture = source(current);
       for (const contribution of buildGroupingContributions(fixture.value)) {
         contribution.run();
@@ -137,6 +162,7 @@ describe("grouping command center contributions", () => {
         status: ["sidebar-grouping-status"],
         list: ["sidebar-grouping-list"],
         sessions: ["sidebar-grouping-sessions"],
+        tabs: ["sidebar-grouping-tabs"],
       },
     );
   });
@@ -155,7 +181,7 @@ describe("grouping command center contributions", () => {
   });
 
   it("stays out of the default empty-query list", () => {
-    for (const mode of ["project", "status", "list", "sessions"] as const) {
+    for (const mode of ["project", "status", "list", "sessions", "tabs"] as const) {
       for (const contribution of buildGroupingContributions(source(mode).value)) {
         expect(contribution.visibility).toBe("query");
         expect(contribution.group).toBe("actions");

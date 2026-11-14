@@ -1,3 +1,4 @@
+import { resolveSessionTasks } from "@/agent-tasks/model";
 import { manualStatus } from "@/agent-status/model";
 import { SessionPinButton } from "@/session-pins/pin-button";
 import { StreamReturnButton } from "@/companion-stream/stream-return";
@@ -25,6 +26,7 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
+import { AgentLimitHandoff } from "@/components/agent-limit-handoff";
 import { CompanionFeed } from "@/companion-stream/feed";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { ComposerDock } from "@/composer/dock";
@@ -394,6 +396,7 @@ function useAgentPanelDescriptor(
           labels: descriptorState.labels,
         })
       : null,
+    statusRunning: descriptorState.isTurnActive || descriptorState.status === "running",
   };
 }
 
@@ -1213,6 +1216,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     (state) => state.selectedViews[`${serverId}:${agentId}`] || "chat",
   );
   const setSelectedView = useAgentViewStore((state) => state.setSelectedView);
+  const findOpen = useAgentViewStore((state) => state.findOpen[`${serverId}:${agentId}`] ?? false);
   const handleSetSelectedView = useCallback(
     (view: "chat" | "artifacts") => {
       setSelectedView(serverId, agentId, view);
@@ -1229,9 +1233,13 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   }, [handleReturnToChat, streamViewRef]);
   const artifactFeedAvailability = useHostFeatureAvailability(serverId, "artifactFeed");
   const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
-  const tasks = useSessionStore((state): TodoEntry[] | undefined =>
+  const snapshotTasks = useSessionStore(
+    (state): TodoEntry[] | undefined => state.sessions[serverId]?.agents.get(agentId)?.tasks,
+  );
+  const timelineTasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
   );
+  const tasks = resolveSessionTasks(snapshotTasks, timelineTasks);
   const archiveFinishedSubagents = useArchiveFinishedSubagents({
     serverId,
     parentAgentId: agentId,
@@ -1388,6 +1396,16 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const dockContent = (
     <View style={styles.contentContainer}>
       {streamContent}
+      {hasActiveComposer ? (
+        <AgentLimitHandoff
+          serverId={serverId}
+          workspaceId={workspaceId}
+          agentId={agentId}
+          agent={effectiveAgent}
+          entries={agentState.companionEntries ?? EMPTY_COMPANION_ENTRIES}
+          toast={toastApi}
+        />
+      ) : null}
 
       {showHistorySyncError ? (
         <TimelineSyncErrorCallout isRetrying={isRetryingHistorySync} onRetry={retryTimelineSync} />
@@ -1442,8 +1460,12 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   // Threads open and live in the layout that shows this chat (a split session's may differ).
   const threadsLayoutWorkspaceId = usePaneContext().layoutWorkspaceId ?? workspaceId;
   const viewSwitcherStyle = useMemo(
-    () => [styles.viewSwitcher, !isChatVisible && styles.streamViewSwitcher],
-    [isChatVisible],
+    () => [
+      styles.viewSwitcher,
+      !isChatVisible && styles.streamViewSwitcher,
+      isCompact && isChatVisible && findOpen && styles.hiddenPane,
+    ],
+    [isChatVisible, isCompact, findOpen],
   );
 
   return (

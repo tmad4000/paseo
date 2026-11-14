@@ -168,41 +168,20 @@ async function simulateDamagedLegacyDirectoryCache(
         await new Promise<void>((resolve, reject) => {
           const transaction = database.transaction("rows", "readwrite");
           const store = transaction.objectStore("rows");
-          const request = store.getAll();
-          request.onsuccess = () => {
-            const rows = request.result as Array<{
-              serverId: string;
-              kind: string;
-              id: string;
-              payload: string;
-            }>;
-            const checkpoint = rows.find(
-              (row) => row.serverId === serverId && row.kind === "checkpoint",
-            );
-            if (!checkpoint) {
-              transaction.abort();
-              return;
-            }
-            const stored = JSON.parse(checkpoint.payload);
-            // Accept either writer so this fixture also reproduces on the unfixed client.
-            const cursors = stored.version === 1 ? stored.cursors : stored;
-            if (!cursors.workspaces?.generation) {
-              transaction.abort();
-              return;
-            }
-            store.put({ ...checkpoint, payload: JSON.stringify(cursors) });
-            for (const row of rows) {
-              if (
-                row.serverId === serverId &&
-                row.kind === "workspace" &&
-                row.id === missingWorkspaceId
-              )
-                store.delete([serverId, row.kind, row.id]);
-            }
-          };
+          // Current hosts use paginated snapshots and never emit workspace sync cursors.
+          // Seed the old unversioned checkpoint contract independently of today's writer.
+          store.put({
+            serverId,
+            kind: "checkpoint",
+            id: "singleton",
+            payload: JSON.stringify({
+              workspaces: { generation: "legacy-directory-generation", afterSeq: 1 },
+            }),
+          });
+          store.delete([serverId, "workspace", missingWorkspaceId]);
           transaction.addEventListener("complete", () => resolve());
           transaction.addEventListener("abort", () =>
-            reject(transaction.error ?? new Error("Missing current directory checkpoint")),
+            reject(transaction.error ?? new Error("Failed to seed damaged legacy directory cache")),
           );
           transaction.addEventListener("error", () => reject(transaction.error));
         });

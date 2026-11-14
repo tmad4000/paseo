@@ -596,9 +596,10 @@ describe("create-agent worktree setup boundary", () => {
   });
 });
 
-function createAgentStorageStub(): Pick<AgentStorage, "list"> {
+function createAgentStorageStub(): Pick<AgentStorage, "list" | "listByWorkspace"> {
   return {
     list: async (): Promise<StoredAgentRecord[]> => [],
+    listByWorkspace: async (): Promise<StoredAgentRecord[]> => [],
   };
 }
 
@@ -2037,6 +2038,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2108,6 +2110,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2184,6 +2187,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         workspaceGitService: {
           getSnapshot: vi.fn(async () => null),
           listWorktrees: vi.fn(async () => []),
+          invalidateWorktrees: () => {},
         },
         agentManager: {
           listAgents: () => [],
@@ -2260,6 +2264,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
       workspaceGitService: {
         getSnapshot: vi.fn(async () => null),
         listWorktrees: vi.fn(async () => []),
+        invalidateWorktrees: () => {},
       },
       agentManager: {
         listAgents: () => [],

@@ -636,8 +636,16 @@ function normalizeNumstatPath(pathField: string): string {
   return pathField;
 }
 
+// Parsed patches need a stable wire format regardless of terminal presentation settings.
+const GIT_PATCH_FORMAT_ARGS = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
+
 function buildGitDiffArgs(args: { ignoreWhitespace?: boolean; extra: string[] }): string[] {
-  return ["diff", ...(args.ignoreWhitespace ? ["-w"] : []), ...args.extra];
+  return [
+    "diff",
+    ...GIT_PATCH_FORMAT_ARGS,
+    ...(args.ignoreWhitespace ? ["-w"] : []),
+    ...args.extra,
+  ];
 }
 
 const TRACKED_DIFF_NUMSTAT_MAX_BYTES = 2 * 1024 * 1024; // 2MB
@@ -1560,11 +1568,15 @@ export async function resolveRepositoryDefaultBranch(
         );
         return localName;
       } catch {
+        await getRunGitCommand(context)(["show-ref", "--verify", "--quiet", ref], {
+          cwd: repoRoot,
+          envOverlay: READ_ONLY_GIT_ENV,
+        });
         return remoteShort;
       }
     }
   } catch {
-    // ignore
+    // A stale origin/HEAD must fall through to the available local branches.
   }
 
   const { stdout } = await getRunGitCommand(context)(["branch", "--format=%(refname:short)"], {
@@ -2631,7 +2643,7 @@ export async function getCommitFileDiff({
   path: string;
 }): Promise<ParsedDiffFile | null> {
   const { stdout } = await runGitCommand(
-    ["show", sha, "--format=", "--diff-merges=first-parent", "--", path],
+    ["show", sha, "--format=", "--diff-merges=first-parent", ...GIT_PATCH_FORMAT_ARGS, "--", path],
     {
       cwd,
       envOverlay: READ_ONLY_GIT_ENV,

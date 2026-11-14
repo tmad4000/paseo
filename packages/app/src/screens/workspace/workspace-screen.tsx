@@ -1,4 +1,7 @@
 import { useFirstMessage } from "@/first-message/reader";
+import { closeLastBlankTab } from "@/navigation/close-last-blank-tab";
+import { navigationFocusHistory } from "@/navigation/focus-history";
+import { navigateInFocusHistory } from "@/navigation/focus-history-runtime";
 import { useWorkspaceLinks } from "./use-workspace-links";
 import { useConversationSharing } from "@/sharing/use-conversation-sharing";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -22,7 +25,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown, Search } from "lucide-react-native";
+import { Button } from "@/components/ui/button";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -155,10 +159,13 @@ import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-reque
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
   reconcileTabActivity,
+  collectUnreadTabStates,
+  type UnreadTabStates,
   sortTabsByActivity,
   type TabActivityState,
 } from "@/screens/workspace/workspace-tab-activity";
 import { useTabReadPolicy } from "@/screens/workspace/use-tab-read-policy";
+import { useTabSeenDwell } from "@/screens/workspace/use-tab-seen-dwell";
 import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import {
   resolveWorkspaceExplorerToggleOwner,
@@ -211,6 +218,7 @@ import {
   type SplitWithSessionPosition,
   type SplitWithSessionValue,
 } from "@/workspace-tabs/split-with-session";
+import { useSidebarDropHost } from "@/workspace-tabs/use-sidebar-drop-host";
 import { ViewSessionPicker, type ViewSessionPickerRequest } from "@/views/view-session-picker";
 import type { ViewTabInput } from "@/stores/views-store";
 import {
@@ -355,7 +363,7 @@ interface MobileWorkspaceTabSwitcherProps {
   workspaceKey: string | null;
   workspaceName: string;
   enabled: boolean;
-  unreadTabIds: Set<string>;
+  unreadTabIds: UnreadTabStates;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
@@ -464,6 +472,7 @@ function MobileWorkspaceTabOption({
   selected,
   active,
   unread,
+  seen,
   onPress,
   resolvedPresentation,
   onCopyResumeCommand,
@@ -487,6 +496,8 @@ function MobileWorkspaceTabOption({
   selected: boolean;
   active: boolean;
   unread: boolean;
+  /** Unread, but this device has already looked at it: a ring instead of a filled badge. */
+  seen: boolean;
   onPress: () => void;
   resolvedPresentation: WorkspaceTabPresentation;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
@@ -590,6 +601,7 @@ function MobileWorkspaceTabOption({
   return (
     <WorkspaceTabOptionRow
       presentation={resolvedPresentation}
+      seen={seen}
       selected={selected}
       active={active}
       unread={unread}
@@ -625,6 +637,12 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   onFindInChat,
 }: MobileWorkspaceTabSwitcherProps) {
   const tabsById = useMemo(() => new Map(tabs.map((tab) => [tab.tabId, tab])), [tabs]);
+  const { t } = useTranslation();
+  const handleCloseSwitcherTab = onCloseTab;
+  const currentAgentId = activeTab?.target.kind === "agent" ? activeTab.target.agentId : null;
+  const handleFindCurrentChat = useCallback(() => {
+    if (currentAgentId) onFindInChat(currentAgentId);
+  }, [currentAgentId, onFindInChat]);
 
   const renderTabOption = useCallback(
     ({ entry, presentation, selected, active, onPress }: WorkspaceTabSearchRow) => {
@@ -648,6 +666,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           active={active}
           resolvedPresentation={presentation}
           unread={unreadTabIds.has(tab.tabId)}
+          seen={unreadTabIds.get(tab.tabId) === "seen"}
           onPress={onPress}
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
@@ -655,7 +674,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
           onRenameTab={onRenameTab}
-          onCloseTab={onCloseTab}
+          onCloseTab={handleCloseSwitcherTab}
           onCloseTabsAbove={onCloseTabsAbove}
           onCloseTabsBelow={onCloseTabsBelow}
           onCloseOtherTabs={onCloseOtherTabs}
@@ -674,7 +693,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       onCopyFilePath,
       onReloadAgent,
       onRenameTab,
-      onCloseTab,
+      handleCloseSwitcherTab,
       onCloseTabsAbove,
       onCloseTabsBelow,
       onCloseOtherTabs,
@@ -708,6 +727,18 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           </>
         }
       />
+      {currentAgentId ? (
+        <Button
+          testID="workspace-current-chat-find"
+          variant="ghost"
+          size="md"
+          leftIcon={Search}
+          accessibilityLabel={t("workspace.tabs.menu.findInChat")}
+          onPress={handleFindCurrentChat}
+        >
+          {t("paneFind.title")}
+        </Button>
+      ) : null}
     </View>
   );
 });
@@ -1508,6 +1539,7 @@ function WorkspaceScreenContent({
   isRouteFocused,
   recoveryRequested,
 }: WorkspaceScreenContentProps) {
+  const router = useRouter();
   const { t } = useTranslation();
   const _insets = useSafeAreaInsets();
   const toast = useToast();
@@ -2120,6 +2152,21 @@ function WorkspaceScreenContent({
     [activityByAgentId, tabs],
   );
   const tabReadPolicy = useTabReadPolicy(allActivityTabs, normalizedServerId);
+  const seenDwellCandidate = useMemo(
+    () =>
+      activeTab?.descriptor.target.kind === "agent" && normalizedServerId
+        ? {
+            tabId: activeTab.descriptor.tabId,
+            serverId: normalizedServerId,
+            agentId: activeTab.descriptor.target.agentId,
+          }
+        : null,
+    [activeTab, normalizedServerId],
+  );
+  const dwelledTabIds = useTabSeenDwell({
+    candidate: seenDwellCandidate,
+    enabled: isRouteFocused,
+  });
   const [tabActivity, setTabActivity] = useState<Map<string, TabActivityState>>(() => new Map());
   useEffect(() => {
     setTabActivity((previous) =>
@@ -2129,13 +2176,11 @@ function WorkspaceScreenContent({
         activityByAgentId,
         viewedTabIds,
         tabReadPolicy,
+        dwelledTabIds,
       ),
     );
-  }, [activityByAgentId, allActivityTabs, tabReadPolicy, viewedTabIds]);
-  const unreadTabIds = useMemo(
-    () => new Set([...tabActivity].filter(([, state]) => state.unread).map(([tabId]) => tabId)),
-    [tabActivity],
-  );
+  }, [activityByAgentId, allActivityTabs, dwelledTabIds, tabReadPolicy, viewedTabIds]);
+  const unreadTabIds = useMemo(() => collectUnreadTabStates(tabActivity), [tabActivity]);
   const hasSetupTab = useMemo(
     () =>
       uiTabs.some(
@@ -2725,6 +2770,23 @@ function WorkspaceScreenContent({
       if (!tab) {
         return;
       }
+      if (
+        tab.target.kind === "new_tab" &&
+        workspaceLayout &&
+        closeLastBlankTab({
+          serverId: normalizedServerId,
+          workspaceId: normalizedWorkspaceId,
+          tabId,
+          layout: workspaceLayout,
+          explorerSidebarPaneId,
+          history: navigationFocusHistory,
+          closeTab: () => handleClosePassiveTab({ tabId, target: tab.target }),
+          navigateBack: (steps) => navigateInFocusHistory("back", { isCompact: isMobile, steps }),
+          navigateSessions: () => router.navigate("/sessions"),
+        })
+      ) {
+        return;
+      }
       if (!(await confirmDiscardModifiedTab(tabId))) {
         return;
       }
@@ -2744,6 +2806,12 @@ function WorkspaceScreenContent({
       handleCloseAgentTab,
       handleClosePassiveTab,
       handleCloseTerminalTab,
+      workspaceLayout,
+      normalizedServerId,
+      normalizedWorkspaceId,
+      explorerSidebarPaneId,
+      isMobile,
+      router,
     ],
   );
 
@@ -3816,6 +3884,7 @@ function WorkspaceScreenContent({
         isCloseHovered: hoveredCloseTabKey === tab.key,
         isClosingTab: closingTabIds.has(tab.tabId),
         unread: unreadTabIds.has(tab.tabId),
+        seen: unreadTabIds.get(tab.tabId) === "seen",
       })),
     [
       activeTabDescriptor?.tabId,
@@ -4221,6 +4290,15 @@ function WorkspaceScreenContent({
     content
   );
   const rendersDesktopSplitContent = !isMobile && desktopSplitContent !== null;
+  useSidebarDropHost({
+    routeFocused: isRouteFocused,
+    rendersSplits: rendersDesktopSplitContent,
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    workspaceKey: persistenceKey,
+    uiTabs,
+    navigateToTabId,
+  });
 
   const workspacePanelContent = (
     <WorkspacePanelContent
@@ -4481,11 +4559,15 @@ const styles = StyleSheet.create((theme) => ({
   },
   newTabTooltipShortcut: {},
   mobileTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.surface0,
     borderBottomWidth: theme.borderWidth[1],
     borderBottomColor: theme.colors.border,
   },
   switcherTrigger: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],

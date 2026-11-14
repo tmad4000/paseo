@@ -17,6 +17,7 @@ import {
 } from "./service.js";
 import { AgentQueueStore } from "./store.js";
 import { MessageReceipts } from "../message-receipts/index.js";
+import { STEER_REJECTED_MESSAGE, steerRejectedError } from "../agent/prompt-not-submitted.js";
 import { wrapSpokenInput } from "../voice-config.js";
 
 const AGENT_ID = "agent-1";
@@ -28,6 +29,9 @@ const AGENT_ID = "agent-1";
 class FakeAgentController implements AgentQueueAgentController {
   lifecycle: AgentLifecycleStatus = "idle";
   pendingPermissions = 0;
+  /** Provider history is loaded, so the timeline is authoritative for delivery checks. */
+  historyPrimed = false;
+  inFlightRun = false;
   private readonly subscribers = new Set<(event: AgentManagerEvent) => void>();
 
   subscribe = ((callback: (event: AgentManagerEvent) => void) => {
@@ -41,7 +45,12 @@ class FakeAgentController implements AgentQueueAgentController {
     ({
       id: agentId,
       lifecycle: this.lifecycle,
+      historyPrimed: this.historyPrimed,
     }) as ManagedAgent) as AgentQueueAgentController["getAgent"];
+
+  hasInFlightRun = (() => this.inFlightRun) as NonNullable<
+    AgentQueueAgentController["hasInFlightRun"]
+  >;
 
   getPendingPermissions = (() =>
     Array.from({ length: this.pendingPermissions }, (_, index) => ({
@@ -81,6 +90,8 @@ interface Harness {
   sent: SendQueuedPromptInput[];
   broadcasts: AgentQueueSnapshot[];
   failSends: (error: Error | null) => void;
+  /** Item ids the fake agent timeline already shows as delivered. */
+  timeline: Set<string>;
 }
 
 describe("AgentQueueService", () => {
@@ -93,6 +104,7 @@ describe("AgentQueueService", () => {
     const sent: SendQueuedPromptInput[] = [];
     const broadcasts: AgentQueueSnapshot[] = [];
     let sendError: Error | null = null;
+    const timeline = new Set<string>();
 
     const store = new AgentQueueStore(join(dir, "queues"));
     const service = new AgentQueueService({
@@ -100,6 +112,7 @@ describe("AgentQueueService", () => {
       agentManager: agents,
       agentStorage: {} as AgentStorage,
       logger: createTestLogger(),
+      isDelivered: (_agentId, item) => timeline.has(item.id),
       sendPrompt: async (input) => {
         attempts.push(input);
         if (sendError) {
@@ -123,6 +136,7 @@ describe("AgentQueueService", () => {
       failSends: (error) => {
         sendError = error;
       },
+      timeline,
     };
   }
 
@@ -718,6 +732,143 @@ describe("AgentQueueService", () => {
       "agent_request_outcome_unknown",
     );
     expect(harness.attempts).toHaveLength(1);
+  });
+
+  test("a real strict-steer refusal clears its receipt so the item sends when the turn ends", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "steer me" });
+    harness.failSends(steerRejectedError());
+
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      STEER_REJECTED_MESSAGE,
+    );
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("absent");
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual(["item-1"]);
+
+    // Send now again during the same turn is refused again, never "outcome unknown".
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      STEER_REJECTED_MESSAGE,
+    );
+
+    harness.failSends(null);
+    harness.agents.emitLifecycle("running");
+    harness.agents.emitLifecycle("idle");
+    await harness.service.flushDrains();
+    expect(harness.sent.map((attempt) => attempt.messageId)).toEqual(["item-1"]);
+    expect(harness.sent[0]?.activeTurnBehavior).toBeUndefined();
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("after a refused steer, an explicit Send now retry with the same id is delivered", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "steer me" });
+    harness.failSends(steerRejectedError());
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      STEER_REJECTED_MESSAGE,
+    );
+
+    harness.failSends(null);
+    await harness.service.sendNow(AGENT_ID, "item-1");
+
+    expect(harness.attempts.map((attempt) => attempt.messageId)).toEqual(["item-1", "item-1"]);
+    expect(harness.sent).toHaveLength(1);
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("an unconfirmed receipt stays guarded while the agent could still be carrying it", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    harness.failSends(new Error("Provider submission outcome unknown: run start timed out"));
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("timed out");
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("pending");
+    harness.failSends(null);
+    harness.agents.historyPrimed = true;
+
+    // Still running: the timed-out start may yet land.
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      "agent_request_outcome_unknown",
+    );
+    // Idle, but a run is still reserved.
+    harness.agents.lifecycle = "idle";
+    harness.agents.inFlightRun = true;
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      "agent_request_outcome_unknown",
+    );
+    // Idle with no reserved run, but provider history not loaded: the timeline is not authoritative.
+    harness.agents.inFlightRun = false;
+    harness.agents.historyPrimed = false;
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      "agent_request_outcome_unknown",
+    );
+
+    expect(harness.attempts).toHaveLength(1);
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("pending");
+  });
+
+  test("Send now resends an unconfirmed message the settled agent's timeline never received", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    harness.failSends(new Error("connection lost"));
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("connection lost");
+    harness.failSends(null);
+
+    harness.agents.lifecycle = "idle";
+    harness.agents.historyPrimed = true;
+    await harness.service.sendNow(AGENT_ID, "item-1");
+
+    expect(harness.attempts.map((attempt) => attempt.messageId)).toEqual(["item-1", "item-1"]);
+    expect(harness.sent).toHaveLength(1);
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("Send now leaves an unconfirmed receipt from an earlier daemon process to Restart agent", async () => {
+    const receiptsDir = join(dir, "agent-requests");
+    harness.service.setMessageReceipts(new MessageReceipts(receiptsDir));
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    harness.failSends(new Error("connection lost"));
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("connection lost");
+    harness.failSends(null);
+
+    // A restarted daemon reads the same receipt directory with fresh in-memory state.
+    harness.service.setMessageReceipts(new MessageReceipts(receiptsDir));
+    harness.agents.lifecycle = "idle";
+    harness.agents.historyPrimed = true;
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow(
+      "agent_request_outcome_unknown",
+    );
+    expect(harness.attempts).toHaveLength(1);
+  });
+
+  test("Send now completes an unconfirmed message the agent's timeline already shows", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.lifecycle = "running";
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-1", text: "once" });
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "item-2", text: "twice" });
+    harness.failSends(new Error("connection lost"));
+    await expect(harness.service.sendNow(AGENT_ID, "item-1")).rejects.toThrow("connection lost");
+    harness.failSends(null);
+
+    harness.timeline.add("item-1");
+    harness.agents.lifecycle = "idle";
+    harness.agents.historyPrimed = true;
+    await harness.service.sendNow(AGENT_ID, "item-1");
+
+    expect(harness.attempts).toHaveLength(1);
+    expect(await receipts.get(AGENT_ID, "item-1")).toBe("completed");
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual(["item-2"]);
   });
 
   test("revision increases monotonically across mutations", async () => {
