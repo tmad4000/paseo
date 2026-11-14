@@ -44,7 +44,8 @@ async function main(): Promise<void> {
         if (typeof row.resolvedModel !== "string" || !row.resolvedModel.trim()) {
           throw new Error("Expected nonempty supportedModels() resolvedModel");
         }
-        resolvedIds.add(row.resolvedModel);
+        const undated = row.resolvedModel.replace(/-\d{8}$/, "");
+        resolvedIds.add(expected.has(undated) ? undated : row.resolvedModel);
       }
     }
     metadataMissingFromManifest = [...resolvedIds].filter((id) => !expected.has(id));
