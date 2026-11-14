@@ -2200,15 +2200,6 @@ function ComposerContentImpl({
   );
   const workspaceAttachments = useWorkspaceAttachmentsForScopes(composerAttachmentScopes);
   const workspaceAttachmentsAtRender = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
-  const getDraftRevision = useMemo(
-    () =>
-      createScopedDraftRevision({
-        getInputRevision: textSource.getRevision ?? textSource.getSnapshot,
-        scopeKeys: composerAttachmentScopes,
-        attachments: workspaceAttachments,
-      }),
-    [textSource, composerAttachmentScopes, workspaceAttachments],
-  );
   const {
     selectedAttachments,
     buildOutgoingAttachments,
@@ -2217,13 +2208,24 @@ function ComposerContentImpl({
     beginSubmit,
     clearSentAttachments,
     completeSubmit,
-    resetSuppression,
+    resetSubmitSuppression,
+    getAttachmentEditRevision,
     revealAttachments,
   } = composerWorkspaceAttachment.useBinding({
     normalAttachments: attachments,
     workspaceAttachments,
     onOpenWorkspaceAttachment,
   });
+  const getDraftRevision = useMemo(
+    () =>
+      createScopedDraftRevision({
+        getInputRevision: textSource.getRevision ?? textSource.getSnapshot,
+        getAttachmentEditRevision,
+        scopeKeys: composerAttachmentScopes,
+        attachments: workspaceAttachments,
+      }),
+    [textSource, getAttachmentEditRevision, composerAttachmentScopes, workspaceAttachments],
+  );
   const setSelectedAttachments = onChangeAttachments;
   const checkoutStatusQuery = useCheckoutStatusQuery({ serverId, cwd });
   const supportsForgeSearch = useSessionStore(
@@ -2408,7 +2410,7 @@ function ComposerContentImpl({
       clearDraft("sent");
       replaceUserInput("");
       setSelectedAttachments([]);
-      resetSuppression();
+      resetSubmitSuppression();
       setSendError(null);
       setIsProcessing(true);
       void onClientSlashCommand(command)
@@ -2425,7 +2427,7 @@ function ComposerContentImpl({
       blurOnSubmit,
       clearDraft,
       onClientSlashCommand,
-      resetSuppression,
+      resetSubmitSuppression,
       setSelectedAttachments,
       replaceUserInput,
     ],
@@ -2437,7 +2439,7 @@ function ComposerContentImpl({
       clearDraft("sent");
       replaceUserInput("");
       setSelectedAttachments([]);
-      resetSuppression();
+      resetSubmitSuppression();
       setSendError(null);
       executePluginClientSlashCommand({
         command: resolved.command,
@@ -2449,7 +2451,7 @@ function ComposerContentImpl({
       });
       return true;
     },
-    [blurOnSubmit, clearDraft, replaceUserInput, resetSuppression, setSelectedAttachments],
+    [blurOnSubmit, clearDraft, replaceUserInput, resetSubmitSuppression, setSelectedAttachments],
   );
 
   const { pickImages } = useImageAttachmentPicker();
@@ -2733,7 +2735,7 @@ function ComposerContentImpl({
             clearDraft: () => {
               replaceUserInput("");
               setSelectedAttachments([]);
-              resetSuppression();
+              resetSubmitSuppression();
             },
           },
         );
@@ -2758,7 +2760,7 @@ function ComposerContentImpl({
       replaceUserInput,
       queueOutbox,
       queueWriter,
-      resetSuppression,
+      resetSubmitSuppression,
       serverId,
       setSelectedAttachments,
       supportsAgentMessageQueue,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ComposerAttachment,
@@ -49,7 +49,8 @@ interface ComposerWorkspaceAttachmentBinding {
   beginSubmit: (attachments: readonly ComposerAttachment[]) => void;
   clearSentAttachments: (attachments: readonly ComposerAttachment[]) => void;
   completeSubmit: (input: CompleteSubmitInput) => void;
-  resetSuppression: () => void;
+  resetSubmitSuppression: () => void;
+  getAttachmentEditRevision: () => number;
   revealAttachments: (attachments: readonly WorkspaceComposerAttachment[]) => void;
 }
 
@@ -110,9 +111,18 @@ function useWorkspaceAttachmentBinding({
   const [suppressedAttachments, setSuppressedAttachments] = useState<
     readonly WorkspaceComposerAttachment[]
   >([]);
+  const [submittingAttachments, setSubmittingAttachments] = useState<
+    readonly WorkspaceComposerAttachment[]
+  >([]);
+  const attachmentEditRevision = useRef(0);
+  const getAttachmentEditRevision = useCallback(() => attachmentEditRevision.current, []);
   const activeWorkspaceAttachments = useMemo(
-    () => selectActiveWorkspaceAttachments(workspaceAttachments, suppressedAttachments),
-    [suppressedAttachments, workspaceAttachments],
+    () =>
+      selectActiveWorkspaceAttachments(workspaceAttachments, [
+        ...suppressedAttachments,
+        ...submittingAttachments,
+      ]),
+    [suppressedAttachments, submittingAttachments, workspaceAttachments],
   );
 
   const selectedAttachments = useMemo<ComposerAttachment[]>(
@@ -141,6 +151,7 @@ function useWorkspaceAttachmentBinding({
   );
 
   const suppressWorkspaceAttachment = useCallback((attachment: WorkspaceComposerAttachment) => {
+    attachmentEditRevision.current++;
     setSuppressedAttachments((current) =>
       hasWorkspaceAttachmentSnapshot(current, attachment) ? current : [...current, attachment],
     );
@@ -180,11 +191,16 @@ function useWorkspaceAttachmentBinding({
     [onOpenWorkspaceAttachment],
   );
 
-  const resetSuppression = useCallback(() => {
-    setSuppressedAttachments([]);
+  const resetSubmitSuppression = useCallback(() => {
+    setSubmittingAttachments([]);
   }, []);
 
   const revealAttachments = useCallback((restored: readonly WorkspaceComposerAttachment[]) => {
+    if (restored.length === 0) return;
+    attachmentEditRevision.current++;
+    setSubmittingAttachments((current) =>
+      current.filter((attachment) => !hasWorkspaceAttachmentSnapshot(restored, attachment)),
+    );
     setSuppressedAttachments((current) =>
       current.filter((attachment) => !hasWorkspaceAttachmentSnapshot(restored, attachment)),
     );
@@ -193,7 +209,7 @@ function useWorkspaceAttachmentBinding({
   const beginSubmit = useCallback((attachments: readonly ComposerAttachment[]) => {
     const submitted = attachments.filter(isWorkspaceAttachment);
     if (submitted.length === 0) return;
-    setSuppressedAttachments((current) => {
+    setSubmittingAttachments((current) => {
       const next = [...current];
       for (const attachment of submitted) {
         if (!hasWorkspaceAttachmentSnapshot(next, attachment)) next.push(attachment);
@@ -208,10 +224,10 @@ function useWorkspaceAttachmentBinding({
         clearSentAttachments(outgoingAttachments);
       }
       if (result === "queued" || result === "submitted" || result === "failed") {
-        resetSuppression();
+        resetSubmitSuppression();
       }
     },
-    [clearSentAttachments, resetSuppression],
+    [clearSentAttachments, resetSubmitSuppression],
   );
 
   return {
@@ -222,7 +238,8 @@ function useWorkspaceAttachmentBinding({
     beginSubmit,
     clearSentAttachments,
     completeSubmit,
-    resetSuppression,
+    resetSubmitSuppression,
+    getAttachmentEditRevision,
     revealAttachments,
   };
 }

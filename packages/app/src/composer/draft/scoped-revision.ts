@@ -8,6 +8,7 @@ import { getReviewDraftRevision } from "@/review/store";
 
 export function createScopedDraftRevision(input: {
   getInputRevision: () => unknown;
+  getAttachmentEditRevision?: () => unknown;
   scopeKeys: readonly string[];
   attachments?: readonly ComposerAttachment[];
 }): () => unknown {
@@ -25,6 +26,7 @@ export function createScopedDraftRevision(input: {
     }
     const current = [
       input.getInputRevision(),
+      input.getAttachmentEditRevision?.(),
       ...scopeKeys.map(getWorkspaceAttachmentRevision),
       ...[...reviewKeys].map(getReviewDraftRevision),
     ];

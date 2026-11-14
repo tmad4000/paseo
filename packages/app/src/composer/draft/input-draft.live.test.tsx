@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
-import React, { act } from "react";
+import React, { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, getByText } from "@testing-library/dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -158,16 +158,17 @@ afterEach(async () => {
   });
 });
 
-let useAgentInputDraft: typeof import("./input-draft").useAgentInputDraft;
+import { useAgentInputDraft } from "./input-draft";
+import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
+import { createScopedDraftRevision } from "@/composer/draft/scoped-revision";
+import { captureDraftPreparation } from "@/composer/submission/preparation-recovery";
 type DraftRecordForTest = ReturnType<typeof useDraftStore.getState>["drafts"][string];
 
-beforeAll(async () => {
+beforeAll(() => {
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
     value: true,
     configurable: true,
   });
-
-  ({ useAgentInputDraft } = await import("./input-draft"));
 });
 
 describe("useAgentInputDraft live contract", () => {
@@ -1403,6 +1404,330 @@ describe("failed preparation copies through the live draft and recovery actions"
       expect(send).not.toHaveBeenCalled();
       expect(flush).not.toHaveBeenCalled();
       expect(add).toHaveBeenCalledTimes(stage === "save" ? 1 : 0);
+    },
+  );
+});
+
+type ReviewPillRoute = "send" | "queue" | "explicitQueue" | "lockedSend" | "keepQueue";
+interface ReviewPillCase {
+  route: ReviewPillRoute;
+  stage: PreparationStage;
+  outcome: PreparationOutcome;
+  edit: "remove" | "aba" | "B" | "newReview" | "unchanged";
+}
+function reviewPillCases(): ReviewPillCase[] {
+  const cases: ReviewPillCase[] = [];
+  for (const stage of ["encode", "save"] as const) {
+    for (const outcome of ["success", "failure"] as const) {
+      for (const route of ["send", "queue", "explicitQueue"] as const) {
+        for (const edit of ["remove", "aba", "B", "newReview", "unchanged"] as const)
+          cases.push({ route, stage, outcome, edit });
+      }
+      for (const route of ["lockedSend", "keepQueue"] as const)
+        cases.push({ route, stage, outcome, edit: "unchanged" });
+    }
+  }
+  return cases;
+}
+
+async function mountReviewPillDraft() {
+  type Binding = ReturnType<typeof composerWorkspaceAttachment.useBinding>;
+  interface MountedDraft {
+    draft: LiveDraft;
+    binding: Binding;
+    getDraftRevision: () => unknown;
+  }
+  let latest: MountedDraft | null = null;
+  function current(): MountedDraft {
+    if (!latest) throw new Error("Review draft not mounted");
+    return latest;
+  }
+  function Probe() {
+    const draft = useAgentInputDraft({ draftKey: "draft:review-pill" });
+    const comments = useReviewDraftStore((state) => state.drafts["recovery-review"]);
+    const workspaceAttachments = useMemo(() => {
+      const review = buildReviewAttachmentSnapshot({
+        reviewDraftKey: "recovery-review",
+        cwd: "/repo",
+        mode: "uncommitted",
+        comments: comments ?? [],
+        diffFiles: [recoveryDiffFile],
+      });
+      return review ? [review] : [];
+    }, [comments]);
+    const binding = composerWorkspaceAttachment.useBinding({
+      normalAttachments: draft.attachments,
+      workspaceAttachments,
+    });
+    const getDraftRevision = useMemo(
+      () =>
+        createScopedDraftRevision({
+          getInputRevision: draft.textSource.getRevision!,
+          getAttachmentEditRevision: binding.getAttachmentEditRevision,
+          scopeKeys: [],
+          attachments: workspaceAttachments,
+        }),
+      [draft.textSource, binding.getAttachmentEditRevision, workspaceAttachments],
+    );
+    latest = { draft, binding, getDraftRevision };
+    return null;
+  }
+  const root = createTestRoot(document.getElementById("root")!);
+  const queryClient = new QueryClient();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Probe />
+      </QueryClientProvider>,
+    );
+  });
+  return current;
+}
+
+describe("review pill edits during live draft preparation", () => {
+  beforeEach(() => {
+    asyncStorage.clear();
+    document.body.innerHTML = "<div id='root'></div>";
+    useDraftStore.setState({ drafts: {}, createModalDraft: null });
+    useWorkspaceAttachmentsStore.setState({ attachmentsByScope: {} });
+    resetReviewDraftStore();
+    useReviewDraftStore.getState().addComment({
+      key: "recovery-review",
+      comment: {
+        id: "comment",
+        filePath: "review.ts",
+        side: "new",
+        lineNumber: 1,
+        body: "original A review",
+      },
+    });
+  });
+
+  it.each(reviewPillCases())(
+    "preserves $edit through $route held $stage $outcome using the pill binding",
+    async ({ route, stage, outcome, edit }) => {
+      const current = await mountReviewPillDraft();
+      const image = imageForRecovery("pill-A-image");
+      const message = "original A";
+      await act(async () => {
+        current().draft.replaceText(message);
+        current().draft.setAttachments([image]);
+      });
+      const binding = current().binding;
+      const original = binding.buildOutgoingAttachments([image]);
+      const review = original.find((attachment) => attachment.kind === "review");
+      if (!review) throw new Error("Missing original review pill");
+      const getDraftRevision = current().getDraftRevision;
+      const recovery = new FailedPreparationRecovery<ComposerAttachment>();
+      const pending = deferred<void>();
+      const entered = deferred<void>();
+      const encodeImages = async () => {
+        if (stage === "encode") {
+          entered.resolve();
+          await pending.promise;
+        }
+        return [{ data: "exact-A-bytes", mimeType: "image/png" }];
+      };
+      const save = vi.fn(async () => {
+        if (stage === "save") {
+          entered.resolve();
+          await pending.promise;
+        }
+      });
+      const flush = vi.fn(async () => {});
+      const send = vi.fn(async () => ({ queued: false }));
+      const enqueue = vi.fn(async () => ({ agentId: "agent", revision: 1, items: [] }));
+      const clear = vi.fn(() => current().draft.clear("sent"));
+      const scope = recovery.forScope("pill-agent");
+      const queue = async () => {
+        const held = captureDraftPreparation({
+          message,
+          attachments: original,
+          recovery: scope,
+          getDraftRevision,
+        });
+        try {
+          const queued = await queueInputMessage(
+            { text: message, attachments: original, cwd: "/repo" },
+            async () => {
+              const result = await queueComposerMessageOnServer({
+                client: {
+                  enqueueAgentMessage: enqueue,
+                  removeQueuedAgentMessage: async () => ({
+                    agentId: "agent",
+                    revision: 1,
+                    items: [],
+                  }),
+                  getQueuedAgentMessageImages: async () => [],
+                },
+                agentId: "agent",
+                text: message,
+                attachments: original,
+                encodeImages,
+                queue: { read: () => [], write: () => {} },
+                applySnapshot: () => {},
+                outbox: { serverId: "server", add: save, flush, remove: async () => {} },
+              });
+              if (result.error) throw new Error(result.error);
+              return Boolean(result.queued);
+            },
+            {
+              getDraftRevision,
+              keepComposer: route === "keepQueue",
+              clearDraft: () => {
+                clear();
+                binding.resetSubmitSuppression();
+              },
+            },
+          );
+          if (queued && route !== "keepQueue") binding.clearSentAttachments(original);
+        } catch (error) {
+          held.failIfChanged(error);
+          throw error;
+        } finally {
+          held.release();
+        }
+      };
+      const direct = async () => {
+        if (route !== "lockedSend") binding.beginSubmit(original);
+        await dispatchComposerAgentMessage({
+          client: {
+            sendAgentMessage: send,
+            uploadFile: async () => ({ requestId: "unused", file: null, error: null }),
+          },
+          agentId: "agent",
+          text: message,
+          attachments: original,
+          encodeImages,
+          submission: { begin: () => {}, accept: () => {}, reject: () => "rejected" },
+          outbox: {
+            serverId: "server",
+            add: save,
+            flush,
+            get: () => undefined,
+            remove: async () => {},
+          },
+        });
+      };
+      function startSubmission(): Promise<string> {
+        if (route === "explicitQueue" || route === "keepQueue") {
+          return queue().then(
+            () => "queued",
+            () => "failed",
+          );
+        }
+        return submitAgentInput({
+          message,
+          attachments: original,
+          submitBehavior: route === "lockedSend" ? "preserve-and-lock" : "clear",
+          isAgentRunning: route === "queue",
+          canSubmit: true,
+          getDraftRevision,
+          recovery: scope,
+          queueMessage: queue,
+          submitMessage: direct,
+          clearDraft: clear,
+          setUserInput: (text) => current().draft.replaceText(text),
+          setAttachments: (attachments) =>
+            current().draft.setAttachments(userAttachmentsOnly(attachments)),
+          setSendError: () => {},
+          setIsProcessing: () => {},
+        }).then((result) => {
+          binding.completeSubmit({ result, outgoingAttachments: original });
+          return result;
+        });
+      }
+      let submission!: Promise<string>;
+      await act(async () => {
+        submission = startSubmission();
+        await entered.promise;
+      });
+      const pendingDirectClear = route === "send";
+      expect(current().draft.textSource.getSnapshot()).toBe(pendingDirectClear ? "" : message);
+      expect(current().draft.attachments).toEqual(pendingDirectClear ? [] : [image]);
+      const beforeEdit = getDraftRevision();
+      await act(async () => {
+        if (edit !== "unchanged") {
+          expect(
+            binding.removeAttachment({
+              selectedAttachments: original,
+              index: original.indexOf(review),
+            }),
+          ).toBe(true);
+          const removedRevision = getDraftRevision();
+          expect(removedRevision).not.toBe(beforeEdit);
+          if (edit === "aba") {
+            binding.revealAttachments([review]);
+            expect(getDraftRevision()).not.toBe(removedRevision);
+          }
+          if (edit === "B") current().draft.editText("newer B");
+          if (edit === "newReview") {
+            useReviewDraftStore.getState().updateComment({
+              key: "recovery-review",
+              id: "comment",
+              updates: { body: "newer B review" },
+            });
+          }
+        }
+        if (outcome === "failure") pending.reject(new Error("held preparation failed"));
+        else pending.resolve();
+        let expectedResult = "queued";
+        if (route === "send" || route === "lockedSend") expectedResult = "submitted";
+        if (outcome === "failure") expectedResult = "failed";
+        expect(await submission).toBe(expectedResult);
+      });
+      function assertComposer() {
+        const isDirect = route === "send" || route === "lockedSend";
+        let expectedText = "";
+        if (!isDirect || route === "lockedSend" || (edit === "unchanged" && outcome === "failure"))
+          expectedText = message;
+        if (edit === "B") expectedText = "newer B";
+        const shouldClear = edit === "unchanged" && outcome === "success" && route !== "keepQueue";
+        expect(current().draft.textSource.getSnapshot()).toBe(shouldClear ? "" : expectedText);
+        expect(clear).toHaveBeenCalledTimes(shouldClear ? 1 : 0);
+        let expectedImages: UserComposerAttachment[] = [];
+        if (
+          !shouldClear &&
+          (!isDirect || route === "lockedSend" || (edit === "unchanged" && outcome === "failure"))
+        )
+          expectedImages = [image];
+        expect(current().draft.attachments).toEqual(expectedImages);
+      }
+      function assertSettlement(sentReview: Extract<ComposerAttachment, { kind: "review" }>) {
+        const copies = recovery.getSnapshot();
+        if (outcome === "failure" && edit !== "unchanged") {
+          expect(copies).toHaveLength(1);
+          expect(copies[0].message).toBe(message);
+          expect(copies[0].attachments).toEqual(original);
+          expect(copies[0].attachments[0]).toBe(image);
+          expect(copies[0].attachments[1]).toBe(sentReview);
+        } else expect(copies).toEqual([]);
+        const selected = current().binding.selectedAttachments;
+        if (edit === "remove" || edit === "B") expect(selected).not.toContainEqual(sentReview);
+        if (edit === "newReview") {
+          const next = selected.find((attachment) => attachment.kind === "review");
+          expect(next?.attachment.comments[0].body).toBe("newer B review");
+        }
+        if (
+          (edit === "aba" && outcome === "failure") ||
+          (route === "keepQueue" && outcome === "success")
+        )
+          expect(selected).toContainEqual(sentReview);
+        expect(send).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+        expect(flush).toHaveBeenCalledTimes(outcome === "success" ? 1 : 0);
+        if (outcome === "success") {
+          expect(save).toHaveBeenCalledWith(
+            expect.objectContaining({
+              text: message,
+              images: [{ data: "exact-A-bytes", mimeType: "image/png" }],
+              attachments: [sentReview.attachment],
+            }),
+          );
+        }
+      }
+      assertComposer();
+      assertSettlement(review);
     },
   );
 });

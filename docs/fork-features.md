@@ -37,7 +37,10 @@ the composer. Hold Send/Queue encoding and device save with a review snapshot, t
 comment under the same review key. Only unchanged submitted comments clear; newer comments stay
 visible/retryable, and discarded comments stay discarded. Updated context snapshots with the same
 key must survive cleanup too. Removing a review pill must remain effective after unrelated diff
-updates reconstruct its attachment; actual added, edited and ABA-edited comments must become visible. An unchanged draft still settles or restores on failure, and
+updates reconstruct its attachment; actual added, edited and ABA-edited comments must become visible.
+Repeat held encoding/save success and failure with the review pill's remove action and remove/reveal
+ABA before render: retain the edited composer and exact failed payload, and keep user suppression
+after submission cleanup. An unchanged draft still settles or restores on failure, and
 preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
 either delivery path and leave the original images recoverable. Fail held encoding/device storage
 after newer text/image/review edits: B stays in the composer and exact A remains in the memory-only

@@ -72,8 +72,10 @@ Independent review caught gaps in the first implementation:
   A later run cannot supply another request's refusal proof. Stale-session retry resolves the same
   acceptance promise and never replays after acceptance, timeout or cancellation. Generic failures
   and ambiguous steering retain their receipts.
-- Review suppression compares the captured comment versions across diff-context rebuilds. Removed
-  unchanged reviews stay hidden while actual new or edited comments become visible.
+- Review suppression compares the captured comment versions across diff-context rebuilds. User
+  pill removals and reveals advance the shared draft revision synchronously, including before render
+  and ABA actions. Submission suppression and cleanup do not count as edits or reveal user-removed
+  reviews; actual new or edited comment versions remain visible.
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
 
@@ -88,7 +90,10 @@ All eleven selected daemon-backed browser flows passed at `1847a0c5`. Its expand
 deadline; that outbox case passed unchanged in isolation. Follow-up fixes add the React import and
 narrow the pull-request fixture type caught by typecheck. The assertions and timeouts are unchanged.
 The published revision's commands, counts and required CI outcomes are listed on PR 207; earlier
-receipts are retained as diagnostics rather than substituted for current-revision results.
+receipts are retained as diagnostics rather than substituted for current-revision results. The
+review-pill binding regressions and cold-import setup correction added after `8178d8d8` await the
+outer executor's GCP checks. The draft dependency now loads during collection; the setup hook only
+sets the React act environment. Behavioral assertions and timeouts are unchanged.
 
 The queue cases cover held encoding/device saves, legacy local acceptance, failures, A→B→A
 text edits, image changes, review/context-only versions, unchanged clearing and Queue as new
