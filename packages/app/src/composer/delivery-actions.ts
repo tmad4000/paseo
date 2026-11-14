@@ -11,12 +11,14 @@ import {
   type PendingDirectSend,
 } from "@/stores/send-outbox-store";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
+import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
 import { confirmDialog } from "@/utils/confirm-dialog";
 
 /** Sends one saved message again now, with the same id so the host can dedupe it. */
 export async function retryDirectSend(input: {
   entry: PendingDirectSend;
-  client: SendOutboxFlushClient;
+  client: SendOutboxFlushClient & Partial<QueueOutboxFlushClient>;
 }): Promise<void> {
   const { entry, client } = input;
   // Same guard as the reconnect flush: never resend to a host that cannot dedupe.
@@ -37,6 +39,10 @@ export async function retryDirectSend(input: {
 export async function discardDirectSend(entry: PendingDirectSend): Promise<void> {
   await useSendOutboxStore.getState().removeDurably(entry.clientMessageId);
   createMessageSubmissionWriter(entry.serverId).reject(entry.agentId, entry.clientMessageId);
+  const client = useSessionStore.getState().sessions[entry.serverId]?.client;
+  if (client) {
+    void flushDeliveryOutboxes({ serverId: entry.serverId, agentId: entry.agentId, client }).catch(() => {});
+  }
 }
 
 /**

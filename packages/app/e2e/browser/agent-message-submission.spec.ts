@@ -1388,6 +1388,53 @@ test.describe("Agent message submission", () => {
     await replaySteeredSleepTurnInBrowser(page, testInfo, "codex");
   });
 
+  test("saves Queue B behind a pre-dispatch Send A and delivers them in order", async ({ page }, testInfo) => {
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `saved-direct-queue-order-${testInfo.workerIndex}-`,
+      title: "Direct and queued device delivery order",
+    });
+    const firstPrompt = "Deliver A before the queued follow-up.";
+    const secondPrompt = "Deliver B after the saved direct request.";
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectComposerVisible(page);
+      await expectAgentIdle(page);
+      gate.holdNextClientRequest("send_agent_message_request");
+      await submitMessage(page, firstPrompt);
+      await gate.waitForHeldClientRequest();
+      expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
+        text: firstPrompt,
+        activeTurnBehavior: "steer",
+      });
+      await expectComposerDraft(page, "");
+      await queueMessage(page, secondPrompt);
+      await expectComposerDraft(page, "");
+      await expect.poll(() => page.evaluate((text) => {
+        const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null");
+        return Object.values(saved?.state?.entries ?? {}).some((entry) =>
+          (entry as { text?: string }).text === text,
+        );
+      }, secondPrompt)).toBe(true);
+      await fillComposerDraft(page, "Keep typing while delivery waits.");
+      await expectComposerDraft(page, "Keep typing while delivery waits.");
+      expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
+      expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items).toEqual([]);
+      gate.releaseHeldClientRequest();
+      await expect.poll(() => gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(1);
+      const first = page.getByTestId("user-message").filter({ hasText: firstPrompt });
+      const second = page.getByTestId("user-message").filter({ hasText: secondPrompt });
+      await expect(first).toHaveCount(1);
+      await expect(second).toHaveCount(1);
+      await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+      await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+      await expectRenderedBefore(first, second);
+      await expectComposerDraft(page, "Keep typing while delivery waits.");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("restores overlapping queued sends when their connection fails", async ({
     page,
   }, testInfo) => {

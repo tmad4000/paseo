@@ -47,7 +47,7 @@ receipt support and retain their draft-restoration checks. A modern saved-send t
 response while composing a newer draft, then checks Unsent recovery, attachment delivery, identical
 retry ID, and the unchanged newer draft.
 
-Full workspace typecheck, lint, and the 248 focused app tests pass on GCP. The keyboard, outline,
+Before the shared delivery-order repair below, full workspace typecheck, lint, and the 248 focused app tests passed on GCP. The keyboard, outline,
 three running-state delivery orders, legacy refusal/Steer, and reconnect status browser cases pass.
 Saved-send recovery also passes: the host accepts one retry with identical image bytes and
 message ID, while the newer draft remains unchanged. This fixture refuses before host dispatch;
@@ -55,6 +55,26 @@ ambiguous provider outcomes remain covered separately. The mock canonical echo o
 previews, so delivery is checked through the complete outbound request payload and host acceptance.
 All 12 focused daemon browser cases pass across these runs. The final phone screenshot was visually
 inspected. Native build/device verification remains deferred; no signed package or rollout is included.
+
+### Shared direct/queue ordering repair — verification pending
+
+Review reproduced a source-level ordering gap: a saved direct send could still wait before host
+dispatch while a later queued message reached an idle daemon. Both outboxes now use one per-agent
+worker ordered by durable creation time. Transport failures and parked unknown outcomes retain
+the barrier; definitive refusal, successful retry and explicit discard allow later delivery. Queue
+removals bypass the delivery barrier, and other agents have independent workers.
+
+Added executable regressions in `stores/send-outbox-store/index.test.ts` for held A / locally saved
+B / later direct C, transport and unknown barriers across rehydration and fresh startup, identical retry, definitive
+refusal, discard wake-up, cancellation and independent agents. `model.test.ts` checks that a new or
+already parked unknown outcome blocks later direct sends. The daemon-backed
+`agent-message-submission.spec.ts` case holds A's actual client request before forwarding, verifies
+B's persisted device entry and absence from the host, keeps a newer draft editable, then releases A
+and checks canonical A-before-B delivery.
+
+These additions have not been executed in this M4 review/fix phase. The outer executor must run
+focused unit/browser regressions and formatting/typecheck/lint on the existing GCP task. Earlier
+passing receipts and the screenshot above do not validate this repair. Native rollout remains deferred.
 
 ## Burst comparison
 

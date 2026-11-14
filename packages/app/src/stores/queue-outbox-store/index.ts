@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import { nextDeliveryCreatedAt } from "@/stores/delivery-order";
+import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
 import {
   flushQueueOutbox,
@@ -279,7 +281,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           set((state) => ({
             entries: {
               ...state.entries,
-              [entry.itemId]: { ...entry, createdAt: Date.now(), attempts: 0 },
+              [entry.itemId]: { ...entry, createdAt: nextDeliveryCreatedAt(), attempts: 0 },
             },
           }));
           try {
@@ -419,12 +421,19 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
   ),
 );
 
-export async function flushQueueOutboxForServer(input: {
+export interface QueueOutboxServerInput {
   serverId: string;
-  client: QueueOutboxFlushClient;
+  client: QueueOutboxFlushClient & Partial<SendOutboxFlushClient>;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
   onRetryLimit?: (entry: PendingQueueEnqueue) => void;
-}): Promise<void> {
+}
+
+export async function flushQueueOutboxForServer(input: QueueOutboxServerInput): Promise<void> {
+  const { flushDeliveryOutboxes } = await import("@/stores/delivery-outboxes");
+  await flushDeliveryOutboxes({ ...input, queue: input });
+}
+
+export async function flushQueueOutboxEntriesForServer(input: QueueOutboxServerInput & { itemId?: string }): Promise<void> {
   await awaitOutboxHydration();
   const store = useQueueOutboxStore.getState();
   await flushQueueOutbox({

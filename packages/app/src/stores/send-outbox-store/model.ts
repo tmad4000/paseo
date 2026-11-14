@@ -101,6 +101,7 @@ export interface FlushSendOutboxInput {
   serverId: string;
   /** Limits the flush to one agent, e.g. right after the composer adds a message. */
   agentId?: string;
+  clientMessageId?: string;
   outbox: SendOutboxAccess;
   client: SendOutboxFlushClient;
   onAccepted?: (entry: PendingDirectSend, result: { queued: boolean }) => void;
@@ -133,6 +134,7 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
   const agents = new Set(
     input.outbox
       .list(input.serverId)
+      .filter((entry) => input.clientMessageId === undefined || entry.clientMessageId === input.clientMessageId)
       .map((entry) => entry.agentId)
       .filter((agentId) => input.agentId === undefined || agentId === input.agentId),
   );
@@ -141,9 +143,11 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
       serializeQueueOperation(sendOutboxOperationKey(input.serverId, agentId), async () => {
         for (const candidate of input.outbox
           .list(input.serverId)
-          .filter((item) => item.agentId === agentId)) {
+          .filter((item) => item.agentId === agentId && (input.clientMessageId === undefined || item.clientMessageId === input.clientMessageId))) {
           const entry = input.outbox.get(candidate.clientMessageId);
-          if (!entry || entry.rejectedError !== undefined) continue;
+          if (!entry) continue;
+          if (isUncertainSendOutcome(entry.rejectedError)) break;
+          if (entry.rejectedError !== undefined) continue;
           let result: { queued: boolean };
           try {
             result = await input.client.sendAgentMessage(
@@ -156,6 +160,7 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
               const message = error instanceof Error ? error.message : String(error);
               await input.outbox.markRejected(entry.clientMessageId, message);
               input.onRejected?.(entry, message);
+              if (isUncertainSendOutcome(message)) break;
               continue;
             }
             await Promise.resolve(input.outbox.bumpAttempts(entry.clientMessageId)).catch(() => {});

@@ -307,7 +307,7 @@ The send outbox (`packages/app/src/stores/send-outbox-store/`) closes it. When t
 dedupes retried sends, `dispatchComposerAgentMessage` stores the full request under its
 client message id before sending. That requires both `agentRequestReceipts` (steer and interrupt
 receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
-per-agent ordered flush that reconnects use. Once local storage accepts the request, the
+per-agent delivery worker that queued composer messages, reconnects and manual Retry use. Once local storage accepts the request, the
 composer finishes its submission and becomes available for the next draft. It does not wait for
 the host acknowledgement. Storage/attachment preparation failures still return the original draft
 with an error. Pending delivery remains visible on the saved bubble.
@@ -329,7 +329,14 @@ with an error. Pending delivery remains visible on the saved bubble.
   It stays parked with its own explanation and never returns to the composer. Edit is offered only
   for definitive refusals of plain-text messages, since the outbox does not keep composer attachments.
 
-A send failure stops that agent's later entries so they cannot overtake it. A refusal does not.
+The device merges both saved outboxes by creation order at the shared delivery boundary
+(`stores/delivery-outboxes.ts`). Saving Queue B while direct Send A waits for receipt preparation
+keeps B on the device until A settles; admitting B to an idle daemon earlier could deliver it first.
+A transport failure or `agent_request_outcome_unknown` blocks later direct sends and queue admission
+for that agent even after a flush returns or the app reloads. A definitive refusal permits later work.
+Retry uses A's identical ID and payload; definitive settlement or explicit Discard wakes the worker.
+Other agents continue independently. Queue removal intents can reach the host while delivery is
+blocked, without admitting the canceled payload. Local saving and typing never wait on this worker.
 The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the
 host unreachable, before its features are known, can still store a send first. The reconnect flush
 itself checks the live features, so a downgraded daemon is never sent retries it cannot dedupe.

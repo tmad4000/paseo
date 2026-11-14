@@ -29,10 +29,14 @@ draft. Content-free handler/frame/stall diagnostics are bounded and use the exis
 reporter. See [agent stream performance](agent-stream-performance.md) for measurement limits.
 Acceptance: hold first history response and a send acknowledgement, type/send and start a second
 draft, release them and retain the second draft; verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
-transport loss. User-error toasts temporarily replace passive sync status in the same alert above
+transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
+then release A and verify host delivery order A then B. Transport loss and unknown outcomes must
+retain the barrier across rehydration; retry/discard must wake delivery, while cancellation and other
+agents remain available. User-error toasts temporarily replace passive sync status in the same alert above
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
 `session-stream-reducers.test.ts`, `composer/actions.test.ts`, `stores/send-outbox-store/index.test.ts`,
+`stores/send-outbox-store/model.test.ts`, `agent-message-submission.spec.ts`,
 `components/ui/tooltip.test.tsx`, `timeline/sync-status.test.tsx`, `viewed-agent-timelines.spec.ts`,
 `sidebar-workspace-mark-unread.spec.ts`, `chat-outline.spec.ts`, `performance/*.test.ts`.
 Source validation: [responsiveness QA receipt](qa/mobile-responsiveness.md). Native installed

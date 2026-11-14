@@ -63,6 +63,7 @@ export interface QueueOutboxFlushClient {
 
 export interface FlushQueueOutboxInput {
   serverId: string;
+  itemId?: string;
   outbox: QueueOutboxAccess;
   client: QueueOutboxFlushClient;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
@@ -110,13 +111,15 @@ function getOutboxEntry(
 }
 
 export async function flushQueueOutbox(input: FlushQueueOutboxInput): Promise<void> {
-  const agents = new Set(input.outbox.list(input.serverId).map((entry) => entry.agentId));
+  const agents = new Set(input.outbox.list(input.serverId)
+    .filter((entry) => input.itemId === undefined || entry.itemId === input.itemId)
+    .map((entry) => entry.agentId));
   await Promise.all(
     [...agents].map((agentId) =>
       serializeQueueOperation(JSON.stringify(["dispatch", input.serverId, agentId]), async () => {
         for (const candidate of input.outbox
           .list(input.serverId)
-          .filter((item) => item.agentId === agentId)) {
+          .filter((item) => item.agentId === agentId && (input.itemId === undefined || item.itemId === input.itemId))) {
           const entry = getOutboxEntry(input, candidate.itemId);
           if (!entry) continue;
           if (entry.routingDispatchHeld && !entry.removalRequested) break;

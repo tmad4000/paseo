@@ -151,6 +151,20 @@ describe("flushSendOutbox", () => {
     expect(entries.get("msg-1")?.rejectedError).toBeUndefined();
   });
 
+  test.each([true, false])("an outcome-unknown entry blocks later direct sends (already parked: %s)", async (parked) => {
+    const { entries, outbox } = createOutbox([
+      pendingSend({ clientMessageId: "unknown", createdAt: 1, ...(parked ? { rejectedError: "agent_request_outcome_unknown" } : {}) }),
+      pendingSend({ clientMessageId: "later", createdAt: 2 }),
+    ]);
+    const { calls, client } = createClient(async () => {
+      throw Object.assign(new Error("agent_request_outcome_unknown"), { name: "DaemonRpcError" });
+    });
+    await flushSendOutbox({ serverId: "server-1", outbox, client });
+    expect(calls.map((call) => call.options.messageId)).toEqual(parked ? [] : ["unknown"]);
+    expect(entries.get("later")?.attempts).toBe(0);
+    expect(entries.get("unknown")?.rejectedError).toBe("agent_request_outcome_unknown");
+  });
+
   test("parks a refused message for the user and continues with later ones", async () => {
     const { entries, outbox } = createOutbox([
       pendingSend({ clientMessageId: "refused", createdAt: 1 }),
