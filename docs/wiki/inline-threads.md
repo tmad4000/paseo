@@ -56,7 +56,8 @@ He remembered the threads part as planned for a while. It was; see History.
 
 ## Recommendation (2026-11-14)
 
-A recommendation, not yet a decision. Details and reasons are in the spec.
+A recommendation, not yet a decision. Jacob asked for the three things under The question;
+the shape below is proposed. Details and reasons are in the spec.
 
 - **One primitive, the thread row.** A message to or from another agent collapses to one line
   in the chat: who, direction, preview, count, new, status, time. It expands in place. **Open
@@ -103,9 +104,9 @@ Phases 0 and 1 are the smallest useful set. Phase 0 has its own PR.
 
 ## Open questions
 
-The spec takes four defaults that Jacob may want to change (spec section 12): agents may add
-reactions but never read them; the turn word is "Finished", not "Done"; a permission request
-badges its row without expanding it; the setting is per device.
+Four choices are the spec's recommendations, not decisions Jacob has made (spec section 12):
+agents may add reactions but never read them; the turn word is "Finished", not "Done"; a
+permission request badges its row without expanding it; the setting is per device.
 
 The four `pspin-plx` questions have proposed answers in the same section. The wording of
 `pspin-plx` above is as summarized by later sessions; the bead itself was not read.

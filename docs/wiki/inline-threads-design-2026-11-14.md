@@ -49,7 +49,7 @@ out at least and probably any one received", or at least "reaction emojis kind o
 | Probably a status on messages received                                       | Section 6.2           |
 | Slack-style emoji reactions, add and remove                                  | Section 7             |
 
-Everything else is a proposal:
+Everything else is a proposal from this spec, not something Jacob asked for or approved:
 
 - Thread rows stay in time order instead of moving under the first message (section 5.3).
 - A thread is defined by recorded sender and recipient, not by parentage (section 5.1).
@@ -59,6 +59,8 @@ Everything else is a proposal:
   more (section 6.1).
 - No read receipts of any kind (section 6.5).
 - Reactions are not delivered to agents, and agents cannot read them (section 7.3).
+- Whether agents may add reactions, the word "Finished", and the per-device setting
+  (section 12).
 - The CLI sender fix (Phase 0) and the exchange log (Phase 1).
 
 ## 3. What exists today
@@ -779,7 +781,10 @@ spec's answers:
    deferred with its identity question, and nothing is promised for it.
 4. _What is the shared memory analog?_ Out of scope. Stream stays the nearest thing.
 
-Defaults this spec takes, each cheap to reverse. None blocks Phases 0 to 2:
+**Recommendations, not decisions.** Jacob asked for three things: collapsible inline threads
+that are on by default and can be turned off, statuses on messages, and add and remove
+reactions. He has not decided any of the four choices below. They are this spec's
+recommended defaults, each cheap to reverse, and none blocks Phases 0 to 2:
 
 1. **Agents may add reactions, and never read them (3b).** It gives a worker a quiet way to
    acknowledge an instruction without a turn. If Jacob prefers people only, drop 3b; Phase 3 is

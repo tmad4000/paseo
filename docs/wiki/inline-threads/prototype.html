@@ -706,7 +706,9 @@
       >
       <button class="act" id="simReply">Simulate: worker reply arrives</button>
       <button class="act" id="simAdvance">Simulate: advance newest outbound status</button>
-      <span class="note">Nothing here sends to an agent. Sample content only.</span>
+      <span class="note"
+        >Design proposal, not built. Nothing here sends to an agent. Sample content only.</span
+      >
     </div>
     <div class="stage" data-width="desktop">
       <div class="app" id="app" data-drawer="closed">
@@ -730,6 +732,28 @@
         <aside class="drawer" id="drawer" aria-label="Thread"></aside>
       </div>
     </div>
+    <details class="legend" open>
+      <summary>What was asked, and what is only recommended</summary>
+      <table>
+        <tr>
+          <th>Asked for</th>
+          <td>
+            Collapsible inline threads in orchestrator chats, on by default with a way to turn them
+            off. A status on sent messages, and probably on received ones. Add and remove emoji
+            reactions.
+          </td>
+        </tr>
+        <tr>
+          <th>Recommended here, not decided</th>
+          <td>
+            The word "Finished" for a turn that ended (it does not mean the task is done). Reactions
+            that agents never receive or read, and that are never approval, completion or a read
+            receipt. Whether agents may add reactions. The setting kept per device. Rows kept in
+            time order.
+          </td>
+        </tr>
+      </table>
+    </details>
     <details class="legend">
       <summary>Status marks and the evidence behind each</summary>
       <table>
