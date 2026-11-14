@@ -92,10 +92,13 @@ Added the exact unknown-A / excluded-routed-B / ordinary-queue-C regression: dis
 automatically deliver C after B is removed, preserving B's draft. Separate cases retain B and C
 after transport loss or an unknown outcome. Execution of these new cases is pending GCP validation.
 
-The queue persistence suite now warms the real delivery dependency graph in a `beforeAll` hook.
-Its existing cold resets, read/write holds and behavioral timeouts are unchanged. The outer executor
-reported 37 passing queue tests with that diagnostic warm-up on interim source; this final repair
-has not been tested here.
+The outbox suites compile the real delivery dependency graph at module setup, outside timed
+behavioral assertions. Their cold resets, read/write holds and assertion timeouts remain unchanged.
+The Stream screen's hook mock and imperative `getState` share the same state factory, retaining the
+actual dispatcher. The supplied GCP fixture/format patch is applied. The outer executor reported
+227 passing tests across eight suites with those fixture changes on `0363d5e7`, plus passing lint,
+workspace typecheck, server build and 34 server tests on that commit. These are earlier-source
+receipts, not validation of the storage-transition repair below.
 
 The one-shot admission follow-up now saves a stable-ID hold in the existing send outbox before
 dispatch. Ambiguous routed direct sends and Stream replies retain it across restart; their recovery
@@ -123,9 +126,16 @@ release the retained hold; an ordinary direct-send case retains the same barrier
 A definite provider refusal releases later work. Configured mock prompt rejection now declares that
 submission never began; mock steering transport failure remains ambiguous.
 
-All of this follow-up coverage and lint/typecheck validation remain pending on GCP; published
-`c8ef9cda1` CI does not validate these repairs. Rebuild the server before browser validation of the
-receipt normalization. No tests, builds or lint ran in this M4 review phase.
+The storage-transition repair retains committed ordering ownership while durable removal is
+unfinished or fails. The existing worker reschedules with its client adapters after an unfinished
+write settles. New regressions save direct B behind a failing Send Back A save and Queue B behind a
+failing ordinary direct A save; B must proceed automatically after A disappears. Recovery cases
+cover ordinary unknown and one-shot entries: save and flush B during A's held removal write, fail
+that write, retain A and B, then explicitly recover A successfully and deliver B once.
+
+Validation of this storage-transition repair and its added tests remains pending on GCP. Published
+`c8ef9cda1` CI does not validate the repair commits. Rebuild the server before browser validation of
+the receipt normalization. No tests, builds or lint ran in this M4 review phase.
 
 The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
 `c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing

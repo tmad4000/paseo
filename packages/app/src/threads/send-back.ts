@@ -26,7 +26,8 @@ export async function queueThreadAnswer(input: {
   void flushQueueOutboxForServer({
     serverId: input.serverId,
     client: input.client,
-    applySnapshot: (snapshot) => useSessionStore.getState().applyAgentQueueSnapshot(input.serverId, snapshot),
+    applySnapshot: (snapshot) =>
+      useSessionStore.getState().applyAgentQueueSnapshot(input.serverId, snapshot),
   }).catch(() => {});
   return itemId;
 }

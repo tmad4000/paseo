@@ -309,7 +309,12 @@ test.each([
   await expect(reopened.send(input)).rejects.toThrow("agent_request_outcome_unknown");
   expect(deliveries).toBe(1);
   expect(await reopened.settleStalePending("agent", "maybe", "absent")).toBe(true);
-  await reopened.send({ ...input, send: async () => { deliveries++; } });
+  await reopened.send({
+    ...input,
+    send: async () => {
+      deliveries++;
+    },
+  });
   expect(deliveries).toBe(2);
   expect(await reopened.get("agent", "maybe")).toBe("completed");
 });
@@ -322,7 +327,14 @@ test("a completion receipt write failure reports ambiguity without replay after 
     await writeJsonFileAtomic(file, receipt);
   });
   let deliveries = 0;
-  const input = { agentId: "agent", messageId: "write-failed", request: { text: "arrived" }, send: async () => { deliveries++; } };
+  const input = {
+    agentId: "agent",
+    messageId: "write-failed",
+    request: { text: "arrived" },
+    send: async () => {
+      deliveries++;
+    },
+  };
   await expect(requests.send(input)).rejects.toMatchObject({
     message: "agent_request_outcome_unknown: completion receipt disk full",
     cause: failure,
@@ -336,9 +348,18 @@ test("a completion receipt write failure reports ambiguity without replay after 
 test("a pending receipt write failure remains a known failure before provider dispatch", async () => {
   const { directory } = await fixture();
   const failure = new Error("pending receipt unavailable");
-  const requests = new MessageReceipts(directory, async () => { throw failure; });
+  const requests = new MessageReceipts(directory, async () => {
+    throw failure;
+  });
   let deliveries = 0;
-  const input = { agentId: "agent", messageId: "not-dispatched", request: {}, send: async () => { deliveries++; } };
+  const input = {
+    agentId: "agent",
+    messageId: "not-dispatched",
+    request: {},
+    send: async () => {
+      deliveries++;
+    },
+  };
   await expect(requests.send(input)).rejects.toBe(failure);
   expect(deliveries).toBe(0);
   expect(await new MessageReceipts(directory).get(input.agentId, input.messageId)).toBe("absent");

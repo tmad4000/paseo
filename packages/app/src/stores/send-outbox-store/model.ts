@@ -52,8 +52,10 @@ export function isDefinitiveSendFailure(error: unknown): boolean {
  */
 export function isUncertainSendOutcome(error: string | undefined): boolean {
   const message = error?.toLowerCase();
-  return message?.includes("agent_request_outcome_unknown") === true ||
-    message?.includes("provider submission outcome unknown") === true;
+  return (
+    message?.includes("agent_request_outcome_unknown") === true ||
+    message?.includes("provider submission outcome unknown") === true
+  );
 }
 
 /** Edit moves only plain text; a message with attachments or an uncertain outcome stays put. */
@@ -138,7 +140,10 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
   const agents = new Set(
     input.outbox
       .list(input.serverId)
-      .filter((entry) => input.clientMessageId === undefined || entry.clientMessageId === input.clientMessageId)
+      .filter(
+        (entry) =>
+          input.clientMessageId === undefined || entry.clientMessageId === input.clientMessageId,
+      )
       .map((entry) => entry.agentId)
       .filter((agentId) => input.agentId === undefined || agentId === input.agentId),
   );
@@ -147,7 +152,12 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
       serializeQueueOperation(sendOutboxOperationKey(input.serverId, agentId), async () => {
         for (const candidate of input.outbox
           .list(input.serverId)
-          .filter((item) => item.agentId === agentId && (input.clientMessageId === undefined || item.clientMessageId === input.clientMessageId))) {
+          .filter(
+            (item) =>
+              item.agentId === agentId &&
+              (input.clientMessageId === undefined ||
+                item.clientMessageId === input.clientMessageId),
+          )) {
           const entry = input.outbox.get(candidate.clientMessageId);
           if (!entry) continue;
           if (entry.oneShot || isUncertainSendOutcome(entry.rejectedError)) break;

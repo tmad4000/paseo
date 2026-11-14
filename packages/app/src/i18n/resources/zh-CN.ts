@@ -434,7 +434,8 @@ export const zhCN: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "需要检查投递 {{messageId}}。请求仍可能到达，后续消息已暂停。解除暂停前，请先查看此聊天。",
+        detail:
+          "需要检查投递 {{messageId}}。请求仍可能到达，后续消息已暂停。解除暂停前，请先查看此聊天。",
         title: "解除投递暂停？",
         release: "解除投递暂停",
         retryUnsupported: "请检查此次一次性投递并解除暂停；此请求不会自动重发。",
@@ -2794,7 +2795,8 @@ export const zhCN: TranslationResources = {
       placeholder: "发给此视图中所有代理的消息",
       send: "全部发送",
       summary: "{{send}} 个空闲，{{queue}} 个忙碌，{{skip}} 个不可用。消息会在投递前保存。",
-      result: "广播：已发送 {{sent}} 个，主机队列中 {{queued}} 个，已保存在此设备等待投递 {{pending}} 个，已跳过 {{skipped}} 个，失败 {{failed}} 个。",
+      result:
+        "广播：已发送 {{sent}} 个，主机队列中 {{queued}} 个，已保存在此设备等待投递 {{pending}} 个，已跳过 {{skipped}} 个，失败 {{failed}} 个。",
     },
     picker: {
       addTitle: "添加会话",

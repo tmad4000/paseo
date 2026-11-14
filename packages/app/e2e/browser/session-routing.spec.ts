@@ -3,7 +3,14 @@ import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { openMobileAgentSidebar } from "../support/helpers/sidebar";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
-import { submitMessage, expectComposerDraft, expectSavedQueueEntry, waitForSavedOneShotMessage, fillComposerDraft, sendDraftToQueue } from "../support/helpers/composer";
+import {
+  submitMessage,
+  expectComposerDraft,
+  expectSavedQueueEntry,
+  waitForSavedOneShotMessage,
+  fillComposerDraft,
+  sendDraftToQueue,
+} from "../support/helpers/composer";
 import { writeFile } from "node:fs/promises";
 
 test("manual routing restores its draft and delivers to an existing chat without navigating or creating a chat", async ({
@@ -102,7 +109,10 @@ test("manual routing restores its draft and delivers to an existing chat without
 test("routed Queue waits behind a saved direct request before host dispatch", async ({ page }) => {
   test.setTimeout(120_000);
   const gate = await installDaemonWebSocketGate(page);
-  const destination = await seedMockAgentWorkspace({ repoPrefix: "routing-direct-order-", title: "Ordered routing destination" });
+  const destination = await seedMockAgentWorkspace({
+    repoPrefix: "routing-direct-order-",
+    title: "Ordered routing destination",
+  });
   const firstPrompt = "Direct A precedes routed B.";
   const routedPrompt = "  Routed B waits for direct A.  ";
   try {
@@ -121,29 +131,52 @@ test("routed Queue waits behind a saved direct request before host dispatch", as
     await expectSavedQueueEntry(page, { text: routedPrompt, routingDispatchHeld: true });
     await expect(routing.getByTestId("routing-send-draft")).toHaveValue(routedPrompt);
     expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
-    expect((await destination.client.listQueuedAgentMessages(destination.agentId)).items).toEqual([]);
+    expect((await destination.client.listQueuedAgentMessages(destination.agentId)).items).toEqual(
+      [],
+    );
     await page.getByRole("textbox", { name: "Message agent..." }).fill("A newer main-chat draft.");
     await expectComposerDraft(page, "A newer main-chat draft.");
     gate.releaseHeldClientRequest();
-    await expect(routing.getByText(/(?:Routed to|Queued for).*Ordered routing destination/)).toBeVisible();
+    await expect(
+      routing.getByText(/(?:Routed to|Queued for).*Ordered routing destination/),
+    ).toBeVisible();
     await expect(routing.getByTestId("routing-send-draft")).toHaveValue("");
     const first = page.getByTestId("user-message").filter({ hasText: firstPrompt });
     const second = page.getByTestId("user-message").filter({ hasText: routedPrompt.trim() });
-    await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
-    await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+      "aria-label",
+      "Delivered to the agent",
+    );
+    await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+      "aria-label",
+      "Delivered to the agent",
+    );
     const secondElement = await second.elementHandle();
-    expect(await first.evaluate((element, next) => Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING), secondElement)).toBe(true);
-    expect(gate.getClientRequests("agent.queue.enqueue.request")).toEqual([expect.objectContaining({ text: routedPrompt, expectedWorkspaceId: destination.workspaceId })]);
+    expect(
+      await first.evaluate(
+        (element, next) =>
+          Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING),
+        secondElement,
+      ),
+    ).toBe(true);
+    expect(gate.getClientRequests("agent.queue.enqueue.request")).toEqual([
+      expect.objectContaining({ text: routedPrompt, expectedWorkspaceId: destination.workspaceId }),
+    ]);
     await expectComposerDraft(page, "A newer main-chat draft.");
   } finally {
     await destination.cleanup();
   }
 });
 
-test("an ambiguous routed direct send survives reload and holds queued follow-ups until explicit review", async ({ page }) => {
+test("an ambiguous routed direct send survives reload and holds queued follow-ups until explicit review", async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   const gate = await installDaemonWebSocketGate(page);
-  const destination = await seedMockAgentWorkspace({ repoPrefix: "routing-one-shot-", title: "One-time routing destination" });
+  const destination = await seedMockAgentWorkspace({
+    repoPrefix: "routing-one-shot-",
+    title: "One-time routing destination",
+  });
   const prompt = "A one-time routed message whose outcome needs review.";
   const followUp = "Queue B after reviewing the one-time delivery.";
   try {
@@ -159,7 +192,11 @@ test("an ambiguous routed direct send survives reload and holds queued follow-up
     await routing.getByTestId("routing-submit").click();
     await gate.waitForHeldClientRequest();
     const id = await waitForSavedOneShotMessage(page, prompt);
-    expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({ messageId: id, text: prompt, activeTurnBehavior: "steer_only" });
+    expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
+      messageId: id,
+      text: prompt,
+      activeTurnBehavior: "steer_only",
+    });
     await fillComposerDraft(page, followUp);
     await sendDraftToQueue(page);
     await expectSavedQueueEntry(page, { text: followUp });
@@ -177,13 +214,20 @@ test("an ambiguous routed direct send survives reload and holds queued follow-up
     const held = page.getByTestId(`unsent-message-${id}`);
     await expect(held.getByRole("button", { name: "Retry now", exact: true })).toHaveCount(0);
     const confirmation = page.waitForEvent("dialog");
-    const releasing = held.getByRole("button", { name: "Release delivery hold", exact: true }).click();
+    const releasing = held
+      .getByRole("button", { name: "Release delivery hold", exact: true })
+      .click();
     const dialog = await confirmation;
     expect(dialog.message()).toContain(id);
     await dialog.accept();
     await releasing;
     await expect(held).toHaveCount(0);
-    await expect(page.getByTestId("user-message").filter({ hasText: followUp }).getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    await expect(
+      page
+        .getByTestId("user-message")
+        .filter({ hasText: followUp })
+        .getByTestId("user-message-delivery-mark"),
+    ).toHaveAttribute("aria-label", "Delivered to the agent");
     expect(gate.getClientRequestCount("send_agent_message_request")).toBe(1);
     expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(1);
     await routing.getByTestId("routing-send-mode").click();

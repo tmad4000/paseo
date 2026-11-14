@@ -440,10 +440,12 @@ export const ja: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "配信 {{messageId}} の確認が必要です。リクエストが後から届く可能性があるため、後続のメッセージを保留しています。保留を解除する前に、このチャットを確認してください。",
+        detail:
+          "配信 {{messageId}} の確認が必要です。リクエストが後から届く可能性があるため、後続のメッセージを保留しています。保留を解除する前に、このチャットを確認してください。",
         title: "配信の保留を解除しますか？",
         release: "配信の保留を解除",
-        retryUnsupported: "この一回限りの配信を確認して保留を解除してください。自動再送はできません。",
+        retryUnsupported:
+          "この一回限りの配信を確認して保留を解除してください。自動再送はできません。",
       },
       pending: "この端末に保存済み — ホストを待っています",
       accepted: "ホストが受信しました",
@@ -2854,8 +2856,10 @@ export const ja: TranslationResources = {
       button: "一斉送信",
       placeholder: "このビューのすべてのエージェントへのメッセージ",
       send: "すべてに送信",
-      summary: "{{send}} 件待機中、{{queue}} 件実行中、{{skip}} 件利用不可。メッセージは配信前に保存されます。",
-      result: "一斉送信: {{sent}} 件送信、{{queued}} 件ホストで待機、{{pending}} 件この端末に保存し配信待ち、{{skipped}} 件スキップ、{{failed}} 件失敗。",
+      summary:
+        "{{send}} 件待機中、{{queue}} 件実行中、{{skip}} 件利用不可。メッセージは配信前に保存されます。",
+      result:
+        "一斉送信: {{sent}} 件送信、{{queued}} 件ホストで待機、{{pending}} 件この端末に保存し配信待ち、{{skipped}} 件スキップ、{{failed}} 件失敗。",
     },
     picker: {
       addTitle: "セッションを追加",

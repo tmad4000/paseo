@@ -39,8 +39,10 @@ a retained unresolved B must keep C pending. Routed direct sends and Stream repl
 stable-ID delivery hold across timeout and restart, without replay; explicit review/release resumes
 later work. The first ambiguous provider response and a failed completion-receipt write must retain
 that barrier for ordinary and one-shot sends, including older hosts' provider ambiguity wording;
-known-not-submitted refusals allow later work. Broadcast receipts distinguish saved/pending work
-from confirmed host delivery.
+known-not-submitted refusals allow later work. Failed initial saves in either outbox must wake later
+saved work without another user action. Hold and fail recovery storage while B saves and flushes:
+ordinary unknown and one-shot A must retain ownership until a later explicit recovery succeeds.
+Broadcast receipts distinguish saved/pending work from confirmed host delivery.
 Restart with a backward device
 clock and delayed hydration of either outbox: new entries must still follow saved ones. User-error toasts temporarily replace passive sync status in the same alert above
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.

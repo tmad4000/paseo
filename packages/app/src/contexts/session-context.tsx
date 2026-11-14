@@ -40,10 +40,7 @@ import {
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
 import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
-import {
-  supportsDurableDirectSend,
-  useSendOutboxStore,
-} from "@/stores/send-outbox-store";
+import { supportsDurableDirectSend, useSendOutboxStore } from "@/stores/send-outbox-store";
 import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
 import { startOutboxReconnectFlush } from "@/contexts/session-outbox-flush";
 import { buildOutboxReportAgents, describeThisDevice } from "@/contexts/outbox-report";
@@ -609,20 +606,26 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
             flushDeliveryOutboxes({
               serverId,
               client,
-              queue: features?.agentMessageQueue === true ? {
-                serverId,
-                client,
-                applySnapshot: (snapshot) =>
-                  useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-                onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
-              } : undefined,
-              direct: durableDirectSend ? {
-                serverId,
-                client,
-                onAccepted: createDirectSendAcceptanceHandler(serverId),
-                onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
-                onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
-              } : undefined,
+              queue:
+                features?.agentMessageQueue === true
+                  ? {
+                      serverId,
+                      client,
+                      applySnapshot: (snapshot) =>
+                        useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
+                      onRetryLimit: () =>
+                        toast.error(t("composer.attachments.queueSyncNeedsAttention")),
+                    }
+                  : undefined,
+              direct: durableDirectSend
+                ? {
+                    serverId,
+                    client,
+                    onAccepted: createDirectSendAcceptanceHandler(serverId),
+                    onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
+                    onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
+                  }
+                : undefined,
             }).catch((error) => console.warn("[Session] Failed to flush delivery outboxes", error)),
           );
         }

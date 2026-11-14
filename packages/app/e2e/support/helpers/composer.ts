@@ -323,22 +323,31 @@ function hasSavedQueueEntry(input: SavedQueueExpectation): boolean {
   const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null") as {
     state?: { entries?: Record<string, { text?: string; routingDispatchHeld?: boolean }> };
   } | null;
-  return Object.values(saved?.state?.entries ?? {}).some((entry) =>
-    (input.text === undefined || entry.text === input.text) &&
-    (input.prefix === undefined || entry.text?.startsWith(input.prefix) === true) &&
-    (input.routingDispatchHeld === undefined || entry.routingDispatchHeld === input.routingDispatchHeld),
+  return Object.values(saved?.state?.entries ?? {}).some(
+    (entry) =>
+      (input.text === undefined || entry.text === input.text) &&
+      (input.prefix === undefined || entry.text?.startsWith(input.prefix) === true) &&
+      (input.routingDispatchHeld === undefined ||
+        entry.routingDispatchHeld === input.routingDispatchHeld),
   );
 }
 
-export async function expectSavedQueueEntry(page: Page, input: SavedQueueExpectation): Promise<void> {
+export async function expectSavedQueueEntry(
+  page: Page,
+  input: SavedQueueExpectation,
+): Promise<void> {
   await expect.poll(() => page.evaluate(hasSavedQueueEntry, input)).toBe(true);
 }
 
 function savedOneShotMessageId(text: string): string | null {
   const saved = JSON.parse(localStorage.getItem("paseo-send-outbox") ?? "null") as {
-    state?: { entries?: Record<string, { text?: string; oneShot?: boolean; clientMessageId?: string }> };
+    state?: {
+      entries?: Record<string, { text?: string; oneShot?: boolean; clientMessageId?: string }>;
+    };
   } | null;
-  const entry = Object.values(saved?.state?.entries ?? {}).find((candidate) => candidate.oneShot && candidate.text === text);
+  const entry = Object.values(saved?.state?.entries ?? {}).find(
+    (candidate) => candidate.oneShot && candidate.text === text,
+  );
   return entry?.clientMessageId ?? null;
 }
 

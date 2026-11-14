@@ -329,7 +329,7 @@ with an error. Pending delivery remains visible on the saved bubble.
   The receipt owner returns this classification on the first ambiguous provider failure and on a
   failed completion-receipt write, preserving the original error detail. Known-not-submitted failures
   keep their original classification. Clients also recognize older hosts' `Provider submission
-  outcome unknown` wording. These responses stay parked and never return to the composer. Edit is
+outcome unknown` wording. These responses stay parked and never return to the composer. Edit is
   offered only for definitive refusals of plain-text messages, since the outbox does not keep
   composer attachments.
 
@@ -341,6 +341,10 @@ for that agent even after a flush returns or the app reloads. A definitive refus
 Retry uses A's identical ID and payload; definitive settlement or explicit Discard wakes the worker.
 Other agents continue independently. Queue removal intents can reach the host while delivery is
 blocked, without admitting the canceled payload. Local saving and typing never wait on this worker.
+Storage transitions keep their place in delivery order until they settle. A failed initial save
+releases its provisional place and resumes later saved work automatically. Discard or release of an
+unresolved send permits later delivery only after durable removal succeeds; a failed removal keeps
+ownership even while optimistic UI state temporarily omits the entry.
 Find/Send's active routed admissions join that worker with their existing draft escrow and destination
 checks. A held routed item remains recoverable after restart; an in-memory admission does not grant
 reconnect permission to an undispatched item. Send Back stores its full quoted answer in the queue

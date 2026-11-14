@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
 const storage = vi.hoisted(() => ({
@@ -61,9 +61,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-beforeAll(async () => {
-  await import("@/stores/delivery-outboxes");
-}, 30_000);
+await import("@/stores/delivery-outboxes");
 
 async function resetPersistedModules() {
   const { flushDraftPersistStorageDurably } = await import("@/stores/draft-store");

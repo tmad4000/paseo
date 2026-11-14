@@ -96,11 +96,26 @@ test.describe("Threaded replies", () => {
     ).toBeVisible({ timeout: 60_000 });
 
     const first = page.getByTestId("user-message").filter({ hasText: firstPrompt });
-    const answer = page.getByTestId("user-message").filter({ hasText: "From the side thread" }).first();
-    await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
-    await expect(answer.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    const answer = page
+      .getByTestId("user-message")
+      .filter({ hasText: "From the side thread" })
+      .first();
+    await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+      "aria-label",
+      "Delivered to the agent",
+    );
+    await expect(answer.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+      "aria-label",
+      "Delivered to the agent",
+    );
     const answerElement = await answer.elementHandle();
-    expect(await first.evaluate((element, next) => Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING), answerElement)).toBe(true);
+    expect(
+      await first.evaluate(
+        (element, next) =>
+          Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING),
+        answerElement,
+      ),
+    ).toBe(true);
     await expect(parentComposer).toHaveValue("Keep this newer parent draft.");
 
     await page

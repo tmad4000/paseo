@@ -65,23 +65,28 @@ vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ show: state.toastShow }) }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
 vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
-vi.mock("@/stores/session-store", () => ({
-  useSessionStore: (selector: (store: unknown) => unknown) =>
-    selector({
-      sessions: {
-        host: {
-          serverInfo: {
-            features: {
-              globalStream: state.supported,
-              streamAnswers: state.answersSupported,
-              streamDefer: state.deferSupported,
-              agentMessageQueue: state.queueSupported,
-            },
+vi.mock("@/stores/session-store", () => {
+  const getState = () => ({
+    sessions: {
+      host: {
+        serverInfo: {
+          features: {
+            globalStream: state.supported,
+            streamAnswers: state.answersSupported,
+            streamDefer: state.deferSupported,
+            agentMessageQueue: state.queueSupported,
           },
         },
       },
-    }),
-}));
+    },
+  });
+  return {
+    useSessionStore: Object.assign(
+      (selector: (store: unknown) => unknown) => selector(getState()),
+      { getState },
+    ),
+  };
+});
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => [],
   useHostRuntimeClient: () => ({
@@ -548,11 +553,13 @@ it("offers Later and in-place replies only where the host can honour them", asyn
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
   fireEvent.click(rendered.getByText("Send reply"));
   // Queued delivery: no activeTurnBehavior, so a busy agent is never interrupted.
-  await waitFor(() => expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
-    messageId: expect.any(String),
-    images: [],
-    attachments: [],
-  }));
+  await waitFor(() =>
+    expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
+      messageId: expect.any(String),
+      images: [],
+      attachments: [],
+    }),
+  );
 });
 
 it("lets a chat opened from a card offer the way back", () => {

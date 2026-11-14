@@ -442,10 +442,12 @@ export const es: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "La entrega {{messageId}} requiere revisión. La solicitud aún puede llegar; los mensajes posteriores esperan. Revisa este chat antes de liberar la espera.",
+        detail:
+          "La entrega {{messageId}} requiere revisión. La solicitud aún puede llegar; los mensajes posteriores esperan. Revisa este chat antes de liberar la espera.",
         title: "¿Liberar la espera de entrega?",
         release: "Liberar la espera de entrega",
-        retryUnsupported: "Revisa esta entrega única y libera su espera; no se puede reenviar automáticamente.",
+        retryUnsupported:
+          "Revisa esta entrega única y libera su espera; no se puede reenviar automáticamente.",
       },
       pending: "Guardado en este dispositivo — esperando al host",
       accepted: "Recibido por el host",
@@ -2891,8 +2893,10 @@ export const es: TranslationResources = {
       button: "Difundir",
       placeholder: "Mensaje para todos los agentes de esta vista",
       send: "Enviar a todos",
-      summary: "{{send}} inactivos, {{queue}} ocupados, {{skip}} no disponibles. Los mensajes se guardan antes de entregarlos.",
-      result: "Difusión: {{sent}} enviados, {{queued}} en cola del host, {{pending}} guardados en este dispositivo pendientes de entrega, {{skipped}} omitidos, {{failed}} fallidos.",
+      summary:
+        "{{send}} inactivos, {{queue}} ocupados, {{skip}} no disponibles. Los mensajes se guardan antes de entregarlos.",
+      result:
+        "Difusión: {{sent}} enviados, {{queued}} en cola del host, {{pending}} guardados en este dispositivo pendientes de entrega, {{skipped}} omitidos, {{failed}} fallidos.",
     },
     picker: {
       addTitle: "Añadir una sesión",

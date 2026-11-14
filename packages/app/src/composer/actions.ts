@@ -320,13 +320,17 @@ export async function dispatchComposerAgentMessage(
       return input.client.sendAgentMessage(input.agentId, input.text, options);
     };
     const result = input.serverId
-      ? await (await import("@/stores/delivery-outboxes")).runOrderedAdmission({
+      ? await (
+          await import("@/stores/delivery-outboxes")
+        ).runOrderedAdmission({
           serverId: input.serverId,
           agentId: input.agentId,
           itemId: clientMessageId,
           client: input.deliveryClient ?? {
             sendAgentMessage: async (agentId, text, sendOptions) =>
-              (await input.client.sendAgentMessage(agentId, text, sendOptions)) ?? { queued: false },
+              (await input.client.sendAgentMessage(agentId, text, sendOptions)) ?? {
+                queued: false,
+              },
             enqueueAgentMessage: input.client.enqueueAgentMessage?.bind(input.client),
             removeQueuedAgentMessage: input.client.removeQueuedAgentMessage?.bind(input.client),
             getLastServerInfoMessage: input.client.getLastServerInfoMessage?.bind(input.client),

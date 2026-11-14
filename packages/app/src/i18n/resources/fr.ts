@@ -442,10 +442,12 @@ export const fr: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "La remise {{messageId}} doit être vérifiée. La demande peut encore arriver ; les messages suivants attendent. Vérifiez cette discussion avant de lever le blocage.",
+        detail:
+          "La remise {{messageId}} doit être vérifiée. La demande peut encore arriver ; les messages suivants attendent. Vérifiez cette discussion avant de lever le blocage.",
         title: "Lever le blocage de remise ?",
         release: "Lever le blocage de remise",
-        retryUnsupported: "Vérifiez cette remise unique puis levez son blocage ; elle ne peut pas être renvoyée automatiquement.",
+        retryUnsupported:
+          "Vérifiez cette remise unique puis levez son blocage ; elle ne peut pas être renvoyée automatiquement.",
       },
       pending: "Enregistré sur cet appareil — en attente de l’hôte",
       accepted: "Reçu par l’hôte",
@@ -2895,8 +2897,10 @@ export const fr: TranslationResources = {
       button: "Diffuser",
       placeholder: "Message pour tous les agents de cette vue",
       send: "Envoyer à tous",
-      summary: "{{send}} inactifs, {{queue}} occupés, {{skip}} indisponibles. Les messages sont enregistrés avant leur remise.",
-      result: "Diffusion : {{sent}} envoyés, {{queued}} en file sur l’hôte, {{pending}} enregistrés sur cet appareil en attente de remise, {{skipped}} ignorés, {{failed}} en échec.",
+      summary:
+        "{{send}} inactifs, {{queue}} occupés, {{skip}} indisponibles. Les messages sont enregistrés avant leur remise.",
+      result:
+        "Diffusion : {{sent}} envoyés, {{queued}} en file sur l’hôte, {{pending}} enregistrés sur cet appareil en attente de remise, {{skipped}} ignorés, {{failed}} en échec.",
     },
     picker: {
       addTitle: "Ajouter une session",

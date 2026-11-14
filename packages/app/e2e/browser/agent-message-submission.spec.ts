@@ -1389,7 +1389,9 @@ test.describe("Agent message submission", () => {
     await replaySteeredSleepTurnInBrowser(page, testInfo, "codex");
   });
 
-  test("saves Queue B behind a pre-dispatch Send A and delivers them in order", async ({ page }, testInfo) => {
+  test("saves Queue B behind a pre-dispatch Send A and delivers them in order", async ({
+    page,
+  }, testInfo) => {
     const gate = await installDaemonWebSocketGate(page);
     const agent = await seedMockAgentWorkspace({
       repoPrefix: `saved-direct-queue-order-${testInfo.workerIndex}-`,
@@ -1422,8 +1424,14 @@ test.describe("Agent message submission", () => {
       const second = page.getByTestId("user-message").filter({ hasText: secondPrompt });
       await expect(first).toHaveCount(1);
       await expect(second).toHaveCount(1);
-      await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
-      await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+      await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+        "aria-label",
+        "Delivered to the agent",
+      );
+      await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+        "aria-label",
+        "Delivered to the agent",
+      );
       await expectRenderedBefore(first, second);
       await expectComposerDraft(page, "Keep typing while delivery waits.");
     } finally {

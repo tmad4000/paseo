@@ -43,7 +43,9 @@ export async function discardDirectSend(entry: PendingDirectSend): Promise<void>
   createMessageSubmissionWriter(entry.serverId).reject(entry.agentId, entry.clientMessageId);
   const client = useSessionStore.getState().sessions[entry.serverId]?.client;
   if (client) {
-    void flushDeliveryOutboxes({ serverId: entry.serverId, agentId: entry.agentId, client }).catch(() => {});
+    void flushDeliveryOutboxes({ serverId: entry.serverId, agentId: entry.agentId, client }).catch(
+      () => {},
+    );
   }
 }
 
@@ -74,7 +76,8 @@ export async function editDirectSend(input: {
 }
 
 export function describeDirectSendAttention(entry: PendingDirectSend): string {
-  if (entry.oneShot) return i18n.t("composer.delivery.oneShot.detail", { messageId: entry.clientMessageId });
+  if (entry.oneShot)
+    return i18n.t("composer.delivery.oneShot.detail", { messageId: entry.clientMessageId });
   if (isUncertainSendOutcome(entry.rejectedError)) {
     return i18n.t("composer.delivery.uncertainDetail");
   }

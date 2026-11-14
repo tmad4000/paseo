@@ -49,7 +49,10 @@ export class MessageReceipts {
   private inflightScan: { generation: number; records: Promise<Receipt[]> } | null = null;
   constructor(
     private readonly directory: string,
-    private readonly writeReceipt: (file: string, receipt: Receipt) => Promise<void> = writeJsonFileAtomic,
+    private readonly writeReceipt: (
+      file: string,
+      receipt: Receipt,
+    ) => Promise<void> = writeJsonFileAtomic,
   ) {}
 
   /** One shared, bounded directory scan for concurrent listings. */

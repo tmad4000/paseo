@@ -441,10 +441,12 @@ export const ptBR: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "A entrega {{messageId}} precisa de revisão. A solicitação ainda pode chegar; as mensagens seguintes estão retidas. Confira esta conversa antes de liberar a retenção.",
+        detail:
+          "A entrega {{messageId}} precisa de revisão. A solicitação ainda pode chegar; as mensagens seguintes estão retidas. Confira esta conversa antes de liberar a retenção.",
         title: "Liberar a retenção de entrega?",
         release: "Liberar a retenção de entrega",
-        retryUnsupported: "Revise esta entrega única e libere sua retenção; ela não pode ser reenviada automaticamente.",
+        retryUnsupported:
+          "Revise esta entrega única e libere sua retenção; ela não pode ser reenviada automaticamente.",
       },
       pending: "Salvo neste dispositivo — aguardando o host",
       accepted: "Recebido pelo host",
@@ -2874,8 +2876,10 @@ export const ptBR: TranslationResources = {
       button: "Transmitir",
       placeholder: "Mensagem para todos os agentes desta visão",
       send: "Enviar para todos",
-      summary: "{{send}} ociosos, {{queue}} ocupados, {{skip}} indisponíveis. As mensagens são salvas antes da entrega.",
-      result: "Transmissão: {{sent}} enviados, {{queued}} na fila do host, {{pending}} salvos neste dispositivo aguardando entrega, {{skipped}} ignorados, {{failed}} com falha.",
+      summary:
+        "{{send}} ociosos, {{queue}} ocupados, {{skip}} indisponíveis. As mensagens são salvas antes da entrega.",
+      result:
+        "Transmissão: {{sent}} enviados, {{queued}} na fila do host, {{pending}} salvos neste dispositivo aguardando entrega, {{skipped}} ignorados, {{failed}} com falha.",
     },
     picker: {
       addTitle: "Adicionar uma sessão",

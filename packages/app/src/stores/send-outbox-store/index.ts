@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 
+import { createOutboxWriteTracker } from "@/stores/outbox-write";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
 import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
@@ -51,7 +52,15 @@ type SendOutboxStore = PersistedSendOutbox & SendOutboxActions;
 
 const MUTATION_KEY = "send-outbox-mutation";
 
-const writesInFlight = new Set<string>();
+const writesInFlight = createOutboxWriteTracker<PendingDirectSend>();
+
+export function pendingSendOutboxWrite(clientMessageId: string): Promise<void> | undefined {
+  return writesInFlight.pending(clientMessageId);
+}
+
+export function sendOutboxDeliveryEntries(): PendingDirectSend[] {
+  return writesInFlight.entries(useSendOutboxStore.getState().entries);
+}
 
 let pendingWrite: Promise<void> = Promise.resolve();
 const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedSendOutboxSchema);
@@ -95,6 +104,7 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
           await awaitSendOutboxHydration();
           const previous = get().entries[clientMessageId];
           if (!previous) return;
+          const finishWrite = writesInFlight.retain(clientMessageId, previous);
           const next = update(previous);
           const entries = { ...get().entries };
           if (next) entries[clientMessageId] = next;
@@ -106,6 +116,8 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
             set({ entries: { ...get().entries, [clientMessageId]: previous } });
             await pendingWrite.catch(() => {});
             throw error;
+          } finally {
+            finishWrite();
           }
         });
 
@@ -115,12 +127,10 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
           serializeQueueOperation(MUTATION_KEY, async () => {
             await awaitSendOutboxHydration();
             await awaitDeliveryOrderHydration();
-            writesInFlight.add(entry.clientMessageId);
+            const saved = { ...entry, createdAt: nextDeliveryCreatedAt(), attempts: 0 };
+            const finishWrite = writesInFlight.retain(entry.clientMessageId, saved);
             set((state) => ({
-              entries: {
-                ...state.entries,
-                [entry.clientMessageId]: { ...entry, createdAt: nextDeliveryCreatedAt(), attempts: 0 },
-              },
+              entries: { ...state.entries, [entry.clientMessageId]: saved },
             }));
             try {
               await pendingWrite;
@@ -130,7 +140,7 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
               set({ entries });
               throw error;
             } finally {
-              writesInFlight.delete(entry.clientMessageId);
+              finishWrite();
             }
           }),
         removeDurably: (clientMessageId) => replaceDurably(clientMessageId, () => null),
@@ -159,7 +169,9 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
           }),
         entriesForServer: (serverId) =>
           Object.values(get().entries)
-            .filter((entry) => entry.serverId === serverId && !writesInFlight.has(entry.clientMessageId))
+            .filter(
+              (entry) => entry.serverId === serverId && !writesInFlight.has(entry.clientMessageId),
+            )
             .sort((a, b) => a.createdAt - b.createdAt),
       };
     },
@@ -186,7 +198,9 @@ export async function flushSendOutboxForServer(input: SendOutboxServerInput): Pr
   await flushDeliveryOutboxes({ ...input, direct: input });
 }
 
-export async function flushSendOutboxEntriesForServer(input: SendOutboxServerInput & { clientMessageId?: string }): Promise<void> {
+export async function flushSendOutboxEntriesForServer(
+  input: SendOutboxServerInput & { clientMessageId?: string },
+): Promise<void> {
   await awaitSendOutboxHydration();
   const store = useSendOutboxStore.getState();
   await flushSendOutbox({

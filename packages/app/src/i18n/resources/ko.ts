@@ -437,10 +437,12 @@ export const ko: TranslationResources = {
     },
     delivery: {
       oneShot: {
-        detail: "전달 {{messageId}}을 확인해야 합니다. 요청이 나중에 도착할 수 있어 이후 메시지를 보류합니다. 보류를 해제하기 전에 이 채팅을 확인하세요.",
+        detail:
+          "전달 {{messageId}}을 확인해야 합니다. 요청이 나중에 도착할 수 있어 이후 메시지를 보류합니다. 보류를 해제하기 전에 이 채팅을 확인하세요.",
         title: "전달 보류를 해제할까요?",
         release: "전달 보류 해제",
-        retryUnsupported: "이 일회성 전달을 확인한 후 보류를 해제하세요. 자동으로 다시 전송할 수 없습니다.",
+        retryUnsupported:
+          "이 일회성 전달을 확인한 후 보류를 해제하세요. 자동으로 다시 전송할 수 없습니다.",
       },
       pending: "이 기기에 저장됨 — 호스트를 기다리는 중",
       accepted: "호스트가 받음",
@@ -2844,8 +2846,10 @@ export const ko: TranslationResources = {
       button: "브로드캐스트",
       placeholder: "이 보기의 모든 에이전트에게 보낼 메시지",
       send: "모두에게 보내기",
-      summary: "{{send}}개 유휴, {{queue}}개 작업 중, {{skip}}개 사용 불가. 메시지는 전달 전에 저장됩니다.",
-      result: "브로드캐스트: {{sent}}개 전송, {{queued}}개 호스트 대기열, {{pending}}개 이 기기에 저장되어 전달 대기, {{skipped}}개 건너뜀, {{failed}}개 실패.",
+      summary:
+        "{{send}}개 유휴, {{queue}}개 작업 중, {{skip}}개 사용 불가. 메시지는 전달 전에 저장됩니다.",
+      result:
+        "브로드캐스트: {{sent}}개 전송, {{queued}}개 호스트 대기열, {{pending}}개 이 기기에 저장되어 전달 대기, {{skipped}}개 건너뜀, {{failed}}개 실패.",
     },
     picker: {
       addTitle: "세션 추가",

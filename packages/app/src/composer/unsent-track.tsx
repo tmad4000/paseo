@@ -129,8 +129,14 @@ const UnsentRow = memo(function UnsentRow({
       ),
     [entry, getComposerText, restoreComposerText, run],
   );
-  const handleDiscard = useCallback(() => void run(() => entry.oneShot ? releaseOneShotDelivery(entry) : discardDirectSend(entry)), [entry, run]);
-  const discardLabel = t(entry.oneShot ? "composer.delivery.oneShot.release" : "composer.delivery.discardUnsent");
+  const handleDiscard = useCallback(
+    () =>
+      void run(() => (entry.oneShot ? releaseOneShotDelivery(entry) : discardDirectSend(entry))),
+    [entry, run],
+  );
+  const discardLabel = t(
+    entry.oneShot ? "composer.delivery.oneShot.release" : "composer.delivery.discardUnsent",
+  );
 
   return (
     <View style={styles.row} testID={`unsent-message-${entry.clientMessageId}`}>
@@ -141,22 +147,27 @@ const UnsentRow = memo(function UnsentRow({
         <View style={styles.status}>
           <DeliveryMark state={attention ? "attention" : "pending"} />
           <Text style={[styles.statusText, attention && styles.attentionText]} numberOfLines={2}>
-            {actionError ?? (attention ? describeDirectSendAttention(entry) : t("composer.delivery.unsentPending"))}
+            {actionError ??
+              (attention
+                ? describeDirectSendAttention(entry)
+                : t("composer.delivery.unsentPending"))}
           </Text>
         </View>
       </View>
       <View style={styles.actions}>
-        {!entry.oneShot ? <IconTooltip label={t("composer.delivery.retryNow")} wrap={false}>
-          <Pressable
-            onPress={handleRetry}
-            disabled={isBusy || !client}
-            style={styles.action}
-            accessibilityRole="button"
-            accessibilityLabel={t("composer.delivery.retryNow")}
-          >
-            <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
-          </Pressable>
-        </IconTooltip> : null}
+        {!entry.oneShot ? (
+          <IconTooltip label={t("composer.delivery.retryNow")} wrap={false}>
+            <Pressable
+              onPress={handleRetry}
+              disabled={isBusy || !client}
+              style={styles.action}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.delivery.retryNow")}
+            >
+              <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
+            </Pressable>
+          </IconTooltip>
+        ) : null}
         {canEditRefusedSend(entry) ? (
           <IconTooltip label={t("composer.delivery.editUnsent")} wrap={false}>
             <Pressable

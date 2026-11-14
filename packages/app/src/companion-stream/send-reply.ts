@@ -22,7 +22,11 @@ export async function sendStreamReply(input: {
     oneShot: { text, images: [], attachments: [] },
     run: (markDispatched) => {
       markDispatched();
-      return input.client.sendAgentMessage(input.agentId, text, { messageId, images: [], attachments: [] });
+      return input.client.sendAgentMessage(input.agentId, text, {
+        messageId,
+        images: [],
+        attachments: [],
+      });
     },
   });
 }
