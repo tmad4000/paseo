@@ -467,6 +467,8 @@ export interface SendMessageOptions {
    * for delivery when the turn completes.
    */
   interrupt?: boolean;
+  /** The agent sending this message, when an agent sends it. Recorded as the sender. */
+  callerAgentId?: string;
 }
 
 export interface AgentAttentionRequiredNotification {
@@ -4017,6 +4019,7 @@ export class DaemonClient {
       ...(options?.images ? { images: options.images } : {}),
       ...(options?.attachments ? { attachments: options.attachments } : {}),
       ...(options?.interrupt !== undefined ? { interrupt: options.interrupt } : {}),
+      ...(options?.callerAgentId ? { callerAgentId: options.callerAgentId } : {}),
     });
     const payload = await this.sendRequest({
       requestId,

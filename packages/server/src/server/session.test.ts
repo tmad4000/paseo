@@ -134,6 +134,261 @@ test("interruptAgentIfRunning rejects when graceful cancellation is refused", as
   );
 });
 
+describe("send_agent_message_request sender", () => {
+  const TARGET_ID = "22222222-2222-4222-8222-222222222222";
+  const CALLER_ID = "33333333-3333-4333-8333-333333333333";
+
+  interface SenderHarness {
+    session: Session;
+    messages: SessionOutboundMessage[];
+    delivered: Array<{ messageId: string; sender: string | undefined }>;
+    /** Run options the direct (not queued) path handed to the agent manager. */
+    direct: Array<{ sender?: string; clientMessageId?: string }>;
+    close: () => Promise<void>;
+  }
+
+  interface SenderHarnessOptions {
+    liveAgentIds: string[];
+    storedAgentIds?: string[];
+    /** Stored agents a client cannot see, such as the daemon's own helper agents. */
+    internalAgentIds?: string[];
+  }
+
+  async function createSenderHarness(options: SenderHarnessOptions): Promise<SenderHarness> {
+    const { liveAgentIds, storedAgentIds = [], internalAgentIds = [] } = options;
+    const dir = mkdtempSync(join(tmpdir(), "session-send-sender-"));
+    const messages: SessionOutboundMessage[] = [];
+    const delivered: SenderHarness["delivered"] = [];
+    const direct: SenderHarness["direct"] = [];
+    const agentManager = {
+      listAgents: vi.fn(() => liveAgentIds.map((id) => ({ id }))),
+      getAgent: vi.fn((id: string) =>
+        liveAgentIds.includes(id) ? { id, provider: "codex", lifecycle: "idle" } : null,
+      ),
+      hasInFlightRun: vi.fn(() => false),
+      getPendingPermissions: vi.fn(() => []),
+      waitForAgentClose: vi.fn(async () => {}),
+      // The direct path offers every prompt to the out-of-band runner first, with the same run
+      // options a turn would get. Accepting it there ends the send without a provider.
+      tryRunOutOfBand: vi.fn(
+        (_agentId: string, _prompt: unknown, runOptions?: SenderHarness["direct"][number]) => {
+          if (!runOptions?.clientMessageId) return false;
+          direct.push({ sender: runOptions.sender, clientMessageId: runOptions.clientMessageId });
+          return true;
+        },
+      ),
+      subscribe: vi.fn(() => () => {}),
+    };
+    const queueService = new AgentQueueService({
+      store: new AgentQueueStore(join(dir, "queues")),
+      agentManager: asAgentManager(agentManager),
+      agentStorage: asAgentStorage({}),
+      logger: pino({ level: "silent" }),
+      sendPrompt: async (input) => {
+        delivered.push({ messageId: input.messageId, sender: input.sender });
+      },
+    });
+    const session = createSessionForTest({
+      messages,
+      agentQueueService: queueService,
+      agentManager,
+      agentStorage: {
+        get: vi.fn(async (id: string) => {
+          if (internalAgentIds.includes(id)) return { id, internal: true };
+          return storedAgentIds.includes(id) ? { id } : undefined;
+        }),
+      },
+    });
+    return {
+      session,
+      messages,
+      delivered,
+      direct,
+      close: async () => {
+        await queueService.flushDrains();
+        queueService.stop();
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  }
+
+  function sendResponses(messages: SessionOutboundMessage[]): SessionOutboundMessage[] {
+    return messages.filter((message) => message.type === "send_agent_message_response");
+  }
+
+  test("a send that names a live calling agent is delivered as that agent", async () => {
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID, CALLER_ID] });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "from-agent",
+        agentId: TARGET_ID,
+        text: "Report from the worker",
+        messageId: "worker-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "from-agent",
+            agentId: TARGET_ID,
+            accepted: true,
+            error: null,
+            queued: true,
+          },
+        },
+      ]);
+      expect(harness.delivered).toEqual([
+        { messageId: "worker-report", sender: `agent:${CALLER_ID}` },
+      ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a send without a calling agent is delivered as the person", async () => {
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID] });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "from-person",
+        agentId: TARGET_ID,
+        text: "Typed by the user",
+        messageId: "typed",
+      });
+      await harness.close();
+
+      expect(harness.delivered).toEqual([{ messageId: "typed", sender: "human" }]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("an interrupting send that names a calling agent runs as that agent", async () => {
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID, CALLER_ID] });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "direct-from-agent",
+        agentId: TARGET_ID,
+        text: "Stop and read this",
+        messageId: "direct-report",
+        activeTurnBehavior: "interrupt",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(harness.direct).toEqual([
+        { sender: `agent:${CALLER_ID}`, clientMessageId: "direct-report" },
+      ]);
+      expect(harness.delivered).toEqual([]);
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "direct-from-agent",
+            agentId: TARGET_ID,
+            accepted: true,
+            error: null,
+          },
+        },
+      ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a calling agent that is stored but not loaded is still recorded as the sender", async () => {
+    const harness = await createSenderHarness({
+      liveAgentIds: [TARGET_ID],
+      storedAgentIds: [CALLER_ID],
+    });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "from-stored-agent",
+        agentId: TARGET_ID,
+        text: "Report from a watcher that outlived its agent",
+        messageId: "late-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(harness.delivered).toEqual([
+        { messageId: "late-report", sender: `agent:${CALLER_ID}` },
+      ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a send naming an internal agent as the caller is refused", async () => {
+    const harness = await createSenderHarness({
+      liveAgentIds: [TARGET_ID],
+      internalAgentIds: [CALLER_ID],
+    });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "internal-caller",
+        agentId: TARGET_ID,
+        text: "Report",
+        messageId: "internal-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "internal-caller",
+            agentId: TARGET_ID,
+            accepted: false,
+            error: `Caller agent ${CALLER_ID} not found`,
+          },
+        },
+      ]);
+      expect(harness.delivered).toEqual([]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a send naming a calling agent this daemon does not have is refused and not delivered", async () => {
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID] });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "unknown-caller",
+        agentId: TARGET_ID,
+        text: "Report from elsewhere",
+        messageId: "stray-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "unknown-caller",
+            agentId: TARGET_ID,
+            accepted: false,
+            error: `Caller agent ${CALLER_ID} not found`,
+          },
+        },
+      ]);
+      expect(harness.delivered).toEqual([]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+});
+
 test("cancel_agent_request reports refusal only through its response", async () => {
   const agentId = "11111111-1111-4111-8111-111111111111";
   const messages: SessionOutboundMessage[] = [];
