@@ -1,0 +1,1291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paseo · Inline threads, message statuses and reactions · Prototype</title>
+    <style>
+      :root {
+        --surface0: #ffffff;
+        --surface1: #fafafa;
+        --surface2: #f4f4f5;
+        --surface3: #e4e4e7;
+        --fg: #18181b;
+        --muted: #71717a;
+        --xmuted: #a1a1aa;
+        --border: #e4e4e7;
+        --accent: #20744a;
+        --accent-tint: #20744a1a;
+        --success: #3e704a;
+        --danger: #9d433b;
+        --warning: #7b5d39;
+        --warning-tint: #7b5d3914;
+        --running: #268ae0;
+        --bubble: #f4f4f5;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      }
+      [data-theme="dark"] {
+        --surface0: #18181b;
+        --surface1: #1a1a1d;
+        --surface2: #27272a;
+        --surface3: #3f3f46;
+        --fg: #fafafa;
+        --muted: #a1a1aa;
+        --xmuted: #71717a;
+        --border: #27272a;
+        --accent: #4fae7c;
+        --accent-tint: #4fae7c24;
+        --success: #6cb17b;
+        --danger: #d8847b;
+        --warning: #c09664;
+        --warning-tint: #c096641f;
+        --running: #5caaf6;
+        --bubble: #27272a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font: 14px/1.45 var(--font);
+        color: var(--fg);
+        background: var(--surface2);
+        display: flex;
+        flex-direction: column;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+
+      /* Prototype controls: not product UI */
+      .proto {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: center;
+        padding: 8px 16px;
+        background: var(--surface1);
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .proto strong {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      .proto .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .proto .seg button {
+        padding: 4px 10px;
+        color: var(--muted);
+      }
+      .proto .seg button[aria-pressed="true"] {
+        background: var(--surface3);
+        color: var(--fg);
+      }
+      .proto .act {
+        padding: 4px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--fg);
+      }
+      .proto .act:hover {
+        background: var(--surface2);
+      }
+      .proto .note {
+        margin-left: auto;
+      }
+
+      .stage {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+      }
+      .app {
+        flex: 1;
+        max-width: 1180px;
+        min-width: 0;
+        display: flex;
+        background: var(--surface0);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .stage[data-width="phone"] .app {
+        max-width: 390px;
+      }
+      .pane {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .pane-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pane-head .title {
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pane-head .sub {
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .pane-head .spacer {
+        flex: 1;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface2);
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 16px 0 8px;
+        overflow-anchor: none;
+      }
+      .col {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+
+      /* Ordinary chat rows */
+      .row {
+        margin: 14px 0;
+        position: relative;
+      }
+      .you {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+      .bubble {
+        max-width: 82%;
+        background: var(--bubble);
+        border-radius: 14px;
+        padding: 8px 12px;
+        white-space: pre-wrap;
+        font-size: 15px;
+      }
+      .meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .assistant {
+        font-size: 15px;
+      }
+      .assistant p {
+        margin: 0 0 8px;
+      }
+      .tool {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 4px 0;
+      }
+      .tool code {
+        font:
+          12px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Thread rows */
+      .thread {
+        margin: 6px 0;
+        border-radius: 10px;
+      }
+      .thread + .thread {
+        margin-top: 2px;
+      }
+      .thread-head {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 10px;
+        text-align: left;
+        min-height: 36px;
+      }
+      .thread-head:hover {
+        background: var(--surface2);
+      }
+      .thread[data-open="true"] > .thread-head {
+        background: var(--surface1);
+      }
+      .chev {
+        width: 14px;
+        flex: none;
+        color: var(--xmuted);
+        transition: transform 0.12s ease;
+      }
+      .thread[data-open="true"] .chev {
+        transform: rotate(90deg);
+      }
+      .avatar {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        position: relative;
+      }
+      .avatar .dot {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        border: 2px solid var(--surface0);
+        background: var(--xmuted);
+      }
+      .dot.running {
+        background: var(--running);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      .dot.attention {
+        background: var(--danger);
+      }
+      .dot.done {
+        background: var(--success);
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      .who {
+        font-weight: 500;
+        white-space: nowrap;
+        flex: none;
+        max-width: 38%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dir {
+        color: var(--xmuted);
+        flex: none;
+        font-size: 13px;
+      }
+      .preview {
+        flex: 1;
+        min-width: 0;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .count {
+        color: var(--muted);
+        font-size: 12px;
+        flex: none;
+      }
+      .new {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .new::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .time {
+        color: var(--muted);
+        font-size: 12px;
+        flex: none;
+        white-space: nowrap;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface2);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .badge.danger {
+        color: var(--danger);
+      }
+
+      .thread-body {
+        margin: 2px 0 6px 18px;
+        padding: 4px 0 4px 14px;
+        border-left: 2px solid var(--border);
+      }
+      .thread[data-owner="true"] .thread-body {
+        border-left-color: var(--accent);
+      }
+      .tmsg {
+        padding: 8px 0;
+        position: relative;
+      }
+      .tmsg + .tmsg {
+        border-top: 1px solid var(--border);
+      }
+      .tmsg-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .tmsg-head .route {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      .tmsg-head .kind {
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .tmsg-text {
+        margin-top: 4px;
+        font-size: 15px;
+        white-space: pre-wrap;
+      }
+      .tmsg-text.clamped {
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .linkbtn {
+        color: var(--accent);
+        font-size: 13px;
+      }
+      .linkbtn:hover {
+        text-decoration: underline;
+      }
+      .thread-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: center;
+        padding: 8px 0 2px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* Delivery marks */
+      .mark {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .mark svg {
+        width: 14px;
+        height: 14px;
+        flex: none;
+      }
+      .mark.alert {
+        color: var(--warning);
+      }
+      .mark.failed {
+        color: var(--danger);
+      }
+      .mark.working {
+        color: var(--running);
+      }
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Reactions */
+      .reactions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      .rx {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 1px 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface1);
+        font-size: 13px;
+        min-height: 24px;
+      }
+      .rx[aria-pressed="true"] {
+        border-color: var(--accent);
+        background: var(--accent-tint);
+      }
+      .rx .n {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .rx-add {
+        color: var(--muted);
+        padding: 1px 7px;
+      }
+      .actions {
+        position: absolute;
+        top: -12px;
+        right: 0;
+        display: none;
+        gap: 2px;
+        background: var(--surface0);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 2px;
+        z-index: 2;
+      }
+      .row:hover > .actions,
+      .tmsg:hover > .actions,
+      .row:focus-within > .actions,
+      .tmsg:focus-within > .actions,
+      .touch .actions {
+        display: inline-flex;
+      }
+      .actions button {
+        width: 28px;
+        height: 26px;
+        border-radius: 6px;
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+      }
+      /* Touch: no hover. The row of actions sits under the message; 44px targets, quiet glyphs. */
+      .touch .row,
+      .touch .tmsg {
+        display: flex;
+        flex-direction: column;
+      }
+      .touch .row.you {
+        align-items: flex-end;
+      }
+      .touch .actions {
+        position: static;
+        order: 9;
+        border: 0;
+        padding: 0;
+        margin: 2px 0 0 -12px;
+        background: none;
+      }
+      .touch .row.you .actions {
+        margin: 2px -12px 0 0;
+      }
+      .touch .actions button {
+        width: 44px;
+        height: 44px;
+      }
+      .touch .thread-head {
+        flex-wrap: wrap;
+        row-gap: 0;
+        padding: 8px;
+        min-height: 44px;
+      }
+      .touch .thread-head .who {
+        max-width: none;
+        flex: 1;
+      }
+      .touch .thread-head .dir {
+        display: none;
+      }
+      .pdir {
+        display: none;
+        color: var(--xmuted);
+      }
+      .touch .pdir {
+        display: inline;
+      }
+      .touch .thread-head .preview {
+        order: 9;
+        flex: 0 0 100%;
+        padding-left: 50px;
+      }
+      .touch .thread-body {
+        margin-left: 10px;
+        padding-left: 12px;
+      }
+      .actions button:hover {
+        background: var(--surface2);
+        color: var(--fg);
+      }
+      .picker {
+        position: absolute;
+        z-index: 5;
+        background: var(--surface0);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 6px;
+        display: flex;
+        gap: 2px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+      }
+      .picker button {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        font-size: 18px;
+      }
+      .picker button:hover,
+      .picker button:focus-visible {
+        background: var(--surface2);
+      }
+
+      /* Composer and drawer */
+      .composer {
+        border-top: 1px solid var(--border);
+        padding: 10px 16px 14px;
+      }
+      .composer .box {
+        max-width: 760px;
+        margin: 0 auto;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 10px 12px;
+        color: var(--muted);
+        background: var(--surface1);
+      }
+      .drawer {
+        width: 380px;
+        flex: none;
+        border-left: 2px solid var(--accent);
+        display: none;
+        flex-direction: column;
+        background: var(--surface0);
+      }
+      .app[data-drawer="open"] .drawer {
+        display: flex;
+      }
+      .stage[data-width="phone"] .app[data-drawer="open"] .pane.main {
+        display: none;
+      }
+      .stage[data-width="phone"] .drawer {
+        width: 100%;
+        border-left: 0;
+      }
+      .legend {
+        max-width: 1180px;
+        margin: 0 auto 16px;
+        padding: 0 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .legend summary {
+        cursor: pointer;
+        color: var(--fg);
+        padding: 6px 0;
+      }
+      .legend table {
+        border-collapse: collapse;
+        width: 100%;
+        background: var(--surface0);
+        border: 1px solid var(--border);
+      }
+      .legend td,
+      .legend th {
+        border-top: 1px solid var(--border);
+        padding: 6px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .legend th {
+        font-weight: 500;
+        color: var(--fg);
+        border-top: 0;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .touch .thread-head .mark.turn span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .mark + .mark {
+        margin-left: -2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .chev,
+        .spin,
+        .dot.running {
+          transition: none;
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body data-theme="light">
+    <div class="proto" role="region" aria-label="Prototype controls (not product UI)">
+      <strong>Prototype controls</strong>
+      <span class="seg" data-ctl="threads"
+        ><button aria-pressed="true" data-v="on">Inline threads on</button
+        ><button aria-pressed="false" data-v="off">Off</button></span
+      >
+      <span class="seg" data-ctl="width"
+        ><button aria-pressed="true" data-v="desktop">Desktop</button
+        ><button aria-pressed="false" data-v="phone">Phone</button></span
+      >
+      <span class="seg" data-ctl="theme"
+        ><button aria-pressed="true" data-v="light">Light</button
+        ><button aria-pressed="false" data-v="dark">Dark</button></span
+      >
+      <button class="act" id="simReply">Simulate: worker reply arrives</button>
+      <button class="act" id="simAdvance">Simulate: advance newest outbound status</button>
+      <span class="note"
+        >Design proposal, not built. Nothing here sends to an agent. Sample content only.</span
+      >
+    </div>
+    <div class="stage" data-width="desktop">
+      <div class="app" id="app" data-drawer="closed">
+        <section class="pane main" aria-label="Chat">
+          <header class="pane-head">
+            <span class="title">Release prep</span>
+            <span class="sub">orchestrator</span>
+            <span class="spacer"></span>
+            <span
+              class="pill"
+              id="threadsPill"
+              title="Settings → Chat → Group agent messages into threads"
+              >Threads on</span
+            >
+          </header>
+          <div class="scroll" id="scroll">
+            <div class="col" id="timeline" role="log" aria-label="Conversation"></div>
+          </div>
+          <div class="composer"><div class="box">Message the orchestrator</div></div>
+        </section>
+        <aside class="drawer" id="drawer" aria-label="Thread"></aside>
+      </div>
+    </div>
+    <details class="legend" open>
+      <summary>What was asked, and what is only recommended</summary>
+      <table>
+        <tr>
+          <th>Asked for</th>
+          <td>
+            Collapsible inline threads in orchestrator chats, on by default with a way to turn them
+            off. A status on sent messages, and probably on received ones. Add and remove emoji
+            reactions.
+          </td>
+        </tr>
+        <tr>
+          <th>Recommended here, not decided</th>
+          <td>
+            The word "Finished" for a turn that ended (it does not mean the task is done). Reactions
+            that agents never receive or read, and that are never approval, completion or a read
+            receipt. Whether agents may add reactions. The setting kept per device. Rows kept in
+            time order.
+          </td>
+        </tr>
+      </table>
+    </details>
+    <details class="legend">
+      <summary>Status marks and the evidence behind each</summary>
+      <table>
+        <tr>
+          <th>Delivery mark</th>
+          <th>Meaning</th>
+          <th>Evidence that sets it</th>
+        </tr>
+        <tr>
+          <td>Clock</td>
+          <td>Saved on this device</td>
+          <td>Durable outbox entry, no host acknowledgement</td>
+        </tr>
+        <tr>
+          <td>Check</td>
+          <td>On the host</td>
+          <td>Host accepted the send, or its queue snapshot lists the item</td>
+        </tr>
+        <tr>
+          <td>Double check</td>
+          <td>Delivered</td>
+          <td>The recipient's timeline has the message row</td>
+        </tr>
+        <tr>
+          <td>Alert</td>
+          <td>Not sent, or delivery unknown</td>
+          <td>Host refusal, retry threshold, or an unknown-outcome receipt</td>
+        </tr>
+        <tr>
+          <th>Turn state</th>
+          <th>Meaning</th>
+          <th>Evidence that sets it</th>
+        </tr>
+        <tr>
+          <td>Spinner · Working</td>
+          <td>The recipient's turn for this message is running</td>
+          <td>The row's turn started and has no terminal event</td>
+        </tr>
+        <tr>
+          <td>Finished</td>
+          <td>That turn ended. Not proof the task is done</td>
+          <td>Turn completed event</td>
+        </tr>
+        <tr>
+          <td>Stopped / Turn failed</td>
+          <td>That turn was cancelled or errored</td>
+          <td>Turn cancelled or failed event</td>
+        </tr>
+        <tr>
+          <th colspan="3">
+            A delivery mark never becomes a turn state, and a reaction is neither.
+          </th>
+        </tr>
+      </table>
+    </details>
+
+    <script>
+      const ICON = {
+        chev: '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg>',
+        clock:
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.2l2 1.2"/></svg>',
+        check:
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6-6.4"/></svg>',
+        checks:
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m1.5 8.6 2.6 2.6 5.4-5.8"/><path d="m8 11.2 5.6-5.8"/></svg>',
+        alert:
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.4M8 10.8v.2"/></svg>',
+        spin: '<svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 2.4a5.6 5.6 0 1 0 5.6 5.6"/></svg>',
+        smile:
+          '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M5.6 9.4c.6.9 1.4 1.3 2.4 1.3s1.8-.4 2.4-1.3M6 6.4v.2M10 6.4v.2"/></svg>',
+        reply:
+          '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4 3 7.5 6.5 11"/><path d="M3 7.5h6a4 4 0 0 1 4 4v.5"/></svg>',
+        save: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 2.8h7v10.4L8 10.8l-3.5 2.4z"/></svg>',
+      };
+      const STATUS = {
+        device: { d: "clock", dl: "Saved on this device" },
+        host: { d: "check", dl: "On the host" },
+        queued: { d: "check", dl: "On the host · sends when the agent is free" },
+        delivered: { d: "checks", dl: "Delivered" },
+        working: { d: "checks", dl: "Delivered", t: "Working", ticon: "spin", tcls: "working" },
+        finished: { d: "checks", dl: "Delivered", t: "Finished" },
+        stopped: { d: "checks", dl: "Delivered", t: "Stopped", ticon: "alert", tcls: "alert" },
+        failed: { d: "checks", dl: "Delivered", t: "Turn failed", ticon: "alert", tcls: "failed" },
+        unknown: { d: "alert", dl: "Delivery unknown", dcls: "alert" },
+      };
+      const ADVANCE = ["device", "host", "queued", "delivered", "working", "finished"];
+      const AGENTS = {
+        notes: {
+          name: "Changelog writer",
+          initial: "C",
+          color: "#6d5bd0",
+          state: "done",
+          rel: "Subagent",
+        },
+        ci: {
+          name: "CI checker",
+          initial: "K",
+          color: "#b4552d",
+          state: "attention",
+          rel: "Subagent",
+        },
+        docs: {
+          name: "Docs reviewer",
+          initial: "D",
+          color: "#1f7a8c",
+          state: "running",
+          rel: "Agent on another host",
+        },
+      };
+      const QUICK = ["👍", "👀", "🙏", "❤️", "😂", "🎉"];
+      let seq = 100;
+      const state = { threads: true, open: new Set(), full: new Set(), drawer: null, lastSeen: 9 };
+      const rows = [
+        {
+          id: 1,
+          kind: "you",
+          text: "Cut the beta. Draft the changelog, check CI on the release branch, and tell me what is blocking.",
+          time: "9:02 AM",
+          status: "finished",
+        },
+        {
+          id: 2,
+          kind: "assistant",
+          html: "<p>I'll split this in two. One agent drafts the changelog from the merged pull requests, another checks CI on the release branch. I'll report blockers here.</p>",
+        },
+        {
+          id: 3,
+          kind: "out",
+          agent: "notes",
+          via: "create_agent",
+          text: "Draft the changelog for the next beta from pull requests merged since the last release tag. Group by feature, fix and docs. Report the draft path and anything you could not classify.",
+          time: "9:02 AM",
+          status: "finished",
+        },
+        {
+          id: 4,
+          kind: "out",
+          agent: "ci",
+          via: "create_agent",
+          text: "Check CI on the release branch. Report failing and flaky jobs with links. Do not rerun anything without asking.",
+          time: "9:02 AM",
+          status: "working",
+        },
+        {
+          id: 5,
+          kind: "in",
+          agent: "notes",
+          via: "message",
+          text: "Progress: 14 merged pull requests found. 11 classified. 3 need a human call on whether they are user-visible.",
+          time: "9:06 AM",
+          status: "finished",
+          rx: { "👀": ["you"] },
+        },
+        {
+          id: 6,
+          kind: "in",
+          agent: "notes",
+          via: "finished",
+          text: "Draft is at docs/changelog-draft.md. 14 entries: 6 features, 5 fixes, 3 docs. The three unclear ones are listed at the bottom with my best guess.\n\nI did not touch the published changelog.",
+          time: "9:11 AM",
+          status: "finished",
+        },
+        {
+          id: 7,
+          kind: "assistant",
+          html: "<p>The changelog draft is ready, with three entries that need your call. CI is still being checked.</p>",
+        },
+        {
+          id: 8,
+          kind: "you",
+          text: "Make sure the queue fix is called out by name.",
+          time: "9:14 AM",
+          status: "finished",
+        },
+        {
+          id: 9,
+          kind: "out",
+          agent: "notes",
+          via: "send_agent_prompt",
+          text: "Add a line under Fixes for the queue receipt fix, by name. Keep the rest as is.",
+          time: "9:14 AM",
+          status: "queued",
+        },
+        {
+          id: 10,
+          kind: "in",
+          agent: "ci",
+          via: "needs permission",
+          text: "CI checker needs permission: Run command `gh run rerun 4821 --failed`.\n\nAnswer it in CI checker's own chat.",
+          time: "9:16 AM",
+          status: "working",
+          attention: true,
+        },
+        {
+          id: 11,
+          kind: "in",
+          agent: "docs",
+          via: "message",
+          text: "Two broken links in the release notes template. Fix is ready on a branch, not pushed.",
+          time: "9:17 AM",
+          status: "queued",
+        },
+        { id: 12, kind: "you", text: "What is still blocking?", time: "9:18 AM", status: "device" },
+      ];
+
+      const el = (tag, attrs = {}, html = "") => {
+        const n = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        n.innerHTML = html;
+        return n;
+      };
+      const esc = (s) =>
+        s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      // Two facts, two marks: where the message is (delivery), and what the recipient's turn did.
+      const mark = (status, withLabel = true) => {
+        const s = STATUS[status];
+        const delivery = `<span class="mark ${s.dcls || ""}" title="${s.dl}">${ICON[s.d]}${withLabel && !s.t ? `<span>${s.dl}</span>` : `<span class="sr">${s.dl}</span>`}</span>`;
+        const turn = s.t
+          ? `<span class="mark turn ${s.tcls || ""}" title="Turn: ${s.t}. Not proof the task is done">${s.ticon ? ICON[s.ticon] : ""}<span>${s.t}</span></span>`
+          : "";
+        return delivery + turn;
+      };
+      const avatar = (a) =>
+        `<span class="avatar" style="background:${a.color}" aria-hidden="true">${a.initial}<span class="dot ${a.state}"></span></span>`;
+      const routeLabel = (r) =>
+        r.kind === "out"
+          ? `Release prep → ${AGENTS[r.agent].name}`
+          : `${AGENTS[r.agent].name} → Release prep`;
+      const viaLabel = (r) =>
+        ({
+          create_agent: "Started with this prompt",
+          send_agent_prompt: "Follow-up",
+          message: "Message",
+          finished: "Finished",
+          "needs permission": "Needs permission",
+        })[r.via];
+
+      function reactionsHtml(r) {
+        const rx = r.rx || {};
+        const chips = Object.entries(rx)
+          .filter(([, who]) => who.length)
+          .map(
+            ([e, who]) =>
+              `<button class="rx" data-rx="${e}" data-row="${r.id}" aria-pressed="${who.includes("you")}" title="${who.map((w) => (w === "you" ? "You" : w)).join(", ")} reacted ${e}" aria-label="${e} ${who.length}, ${who.includes("you") ? "remove your reaction" : "add your reaction"}">${e}<span class="n">${who.length}</span></button>`,
+          )
+          .join("");
+        return chips
+          ? `<div class="reactions">${chips}<button class="rx rx-add" data-add="${r.id}" aria-label="Add reaction">${ICON.smile}</button></div>`
+          : "";
+      }
+      const actionsHtml = (r) =>
+        `<div class="actions"><button data-add="${r.id}" title="Add reaction" aria-label="Add reaction">${ICON.smile}</button><button title="Reply" aria-label="Reply">${ICON.reply}</button><button title="Save to Stream" aria-label="Save to Stream">${ICON.save}</button></div>`;
+
+      function threadMessage(r) {
+        const long = r.text.length > 220 && !state.full.has(r.id);
+        return `<div class="tmsg" data-msg="${r.id}">
+          ${actionsHtml(r)}
+          <div class="tmsg-head"><span class="route">${routeLabel(r)}</span><span class="kind">${viaLabel(r)}</span><span>${r.time}</span>${mark(r.status)}</div>
+          <div class="tmsg-text ${long ? "clamped" : ""}">${esc(r.text)}</div>
+          ${r.text.length > 220 ? `<button class="linkbtn" data-full="${r.id}">${long ? "Show more" : "Show less"}</button>` : ""}
+          ${reactionsHtml(r)}
+        </div>`;
+      }
+
+      function threadBlock(group) {
+        const a = AGENTS[group[0].agent];
+        const key = `t${group[0].id}`;
+        const open = state.open.has(key);
+        const last = group[group.length - 1];
+        const fresh = group.filter((r) => r.kind === "in" && r.id > state.lastSeen).length;
+        const attention = group.some((r) => r.attention);
+        const wrap = el("div", {
+          class: "thread",
+          "data-open": open,
+          "data-attention": attention,
+          "data-owner": state.drawer === group[0].agent,
+        });
+        const dir = last.kind === "out" ? "→" : "←";
+        const dirWord = last.kind === "out" ? "To" : "From";
+        wrap.innerHTML = `<button class="thread-head" aria-expanded="${open}" aria-controls="${key}-body" data-thread="${key}">
+            ${ICON.chev}${avatar(a)}
+            <span class="who"><span class="sr">${dirWord} </span>${a.name}</span><span class="dir" aria-hidden="true">${dir}</span>
+            <span class="preview"><span class="pdir" aria-hidden="true">${dir} </span>${attention ? `<span class="badge danger">Needs permission</span> ` : ""}${esc(last.text.split("\n")[0])}</span>
+            ${group.length > 1 ? `<span class="count">${group.length} messages</span>` : ""}
+            ${fresh ? `<span class="new">${fresh} new</span>` : ""}
+            ${mark(last.status, false)}<span class="time">${last.time}</span>
+          </button>
+          ${
+            open
+              ? `<div class="thread-body" id="${key}-body" role="group" aria-label="Messages with ${a.name}">${group.map(threadMessage).join("")}
+            <div class="thread-foot"><button class="linkbtn" data-drawer="${group[0].agent}">Open chat</button><span>${a.rel} · state: ${a.state === "attention" ? "needs input" : a.state}</span></div></div>`
+              : ""
+          }`;
+        return wrap;
+      }
+
+      function flatRow(r) {
+        const a = AGENTS[r.agent];
+        const n = el("div", {
+          class: "row",
+          style: "display:flex;flex-direction:column;align-items:flex-start",
+        });
+        const lead = r.kind === "out" ? `To ${a.name}` : a.name;
+        n.innerHTML = `${actionsHtml(r)}<div class="meta" style="margin:0 0 4px">${avatar(a)}<span style="color:var(--fg);font-weight:500">${lead}</span><span>${viaLabel(r)}</span></div><div class="bubble">${esc(r.text)}</div><div class="meta"><span>${r.time}</span>${mark(r.status)}</div>${reactionsHtml(r)}`;
+        return n;
+      }
+
+      function render() {
+        const tl = document.getElementById("timeline");
+        const anchor = document.activeElement?.dataset?.thread;
+        tl.innerHTML = "";
+        let i = 0;
+        while (i < rows.length) {
+          const r = rows[i];
+          if (r.kind === "you") {
+            const n = el("div", { class: "row you" });
+            n.innerHTML = `${actionsHtml(r)}<div class="bubble">${esc(r.text)}</div><div class="meta"><span>${r.time}</span>${mark(r.status)}</div>${reactionsHtml(r)}`;
+            tl.append(n);
+            i++;
+          } else if (r.kind === "assistant") {
+            const n = el(
+              "div",
+              { class: "row assistant" },
+              actionsHtml(r) + r.html + reactionsHtml(r),
+            );
+            tl.append(n);
+            i++;
+          } else if (!state.threads) {
+            tl.append(flatRow(r));
+            i++;
+          } else {
+            const group = [r];
+            while (
+              rows[i + 1] &&
+              (rows[i + 1].kind === "in" || rows[i + 1].kind === "out") &&
+              rows[i + 1].agent === r.agent
+            )
+              group.push(rows[++i]);
+            tl.append(threadBlock(group));
+            i++;
+          }
+        }
+        document.getElementById("threadsPill").textContent = state.threads
+          ? "Threads on"
+          : "Threads off";
+        if (anchor) tl.querySelector(`[data-thread="${anchor}"]`)?.focus();
+        renderDrawer();
+      }
+
+      function renderDrawer() {
+        const d = document.getElementById("drawer");
+        document.getElementById("app").dataset.drawer = state.drawer ? "open" : "closed";
+        if (!state.drawer) return (d.innerHTML = "");
+        const a = AGENTS[state.drawer];
+        const msgs = rows.filter((r) => r.agent === state.drawer);
+        d.innerHTML = `<header class="pane-head">${avatar(a)}<span class="title">${a.name}</span><span class="sub">${a.rel} of Release prep</span><span class="spacer"></span><button class="linkbtn" id="closeDrawer">Close</button></header>
+          <div class="scroll"><div class="col"><p style="color:var(--muted);font-size:13px">The existing subagents drawer: this agent's full chat, with its own composer. Shown here with only the exchanged messages.</p>${msgs.map(threadMessage).join("")}</div></div>
+          <div class="composer"><div class="box">Reply to ${a.name}</div></div>`;
+        document.getElementById("closeDrawer").focus();
+      }
+
+      // Keep the toggled header where it is on screen while content above or below changes height.
+      function preserve(node, fn) {
+        const sc = document.getElementById("scroll");
+        const before = node.getBoundingClientRect().top;
+        const key = node.dataset.thread;
+        fn();
+        const again = document.querySelector(`[data-thread="${key}"]`);
+        if (again) sc.scrollTop += again.getBoundingClientRect().top - before;
+      }
+
+      let picker = null;
+      function closePicker() {
+        picker?.remove();
+        picker = null;
+      }
+      function openPicker(btn, rowId) {
+        closePicker();
+        picker = el(
+          "div",
+          { class: "picker", role: "menu", "aria-label": "Add reaction" },
+          QUICK.map(
+            (e) =>
+              `<button role="menuitem" data-pick="${e}" data-row="${rowId}" aria-label="React ${e}">${e}</button>`,
+          ).join(""),
+        );
+        document.body.append(picker);
+        const b = btn.getBoundingClientRect();
+        picker.style.top = `${Math.max(8, b.top - 48 + window.scrollY)}px`;
+        picker.style.left = `${Math.min(window.innerWidth - 230, Math.max(8, b.left - 90))}px`;
+        picker.querySelector("button").focus();
+      }
+      function toggleRx(rowId, emoji) {
+        const r = rows.find((x) => x.id === Number(rowId));
+        r.rx = r.rx || {};
+        const who = (r.rx[emoji] = r.rx[emoji] || []);
+        const at = who.indexOf("you");
+        if (at >= 0) who.splice(at, 1);
+        else who.push("you");
+      }
+
+      document.addEventListener("click", (ev) => {
+        const t = ev.target.closest("button");
+        if (!t) return closePicker();
+        if (t.dataset.pick) {
+          toggleRx(t.dataset.row, t.dataset.pick);
+          closePicker();
+          return render();
+        }
+        closePicker();
+        if (t.dataset.thread) {
+          return preserve(t, () => {
+            state.open.has(t.dataset.thread)
+              ? state.open.delete(t.dataset.thread)
+              : state.open.add(t.dataset.thread);
+            render();
+          });
+        }
+        if (t.dataset.add) return openPicker(t, t.dataset.add);
+        if (t.dataset.rx) {
+          toggleRx(t.dataset.row, t.dataset.rx);
+          return render();
+        }
+        if (t.dataset.full) {
+          const id = Number(t.dataset.full);
+          state.full.has(id) ? state.full.delete(id) : state.full.add(id);
+          return render();
+        }
+        if (t.dataset.drawer) {
+          state.drawer = t.dataset.drawer;
+          return render();
+        }
+        if (t.id === "closeDrawer") {
+          state.drawer = null;
+          return render();
+        }
+        const seg = t.closest(".seg");
+        if (seg) {
+          seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === t));
+          if (seg.dataset.ctl === "threads") state.threads = t.dataset.v === "on";
+          if (seg.dataset.ctl === "theme") document.body.dataset.theme = t.dataset.v;
+          if (seg.dataset.ctl === "width") {
+            document.querySelector(".stage").dataset.width = t.dataset.v;
+            document.body.classList.toggle("touch", t.dataset.v === "phone");
+          }
+          return render();
+        }
+        if (t.id === "simReply") {
+          const sc = document.getElementById("scroll");
+          const following = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 40;
+          rows.push({
+            id: ++seq,
+            kind: "in",
+            agent: "notes",
+            via: "finished",
+            text: "Added the queue receipt fix under Fixes, by name. Nothing else changed.",
+            time: "9:21 AM",
+            status: "delivered",
+          });
+          const sent = rows.find((r) => r.id === 9);
+          sent.status = "finished";
+          AGENTS.notes.state = "done";
+          render();
+          if (following) sc.scrollTop = sc.scrollHeight;
+        }
+        if (t.id === "simAdvance") {
+          const last = [...rows].reverse().find((r) => r.kind === "you" || r.kind === "out");
+          last.status =
+            ADVANCE[Math.min(ADVANCE.length - 1, ADVANCE.indexOf(last.status) + 1)] || "host";
+          render();
+        }
+      });
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") {
+          if (picker) return closePicker();
+          const body = ev.target.closest?.(".thread-body");
+          if (body) return body.previousElementSibling.focus();
+          if (state.drawer) {
+            state.drawer = null;
+            render();
+          }
+        }
+        const head = ev.target.closest?.(".thread-head");
+        if (!head) return;
+        const open = head.getAttribute("aria-expanded") === "true";
+        if ((ev.key === "ArrowRight" && !open) || (ev.key === "ArrowLeft" && open)) {
+          ev.preventDefault();
+          head.click();
+        }
+        if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+          const heads = [...document.querySelectorAll(".thread-head")];
+          const next = heads[heads.indexOf(head) + (ev.key === "ArrowDown" ? 1 : -1)];
+          if (next) {
+            ev.preventDefault();
+            next.focus();
+          }
+        }
+      });
+
+      const q = new URLSearchParams(location.search);
+      // Screenshot hosts without a colour emoji font can pass one in; real devices never need this.
+      if (q.get("emojiFont")) {
+        document.head.append(
+          el(
+            "style",
+            {},
+            `@font-face{font-family:ProtoEmoji;src:url("${q.get("emojiFont")}")} body{--font:-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,ProtoEmoji,sans-serif} .picker button,.rx{font-family:ProtoEmoji,sans-serif}`,
+          ),
+        );
+      }
+      if (q.get("theme") === "dark") document.body.dataset.theme = "dark";
+      if (q.get("width") === "phone") {
+        document.querySelector(".stage").dataset.width = "phone";
+        document.body.classList.add("touch");
+      }
+      if (q.get("threads") === "off") state.threads = false;
+      (q.get("open") || "")
+        .split(",")
+        .filter(Boolean)
+        .forEach((k) => state.open.add(k));
+      if (q.get("drawer")) state.drawer = q.get("drawer");
+      document.querySelectorAll(".seg").forEach((seg) => {
+        const v = {
+          threads: state.threads ? "on" : "off",
+          theme: document.body.dataset.theme,
+          width: document.querySelector(".stage").dataset.width,
+        }[seg.dataset.ctl];
+        seg
+          .querySelectorAll("button")
+          .forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v));
+      });
+      render();
+    </script>
+  </body>
+</html>
