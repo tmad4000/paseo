@@ -3292,10 +3292,6 @@ export class AgentManager {
 
     const pendingRun = this.runs.getPendingRun(agentId);
     if (pendingRun?.start.status === "failed") throw pendingRun.start.error;
-    if (!pendingRun) {
-      const failedStart = this.runs.getFailedStart(agentId);
-      if (failedStart) throw failedStart.error;
-    }
     if (
       (snapshot.lifecycle === "running" || pendingRun?.start.status === "started") &&
       !snapshot.pendingReplacement

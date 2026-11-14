@@ -1,6 +1,6 @@
 import type { ComposerAttachment, WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachments-store";
-import { clearSubmittedReviewAttachment } from "@/review/store";
+import { clearSubmittedReviewAttachment, sameReviewAttachmentSnapshot } from "@/review/store";
 import { isPullRequestContextAttachment } from "@/attachments/workspace-attachment-utils";
 
 export function getAttachmentKey(attachment: WorkspaceComposerAttachment): string {
@@ -84,9 +84,25 @@ export function clearSubmittedWorkspaceAttachments(
   removeSentContextAttachments(attachments);
 }
 
+export function hasWorkspaceAttachmentSnapshot(
+  attachments: readonly WorkspaceComposerAttachment[],
+  target: WorkspaceComposerAttachment,
+): boolean {
+  return attachments.some((attachment) => {
+    if (attachment === target) return true;
+    return (
+      attachment.kind === "review" &&
+      target.kind === "review" &&
+      sameReviewAttachmentSnapshot(attachment, target)
+    );
+  });
+}
+
 export function activeWorkspaceAttachments(
   attachments: readonly WorkspaceComposerAttachment[],
   suppressed: readonly WorkspaceComposerAttachment[],
 ): WorkspaceComposerAttachment[] {
-  return attachments.filter((attachment) => !suppressed.includes(attachment));
+  return attachments.filter(
+    (attachment) => !hasWorkspaceAttachmentSnapshot(suppressed, attachment),
+  );
 }

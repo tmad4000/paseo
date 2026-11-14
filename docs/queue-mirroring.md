@@ -183,8 +183,9 @@ The inline editor changes only text; both attachment lists and image bytes stay 
 Composer cleanup consumes the submitted workspace attachment snapshot. For reviews, only unchanged
 comments actually included in that snapshot are removed; added or edited comments remain available
 for another message. Discarding a comment while submission is pending must never recreate it.
-Suppression follows the submitted snapshot, so a newer attachment with the same review/context key
-stays visible while encoding or storage finishes.
+Suppression follows the underlying comment versions across diff-context rebuilds, so an unchanged
+review the user removed stays hidden. New or edited comments under the same review key stay visible
+while encoding or storage finishes.
 
 ## Composer controls
 

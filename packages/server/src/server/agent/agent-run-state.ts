@@ -40,17 +40,10 @@ export interface ForegroundRunAgentState {
   finalizedForegroundTurnIds: Set<string>;
 }
 
-interface FailedRunStart {
-  token: string;
-  error: unknown;
-}
-
 export class AgentRunState {
   private readonly runs = new Map<string, TrackedAgentRun>();
-  private readonly failedStarts = new Map<string, FailedRunStart>();
 
   createPendingRun(agentId: string): PendingForegroundRun {
-    this.failedStarts.delete(agentId);
     const pendingRun = createPendingForegroundRun();
     this.runs.set(agentId, pendingRun);
     return pendingRun;
@@ -59,10 +52,6 @@ export class AgentRunState {
   getPendingRun(agentId: string): PendingForegroundRun | null {
     const run = this.runs.get(agentId);
     return run?.kind === "foreground" ? run : null;
-  }
-
-  getFailedStart(agentId: string): FailedRunStart | null {
-    return this.failedStarts.get(agentId) ?? null;
   }
 
   hasPendingRun(agentId: string): boolean {
@@ -90,7 +79,6 @@ export class AgentRunState {
       return current;
     }
 
-    this.failedStarts.delete(agentId);
     const run: AutonomousAgentRun = {
       ...createTrackedRunState(),
       kind: "autonomous",
@@ -138,7 +126,6 @@ export class AgentRunState {
     if (run) {
       this.clearRun(agentId, run);
     }
-    this.failedStarts.delete(agentId);
   }
 
   createTurnStream(turnId: string): ForegroundTurnStream {
@@ -225,9 +212,6 @@ export class AgentRunState {
   }
 
   private clearRun(agentId: string, run: TrackedAgentRun): void {
-    if (run.kind === "foreground" && run.start.status === "failed") {
-      this.failedStarts.set(agentId, { token: run.token, error: run.start.error });
-    }
     this.runs.delete(agentId);
     settleTrackedRun(run);
   }

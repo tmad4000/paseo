@@ -35,6 +35,7 @@ export interface StartAgentRunOptions {
   replaceRunning?: boolean;
   /** Wait on this iterator's accepted turn, never a later run on the same agent. */
   awaitRunStart?: boolean;
+  signal?: AbortSignal;
   activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
   /** Ask the provider to deny permissions blocking this steer. */
@@ -138,6 +139,76 @@ async function drainAgentRunIterator(
   }
 }
 
+interface RunStartContext {
+  options: StartAgentRunOptions | undefined;
+  accepted: boolean;
+  retried: boolean;
+  observationEnded: boolean;
+}
+
+function canRetryStaleRun(error: unknown, context: RunStartContext): boolean {
+  return (
+    !context.accepted &&
+    !context.retried &&
+    !context.observationEnded &&
+    context.options?.replaceRunning !== false &&
+    context.options?.activeTurnBehavior !== "steer_only" &&
+    !context.options?.signal?.aborted &&
+    isStaleProviderSessionError(error)
+  );
+}
+
+function canceledRunStart(signal: AbortSignal | undefined): Error {
+  return new Error("Provider submission outcome unknown: run start canceled", {
+    cause: signal?.reason,
+  });
+}
+
+async function reloadStaleRun(
+  agentManager: AgentRunController,
+  agentId: string,
+  context: RunStartContext,
+): Promise<void> {
+  context.retried = true;
+  await agentManager.reloadAgentSession(agentId);
+  if (context.observationEnded || context.options?.signal?.aborted)
+    throw canceledRunStart(context.options?.signal);
+}
+
+function waitForOwnedRunStart(started: Promise<void>, context: RunStartContext): Promise<void> {
+  const signal = context.options?.signal;
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", canceled);
+    };
+    const canceled = () => {
+      context.observationEnded = true;
+      cleanup();
+      reject(canceledRunStart(signal));
+    };
+    const timer = setTimeout(() => {
+      context.observationEnded = true;
+      cleanup();
+      reject(new Error("Provider submission outcome unknown: run start timed out"));
+    }, AGENT_RUN_START_TIMEOUT_MS);
+    signal?.addEventListener("abort", canceled, { once: true });
+    if (signal?.aborted) canceled();
+    void started.then(
+      () => {
+        cleanup();
+        resolve();
+        return undefined;
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+        return undefined;
+      },
+    );
+  });
+}
+
 export async function startAgentRun(
   agentManager: AgentRunController,
   agentId: string,
@@ -145,6 +216,13 @@ export async function startAgentRun(
   logger: Logger,
   options?: StartAgentRunOptions,
 ): Promise<{ disposition: PromptDispatchDisposition }> {
+  if (options?.signal?.aborted) throw canceledRunStart(options.signal);
+  const context: RunStartContext = {
+    options,
+    accepted: false,
+    retried: false,
+    observationEnded: false,
+  };
   const snapshot = agentManager.getAgent(agentId);
   logger.trace(
     {
@@ -165,17 +243,14 @@ export async function startAgentRun(
     return { disposition: "out_of_band" };
   }
   try {
-    return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
+    return await startAgentRunInner(agentManager, agentId, prompt, logger, context);
   } catch (error) {
-    if (options?.replaceRunning === false || options?.activeTurnBehavior === "steer_only") {
-      throw error;
-    }
-    if (!isStaleProviderSessionError(error)) throw error;
+    if (!canRetryStaleRun(error, context)) throw error;
     logger.info({ agentId, err: error }, "Provider session went stale; reopening from persistence");
     // The live session belongs to a retired plugin runtime. Reload swaps in a
     // fresh session on the current runtime while preserving history and labels.
-    await agentManager.reloadAgentSession(agentId);
-    return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
+    await reloadStaleRun(agentManager, agentId, context);
+    return await startAgentRunInner(agentManager, agentId, prompt, logger, context);
   }
 }
 
@@ -184,8 +259,9 @@ async function startAgentRunInner(
   agentId: string,
   prompt: AgentPromptInput,
   logger: Logger,
-  options?: StartAgentRunOptions,
+  context: RunStartContext,
 ): Promise<{ disposition: PromptDispatchDisposition }> {
+  const { options } = context;
   const snapshot = agentManager.getAgent(agentId);
   const steered = await steerOrReplaceActiveRun(agentManager, agentId, prompt, options);
   if (steered?.disposition === "steered") {
@@ -210,24 +286,27 @@ async function startAgentRunInner(
     rejectStart = reject;
   });
   void started.catch(() => undefined);
+  async function acceptAndDrain(run: typeof iterator): Promise<void> {
+    const first = await run.next();
+    if (first.done || first.value.type !== "turn_started")
+      throw new Error("Reserved agent run ended before acceptance");
+    context.accepted = true;
+    resolveStart();
+    await drainAgentRunIterator(run);
+  }
   void (async () => {
     try {
       try {
-        // The first yield of this reserved iterator is its accepted turn_started.
-        const first = await iterator.next();
-        if (first.done || first.value.type !== "turn_started")
-          throw new Error("Reserved agent run ended before acceptance");
-        resolveStart();
-        await drainAgentRunIterator(iterator);
+        await acceptAndDrain(iterator);
       } catch (error) {
-        if (options?.replaceRunning === false || !isStaleProviderSessionError(error)) throw error;
+        if (!canRetryStaleRun(error, context)) throw error;
         logger.info(
           { agentId, err: error },
           "Provider session went stale; reopening from persistence",
         );
-        await agentManager.reloadAgentSession(agentId);
+        await reloadStaleRun(agentManager, agentId, context);
         const retry = await startOrReplaceRun(agentManager, agentId, prompt, options);
-        await drainAgentRunIterator(retry.iterator);
+        await acceptAndDrain(retry.iterator);
       }
       logger.trace(
         {
@@ -251,22 +330,7 @@ async function startAgentRunInner(
       logger.error({ err: error, agentId }, "Agent stream failed");
     }
   })();
-  if (options?.awaitRunStart) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        started,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("Provider submission outcome unknown: run start timed out")),
-            AGENT_RUN_START_TIMEOUT_MS,
-          );
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+  if (options?.awaitRunStart) await waitForOwnedRunStart(started, context);
   return { disposition: "turn_started" };
 }
 
@@ -326,6 +390,7 @@ export interface SendPromptToAgentParams {
   /** Queue delivery waits while a provider permission request is pending. */
   blockPendingPermissions?: boolean;
   awaitRunStart?: boolean;
+  signal?: AbortSignal;
   logger: Logger;
 }
 
@@ -442,6 +507,7 @@ export async function sendPromptToAgent(
       ? { ...runOptions, requireNoPendingPermissions: true }
       : runOptions,
     awaitRunStart: params.awaitRunStart,
+    signal: params.signal,
   });
 }
 
@@ -457,19 +523,10 @@ export async function startCreatedAgentInitialPrompt(
     return currentSnapshot;
   }
 
-  const dispatchResult = await startAgentRun(
-    params.agentManager,
-    params.agentId,
-    params.prompt,
-    params.logger,
-    {
-      runOptions: params.runOptions,
-    },
-  );
-
-  if (dispatchResult.disposition === "turn_started") {
-    await waitForAgentRunStartWithTimeout(params.agentManager, params.agentId);
-  }
+  await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
+    runOptions: params.runOptions,
+    awaitRunStart: true,
+  });
 
   const refreshedSnapshot = params.agentManager.getAgent(params.agentId) ?? params.snapshot ?? null;
   if (!refreshedSnapshot) {

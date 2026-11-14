@@ -274,6 +274,18 @@ export function buildReviewAttachmentSnapshot(
   return snapshot;
 }
 
+export function sameReviewAttachmentSnapshot(
+  left: ReviewComposerAttachment,
+  right: ReviewComposerAttachment,
+): boolean {
+  if (left === right) return true;
+  if (left.reviewDraftKey !== right.reviewDraftKey) return false;
+  const leftComments = submittedReviewComments.get(left);
+  const rightComments = submittedReviewComments.get(right);
+  if (!leftComments || !rightComments || leftComments.length !== rightComments.length) return false;
+  return leftComments.every((comment, index) => comment === rightComments[index]);
+}
+
 export function clearSubmittedReviewAttachment(attachment: ReviewComposerAttachment): void {
   const comments = submittedReviewComments.get(attachment);
   if (!comments) return;

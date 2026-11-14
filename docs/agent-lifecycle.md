@@ -52,11 +52,14 @@ Accepting new work after an ambiguous interruption would create a split-brain se
 
 ### Run-start failures
 
-Run-start observers retain the provider's original error, including definitive non-submission
-metadata. Keep that result after the active reservation settles, until another run is reserved or
-the agent is closed. Bind an existing observer to its captured reservation: a later run cannot
-answer whether the earlier prompt was accepted. The receipt owner uses this distinction to allow
-retry after a proven pre-submission refusal while retaining generic or ambiguous outcomes.
+Receipt-backed sends wait for the first accepted event from their reserved iterator. Keep the
+provider's original error at that boundary so a proven pre-submission refusal remains retryable.
+An agent-ID observer cannot attribute a settled failure to a particular request; never use its
+latest error as proof for a receipt.
+
+A stale session may be reopened once before acceptance. The replacement iterator resolves the same
+owned acceptance promise. Once the run is accepted, or waiting times out or is canceled, no automatic
+replay is allowed. Timeout, cancellation and generic provider failure remain unknown outcomes.
 
 ## Relationships
 

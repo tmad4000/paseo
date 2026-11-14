@@ -15,6 +15,7 @@ import {
 } from "@/attachments/workspace-attachment-utils";
 import {
   getAttachmentKey,
+  hasWorkspaceAttachmentSnapshot,
   clearSubmittedWorkspaceAttachments,
   activeWorkspaceAttachments as selectActiveWorkspaceAttachments,
   removeWorkspaceAttachmentsMatching,
@@ -123,7 +124,9 @@ function useWorkspaceAttachmentBinding({
 
   useEffect(() => {
     setSuppressedAttachments((current) => {
-      const next = current.filter((attachment) => workspaceAttachments.includes(attachment));
+      const next = current.filter((attachment) =>
+        hasWorkspaceAttachmentSnapshot(workspaceAttachments, attachment),
+      );
       return next.length === current.length ? current : next;
     });
   }, [workspaceAttachments]);
@@ -138,7 +141,7 @@ function useWorkspaceAttachmentBinding({
 
   const suppressWorkspaceAttachment = useCallback((attachment: WorkspaceComposerAttachment) => {
     setSuppressedAttachments((current) =>
-      current.includes(attachment) ? current : [...current, attachment],
+      hasWorkspaceAttachmentSnapshot(current, attachment) ? current : [...current, attachment],
     );
   }, []);
 
@@ -184,8 +187,11 @@ function useWorkspaceAttachmentBinding({
     const submitted = attachments.filter(isWorkspaceAttachment);
     if (submitted.length === 0) return;
     setSuppressedAttachments((current) => {
-      const next = new Set([...current, ...submitted]);
-      return next.size === current.length ? current : Array.from(next);
+      const next = [...current];
+      for (const attachment of submitted) {
+        if (!hasWorkspaceAttachmentSnapshot(next, attachment)) next.push(attachment);
+      }
+      return next.length === current.length ? current : next;
     });
   }, []);
 

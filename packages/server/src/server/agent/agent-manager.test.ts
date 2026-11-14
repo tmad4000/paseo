@@ -13003,7 +13003,7 @@ async function runStartFailureFixture() {
   return { manager, session, agentId: agent.id, workdir };
 }
 
-test("run-start observers retain the original failure before and after registry settlement", async () => {
+test("run-start observers retain their failure while late observers receive no submission proof", async () => {
   const { manager, session, agentId, workdir } = await runStartFailureFixture();
   const error = Object.assign(new Error("provider refused preparation"), {
     code: "AGENT_PROMPT_NOT_SUBMITTED",
@@ -13020,7 +13020,11 @@ test("run-start observers retain the original failure before and after registry 
     await failedDrain;
     await observed;
     expect(manager.hasInFlightRun(agentId)).toBe(false);
-    await expect(manager.waitForAgentRunStart(agentId)).rejects.toBe(error);
+    const lateFailure = await manager
+      .waitForAgentRunStart(agentId)
+      .catch((cause: unknown) => cause);
+    expect(lateFailure).toBeInstanceOf(Error);
+    expect(isPromptNotSubmittedError(lateFailure)).toBe(false);
     session.startError = null;
     await startAgentRun(manager, agentId, "retry", logger, { awaitRunStart: true });
     await expect(manager.waitForAgentRunStart(agentId)).resolves.toBeUndefined();
@@ -13048,8 +13052,8 @@ test.each(["definite", "generic"] as const)(
         await startAgentRun(manager, agentId, "retry with image", logger, {
           activeTurnBehavior: "interrupt",
           runOptions: { clientMessageId: "stable-rejected-request" },
+          awaitRunStart: true,
         });
-        await manager.waitForAgentRunStart(agentId);
       },
     };
     try {
@@ -13086,16 +13090,74 @@ test("failed run-start generations cannot replace a later reservation", async ()
   first.start = { status: "failed", error };
   runs.settleForegroundRun("agent", first.token);
   expect(runs.getPendingRun("agent")).toBeNull();
-  expect(runs.getFailedStart("agent")).toEqual({ token: first.token, error });
+  expect(first.start).toEqual({ status: "failed", error });
   const second = runs.createPendingRun("agent");
-  expect(runs.getFailedStart("agent")).toBeNull();
   runs.settleForegroundRun("agent", first.token);
   expect(runs.getPendingRun("agent")).toBe(second);
   expect(first.start).toEqual({ status: "failed", error });
   const laterError = new Error("later ambiguous start");
   second.start = { status: "failed", error: laterError };
   runs.settleForegroundRun("agent", second.token);
-  expect(runs.getFailedStart("agent")).toEqual({ token: second.token, error: laterError });
+  expect(second.start).toEqual({ status: "failed", error: laterError });
   runs.clearAgentRun("agent");
-  expect(runs.getFailedStart("agent")).toBeNull();
+});
+
+test("owned receipt acceptance cannot take a competing run's definitive rejection", async () => {
+  const { manager, session, agentId, workdir } = await runStartFailureFixture();
+  const ambiguous = new Error("A provider outcome is unknown");
+  const definite = Object.assign(new Error("B never submitted"), {
+    code: "AGENT_PROMPT_NOT_SUBMITTED",
+  });
+  const gateA = deferred<void>();
+  const failedA = deferred<void>();
+  const observedB = deferred<void>();
+  const receiptsDirectory = join(workdir, "owned-receipts");
+  const receipts = new MessageReceipts(receiptsDirectory);
+  session.startGate = gateA.promise;
+  session.startError = ambiguous;
+  const requestA = {
+    agentId,
+    messageId: "A",
+    request: { text: "A" },
+    send: async () => {
+      try {
+        await startAgentRun(manager, agentId, "A", logger, { awaitRunStart: true });
+      } catch (error) {
+        failedA.resolve();
+        await observedB.promise;
+        throw error;
+      }
+    },
+  };
+  try {
+    const outcomeA = receipts.send(requestA).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(session.attempts).toBe(1));
+    gateA.resolve();
+    await failedA.promise;
+    session.startError = definite;
+    const requestB = {
+      agentId,
+      messageId: "B",
+      request: { text: "B" },
+      send: async () => {
+        await startAgentRun(manager, agentId, "B", logger, { awaitRunStart: true });
+      },
+    };
+    await expect(receipts.send(requestB)).rejects.toBe(definite);
+    observedB.resolve();
+    expect(await outcomeA).toMatchObject({
+      message: "agent_request_outcome_unknown: A provider outcome is unknown",
+      cause: ambiguous,
+    });
+    const reopened = new MessageReceipts(receiptsDirectory);
+    expect(await reopened.get(agentId, "A")).toBe("pending");
+    expect(await reopened.get(agentId, "B")).toBe("absent");
+    await expect(reopened.send(requestA)).rejects.toThrow("agent_request_outcome_unknown");
+    expect(session.attempts).toBe(2);
+  } finally {
+    gateA.resolve();
+    observedB.resolve();
+    await manager.closeAgent(agentId).catch(() => {});
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });

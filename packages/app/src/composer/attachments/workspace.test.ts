@@ -16,6 +16,7 @@ import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import { dispatchComposerAgentMessage, queueComposerMessageOnServer } from "@/composer/actions";
 import {
   activeWorkspaceAttachments,
+  hasWorkspaceAttachmentSnapshot,
   clearSubmittedWorkspaceAttachments,
   removeSentContextAttachments,
 } from "./workspace-cleanup";
@@ -297,4 +298,45 @@ describe("submitted review cleanup", () => {
     expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope[scopeKey]).toEqual([updated]);
     expect(activeWorkspaceAttachments([updated], [sent])).toEqual([updated]);
   });
+});
+
+it("keeps a removed review suppressed when unrelated diff updates reconstruct its attachment", () => {
+  resetReviewDraftStore();
+  addReviewComment("first", "comment 1");
+  const removed = currentReviewSnapshot();
+  if (!removed) throw new Error("Missing removed review");
+  const reconstructed = buildReviewAttachmentSnapshot({
+    reviewDraftKey: reviewKey,
+    cwd: "/repo",
+    mode: "uncommitted",
+    comments: useReviewDraftStore.getState().drafts[reviewKey],
+    diffFiles: [reviewDiff, { ...reviewDiff, path: "unrelated.ts" }],
+  });
+  if (!reconstructed) throw new Error("Missing reconstructed review");
+  expect(reconstructed).not.toBe(removed);
+  expect(hasWorkspaceAttachmentSnapshot([reconstructed], removed)).toBe(true);
+  expect(activeWorkspaceAttachments([reconstructed], [removed])).toEqual([]);
+  const original = useReviewDraftStore.getState().drafts[reviewKey][0];
+  const store = useReviewDraftStore.getState();
+  store.updateComment({
+    key: reviewKey,
+    id: original.id,
+    updates: { body: "edited" },
+    updatedAt: original.updatedAt,
+  });
+  store.updateComment({
+    key: reviewKey,
+    id: original.id,
+    updates: { body: original.body },
+    updatedAt: original.updatedAt,
+  });
+  const edited = currentReviewSnapshot();
+  if (!edited) throw new Error("Missing edited review");
+  expect(hasWorkspaceAttachmentSnapshot([edited], removed)).toBe(false);
+  expect(activeWorkspaceAttachments([edited], [removed])).toEqual([edited]);
+  clearSubmittedWorkspaceAttachments([removed]);
+  expect(useReviewDraftStore.getState().drafts[reviewKey]).toHaveLength(1);
+  store.clearReview({ key: reviewKey });
+  clearSubmittedWorkspaceAttachments([removed]);
+  expect(currentReviewSnapshot()).toBeNull();
 });

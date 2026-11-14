@@ -304,7 +304,6 @@ describe("stopRealtimeVoice", () => {
 });
 
 it("awaits the widget queue callback without clearing newer input", async () => {
-  const { queueInputMessage } = await import("./state");
   let resolve!: () => void;
   let current = "submitted";
   let revision = 0;
@@ -461,7 +460,7 @@ it("keeps edits that re-enter an auto-queued transcript before acceptance", asyn
     value: field.getText(),
     defaultSendBehavior: "queue",
     isAgentRunning: true,
-    onQueue: () => write.promise.then(() => {}),
+    onQueue: () => write.promise.then(() => undefined),
     onSubmit: () => {},
     replaceText: field.edit,
     getDraftRevision: field.getDraftRevision,

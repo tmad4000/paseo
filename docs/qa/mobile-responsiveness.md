@@ -63,9 +63,12 @@ Independent review caught gaps in the first implementation:
 - Review cleanup removes only unchanged comments included in the submitted snapshot. Newer
   same-key review/context snapshots remain visible during preparation and survive settlement;
   discarded comments are not reconstructed.
-- Run-start waiting preserves the original provider error through active-registry settlement and
-  keeps observers bound to their captured run. A proven pre-submission refusal releases its receipt;
-  generic failures and ambiguous steering retain it.
+- Direct RPC receipts wait on their reserved iterator's acceptance, preserving its original error.
+  A later run cannot supply another request's refusal proof. Stale-session retry resolves the same
+  acceptance promise and never replays after acceptance, timeout or cancellation. Generic failures
+  and ambiguous steering retain their receipts.
+- Review suppression compares the captured comment versions across diff-context rebuilds. Removed
+  unchanged reviews stay hidden while actual new or edited comments become visible.
 - Delivery hydration and flushing use dependencies available when the composer loads, keeping
   lazy code-bundle fetches off the first-send path.
 
@@ -85,6 +88,13 @@ This review also adds snapshot cleanup cases in `composer/attachments/workspace.
 `review/store.test.ts`, plus manager/receipt cases in server `agent/agent-manager.test.ts`.
 These repairs await GCP validation. Rebuild the server before rerunning the daemon-backed browser
 flows; preserve the legacy refusal/retry/image assertions.
+
+At `782a8ef3a8ad11a6516b54c03ba8cda813fbe8c8`, global formatting passed and GCP reported two
+mechanical lint errors in `composer/input/state.test.ts`; this round applies their supplied patch.
+The server build, workspace typecheck, expanded unit suites and browser batch were still running
+when this review began. This round adds owned-acceptance coverage in server `agent/agent-prompt.test.ts`
+and `session.test.ts`, alongside the real-manager receipt race and review reconstruction regressions.
+Those new changes still require GCP validation and a server rebuild before E2E.
 
 Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
 legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and
