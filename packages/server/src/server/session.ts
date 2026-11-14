@@ -9270,11 +9270,7 @@ export class Session {
     // The CLI inside an agent's shell names that agent. A caller this daemon has no record of is
     // refused before anything reaches the target. A stored record is enough: a process can
     // outlive its agent's runtime, and attribution needs only the id.
-    if (
-      msg.callerAgentId &&
-      !this.agentManager.getAgent(msg.callerAgentId) &&
-      !(await this.agentStorage.get(msg.callerAgentId))
-    ) {
+    if (msg.callerAgentId && !(await this.isKnownCallerAgent(msg.callerAgentId))) {
       this.emit({
         type: "send_agent_message_response",
         payload: {
@@ -9391,6 +9387,14 @@ export class Session {
         },
       });
     }
+  }
+
+  /** Whether a message may be attributed to this agent: any agent a client can see. */
+  private async isKnownCallerAgent(agentId: string): Promise<boolean> {
+    const live = this.agentManager.getAgent(agentId);
+    if (live) return !live.internal;
+    const record = await this.agentStorage.get(agentId);
+    return Boolean(record && !record.internal);
   }
 
   private async hasLiveOrQueuedAgent(agentId: string): Promise<boolean> {

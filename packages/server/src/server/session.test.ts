@@ -150,10 +150,12 @@ describe("send_agent_message_request sender", () => {
   interface SenderHarnessOptions {
     liveAgentIds: string[];
     storedAgentIds?: string[];
+    /** Stored agents a client cannot see, such as the daemon's own helper agents. */
+    internalAgentIds?: string[];
   }
 
   async function createSenderHarness(options: SenderHarnessOptions): Promise<SenderHarness> {
-    const { liveAgentIds, storedAgentIds = [] } = options;
+    const { liveAgentIds, storedAgentIds = [], internalAgentIds = [] } = options;
     const dir = mkdtempSync(join(tmpdir(), "session-send-sender-"));
     const messages: SessionOutboundMessage[] = [];
     const delivered: SenderHarness["delivered"] = [];
@@ -191,7 +193,10 @@ describe("send_agent_message_request sender", () => {
       agentQueueService: queueService,
       agentManager,
       agentStorage: {
-        get: vi.fn(async (id: string) => (storedAgentIds.includes(id) ? { id } : undefined)),
+        get: vi.fn(async (id: string) => {
+          if (internalAgentIds.includes(id)) return { id, internal: true };
+          return storedAgentIds.includes(id) ? { id } : undefined;
+        }),
       },
     });
     return {
@@ -315,6 +320,39 @@ describe("send_agent_message_request sender", () => {
       expect(harness.delivered).toEqual([
         { messageId: "late-report", sender: `agent:${CALLER_ID}` },
       ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a send naming an internal agent as the caller is refused", async () => {
+    const harness = await createSenderHarness({
+      liveAgentIds: [TARGET_ID],
+      internalAgentIds: [CALLER_ID],
+    });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "internal-caller",
+        agentId: TARGET_ID,
+        text: "Report",
+        messageId: "internal-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "internal-caller",
+            agentId: TARGET_ID,
+            accepted: false,
+            error: `Caller agent ${CALLER_ID} not found`,
+          },
+        },
+      ]);
+      expect(harness.delivered).toEqual([]);
     } finally {
       await harness.close().catch(() => undefined);
     }
