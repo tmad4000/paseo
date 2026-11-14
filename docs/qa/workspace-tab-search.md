@@ -144,6 +144,28 @@ Focused receipts retained at the cloud job root:
 - `compact-focus-red.log`, `overlay-scroll-red.log` and `evidence/backdrop-*` retain the original focus
   and geometry failures outside the source tree. Temporary diagnostic code is removed from tests.
 
+### Compact Escape follow-up after exact-head CI
+
+Run `43571303183` at `69b62c583` passed static checks, app tests, both desktop jobs and three browser
+shards. Shard four failed only the compact title-search Escape return, twice. The same case reproduced
+on the cloud job with its original focus assertion. Capture was correct: the trigger received focus,
+then React's `flushMutationEffects` preserved the still-mounted Search input during the close commit;
+its later removal left focus on `BODY`. The original red trace, focus/stack JSON and screenshots remain
+outside source as `compact-escape-red*` logs and `evidence/compact-escape-red*`.
+
+Restoration now runs after the commit, once per removal request, using the original connected target.
+It skips a reopened scope and respects the current top overlay's ownership. `preventScroll`, native
+hierarchy and ordinary Tab scrolling stay intact. The retained-host DOM regression failed before the
+fix; all six DOM tests then passed, including newer-overlay and reopen guards. The original compact
+integration case passed unchanged. Existing unit assertions now await the commit boundary and also
+require exactly one return to the opener. Temporary tracing is absent from committed source.
+
+Final verification: full picker/Rename/Move specs **8/8**, settings dropdown/modal Escape **1/1**,
+overlay/Combobox unit tests **2 files / 8 tests**, and Chromium DOM **6/6** passed. Repository formatting,
+full lint (zero warnings/errors) and all-workspace typecheck passed. Retained receipts are
+`compact-escape-regressions.log`, `compact-escape-settings.log`, `compact-escape-unit.log`,
+`compact-escape-dom-green.log` and `compact-escape-final-checks.result` (exit zero).
+
 ## Platform and acceptance boundaries
 
 | Surface                                                    | Evidence / remaining boundary                                                        |
