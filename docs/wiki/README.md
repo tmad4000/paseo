@@ -9,9 +9,10 @@ How it relates to the rest of `docs/`:
 
 ## Pages
 
-| Page                                 | Topic                                                                               | Status                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [split-layouts.md](split-layouts.md) | iTerm2-style "split this tab" compared with the current cmux-style workspace splits | Coexist recommended; Phase 1 in progress (2026-11-14) |
+| Page                                   | Topic                                                                                    | Status                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [split-layouts.md](split-layouts.md)   | iTerm2-style "split this tab" compared with the current cmux-style workspace splits      | Coexist recommended; Phase 1 in progress (2026-11-14) |
+| [inline-threads.md](inline-threads.md) | Slack-style collapsible threads in orchestrator chats, message statuses, emoji reactions | Design recommended; nothing built (2026-11-14)        |
 
 The [log](log.md) lists every recorded discussion and query, newest first.
 

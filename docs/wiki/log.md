@@ -2,6 +2,12 @@
 
 Newest first. Each entry records the ask, its source, and the outcome, and links to its topic page.
 
+## 2026-11-14: Slack-style inline threads for orchestrator chats, message statuses, reactions
+
+- **Ask:** Jacob asked for the collapsible thread mode he remembered planning for orchestrator sessions, so worker replies stay mostly inline; on by default with a way to turn it off; a status on every message he sends and probably on those received; and Slack-style emoji reactions.
+- **Work:** Fable recovered the earlier plans (beads `pspin-plx` and `pspin-plx.1`, PRs #79, #84, #94, #153, #164), inventoried the code, and wrote the design ([spec](inline-threads-design-2026-11-14.md), [prototype](inline-threads/prototype.html)). Nothing was implemented.
+- **Outcome:** A recommendation, not a decision. One thread-row primitive, kept in time order, built on the `sender` the daemon already records; statuses extend the existing delivery marks; reactions are annotations that agents never see. Two prerequisites were found: the app drops `sender`, and `paseo send` run by an agent is recorded as `human`. See [inline-threads.md](inline-threads.md#recommendation-2026-11-14).
+
 ## 2026-11-14: Should Paseo offer an iTerm2-style layout, splitting the current tab?
 
 - **Ask:** Jacob asked whether the fork should offer a layout more like iTerm2 than cmux, where you split the current tab instead of a dragged pane becoming a separate tab or workspace pane. Should it coexist with the current mode, replace it, or be a setting with defaults? He remembered asking for an investigation before.
