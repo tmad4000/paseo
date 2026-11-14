@@ -300,15 +300,21 @@ bulk writes report how many sessions failed and reload the saved state for retry
 
 The track is a pill at the foot of an agent's pane (`packages/app/src/subagents/track.tsx`): a count you can read at a glance, and a panel behind it — a popover on wide screens, a sheet on compact ones — holding the rows. It floats over the transcript rather than sitting in a band above the composer, so the timeline scrolls underneath it; `packages/app/src/panels/agent-tracks.tsx` owns that placement, and the pill frame is shared with the task list in `packages/app/src/composer/tracks.tsx`.
 
-The rows combine two kinds of children:
+The panel lists two kinds of children under their own headings, **Spawned agents** then
+**Provider subagents**, each in creation order and never interleaved
+(`orderSubagentRows`, `packages/app/src/subagents/select.ts`). A chat with three workers and
+twenty Explore tasks reads as 3 + 20, not as 23 of one thing. The pill keeps one count.
 
-- **Paseo subagents** are full managed agents. Their membership rule (`packages/app/src/subagents/select.ts`) is:
+- **Spawned agents** are full managed agents a chat started through Paseo (MCP `create_agent`, or
+  `paseo run` from the agent's shell, which sends `PASEO_AGENT_ID` as the caller). OMP-style child
+  sessions a provider created and the daemon imported with a parent label count here too, since
+  they take replies. Their membership rule (`packages/app/src/subagents/select.ts`) is:
 
 ```
 parentAgentId === thisAgent.id  AND  !archivedAt
 ```
 
-- **Provider subagents** are child executions owned by Claude, Codex, or OpenCode. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and merges only the presentation rows into the track. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
+- **Provider subagents** are child executions owned by Claude, Codex, or OpenCode. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and only the presentation rows meet the spawned ones. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
 
 Clicking either kind opens a workspace tab. A Paseo subagent tab is a normal interactive agent pane. A provider subagent tab is a read-only timeline pane with no composer, archive, detach, rewind, or fork actions. It shows its own direct children in a subagents track. Both panes use `AgentStreamView`, so message, reasoning, tool-call, and layout rendering stay identical.
 
@@ -319,17 +325,46 @@ Provider descriptors may include one compact subtitle. The provider owns its con
 ### The subagents drawer
 
 An orchestrating agent's pane can open all of its subagents in a drawer beside its own chat
-(`packages/app/src/subthreads/`). It is for reading a subagent and replying to it without leaving
-the parent: the parent stays mounted, scrolled and drafted, and the drawer reuses the exact agent
-pane a tab would show. Entry points: the **Subagents** button beside the Chat / Stream controls,
-the **Read and reply beside this chat** row in the subagents track panel, and Mod+Shift+J (see
-below). The track and its tab-opening rows are unchanged.
+(`packages/app/src/subthreads/`). It is the chat's registry of the agents it spawned, and its
+thread view is the **peek**: reading a subagent and replying to it without leaving the parent. The
+parent stays mounted, scrolled and drafted, and the peek reuses the exact agent pane a tab would
+show. Entry points: the **Subagents** button beside the Chat / Stream controls, the **Read and
+reply beside this chat** row in the subagents track panel, Mod+Shift+J (see below), and every
+peek-first link listed below. The track's own rows keep opening tabs; the track is the
+tab-opening surface.
 
-- **Rows** are the subagents track's rows, in the same creation order, with the managed agent's
-  own permission and attention state added: **Needs input** (a pending permission), **Failed**,
-  **Working**, **Unread** (finished or failed since the user last looked), and **Done**. Rows do
-  not reorder by urgency, so a row never moves under the pointer; the header summarizes counts
-  instead. Selecting a managed subagent reports it to the viewed-timeline sync under the drawer's
+- **Groups.** **Spawned agents · N**, then **Provider subagents · N**, each a heading button that
+  folds its group; a folded heading carries its count, needs input, failed and working, zero parts
+  omitted. Spawned agents start open; provider subagents start folded once the chat has spawned
+  agents, open otherwise. An explicit fold wins and is remembered per device and per chat in the
+  `subagent-registry` store (`subthreads/registry-store.ts`), not in a label, so a second device
+  watching the same orchestrator keeps its own folds. The header summary counts spawned agents
+  only: a finished Explore task does not read as something that needs you.
+- **Cards** keep creation order inside each group and never reorder by urgency, so a card never
+  moves under the pointer. Each shows its state dot and word (**Needs input** for a pending
+  permission, **Failed**, **Working**, **Unread** for finished or failed since the user last
+  looked, **Done**), title, provider and model (the provider's own subtitle for a provider
+  subagent), and a compact age that ticks with the shared clock, full local time on hover. Pressing
+  a card peeks it; its chevron, a separate target, expands it in place. Expanded, a spawned
+  agent's card shows its latest report or blocker (six lines, then **Show more** into the peek), a
+  pending permission with **Review** (which peeks; approval is never given from the card), task
+  progress from the agent snapshot, its mode and directory, and **Peek**, **Open in tab** and an
+  overflow with Detach and Archive. A provider subagent's card shows its task in full and its
+  type. Expansion is view state and is not saved. All of it is read from snapshots the client
+  already holds; no card loads a timeline.
+- **Peek-first.** Opening a subagent from the parent's pane peeks it: a Spawned agents row in the
+  Questions and asks pane or above the chat's Stream, a delegation pulse chip on an ask or its
+  Stream card, and the host's `peek` (`SubthreadsHostValue`, for callers such as inline threads'
+  **Open chat**). A target that is not one of this chat's subagents, or lives on another host,
+  keeps its tab or session (`usePeekOrOpenAgent`). Mod+click and middle-click on web open the tab
+  directly. Inside a peeked child there is no host, so its own links open tabs.
+- **Keyboard** (web and desktop). The list is one tab stop with roving focus: Up and Down walk
+  headings and cards across groups, Right and Left expand and fold, Enter peeks a card or toggles a
+  heading, Mod+Enter opens a card in a tab, Escape returns typing to the parent (or closes where
+  the panel covers it). Escape on the peek's header goes back to the list and focus returns to the
+  card it came from; inside the peeked pane Escape keeps its meaning (interrupt). A card that
+  leaves while focused hands focus to the one that took its place.
+- **Selection** of a managed subagent reports it to the viewed-timeline sync under the drawer's
   own owner key, so it hydrates and stays live without being a tab. Focusing it clears its
   attention through the normal path, the same as reading it in a tab.
 - **One composer takes input.** The pane's focus is owned by either the parent or the drawer;
@@ -355,10 +390,11 @@ below). The track and its tab-opening rows are unchanged.
   RPCs, so it works against any host the subagents track works against. Provider rows appear
   only when the host advertises `providerSubagents`.
 
-- **Condensed activity.** Each managed row's second line is the subagent's pending approval
+- **Condensed activity.** Each managed card's third line is the subagent's pending approval
   (in foreground text) or, failing that, its latest turn outcome, both from its Stream entries
-  and reduced to one markdown-free line. Hosts without the companion Stream show the plain
-  subtitle.
+  and reduced to one markdown-free line. Hosts without the companion Stream omit the line and the
+  expanded report; tasks and actions still show. Hosts without `providerSubagents` show the
+  Spawned agents group alone.
 
 #### The session side panel: subagents or a checklist
 

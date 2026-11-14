@@ -112,6 +112,7 @@ describe("countFinishedSubagents", () => {
         status: "running",
         requiresAttention: false,
         createdAt: new Date("2026-04-20T00:00:00.000Z"),
+        updatedAt: new Date("2026-04-20T00:00:00.000Z"),
       },
       {
         kind: "provider",
@@ -124,6 +125,7 @@ describe("countFinishedSubagents", () => {
         status: "failed",
         requiresAttention: true,
         createdAt: new Date("2026-04-20T00:00:01.000Z"),
+        updatedAt: new Date("2026-04-20T00:00:00.000Z"),
       },
     ];
 
@@ -219,6 +221,7 @@ describe("buildSubagentRowPresentationData for provider rows", () => {
       status: overrides.status ?? "running",
       requiresAttention: false,
       createdAt: overrides.createdAt ?? new Date("2026-07-26T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-20T00:00:00.000Z"),
     };
   }
 
@@ -273,6 +276,7 @@ describe("provider-owned row subtitles", () => {
       status: "running",
       requiresAttention: false,
       createdAt: new Date("2026-07-26T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-20T00:00:00.000Z"),
       ...overrides,
     };
   }

@@ -6,8 +6,8 @@ import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-
 /**
  * A delegating chat watches its children live: the open-asks pane and the Stream card show each
  * child's state from the host's agent pushes, an idle child reads as an open loop, and both ends
- * link to each other. A child it started without recording an ask still shows, under Delegated
- * chats, from the host's parent label.
+ * link to each other. A child it started without recording an ask still shows, under Spawned
+ * agents, from the host's parent label.
  */
 test("Delegated asks pulse live in the delegating chat and link both ways", async ({
   page,
@@ -85,13 +85,16 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
       /^Idle.* · ask still open$/,
     );
     await expect(toggle).toHaveAccessibleName(/2 open asks · 1 needs attention/);
-    // The untracked child is listed live with a link; at rest it asks nothing of the delegator.
-    const scoutRow = pane.getByTestId(`delegated-chat-${scout.id}`);
-    await expect(pane.getByText("Delegated chats · 1")).toBeVisible();
+    // The spawned child is listed under Spawned agents, folded to one line; at rest it asks
+    // nothing of the delegator.
+    const spawnedToggle = pane.getByTestId("spawned-agents-toggle");
+    await expect(spawnedToggle).toContainText("Spawned agents · 1");
+    await expect(spawnedToggle).toHaveAttribute("aria-expanded", "false");
+    await spawnedToggle.click();
+    const scoutRow = pane.getByTestId(`spawned-agents-row-${scout.id}`);
     await expect(scoutRow).toContainText("Scout worker");
-    await expect(scoutRow.getByTestId("delegated-chat-open-status")).toHaveText(/^Idle/);
-    await expect(scoutRow.getByTestId("delegated-chat-open-status")).not.toContainText(
-      "ask still open",
+    await expect(pane.getByTestId(`spawned-agents-row-state-${scout.id}`)).toHaveText(
+      /^(Unread|Done)$/,
     );
     await page.screenshot({ path: testInfo.outputPath("pulse-running.png") });
 
@@ -113,9 +116,9 @@ test("Delegated asks pulse live in the delegating chat and link both ways", asyn
       .filter({ hasText: "Docs worker" });
     await expect(card).toBeVisible();
     await expect(card).toContainText("ask still open");
-    // The chat's own Stream keeps the untracked child in view too.
+    // The chat's own Stream keeps its spawned child in view too, open.
     await expect(
-      page.getByTestId("local-stream-workflow").getByTestId(`delegated-chat-${scout.id}`),
+      page.getByTestId("local-stream-workflow").getByTestId(`spawned-agents-row-${scout.id}`),
     ).toContainText("Scout worker");
     await page.screenshot({ path: testInfo.outputPath("pulse-stream-card.png") });
 

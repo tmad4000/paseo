@@ -4,21 +4,33 @@ import type { StreamEntryUpdate } from "@getpaseo/protocol/global-stream";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToastApi } from "@/components/toast-host";
+import { useOptionalPaneContext } from "@/panels/pane-context";
 import { useHostFeature } from "@/runtime/host-features";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import { useSessionStore } from "@/stores/session-store";
 import type { StreamItem, TimelinePosition } from "@/types/stream";
 import type { TimelineJump } from "@/agent-stream/use-timeline-anchor-jump";
+import { useSubthreadsHost } from "@/subthreads/context";
+import { usePeekOrOpenAgent } from "@/subthreads/use-peek-or-open";
+import type { SubthreadRow } from "@/subthreads/model";
+import { registryPaneKey, useSubagentRegistryStore } from "@/subthreads/registry-store";
+import { useSpawnedAgentRows } from "@/subthreads/use-subthread-rows";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { trackedQuestionEntryId } from "./answers-model";
 import { splitEntryText } from "./entry-labels";
-import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
-import { delegationTarget, delegationTargetKey, type DelegationTarget } from "./delegation-pulse";
 import {
-  useDelegatedChildren,
-  useDelegatedHere,
-  useDelegationPulses,
-} from "./use-delegation-pulse";
+  TrackedAnswersPane,
+  type AskDelegation,
+  type SpawnedAgentsPaneSection,
+  type TrackedAnswerActions,
+} from "./answers-pane";
+import {
+  delegationTarget,
+  delegationTargetKey,
+  trackedChildIds,
+  type DelegationTarget,
+} from "./delegation-pulse";
+import { useDelegatedHere, useDelegationPulses } from "./use-delegation-pulse";
 import {
   chatMessageEvents,
   computeChatSessions,
@@ -162,6 +174,69 @@ function useChatSessions(serverId: string, agentId: string): ChatSessions {
   return sessionsSignature(stable) === sessionsSignature(computed) ? stable : computed;
 }
 
+/**
+ * A spawned agent that needs the delegator lights the minimized pill, unless an ask already
+ * tracks it: that ask's pulse is counted instead, so nothing needs you twice.
+ */
+function attentionReason(row: SubthreadRow): "needs_input" | "failed" | null {
+  if (row.needsInput) return "needs_input";
+  return row.bucket === "failed" ? "failed" : null;
+}
+
+export function spawnedAttentionKeys(
+  rows: readonly SubthreadRow[],
+  tracked: ReadonlySet<string>,
+): string[] {
+  return rows.flatMap((row) => {
+    if (tracked.has(row.id)) return [];
+    const reason = attentionReason(row);
+    if (!reason && row.openQuestions === 0) return [];
+    const questions = row.openQuestions > 0 ? `:q${row.openQuestions}` : "";
+    return [`chat:${row.id}:${reason ?? "idle"}${questions}`];
+  });
+}
+
+/** The pane's Spawned agents section, folded per pane; a row peeks. */
+function useSpawnedAgentsSection(input: {
+  serverId: string;
+  agentId: string;
+  entries: readonly CompanionEntry[];
+  enabled: boolean;
+}): SpawnedAgentsPaneSection | null {
+  const { serverId, agentId, entries, enabled } = input;
+  const rows = useSpawnedAgentRows(serverId, agentId, enabled);
+  const pane = useOptionalPaneContext();
+  const host = useSubthreadsHost();
+  const paneKey = registryPaneKey(
+    serverId,
+    pane?.layoutWorkspaceId ?? pane?.workspaceId ?? null,
+    pane?.tabId ?? null,
+    agentId,
+  );
+  // Starts folded: an agent an ask tracks keeps its pulse on the ask, and the roster costs a line.
+  const collapsed = useSubagentRegistryStore((state) => state.asksSections[paneKey]) ?? true;
+  const setCollapsed = useSubagentRegistryStore((state) => state.setAsksSectionCollapsed);
+  const peekOrOpen = usePeekOrOpenAgent(serverId);
+  const tracked = useMemo(
+    () => trackedChildIds(entries, serverId, agentId),
+    [agentId, entries, serverId],
+  );
+  const attentionKeys = useMemo(() => spawnedAttentionKeys(rows, tracked), [rows, tracked]);
+  const openRegistry = host?.open;
+  return useMemo(() => {
+    if (rows.length === 0) return null;
+    return {
+      rows,
+      collapsed,
+      onToggle: () => setCollapsed(paneKey, !collapsed),
+      onPeek: (row) => peekOrOpen({ serverId, agentId: row.id }),
+      onOpenTab: (row) => peekOrOpen({ serverId, agentId: row.id }, { tab: true }),
+      onOpenRegistry: openRegistry ? () => openRegistry(null) : undefined,
+      attentionKeys,
+    };
+  }, [attentionKeys, collapsed, openRegistry, paneKey, peekOrOpen, rows, serverId, setCollapsed]);
+}
+
 /** The answers pane for one chat, fed by the agent's live Stream snapshot. */
 export function ChatTrackedAnswers({
   serverId,
@@ -198,7 +273,13 @@ export function ChatTrackedAnswers({
     [agentId, pulses, serverId],
   );
   const delegatedHere = useDelegatedHere(serverId, agentId, showOpenAsks);
-  const delegatedChildren = useDelegatedChildren(serverId, agentId, showOpenAsks);
+  const spawned = useSpawnedAgentsSection({
+    serverId,
+    agentId,
+    entries: paneEntries,
+    enabled: showOpenAsks,
+  });
+  const peekOrOpen = usePeekOrOpenAgent(serverId);
   const sessions = useChatSessions(serverId, agentId);
   // The jump callbacks change with every streamed row; reading them through a ref keeps the
   // pane's actions stable, so its memoized rows do not re-render while the agent streams.
@@ -215,8 +296,7 @@ export function ChatTrackedAnswers({
       jumpToTarget: (target) => jumpRef.current.jumpToTarget(target),
       hasMessage: (messageId) => jumpRef.current.hasMessage(messageId),
       openChat: (target) => navigateToAgent({ serverId, agentId: target }),
-      openSession: (target) =>
-        navigateToAgent({ serverId: target.serverId, agentId: target.agentId }),
+      openSession: (target, options) => peekOrOpen(target, options),
       openOwnerAsk: (item) => {
         openStreamEntry(serverId, item.ownerAgentId, {
           entryId: item.entryId,
@@ -233,7 +313,7 @@ export function ChatTrackedAnswers({
           query: splitEntryText(entry.text).headline || entry.text,
         }),
     };
-  }, [agentId, client, openStreamEntry, serverId]);
+  }, [agentId, client, openStreamEntry, peekOrOpen, serverId]);
   if (!supported || readOnly) return null;
   return (
     <TrackedAnswersPane
@@ -244,7 +324,7 @@ export function ChatTrackedAnswers({
       agentTitle={agentTitle}
       delegation={delegation}
       delegatedHere={delegatedHere}
-      delegatedChildren={delegatedChildren}
+      spawned={spawned}
       sessions={sessions}
     />
   );

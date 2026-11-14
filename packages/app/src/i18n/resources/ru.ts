@@ -729,6 +729,11 @@ export const ru: TranslationResources = {
         nextAction: "Далее: {{action}}",
         openOwnerLabel: "Открыть {{name}}",
         openAskHint: "Переходит к сообщению с задачей или открывает её карточку в Stream",
+        spawned: {
+          section: "Запущенные агенты · {{count}}",
+          hint: "Агенты, запущенные этим чатом. Выберите агента, чтобы читать его и отвечать рядом с этим чатом.",
+          openRegistry: "Открыть панель субагентов",
+        },
         delegation: {
           running: "Выполняется",
           runningFor: "Выполняется · {{time}}",
@@ -751,9 +756,6 @@ export const ru: TranslationResources = {
           questionsForYou_one: "{{count}} вопрос для вас",
           questionsForYou_other: "{{count}} вопросов для вас",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "Делегированные чаты · {{count}}",
-          delegatedChatsHint:
-            "Чаты, запущенные этим чатом, которые ещё не отслеживает ни одна задача. Каждый ведёт в свой чат.",
           showMore: "Показать ещё {{count}}",
           showFewer: "Свернуть",
         },
@@ -2661,6 +2663,26 @@ export const ru: TranslationResources = {
     archiveFinishedRetry: "Повторить ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "Запущенные агенты",
+      provider: "Субагенты провайдера",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "последняя активность {{time}}",
+      showDetails: "Показать сведения: {{label}}",
+      hideDetails: "Скрыть сведения: {{label}}",
+      peek: "Открыть рядом",
+      more: "Другие действия: {{label}}",
+      detach: "Отсоединить",
+      archive: "Архивировать",
+      review: "Проверить",
+      reviewHint: "Показывает агента на запросе разрешения. Одобрите его там.",
+      waitingOn: "Ожидает одобрения: {{title}}",
+      tasks: "Задачи {{done}}/{{total}}",
+      showMore: "Показать ещё",
+      type: "Тип: {{type}}",
+    },
     untitled: "Субагент без названия",
     title: "Субагенты",
     close: "Закрыть панель субагентов",

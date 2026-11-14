@@ -5,6 +5,7 @@ import { Archive, ListTree, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
+import { MenuLabel } from "@/components/ui/menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
@@ -13,7 +14,7 @@ import {
   type WorkspaceTabPresentation,
 } from "@/screens/workspace/workspace-tab-presentation";
 import type { Theme } from "@/styles/theme";
-import type { SubagentRow } from "./select";
+import { partitionSubagentRows, type SubagentRow } from "./select";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
 import {
   buildSubagentPillPresentation,
@@ -79,6 +80,13 @@ export function SubagentsTrack({
   }
 
   const pill = buildSubagentPillPresentation(t, rows);
+  // The two kinds under their own headings, as in the registry, so a fan-out of provider tasks
+  // never reads as more agents this chat spawned. No cards or expansion here.
+  const { spawned, provider } = partitionSubagentRows(rows);
+  const sections = [
+    { kind: "paseo" as const, rows: spawned, name: t("subthreads.groups.spawned") },
+    { kind: "provider" as const, rows: provider, name: t("subthreads.groups.provider") },
+  ].filter((section) => section.rows.length > 0);
   const finishedCount = countFinishedSubagents(rows);
   const showArchiveFinished = finishedCount > 0 || isArchivingFinished || isArchiveFinishedFailed;
 
@@ -101,16 +109,23 @@ export function SubagentsTrack({
           ) : null}
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row) => (
-        <SubagentsTrackRow
-          key={row.id}
-          row={row}
-          serverId={serverId}
-          onOpenSubagent={onOpenSubagent}
-          onOpenProviderSubagent={onOpenProviderSubagent}
-          onArchiveSubagent={onArchiveSubagent}
-          onDetachSubagent={onDetachSubagent}
-        />
+      {sections.map((section) => (
+        <View key={section.kind} testID={`subagents-track-group-${section.kind}`}>
+          <MenuLabel testID={`subagents-track-heading-${section.kind}`}>
+            {t("subthreads.groups.heading", { name: section.name, count: section.rows.length })}
+          </MenuLabel>
+          {section.rows.map((row) => (
+            <SubagentsTrackRow
+              key={row.id}
+              row={row}
+              serverId={serverId}
+              onOpenSubagent={onOpenSubagent}
+              onOpenProviderSubagent={onOpenProviderSubagent}
+              onArchiveSubagent={onArchiveSubagent}
+              onDetachSubagent={onDetachSubagent}
+            />
+          ))}
+        </View>
       ))}
     </ComposerTrackPill>
   );

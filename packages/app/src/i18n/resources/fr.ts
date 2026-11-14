@@ -735,6 +735,11 @@ export const fr: TranslationResources = {
         nextAction: "Suite : {{action}}",
         openOwnerLabel: "Ouvrir {{name}}",
         openAskHint: "Va au message qui l'a demandée, ou ouvre sa carte dans Stream",
+        spawned: {
+          section: "Agents lancés · {{count}}",
+          hint: "Agents lancés par ce chat. Sélectionnez-en un pour le lire et lui répondre à côté de ce chat.",
+          openRegistry: "Ouvrir le panneau des sous-agents",
+        },
         delegation: {
           running: "En cours",
           runningFor: "En cours · {{time}}",
@@ -757,9 +762,6 @@ export const fr: TranslationResources = {
           questionsForYou_one: "{{count}} question pour vous",
           questionsForYou_other: "{{count}} questions pour vous",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "Discussions déléguées · {{count}}",
-          delegatedChatsHint:
-            "Discussions lancées par celle-ci qu'aucune demande ne suit encore. Chacune renvoie à sa discussion.",
           showMore: "Afficher {{count}} de plus",
           showFewer: "Afficher moins",
         },
@@ -2686,6 +2688,26 @@ export const fr: TranslationResources = {
     archiveFinishedRetry: "Réessayer ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "Agents lancés",
+      provider: "Sous-agents du fournisseur",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "dernière activité {{time}}",
+      showDetails: "Afficher les détails de {{label}}",
+      hideDetails: "Masquer les détails de {{label}}",
+      peek: "Aperçu",
+      more: "Plus d'actions pour {{label}}",
+      detach: "Détacher",
+      archive: "Archiver",
+      review: "Examiner",
+      reviewHint: "Affiche l'agent sur sa demande d'autorisation. Approuvez-la là-bas.",
+      waitingOn: "En attente d'approbation : {{title}}",
+      tasks: "Tâches {{done}}/{{total}}",
+      showMore: "Afficher plus",
+      type: "Type : {{type}}",
+    },
     untitled: "Sous-agent sans titre",
     title: "Sous-agents",
     close: "Fermer le panneau des sous-agents",

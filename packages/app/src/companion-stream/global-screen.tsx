@@ -45,9 +45,11 @@ import { useStreamReturnStore, type StreamPlace } from "./stream-return";
 import { useToast } from "@/contexts/toast-context";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { splitLater } from "./needs-you-later";
-import { DelegatedChatsList } from "./delegated-chats";
-import type { DelegationTarget } from "./delegation-pulse";
-import { useDelegatedChildren } from "./use-delegation-pulse";
+import { useSubthreadsHost } from "@/subthreads/context";
+import type { SubthreadRow } from "@/subthreads/model";
+import { useSpawnedAgentRows } from "@/subthreads/use-subthread-rows";
+import { SpawnedAgentsSection } from "./spawned-agents";
+import { usePeekOrOpenAgent } from "@/subthreads/use-peek-or-open";
 
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
   color: theme.colors.foregroundMuted,
@@ -73,17 +75,38 @@ export interface WorkflowLocalContext extends WorkflowScope {
   onReplyInChat: () => void;
 }
 
-function openDelegatedChat(target: DelegationTarget) {
-  navigateToAgent({ serverId: target.serverId, agentId: target.agentId });
-}
-
 /**
- * This chat's delegated work that no ask tracks, above its Activity and Tasks: the delegating
- * chat keeps sight of every child it started, live, with a link over to each one.
+ * Every agent this chat spawned, above its Activity and Tasks: the delegating chat keeps sight of
+ * each child it started, live. Open here, with its hint; a row peeks the child beside the chat.
  */
-function ScopedDelegatedChats({ scope }: { scope: WorkflowScope }) {
-  const items = useDelegatedChildren(scope.serverId, scope.agentId, true);
-  return <DelegatedChatsList items={items} onOpen={openDelegatedChat} first showHint />;
+function ScopedSpawnedAgents({ scope }: { scope: WorkflowScope }) {
+  const rows = useSpawnedAgentRows(scope.serverId, scope.agentId);
+  const [collapsed, setCollapsed] = useState(false);
+  const toggle = useCallback(() => setCollapsed((value) => !value), []);
+  const host = useSubthreadsHost();
+  const peekOrOpen = usePeekOrOpenAgent(scope.serverId);
+  const peek = useCallback(
+    (row: SubthreadRow) => peekOrOpen({ serverId: scope.serverId, agentId: row.id }),
+    [peekOrOpen, scope.serverId],
+  );
+  const openTab = useCallback(
+    (row: SubthreadRow) => peekOrOpen({ serverId: scope.serverId, agentId: row.id }, { tab: true }),
+    [peekOrOpen, scope.serverId],
+  );
+  const openRegistry = host?.open;
+  const handleOpenRegistry = useCallback(() => openRegistry?.(null), [openRegistry]);
+  return (
+    <SpawnedAgentsSection
+      rows={rows}
+      collapsed={collapsed}
+      onToggle={toggle}
+      onPeek={peek}
+      onOpenTab={openTab}
+      onOpenRegistry={openRegistry ? handleOpenRegistry : undefined}
+      first
+      showHint
+    />
+  );
 }
 
 /** Global and local views query the same canonical rows. Scope never owns another task store. */
@@ -324,7 +347,7 @@ export function StreamWorkflowFeed({
           />
         ) : null}
         {scope && local && (view === "activity" || view === "tasks") ? (
-          <ScopedDelegatedChats scope={scope} />
+          <ScopedSpawnedAgents scope={scope} />
         ) : null}
         {scope ? (
           <WorkflowComposer
