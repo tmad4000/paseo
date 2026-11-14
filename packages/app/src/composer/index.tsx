@@ -1,3 +1,5 @@
+import { useComposerPaneHeight } from "./dock/pane-height";
+import { isShortComposerPane } from "./dock/pane-geometry";
 import { useDraftStore, flushDraftPersistStorage } from "@/stores/draft-store";
 import type { ComposerTextSource } from "./text-source";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -2105,6 +2107,8 @@ function ComposerContentImpl({
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
 
   const isCompactFormFactor = useIsCompactFormFactor();
+  const paneHeight = useComposerPaneHeight();
+  const isShortPane = isWeb && !isCompactFormFactor && isShortComposerPane(paneHeight);
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
   const isDesktopWebBreakpoint = resolveIsDesktopWebBreakpoint(isCompactFormFactor);
   const isDesktopLayout = resolveIsDesktopWebBreakpoint(isCompactLayout);
@@ -3443,8 +3447,12 @@ function ComposerContentImpl({
   );
 
   const inputAreaContainerStyle = useMemo(
-    () => [styles.inputAreaContainer, isComposerLocked && styles.inputAreaLocked],
-    [isComposerLocked],
+    () => [
+      styles.inputAreaContainer,
+      isShortPane && styles.inputAreaShortPane,
+      isComposerLocked && styles.inputAreaLocked,
+    ],
+    [isComposerLocked, isShortPane],
   );
 
   const attachmentTray = useMemo(
@@ -3786,6 +3794,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
     overflow: "visible",
     paddingHorizontal: theme.spacing[4],
     paddingBottom: theme.spacing[4],
+  },
+  inputAreaShortPane: {
+    paddingBottom: theme.spacing[2],
   },
   inputAreaLocked: {
     opacity: 0.6,
