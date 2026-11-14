@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { MessageReceipts } from "./index.js";
+import { writeJsonFileAtomic } from "../atomic-file.js";
 import { STEER_REJECTED_MESSAGE, steerRejectedError } from "../agent/prompt-not-submitted.js";
 
 const directories: string[] = [];
@@ -118,7 +119,7 @@ test("known reservation loss clears the pending receipt but provider ambiguity d
       throw busy;
     },
   };
-  await expect(requests.send(input)).rejects.toThrow("busy");
+  await expect(requests.send(input)).rejects.toBe(busy);
   expect(await new MessageReceipts(directory).get("agent", "retryable")).toBe("absent");
   await requests.send({ ...input, send: async () => {} });
   expect(await requests.get("agent", "retryable")).toBe("completed");
@@ -282,24 +283,65 @@ test("a steer refused because the turn changed is also retryable", async () => {
   expect(await requests.get(input.agentId, input.messageId)).toBe("absent");
 });
 
-test("an uncoded error after dispatch stays outcome-unknown until settled", async () => {
+test.each([
+  "Provider submission outcome unknown: the active turn changed during steering",
+  "Provider submission outcome unknown: run start timed out",
+  "Requested mock steer transport failure",
+])("the first ambiguous response is normalized and survives restart: %s", async (detail) => {
   const { requests, directory } = await fixture();
+  const failure = new Error(detail);
+  let deliveries = 0;
   const input = {
     agentId: "agent",
     messageId: "maybe",
     request: {},
     send: async () => {
-      throw new Error("Provider submission outcome unknown: run start timed out");
+      deliveries++;
+      throw failure;
     },
   };
-  await expect(requests.send(input)).rejects.toThrow("timed out");
+  await expect(requests.send(input)).rejects.toMatchObject({
+    message: `agent_request_outcome_unknown: ${detail}`,
+    cause: failure,
+  });
   const reopened = new MessageReceipts(directory);
-  await expect(reopened.send({ ...input, send: async () => {} })).rejects.toThrow(
-    "agent_request_outcome_unknown",
-  );
+  expect(await reopened.get("agent", "maybe")).toBe("pending");
+  await expect(reopened.send(input)).rejects.toThrow("agent_request_outcome_unknown");
+  expect(deliveries).toBe(1);
   expect(await reopened.settleStalePending("agent", "maybe", "absent")).toBe(true);
-  await reopened.send({ ...input, send: async () => {} });
+  await reopened.send({ ...input, send: async () => { deliveries++; } });
+  expect(deliveries).toBe(2);
   expect(await reopened.get("agent", "maybe")).toBe("completed");
+});
+
+test("a completion receipt write failure reports ambiguity without replay after restart", async () => {
+  const { directory } = await fixture();
+  const failure = new Error("completion receipt disk full");
+  const requests = new MessageReceipts(directory, async (file, receipt) => {
+    if (receipt.state === "completed") throw failure;
+    await writeJsonFileAtomic(file, receipt);
+  });
+  let deliveries = 0;
+  const input = { agentId: "agent", messageId: "write-failed", request: { text: "arrived" }, send: async () => { deliveries++; } };
+  await expect(requests.send(input)).rejects.toMatchObject({
+    message: "agent_request_outcome_unknown: completion receipt disk full",
+    cause: failure,
+  });
+  const reopened = new MessageReceipts(directory);
+  expect(await reopened.get(input.agentId, input.messageId)).toBe("pending");
+  await expect(reopened.send(input)).rejects.toThrow("agent_request_outcome_unknown");
+  expect(deliveries).toBe(1);
+});
+
+test("a pending receipt write failure remains a known failure before provider dispatch", async () => {
+  const { directory } = await fixture();
+  const failure = new Error("pending receipt unavailable");
+  const requests = new MessageReceipts(directory, async () => { throw failure; });
+  let deliveries = 0;
+  const input = { agentId: "agent", messageId: "not-dispatched", request: {}, send: async () => { deliveries++; } };
+  await expect(requests.send(input)).rejects.toBe(failure);
+  expect(deliveries).toBe(0);
+  expect(await new MessageReceipts(directory).get(input.agentId, input.messageId)).toBe("absent");
 });
 
 test("only the process that dispatched a pending receipt reports owning it", async () => {

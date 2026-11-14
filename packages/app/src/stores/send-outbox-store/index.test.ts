@@ -736,13 +736,22 @@ describe("durable one-shot delivery ownership", () => {
     expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
   });
 
-  it("retains a one-shot barrier across restart and slow hydration without replaying it", async () => {
+  it.each(["transport", "legacy provider response", "normalized receipt response"])("retains a one-shot barrier across restart and slow hydration without replaying it: %s", async (response) => {
     const state = await oneShotRouteFixture();
-    state.client.sendAgentMessage.mockRejectedValueOnce(new Error("Connection lost after dispatch"));
+    const { AgentMessageRejectedError } = await import("@getpaseo/client/internal/daemon-client");
+    let failure: Error = new Error("Connection lost after dispatch");
+    if (response === "legacy provider response") failure = new AgentMessageRejectedError("Provider submission outcome unknown: the active turn changed during steering");
+    if (response === "normalized receipt response") failure = new AgentMessageRejectedError("agent_request_outcome_unknown: completion receipt disk full");
+    let rejectHost!: (error: Error) => void;
+    const host = new Promise<{ queued: boolean }>((_resolve, reject) => { rejectHost = reject; });
+    state.client.sendAgentMessage.mockImplementationOnce(() => host);
     const sending = state.start();
-    await sending;
+    await vi.waitFor(() => expect(state.client.sendAgentMessage).toHaveBeenCalledOnce());
     const id = state.saved().clientMessageId;
     const queued = await state.queue("after restart");
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    rejectHost(failure);
+    expect(await sending).toEqual({ error: expect.objectContaining({ reason: "uncertain" }) });
     await state.queueSettled();
     vi.resetModules();
     const reading = held<void>();
@@ -765,6 +774,50 @@ describe("durable one-shot delivery ownership", () => {
     await vi.waitFor(() => expect(queue.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
     expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
     expect(state.calls).toEqual(["after restart"]);
+  });
+
+  it("releases a definitive provider refusal and lets queued B proceed", async () => {
+    const state = await oneShotRouteFixture();
+    const { AgentMessageRejectedError } = await import("@getpaseo/client/internal/daemon-client");
+    let refuse!: (error: Error) => void;
+    const host = new Promise<{ queued: boolean }>((_resolve, reject) => { refuse = reject; });
+    state.client.sendAgentMessage.mockImplementationOnce(() => host);
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.client.sendAgentMessage).toHaveBeenCalledOnce());
+    const id = state.saved().clientMessageId;
+    const queued = await state.queue("after definitive refusal");
+    refuse(new AgentMessageRejectedError("The active turn cannot accept a steer. It was not interrupted."));
+    expect(await sending).toEqual({ error: expect.objectContaining({ reason: "uncertain" }) });
+    await state.queueSettled();
+    expect(state.useSendOutboxStore.getState().entries[id]).toBeUndefined();
+    expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined();
+    expect(state.calls).toEqual(["after definitive refusal"]);
+  });
+
+  it("keeps an ordinary direct send's first legacy ambiguous response guarded across restart", async () => {
+    const state = await setupOrderedDelivery();
+    const { AgentMessageRejectedError } = await import("@getpaseo/client/internal/daemon-client");
+    const message = "Provider submission outcome unknown: the active turn changed during steering";
+    state.client.sendAgentMessage.mockRejectedValueOnce(new AgentMessageRejectedError(message));
+    await state.composerOutbox.flush("agent");
+    const queued = await state.queue("ordinary follow-up");
+    await state.queueSettled();
+    expect(state.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe(message);
+    expect(state.isActive()).toBe(true);
+    expect(state.canEditRefusedSend(state.useSendOutboxStore.getState().entries["msg-1"])).toBe(false);
+    vi.resetModules();
+    const queue = await import("@/stores/queue-outbox-store");
+    await queue.flushQueueOutboxForServer({ serverId: "server", client: state.client, applySnapshot: vi.fn() });
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    const direct = await import("./index");
+    expect(direct.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe(message);
+    const { useSessionStore } = await import("@/stores/session-store");
+    useSessionStore.getState().initializeSession("server", state.client as unknown as DaemonClient);
+    const { discardDirectSend } = await import("@/composer/delivery-actions");
+    await discardDirectSend(direct.useSendOutboxStore.getState().entries["msg-1"]);
+    await vi.waitFor(() => expect(queue.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
+    expect(state.calls).toEqual(["ordinary follow-up"]);
   });
 
   it.each([false, true])("waits for durable barrier storage before dispatch (write fails: %s)", async (failWrite) => {

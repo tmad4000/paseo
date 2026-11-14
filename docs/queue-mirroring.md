@@ -326,13 +326,17 @@ with an error. Pending delivery remains visible on the saved bubble.
   refusals positively. Any unrecognized error means "unknown", never "refused", because handing an
   arrived message back to the composer turns the user's resend into a duplicate.
 - `agent_request_outcome_unknown` arrives as a refusal, but the host may have delivered the message.
-  It stays parked with its own explanation and never returns to the composer. Edit is offered only
-  for definitive refusals of plain-text messages, since the outbox does not keep composer attachments.
+  The receipt owner returns this classification on the first ambiguous provider failure and on a
+  failed completion-receipt write, preserving the original error detail. Known-not-submitted failures
+  keep their original classification. Clients also recognize older hosts' `Provider submission
+  outcome unknown` wording. These responses stay parked and never return to the composer. Edit is
+  offered only for definitive refusals of plain-text messages, since the outbox does not keep
+  composer attachments.
 
 The device merges both saved outboxes by creation order at the shared delivery boundary
 (`stores/delivery-outboxes.ts`). Saving Queue B while direct Send A waits for receipt preparation
 keeps B on the device until A settles; admitting B to an idle daemon earlier could deliver it first.
-A transport failure or `agent_request_outcome_unknown` blocks later direct sends and queue admission
+A transport failure or an ambiguous host response blocks later direct sends and queue admission
 for that agent even after a flush returns or the app reloads. A definitive refusal permits later work.
 Retry uses A's identical ID and payload; definitive settlement or explicit Discard wakes the worker.
 Other agents continue independently. Queue removal intents can reach the host while delivery is

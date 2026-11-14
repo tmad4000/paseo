@@ -51,7 +51,9 @@ export function isDefinitiveSendFailure(error: unknown): boolean {
  * message. It must not return to the composer, where a resend gets a new id.
  */
 export function isUncertainSendOutcome(error: string | undefined): boolean {
-  return error?.includes("agent_request_outcome_unknown") === true;
+  const message = error?.toLowerCase();
+  return message?.includes("agent_request_outcome_unknown") === true ||
+    message?.includes("provider submission outcome unknown") === true;
 }
 
 /** Edit moves only plain text; a message with attachments or an uncertain outcome stays put. */

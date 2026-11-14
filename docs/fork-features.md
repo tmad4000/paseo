@@ -37,7 +37,10 @@ draft escrow and expected destination checks must survive the wait. If routed B 
 after unknown A is discarded, ordinary queued C must proceed without another send or reconnect;
 a retained unresolved B must keep C pending. Routed direct sends and Stream replies must retain a
 stable-ID delivery hold across timeout and restart, without replay; explicit review/release resumes
-later work. Broadcast receipts distinguish saved/pending work from confirmed host delivery.
+later work. The first ambiguous provider response and a failed completion-receipt write must retain
+that barrier for ordinary and one-shot sends, including older hosts' provider ambiguity wording;
+known-not-submitted refusals allow later work. Broadcast receipts distinguish saved/pending work
+from confirmed host delivery.
 Restart with a backward device
 clock and delayed hydration of either outbox: new entries must still follow saved ones. User-error toasts temporarily replace passive sync status in the same alert above
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.

@@ -109,14 +109,28 @@ client promise, prior-work adapter progress, legacy hosts and Stream replies. Br
 unresolved and refused delivery, held queue admission, prior unresolved work and confirmed legacy
 receipts. The routing browser case preserves its draft and B through an ambiguous response/reload,
 then exercises the visible release confirmation and verifies A was never replayed. Existing queue
-E2E persistence predicates now use named helpers; their ordering assertions remain. The reported
-shadowing and promise-return lint errors are corrected in source. All of this follow-up coverage and
-lint/typecheck validation remain pending on GCP; published `c8ef9cda1` CI does not validate these repairs.
+E2E persistence predicates now use named helpers; their ordering assertions remain. The Send Back
+case navigates to the original turn before reopening its thread chip after the newer parent messages.
+The reported shadowing, callback complexity, nesting, ternary and promise-return issues are refactored
+in source without suppressions.
+
+The first ambiguous provider response now carries `agent_request_outcome_unknown` with its original
+detail, including completion-receipt write failures. The client also recognizes older hosts' provider
+ambiguity wording. Added receipt tests exercise the first response, reconstruction without replay,
+explicit settlement, completion-write failure and known pre-dispatch failure. Client regressions hold
+A while B saves, return the first ambiguous response, then restart with slow hydration and explicitly
+release the retained hold; an ordinary direct-send case retains the same barrier across restart.
+A definite provider refusal releases later work. Configured mock prompt rejection now declares that
+submission never began; mock steering transport failure remains ambiguous.
+
+All of this follow-up coverage and lint/typecheck validation remain pending on GCP; published
+`c8ef9cda1` CI does not validate these repairs. Rebuild the server before browser validation of the
+receipt normalization. No tests, builds or lint ran in this M4 review phase.
 
 The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
 `c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing
 receipt for this source. These additions have not been executed in this M4 review/fix phase. The outer executor must run
-focused unit/browser regressions and formatting/typecheck/lint on the existing GCP task. Earlier
+focused unit/browser regressions and formatting/typecheck/lint on `jacob-dev-1` through `agent-dev`. Earlier
 passing receipts and the screenshot above do not validate this repair. Native rollout remains deferred.
 
 ## Burst comparison

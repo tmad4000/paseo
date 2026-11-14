@@ -3,6 +3,7 @@ import { awaitAssistantMessage } from "../support/helpers/agent-stream";
 import { expectChatHistoryAttachment } from "../support/helpers/assistant-fork";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { expectComposerVisible, expectSavedQueueEntry } from "../support/helpers/composer";
+import { userScrollsTimelineToHistoryStart } from "../support/helpers/timeline-pagination";
 import { closeWorkspaceAgentTab } from "../support/helpers/archive-tab";
 import {
   openAgentRoute,
@@ -109,6 +110,7 @@ test.describe("Threaded replies", () => {
       .hover();
     await closeWorkspaceAgentTab(page, thread.id);
     await expect(page.getByRole("textbox", { name: COMPOSER })).toHaveCount(1, { timeout: 30_000 });
+    await userScrollsTimelineToHistoryStart(page);
     await chip.click();
     await expect(page.getByRole("textbox", { name: COMPOSER })).toHaveCount(2, {
       timeout: 30_000,

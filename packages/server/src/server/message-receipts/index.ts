@@ -47,7 +47,10 @@ export class MessageReceipts {
   /** Bumped on every write so a caller never joins a scan that predates it. */
   private writeGeneration = 0;
   private inflightScan: { generation: number; records: Promise<Receipt[]> } | null = null;
-  constructor(private readonly directory: string) {}
+  constructor(
+    private readonly directory: string,
+    private readonly writeReceipt: (file: string, receipt: Receipt) => Promise<void> = writeJsonFileAtomic,
+  ) {}
 
   /** One shared, bounded directory scan for concurrent listings. */
   private scanAll(): Promise<Receipt[]> {
@@ -64,7 +67,7 @@ export class MessageReceipts {
   }
 
   private async write(file: string, value: Receipt): Promise<void> {
-    await this.mutate(() => writeJsonFileAtomic(file, value));
+    await this.mutate(() => this.writeReceipt(file, value));
   }
 
   /** Scans started before or during a mutation are not reused after it. */
@@ -269,12 +272,22 @@ export class MessageReceipts {
       if (isPromptNotSubmittedError(error)) {
         await this.mutate(() => rm(file, { force: true }));
         this.dispatchedHere.delete(key);
+        throw error;
       }
-      throw error;
+      throw unknownOutcomeError(error);
     }
-    await this.write(file, { ...receipt, state: "completed" });
+    try {
+      await this.write(file, { ...receipt, state: "completed" });
+    } catch (error) {
+      throw unknownOutcomeError(error);
+    }
     this.dispatchedHere.delete(key);
   }
+}
+
+function unknownOutcomeError(cause: unknown): Error {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new Error(`agent_request_outcome_unknown: ${detail}`, { cause });
 }
 
 async function readAllReceipts(directory: string): Promise<Receipt[]> {

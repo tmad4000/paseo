@@ -10,6 +10,7 @@ import {
   flushQueueOutboxEntriesForServer,
   useQueueOutboxStore,
   type QueueOutboxServerInput,
+  type PendingQueueEnqueue,
 } from "@/stores/queue-outbox-store";
 import { serializeQueueOperation, type QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
 import { isDefinitiveSendFailure, supportsDurableDirectSend, type PendingDirectSend, type SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
@@ -101,30 +102,59 @@ export function releaseOrderedAdmission(serverId: string, itemId: string): void 
   }
 }
 
-export async function flushDeliveryOutboxes(input: {
+interface DeliveryFlushInput {
   serverId: string;
   agentId?: string;
   client: DeliveryClient;
   direct?: SendOutboxServerInput;
   queue?: QueueOutboxServerInput;
-}): Promise<void> {
-  await Promise.all([awaitSendOutboxHydration(), awaitOutboxHydration()]);
-  const { serverId, client } = input;
-  const directEntries = () => Object.values(useSendOutboxStore.getState().entries).filter(
-    (entry) => entry.serverId === serverId &&
-      (entry.oneShot || entry.rejectedError === undefined || isUncertainSendOutcome(entry.rejectedError)),
+}
+
+interface DeliveryDrivers {
+  direct?: SendOutboxServerInput;
+  queue?: QueueOutboxServerInput;
+}
+
+type DeliveryCandidate =
+  | { kind: "direct"; entry: PendingDirectSend }
+  | { kind: "queue"; entry: PendingQueueEnqueue }
+  | { kind: "admission"; entry: OrderedAdmission };
+
+function directEntries(serverId: string): PendingDirectSend[] {
+  return Object.values(useSendOutboxStore.getState().entries).filter((saved) =>
+    saved.serverId === serverId &&
+    (saved.oneShot || saved.rejectedError === undefined || isUncertainSendOutcome(saved.rejectedError)),
   );
-  const queueEntries = () => Object.values(useQueueOutboxStore.getState().entries).filter(
-    (entry) => entry.serverId === serverId,
-  );
+}
+
+function queueEntries(serverId: string): PendingQueueEnqueue[] {
+  return Object.values(useQueueOutboxStore.getState().entries).filter((saved) => saved.serverId === serverId);
+}
+
+function activeAdmissions(serverId: string): OrderedAdmission[] {
+  return [...admissions.values()].filter((saved) => saved.serverId === serverId);
+}
+
+function resolveDirectDriver(input: DeliveryFlushInput): SendOutboxServerInput | undefined {
+  if (input.direct) return input.direct;
+  const { client, serverId } = input;
   const features = client.getLastServerInfoMessage?.()?.features ??
     useSessionStore.getState().sessions[serverId]?.serverInfo?.features;
-  const direct = input.direct ?? (client.sendAgentMessage && (!features || supportsDurableDirectSend(features)) ? {
+  if (!client.sendAgentMessage || (features && !supportsDurableDirectSend(features))) return undefined;
+  return {
     serverId,
     client: { sendAgentMessage: client.sendAgentMessage.bind(client) },
     onAccepted: createDirectSendAcceptanceHandler(serverId),
-  } : undefined);
-  const queue = input.queue ?? (client.enqueueAgentMessage && (!features || features.agentMessageQueue === true) ? {
+  };
+}
+
+function resolveQueueDriver(input: DeliveryFlushInput): QueueOutboxServerInput | undefined {
+  if (input.queue) return input.queue;
+  const { client, serverId } = input;
+  const features = client.getLastServerInfoMessage?.()?.features ??
+    useSessionStore.getState().sessions[serverId]?.serverInfo?.features;
+  if (!client.enqueueAgentMessage || (features && features.agentMessageQueue !== true)) return undefined;
+  return {
     serverId,
     client: {
       enqueueAgentMessage: client.enqueueAgentMessage.bind(client),
@@ -132,91 +162,145 @@ export async function flushDeliveryOutboxes(input: {
       getLastServerInfoMessage: client.getLastServerInfoMessage?.bind(client),
     },
     applySnapshot: (snapshot) => useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-  } satisfies QueueOutboxServerInput : undefined);
-  const activeAdmissions = () => [...admissions.values()].filter((entry) => entry.serverId === serverId);
-  const agents = new Set([...directEntries(), ...queueEntries(), ...activeAdmissions()].map((entry) => entry.agentId));
-  await Promise.all([...agents].filter((agentId) => input.agentId === undefined || input.agentId === agentId).map(async (agentId) => {
-      for (const admission of activeAdmissions().filter((entry) => entry.agentId === agentId)) {
-        if (!admission.running && admission.isPending && !(await admission.isPending())) {
-          const key = admissionKey(serverId, admission.itemId);
-          if (admission.running || admissions.get(key) !== admission) continue;
-          admissions.delete(key);
-          admission.reject(new Error("Delivery canceled or no longer pending."));
-        }
-      }
-      if (queue) {
-        for (const entry of queueEntries().filter((entry) => entry.agentId === agentId && entry.removalRequested)) {
-          await flushQueueOutboxEntriesForServer({ ...queue, itemId: entry.itemId });
-        }
-      }
-      await serializeQueueOperation(JSON.stringify(["delivery", serverId, agentId]), async () => {
-      while (true) {
-        const pending = [
-          ...directEntries().filter((entry) => entry.agentId === agentId && !admissions.has(admissionKey(serverId, entry.clientMessageId))).map((entry) => ({ kind: "direct" as const, entry })),
-          ...queueEntries().filter((entry) => entry.agentId === agentId && !entry.removalRequested && !admissions.has(admissionKey(serverId, entry.itemId))).map((entry) => ({ kind: "queue" as const, entry })),
-          ...activeAdmissions().filter((entry) => entry.agentId === agentId).map((entry) => ({ kind: "admission" as const, entry })),
-        ].sort((a, b) => a.entry.createdAt - b.entry.createdAt);
-        const next = pending[0];
-        if (!next) break;
-        if (next.kind === "admission") {
-          const admission = next.entry;
-          const key = admissionKey(serverId, admission.itemId);
-          try {
-            admission.running = true;
-            if (admission.oneShot && !useSendOutboxStore.getState().entries[admission.itemId]) {
-              throw new Error("One-time delivery was canceled before dispatch.");
-            }
-            const released = new Promise<never>((_resolve, rejectRelease) => {
-              admission.release = () => rejectRelease(new Error("One-time delivery hold was released."));
-            });
-            const running = admission.run(() => {
-              if (admission.oneShot && !useSendOutboxStore.getState().entries[admission.itemId]) {
-                throw new Error("One-time delivery was canceled before dispatch.");
-              }
-              admission.dispatched = true;
-            });
-            const result = await Promise.race([running, released]);
-            admission.release = undefined;
-            if (admission.oneShot) await useSendOutboxStore.getState().removeDurably(admission.itemId);
-            if (admissions.get(key) === admission) admissions.delete(key);
-            admission.resolve(result);
-          } catch (error) {
-            admission.release = undefined;
-            if (admissions.get(key) === admission) admissions.delete(key);
-            let reported = error;
-            const cause = error instanceof Error && error.cause ? error.cause : error;
-            const causeMessage = cause instanceof Error ? cause.message : String(cause);
-            if (admission.oneShot && (!admission.dispatched || (isDefinitiveSendFailure(cause) && !isUncertainSendOutcome(causeMessage)))) {
-              try {
-                await useSendOutboxStore.getState().removeDurably(admission.itemId);
-              } catch (storageError) {
-                reported = storageError;
-              }
-            }
-            admission.reject(reported);
-            const unresolvedDirect = directEntries().some(
-              (entry) => entry.agentId === agentId && entry.clientMessageId === admission.itemId,
-            );
-            const unresolvedQueue = queueEntries().some(
-              (entry) => entry.agentId === agentId && entry.itemId === admission.itemId,
-            );
-            if (unresolvedDirect || unresolvedQueue) break;
-          }
-        } else if (next.kind === "direct") {
-          if (!direct || next.entry.oneShot || isUncertainSendOutcome(next.entry.rejectedError)) break;
-          const id = next.entry.clientMessageId;
-          if (!useSendOutboxStore.getState().entriesForServer(serverId).some((entry) => entry.clientMessageId === id)) break;
-          await flushSendOutboxEntriesForServer({ ...direct, agentId, clientMessageId: id });
-          if (directEntries().some((entry) => entry.clientMessageId === id)) break;
-        } else {
-          if (!queue) break;
-          const id = next.entry.itemId;
-          if (!useQueueOutboxStore.getState().entriesForServer(serverId).some((entry) => entry.itemId === id)) break;
-          await flushQueueOutboxEntriesForServer({ ...queue, itemId: id });
-          if (queueEntries().some((entry) => entry.itemId === id)) break;
-        }
-      }
-      });
-    }),
+  };
+}
+
+function detachAdmission(admission: OrderedAdmission): void {
+  const key = admissionKey(admission.serverId, admission.itemId);
+  if (admissions.get(key) === admission) admissions.delete(key);
+}
+
+async function rejectCanceledAdmissions(serverId: string, agentId: string): Promise<void> {
+  for (const admission of activeAdmissions(serverId).filter((saved) => saved.agentId === agentId)) {
+    if (admission.running || !admission.isPending || await admission.isPending()) continue;
+    if (admission.running || admissions.get(admissionKey(serverId, admission.itemId)) !== admission) continue;
+    detachAdmission(admission);
+    admission.reject(new Error("Delivery canceled or no longer pending."));
+  }
+}
+
+async function flushRemovalIntents(serverId: string, agentId: string, driver?: QueueOutboxServerInput): Promise<void> {
+  if (!driver) return;
+  const removals = queueEntries(serverId).filter((saved) => saved.agentId === agentId && saved.removalRequested);
+  for (const removal of removals) await flushQueueOutboxEntriesForServer({ ...driver, itemId: removal.itemId });
+}
+
+function nextDelivery(serverId: string, agentId: string): DeliveryCandidate | undefined {
+  const pending: DeliveryCandidate[] = [
+    ...directEntries(serverId)
+      .filter((saved) => saved.agentId === agentId && !admissions.has(admissionKey(serverId, saved.clientMessageId)))
+      .map((entry) => ({ kind: "direct" as const, entry })),
+    ...queueEntries(serverId)
+      .filter((saved) => saved.agentId === agentId && !saved.removalRequested && !admissions.has(admissionKey(serverId, saved.itemId)))
+      .map((entry) => ({ kind: "queue" as const, entry })),
+    ...activeAdmissions(serverId)
+      .filter((saved) => saved.agentId === agentId)
+      .map((entry) => ({ kind: "admission" as const, entry })),
+  ];
+  pending.sort((left, right) => left.entry.createdAt - right.entry.createdAt);
+  return pending[0];
+}
+
+function ensureOneShotOwnership(admission: OrderedAdmission): void {
+  if (admission.oneShot && !useSendOutboxStore.getState().entries[admission.itemId]) {
+    throw new Error("One-time delivery was canceled before dispatch.");
+  }
+}
+
+function canReleaseFailedOneShot(admission: OrderedAdmission, error: unknown): boolean {
+  if (!admission.oneShot) return false;
+  if (!admission.dispatched) return true;
+  const cause = error instanceof Error && error.cause ? error.cause : error;
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return isDefinitiveSendFailure(cause) && !isUncertainSendOutcome(message);
+}
+
+function hasUnresolvedBarrier(admission: OrderedAdmission): boolean {
+  return directEntries(admission.serverId).some((saved) =>
+    saved.agentId === admission.agentId && saved.clientMessageId === admission.itemId,
+  ) || queueEntries(admission.serverId).some((saved) =>
+    saved.agentId === admission.agentId && saved.itemId === admission.itemId,
+  );
+}
+
+async function rejectFailedAdmission(admission: OrderedAdmission, error: unknown): Promise<boolean> {
+  admission.release = undefined;
+  detachAdmission(admission);
+  let reported = error;
+  if (canReleaseFailedOneShot(admission, error)) {
+    try {
+      await useSendOutboxStore.getState().removeDurably(admission.itemId);
+    } catch (storageError) {
+      reported = storageError;
+    }
+  }
+  admission.reject(reported);
+  return !hasUnresolvedBarrier(admission);
+}
+
+async function dispatchAdmission(admission: OrderedAdmission): Promise<boolean> {
+  try {
+    admission.running = true;
+    ensureOneShotOwnership(admission);
+    const released = new Promise<never>((_resolve, rejectRelease) => {
+      admission.release = () => rejectRelease(new Error("One-time delivery hold was released."));
+    });
+    const running = admission.run(() => {
+      ensureOneShotOwnership(admission);
+      admission.dispatched = true;
+    });
+    const result = await Promise.race([running, released]);
+    admission.release = undefined;
+    if (admission.oneShot) await useSendOutboxStore.getState().removeDurably(admission.itemId);
+    detachAdmission(admission);
+    admission.resolve(result);
+    return true;
+  } catch (error) {
+    return rejectFailedAdmission(admission, error);
+  }
+}
+
+async function dispatchDirect(entry: PendingDirectSend, driver?: SendOutboxServerInput): Promise<boolean> {
+  if (!driver || entry.oneShot || isUncertainSendOutcome(entry.rejectedError)) return false;
+  const eligible = useSendOutboxStore.getState().entriesForServer(entry.serverId);
+  if (!eligible.some((saved) => saved.clientMessageId === entry.clientMessageId)) return false;
+  await flushSendOutboxEntriesForServer({ ...driver, agentId: entry.agentId, clientMessageId: entry.clientMessageId });
+  return !directEntries(entry.serverId).some((saved) => saved.clientMessageId === entry.clientMessageId);
+}
+
+async function dispatchQueue(entry: PendingQueueEnqueue, driver?: QueueOutboxServerInput): Promise<boolean> {
+  if (!driver) return false;
+  const eligible = useQueueOutboxStore.getState().entriesForServer(entry.serverId);
+  if (!eligible.some((saved) => saved.itemId === entry.itemId)) return false;
+  await flushQueueOutboxEntriesForServer({ ...driver, itemId: entry.itemId });
+  return !queueEntries(entry.serverId).some((saved) => saved.itemId === entry.itemId);
+}
+
+function dispatchNext(candidate: DeliveryCandidate, drivers: DeliveryDrivers): Promise<boolean> {
+  switch (candidate.kind) {
+    case "admission": return dispatchAdmission(candidate.entry);
+    case "direct": return dispatchDirect(candidate.entry, drivers.direct);
+    case "queue": return dispatchQueue(candidate.entry, drivers.queue);
+  }
+}
+
+async function flushAgentDelivery(serverId: string, agentId: string, drivers: DeliveryDrivers): Promise<void> {
+  await rejectCanceledAdmissions(serverId, agentId);
+  await flushRemovalIntents(serverId, agentId, drivers.queue);
+  await serializeQueueOperation(JSON.stringify(["delivery", serverId, agentId]), async () => {
+    while (true) {
+      const candidate = nextDelivery(serverId, agentId);
+      if (!candidate || !await dispatchNext(candidate, drivers)) return;
+    }
+  });
+}
+
+export async function flushDeliveryOutboxes(input: DeliveryFlushInput): Promise<void> {
+  await Promise.all([awaitSendOutboxHydration(), awaitOutboxHydration()]);
+  const drivers = { direct: resolveDirectDriver(input), queue: resolveQueueDriver(input) };
+  const agents = new Set([...directEntries(input.serverId), ...queueEntries(input.serverId), ...activeAdmissions(input.serverId)].map((saved) => saved.agentId));
+  await Promise.all([...agents]
+    .filter((agentId) => input.agentId === undefined || input.agentId === agentId)
+    .map((agentId) => flushAgentDelivery(input.serverId, agentId, drivers)),
   );
 }
