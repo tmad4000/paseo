@@ -1,7 +1,11 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+/** Real strip chips, excluding nested title/overlay test IDs and picker triggers. */
+export const WORKSPACE_TAB_BUTTON_SELECTOR =
+  '[data-testid^="workspace-tab-"][role="button"][aria-selected]';
+
 export async function getWorkspaceTabTestIds(page: Page): Promise<string[]> {
-  const tabs = page.locator('[data-testid^="workspace-tab-"]');
+  const tabs = page.locator(WORKSPACE_TAB_BUTTON_SELECTOR);
   const count = await tabs.count();
   const ids: string[] = [];
   for (let index = 0; index < count; index += 1) {

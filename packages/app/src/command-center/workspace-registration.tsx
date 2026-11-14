@@ -20,6 +20,7 @@ import {
   PinOff,
   RotateCw,
   Rows2,
+  Search,
   SquarePen,
   SquareTerminal,
   X,
@@ -64,6 +65,7 @@ import { resolveWorkspaceCommandCenterShortcuts } from "./workspace-shortcuts";
 
 const WORKSPACE_COMMAND_CENTER_ICONS = {
   newAgent: getCommandCenterIcon(SquarePen),
+  searchTabs: getCommandCenterIcon(Search),
   newTerminal: getCommandCenterIcon(SquareTerminal),
   newBrowser: getCommandCenterIcon(Globe),
   splitRight: getCommandCenterIcon(Columns2),
@@ -238,6 +240,7 @@ export function useWorkspaceCommandCenterActions(): void {
         labels: {
           section: t("workspace.header.actions.workspaceActions"),
           newAgent: t("workspace.tabs.actions.newAgent"),
+          searchTabs: t("workspace.tabs.search.action"),
           newTerminal: t("workspace.tabs.actions.newTerminal"),
           newBrowser: t("workspace.tabs.actions.newBrowser"),
           splitRight: t("workspace.tabs.actions.splitRight"),

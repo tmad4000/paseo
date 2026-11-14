@@ -41,6 +41,8 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { WorkspaceTabTitle } from "./workspace-tab-title";
+import { useAppSettings } from "@/hooks/use-settings";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
@@ -115,8 +117,6 @@ const PANE_MAXIMIZE_ACTION_RESERVED_WIDTH = smallIconButtonChromeFrameSize(false
 // Tabs and the adjacent New Tab trigger are one control family. Keep their outer box and corner
 // token identical; only their horizontal sizing differs (content-width chip versus square icon).
 const TAB_CHIP_HORIZONTAL_PADDING = 8;
-// The read check spans 24-42pt from the chip's trailing edge; the chip's own padding covers the rest.
-const TAB_READ_CONTROL_SPACE = 42 - TAB_CHIP_HORIZONTAL_PADDING;
 const TAB_CHIP_GAP = 4;
 const TAB_ROW_PADDING_HORIZONTAL = 4;
 const TAB_ICON_WIDTH = 14;
@@ -549,7 +549,7 @@ function completeWorkspaceTabLabelWidths(
   measurements: Map<string, WorkspaceTabLabelMeasurement>,
 ): number[] | null {
   const widths: number[] = [];
-  for (const { key, label, modified, unread } of labels) {
+  for (const { key, label, modified } of labels) {
     const measurement = measurements.get(key);
     if (!measurement || measurement.label !== label || measurement.width <= 0) {
       return null;
@@ -557,13 +557,10 @@ function completeWorkspaceTabLabelWidths(
     // The modified dot sits in the content row, so the label must truncate before it. The read
     // state lives on the icon's corner badge and takes no row width of its own.
     const dotAllowance = Number(modified);
-    // An unread tab still reserves room for its read check (see `tabReadControlSpace`).
-    const readControlAllowance = unread ? TAB_CONTENT_GAP + TAB_READ_CONTROL_SPACE : 0;
     widths.push(
       measurement.width +
         TAB_LABEL_LAYOUT_ALLOWANCE +
-        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE) +
-        readControlAllowance,
+        dotAllowance * (TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE),
     );
   }
   return widths;
@@ -693,11 +690,12 @@ function getFallbackTabLabel(
   return labels.agent;
 }
 
-function useMiddleClickClose(onClose: () => void) {
+function useTabInteraction(onClose: () => void) {
   const ref = useRef<View>(null);
+  const [keyboardFocused, setKeyboardFocused] = useState(false);
 
   useEffect(() => {
-    if (isNative) return;
+    if (!isWeb) return;
     const node = ref.current as unknown as HTMLElement | null;
     if (!node) return;
 
@@ -708,11 +706,22 @@ function useMiddleClickClose(onClose: () => void) {
       }
     }
 
+    const focusIn = (event: FocusEvent) =>
+      setKeyboardFocused(event.target instanceof Element && event.target.matches(":focus-visible"));
+    const focusOut = (event: FocusEvent) => {
+      if (!node.contains(event.relatedTarget as Node | null)) setKeyboardFocused(false);
+    };
     node.addEventListener("auxclick", handleAuxClick);
-    return () => node.removeEventListener("auxclick", handleAuxClick);
+    node.addEventListener("focusin", focusIn);
+    node.addEventListener("focusout", focusOut);
+    return () => {
+      node.removeEventListener("auxclick", handleAuxClick);
+      node.removeEventListener("focusin", focusIn);
+      node.removeEventListener("focusout", focusOut);
+    };
   }, [onClose]);
 
-  return ref;
+  return { ref, keyboardFocused };
 }
 
 /** The chip fill the running-status ring has to knock out of. Mirrors `styles.tab*` exactly. */
@@ -736,7 +745,7 @@ function TabHandleContent({
   tabLabelStyle,
   modifiedTestId,
   readState,
-  reserveReadControl,
+  trailingInset = 0,
 }: {
   presentation: WorkspaceTabPresentation;
   isHighlighted: boolean;
@@ -746,17 +755,17 @@ function TabHandleContent({
   tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
   readState: TabReadState;
-  /** Keep the title clear of the read check, which the overlay draws without a solid scrim. */
-  reserveReadControl: boolean;
+  trailingInset?: number;
 }) {
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
   const tabHandleDataSet = useMemo(
     () => ({ statusBucket: presentation.statusBucket ?? "none" }),
     [presentation.statusBucket],
   );
 
   return (
-    <View style={styles.tabHandle} dataSet={tabHandleDataSet}>
+    <View style={[styles.tabHandle, { paddingRight: trailingInset }]} dataSet={tabHandleDataSet}>
       <View style={styles.tabIcon}>
         <WorkspaceTabIcon
           presentation={presentation}
@@ -769,9 +778,12 @@ function TabHandleContent({
         <View style={tabLabelSkeletonStyle} />
       ) : null}
       {showLabel && presentation.titleState !== "loading" ? (
-        <Text style={tabLabelStyle} selectable={false} numberOfLines={1} ellipsizeMode="tail">
-          {presentation.label}
-        </Text>
+        <WorkspaceTabTitle
+          title={presentation.label}
+          compact={settings.compactTabTitles}
+          backdrop={backdrop}
+          textStyle={tabLabelStyle}
+        />
       ) : null}
       {/* The dot is a laid-out sibling of the label, not an overlay, so a truncated label ends
           before it instead of running underneath it. */}
@@ -782,7 +794,6 @@ function TabHandleContent({
           testID={modifiedTestId}
         />
       ) : null}
-      {reserveReadControl ? <View style={styles.tabReadControlSpace} /> : null}
     </View>
   );
 }
@@ -804,7 +815,7 @@ function TabTrailingControls({
   tabLabel,
   testIdentity,
   backdrop,
-  isActive,
+  isKeyboardFocused,
   isHovered,
   isClosingTab,
   showCloseButton,
@@ -818,7 +829,7 @@ function TabTrailingControls({
   tabLabel: string;
   testIdentity: string;
   backdrop: SurfaceBackdrop;
-  isActive: boolean;
+  isKeyboardFocused: boolean;
   isHovered: boolean;
   isClosingTab: boolean;
   showCloseButton: boolean;
@@ -833,7 +844,7 @@ function TabTrailingControls({
     resolveTabTrailingControls({
       canMarkRead: readAction.canMarkRead,
       showCloseButton,
-      isActive,
+      isKeyboardFocused,
       isHovered,
       isClosingTab,
       isTouch: isNative || isCompact,
@@ -1006,15 +1017,31 @@ function TabChip({
   } else if (readState === "seen") {
     unreadHint = t("workspace.tabs.seenNotRead", { defaultValue: "Seen, not read" });
   }
-  const middleClickRef = useMiddleClickClose(
+  const { ref: interactionRef, keyboardFocused } = useTabInteraction(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
   );
   const [hovered, setHovered] = useState(false);
+  const isCompact = useIsCompactFormFactor();
   // An active tab in a pane that does not have focus stays legible but quiet: it keeps the fill of
   // a hovered chip and the muted label, so only one chip in the window reads as the live one.
   const isActiveFocused = isActive && isFocused;
   const isHovered = hovered || isCloseHovered;
   const isHighlighted = isActiveFocused || isHovered;
+  const trailingControls = resolveTabTrailingControls({
+    canMarkRead: readAction.canMarkRead,
+    showCloseButton,
+    isKeyboardFocused: keyboardFocused,
+    isHovered,
+    isClosingTab,
+    isTouch: isNative || isCompact,
+  });
+  // Only the title viewport gives way to revealed controls. The measured chip
+  // width and fixed close/read targets never move, including when read clears.
+  const trailingInset = trailingControls.showTrailingOverlay
+    ? (trailingControls.readSitsBesideClose ? 42 : 22) +
+      TAB_CONTENT_GAP -
+      TAB_CHIP_HORIZONTAL_PADDING
+    : 0;
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
     isActiveFocused,
     isFilled: isActive || isHovered,
@@ -1059,7 +1086,7 @@ function TabChip({
 
   return (
     <View
-      ref={middleClickRef}
+      ref={interactionRef}
       style={styles.tabHoverFrame}
       onPointerEnter={handleTabPointerEnter}
       onPointerLeave={handleTabPointerLeave}
@@ -1091,7 +1118,7 @@ function TabChip({
                 tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
                 readState={readState}
-                reserveReadControl={readAction.canMarkRead}
+                trailingInset={trailingInset}
               />
             </ContextMenuTrigger>
           </TooltipTrigger>
@@ -1119,7 +1146,7 @@ function TabChip({
           tabLabel={accessibilityLabel}
           testIdentity={testIdentity}
           backdrop={chipBackdrop}
-          isActive={isActive}
+          isKeyboardFocused={keyboardFocused}
           isHovered={isHovered}
           isClosingTab={isClosingTab}
           showCloseButton={showCloseButton}
@@ -1982,10 +2009,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,
-  },
-  tabReadControlSpace: {
-    width: TAB_READ_CONTROL_SPACE,
-    flexShrink: 0,
   },
   tabCloseButtonHidden: {
     position: "absolute",

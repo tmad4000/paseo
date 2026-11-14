@@ -1222,6 +1222,7 @@ export const ja: TranslationResources = {
         agent: "エージェント",
         workspace: "ワークスペース",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "タブを切り替え（{{count}}件開いています）",
         title: "タブを切り替え",
@@ -3023,6 +3024,7 @@ export const ja: TranslationResources = {
         label: "チャットを開いたときに既読にする",
         description: "オフの場合、既読にするかメッセージを送信するまでチャットは未読のままです",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "タブ",
         label: "最近のアクティビティでタブを並べ替える",

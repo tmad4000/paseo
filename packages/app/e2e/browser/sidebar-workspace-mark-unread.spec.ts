@@ -285,6 +285,7 @@ test("by default a chat stays unread until its sidebar or tab check marks it rea
     await markAsUnread(page, subject.workspaceId);
     await openWorkspace(page, subject.workspaceId);
     const tabCheck = page.getByTestId(`workspace-tab-mark-as-read-agent_${subject.agentId}`);
+    await agentTab(page, subject.agentId).hover();
     await expect(tabCheck).toBeVisible();
     await expect(tabCheck).toHaveAccessibleName(/^Mark .*Unread subject.* as read$/);
     await page.screenshot({ path: "test-results/explicit-read-tab-check.png" });
@@ -309,6 +310,8 @@ async function finishRealTurn(workspace: MockAgentWorkspace, prompt: string) {
 
 /** The open tab's check must sit clear of its title, not over it. */
 async function expectCheckClearOfTitle(page: Page, agentId: string, title: string) {
+  await agentTab(page, agentId).hover();
+  await expect(tabReadCheck(page, agentId)).toBeVisible();
   const titleBox = await agentTab(page, agentId).getByText(title, { exact: true }).boundingBox();
   const checkBox = await tabReadCheck(page, agentId).boundingBox();
   expect(titleBox).not.toBeNull();
@@ -449,6 +452,7 @@ test.describe("at 2x", () => {
     await openWorkspace(page, other.workspaceId);
     await markAsUnread(page, subject.workspaceId);
     await openWorkspace(page, subject.workspaceId);
+    await agentTab(page, subject.agentId).hover();
     await expect(tabReadCheck(page, subject.agentId)).toBeVisible();
     await expectCheckClearOfTitle(page, subject.agentId, "Unread subject");
     await page.screenshot({ path: "test-results/explicit-read-tab-check-2x.png" });

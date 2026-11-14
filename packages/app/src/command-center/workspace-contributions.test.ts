@@ -37,6 +37,7 @@ function source(gitActions: GitActions): {
       labels: {
         section: "Workspace actions",
         newAgent: "New agent",
+        searchTabs: "Search workspace tabs",
         newTerminal: "New terminal",
         newBrowser: "New browser",
         splitRight: "Split pane right",
@@ -387,4 +388,14 @@ describe("workspace command center contributions", () => {
       { name: "urgent", assigned: true },
     ]);
   });
+});
+
+it("offers Search workspace tabs through the workspace dispatcher", () => {
+  const fixture = source({ primary: null, secondary: [], menu: [] });
+  const action = buildWorkspaceCommandCenterContributions(fixture.value).find(
+    (item) => item.id === "tab:search",
+  );
+  expect(action?.presentation).toMatchObject({ title: "Search workspace tabs" });
+  action?.run();
+  expect(fixture.dispatched).toEqual([{ id: "workspace.tab.search", scope: "workspace" }]);
 });

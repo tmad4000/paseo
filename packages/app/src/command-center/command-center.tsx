@@ -529,7 +529,13 @@ function useCommandCenterState(): CommandCenterState {
     const wasOpen = previousOpenRef.current;
     previousOpenRef.current = open;
     if (open) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 0);
+      const initialQuery = useKeyboardShortcutsStore.getState().commandCenterInitialQuery;
+      setQueryState(initialQuery);
+      setActiveId(null);
+      const timer = setTimeout(() => {
+        inputRef.current?.replaceText(initialQuery);
+        inputRef.current?.focus();
+      }, 0);
       return () => clearTimeout(timer);
     }
     setQueryState("");

@@ -1242,6 +1242,18 @@ export const en = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: {
+        action: "Switch tab…",
+        title: "Switch tab",
+        placeholder: "Search tabs…",
+        empty: "No matching tabs",
+        pane: "Pane {{number}}",
+        explorer: "Explorer",
+        hidden: "Hidden",
+        current: "Current",
+        results_one: "{{count}} tab",
+        results: "{{count}} tabs",
+      },
       switcher: {
         trigger: "Switch tabs ({{count}} open)",
         title: "Switch tab",
@@ -3174,6 +3186,11 @@ export const en = {
         section: "Read status",
         label: "Mark chats read when opened",
         description: "When off, a chat stays unread until you mark it read or send it a message",
+      },
+      compactTabTitles: {
+        label: "Compact tab titles",
+        description:
+          "Fade long tab titles instead of showing truncation dots. Full titles remain in tooltips.",
       },
       sortTabsByActivity: {
         section: "Tabs",

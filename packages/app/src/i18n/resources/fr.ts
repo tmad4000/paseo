@@ -1226,6 +1226,7 @@ export const fr: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Changer d'onglet ({{count}}ouvert)",
         title: "Changer d'onglet",
@@ -3068,6 +3069,7 @@ export const fr: TranslationResources = {
         description:
           "Désactivé, une discussion reste non lue jusqu'à ce que vous la marquiez comme lue ou lui envoyiez un message",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "Onglets",
         label: "Trier les onglets par activité récente",

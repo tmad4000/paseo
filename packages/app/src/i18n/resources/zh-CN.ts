@@ -1203,6 +1203,7 @@ export const zhCN: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "切换标签（已打开 {{count}} 个）",
         title: "切换标签",
@@ -2959,6 +2960,7 @@ export const zhCN: TranslationResources = {
         label: "打开聊天时标记为已读",
         description: "关闭后，聊天会保持未读，直到你将其标记为已读或向其发送消息",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "标签页",
         label: "按最近活动排序标签页",
