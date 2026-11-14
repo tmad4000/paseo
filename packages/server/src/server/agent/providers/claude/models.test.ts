@@ -70,6 +70,18 @@ describe("getClaudeModels", () => {
     ]);
   });
 
+  it("advertises verified Fable 5.2 on 2.1.319 without guessing future IDs", () => {
+    expect(getClaudeModels("2.1.318").map((model) => model.id)).not.toContain("claude-fable-5-2");
+    const fableModel = getClaudeModels("2.1.319").find((model) => model.id === "claude-fable-5-2");
+    expect(fableModel).toMatchObject({
+      label: "Fable 5.2",
+      contextWindowMaxTokens: 1_000_000,
+      defaultThinkingOptionId: "medium",
+    });
+    expect(normalizeClaudeRuntimeModelId("claude-fable-5-2")).toBe("claude-fable-5-2");
+    expect(getClaudeModels("99.0.0").map((model) => model.id)).not.toContain("claude-fable-5-3");
+  });
+
   it("marks exactly one model as default", () => {
     const models = getClaudeModels();
     const defaults = models.filter((m) => m.isDefault);
