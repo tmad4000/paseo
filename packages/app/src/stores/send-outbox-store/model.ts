@@ -27,6 +27,7 @@ export const PendingDirectSendSchema = z.object({
   attempts: z.number().int().nonnegative(),
   /** Set when the host answered with a refusal; such entries wait for the user. */
   rejectedError: z.string().optional(),
+  oneShot: z.boolean().optional(),
 });
 
 export type PendingDirectSend = z.infer<typeof PendingDirectSendSchema>;
@@ -50,14 +51,19 @@ export function isDefinitiveSendFailure(error: unknown): boolean {
  * message. It must not return to the composer, where a resend gets a new id.
  */
 export function isUncertainSendOutcome(error: string | undefined): boolean {
-  return error?.includes("agent_request_outcome_unknown") === true;
+  const message = error?.toLowerCase();
+  return (
+    message?.includes("agent_request_outcome_unknown") === true ||
+    message?.includes("provider submission outcome unknown") === true
+  );
 }
 
 /** Edit moves only plain text; a message with attachments or an uncertain outcome stays put. */
 export function canEditRefusedSend(
-  entry: Pick<PendingDirectSend, "rejectedError" | "images" | "attachments">,
+  entry: Pick<PendingDirectSend, "rejectedError" | "images" | "attachments" | "oneShot">,
 ): boolean {
   return (
+    entry.oneShot !== true &&
     entry.rejectedError !== undefined &&
     !isUncertainSendOutcome(entry.rejectedError) &&
     entry.images.length === 0 &&
@@ -101,6 +107,7 @@ export interface FlushSendOutboxInput {
   serverId: string;
   /** Limits the flush to one agent, e.g. right after the composer adds a message. */
   agentId?: string;
+  clientMessageId?: string;
   outbox: SendOutboxAccess;
   client: SendOutboxFlushClient;
   onAccepted?: (entry: PendingDirectSend, result: { queued: boolean }) => void;
@@ -133,6 +140,10 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
   const agents = new Set(
     input.outbox
       .list(input.serverId)
+      .filter(
+        (entry) =>
+          input.clientMessageId === undefined || entry.clientMessageId === input.clientMessageId,
+      )
       .map((entry) => entry.agentId)
       .filter((agentId) => input.agentId === undefined || agentId === input.agentId),
   );
@@ -141,9 +152,16 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
       serializeQueueOperation(sendOutboxOperationKey(input.serverId, agentId), async () => {
         for (const candidate of input.outbox
           .list(input.serverId)
-          .filter((item) => item.agentId === agentId)) {
+          .filter(
+            (item) =>
+              item.agentId === agentId &&
+              (input.clientMessageId === undefined ||
+                item.clientMessageId === input.clientMessageId),
+          )) {
           const entry = input.outbox.get(candidate.clientMessageId);
-          if (!entry || entry.rejectedError !== undefined) continue;
+          if (!entry) continue;
+          if (entry.oneShot || isUncertainSendOutcome(entry.rejectedError)) break;
+          if (entry.rejectedError !== undefined) continue;
           let result: { queued: boolean };
           try {
             result = await input.client.sendAgentMessage(
@@ -156,6 +174,7 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
               const message = error instanceof Error ? error.message : String(error);
               await input.outbox.markRejected(entry.clientMessageId, message);
               input.onRejected?.(entry, message);
+              if (isUncertainSendOutcome(message)) break;
               continue;
             }
             await Promise.resolve(input.outbox.bumpAttempts(entry.clientMessageId)).catch(() => {});

@@ -2354,6 +2354,7 @@ export class HostRuntimeStore {
         const supportsForgeAttachments =
           useSessionStore.getState().sessions[serverId]?.serverInfo?.features?.forgeSearch === true;
         await dispatchComposerAgentMessage({
+          serverId,
           client,
           agentId,
           text,

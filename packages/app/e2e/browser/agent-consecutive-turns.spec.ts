@@ -752,7 +752,7 @@ async function recordDelayedRunningTransition(
 
   const prompt = "Second prompt keeps streaming.";
   gate.holdNextAgentStreamEvent("turn_started");
-  gate.holdNextAgentUpdate(agent.agentId, "running");
+  gate.holdAgentUpdates(agent.agentId, "running");
   gate.holdNextServerMessage("send_agent_message_response");
   gate.setAgentStreamSuppressed(true);
   await recordTurnFrames(page, prompt);

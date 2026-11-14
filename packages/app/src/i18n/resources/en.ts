@@ -449,6 +449,14 @@ export const en = {
       removeReview: "Remove review attachment",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "Delivery {{messageId}} needs review. The request may still arrive; later messages are held. Check this chat before releasing the hold.",
+        title: "Release delivery hold?",
+        release: "Release delivery hold",
+        retryUnsupported:
+          "Review this one-time delivery and release its hold; it cannot be replayed automatically.",
+      },
       pending: "Saved on this device — waiting for the host",
       accepted: "Received by the host",
       delivered: "Delivered to the agent",
@@ -466,6 +474,12 @@ export const en = {
       queueAttention: "Not synced yet — saved here, still retrying",
       queueOnHost: "On the host — sends when the agent is free",
       unsentHeader: "Unsent messages ({{count}})",
+      recoveryHeader: "Unsent draft copies ({{count}})",
+      recoveryMemory: "Kept only while this app is open. This copy is not saved on the device.",
+      recoveryAttachments: "{{count}} attachments",
+      restoreFailed: "Restore draft",
+      discardFailed: "Discard copy",
+      recoveryOccupied: "Finish or clear the current draft before restoring this copy.",
       unsentPending: "Saved on this device — sends when the host reconnects",
       editUnsent: "Move back to the message box",
       discardUnsent: "Discard unsent message",
@@ -2902,8 +2916,9 @@ export const en = {
       placeholder: "Message every agent in this View",
       send: "Send to all",
       summary:
-        "{{send}} will receive it now, {{queue}} busy will get it queued, {{skip}} unavailable.",
-      result: "Broadcast: {{sent}} sent, {{queued}} queued, {{skipped}} skipped.",
+        "{{send}} idle, {{queue}} busy, {{skip}} unavailable. Messages are saved before delivery.",
+      result:
+        "Broadcast: {{sent}} sent, {{queued}} queued on host, {{pending}} saved on this device pending delivery, {{skipped}} skipped, {{failed}} failed.",
     },
     picker: {
       addTitle: "Add a session",

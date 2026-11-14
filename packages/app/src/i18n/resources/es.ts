@@ -441,6 +441,14 @@ export const es: TranslationResources = {
       removeReview: "Eliminar archivo adjunto de reseña",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "La entrega {{messageId}} requiere revisión. La solicitud aún puede llegar; los mensajes posteriores esperan. Revisa este chat antes de liberar la espera.",
+        title: "¿Liberar la espera de entrega?",
+        release: "Liberar la espera de entrega",
+        retryUnsupported:
+          "Revisa esta entrega única y libera su espera; no se puede reenviar automáticamente.",
+      },
       pending: "Guardado en este dispositivo — esperando al host",
       accepted: "Recibido por el host",
       delivered: "Entregado al agente",
@@ -459,6 +467,13 @@ export const es: TranslationResources = {
       queueAttention: "Aún sin sincronizar — guardado aquí, se sigue reintentando",
       queueOnHost: "En el host — se envía cuando el agente quede libre",
       unsentHeader: "Mensajes sin enviar ({{count}})",
+      recoveryHeader: "Copias de borradores sin enviar ({{count}})",
+      recoveryMemory:
+        "Se conserva solo mientras esta aplicación esté abierta. Esta copia no está guardada en el dispositivo.",
+      recoveryAttachments: "{{count}} archivos adjuntos",
+      restoreFailed: "Restaurar borrador",
+      discardFailed: "Descartar copia",
+      recoveryOccupied: "Termina o borra el borrador actual antes de restaurar esta copia.",
       unsentPending: "Guardado en este dispositivo — se envía cuando el host se reconecte",
       editUnsent: "Devolver al cuadro de mensaje",
       discardUnsent: "Descartar mensaje sin enviar",
@@ -2886,8 +2901,9 @@ export const es: TranslationResources = {
       placeholder: "Mensaje para todos los agentes de esta vista",
       send: "Enviar a todos",
       summary:
-        "{{send}} lo recibirán ahora, {{queue}} ocupados lo recibirán en cola, {{skip}} no disponibles.",
-      result: "Difusión: {{sent}} enviados, {{queued}} en cola, {{skipped}} omitidos.",
+        "{{send}} inactivos, {{queue}} ocupados, {{skip}} no disponibles. Los mensajes se guardan antes de entregarlos.",
+      result:
+        "Difusión: {{sent}} enviados, {{queued}} en cola del host, {{pending}} guardados en este dispositivo pendientes de entrega, {{skipped}} omitidos, {{failed}} fallidos.",
     },
     picker: {
       addTitle: "Añadir una sesión",

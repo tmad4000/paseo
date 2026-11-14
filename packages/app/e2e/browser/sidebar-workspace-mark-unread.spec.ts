@@ -382,37 +382,40 @@ test("sending a prompt reads the chat with a bounded read clear", async ({ page,
     .toMatchObject({ read: { seenAttentionAt: expect.any(String) } });
 });
 
-test("the sidebar check is reachable and usable from the keyboard", async ({
-  page,
-  workspaces,
-}) => {
-  const { subject, other } = workspaces;
-  await gotoAppShell(page);
-  await openWorkspace(page, other.workspaceId);
-  // Marked through the host, not the row's menu: a used kebab menu leaves the row revealed (a
-  // pre-existing hover quirk), and this test needs a row that is neither hovered nor focused.
-  await subject.client.markWorkspaceUnread(subject.workspaceId);
-  await expectStatus(page, subject.workspaceId, "attention");
-  await page.getByRole("textbox", { name: "Message agent..." }).first().click();
-  await page.mouse.move(0, 0);
+for (const activationKey of ["Enter", "Space"]) {
+  test(`the sidebar check is reachable and usable from the keyboard (${activationKey})`, async ({
+    page,
+    workspaces,
+  }) => {
+    const { subject, other } = workspaces;
+    await gotoAppShell(page);
+    await openWorkspace(page, other.workspaceId);
+    // Marked through the host, not the row's menu: a used kebab menu leaves the row revealed (a
+    // pre-existing hover quirk), and this test needs a row that is neither hovered nor focused.
+    await subject.client.markWorkspaceUnread(subject.workspaceId);
+    await expectStatus(page, subject.workspaceId, "attention");
+    await page.getByRole("textbox", { name: "Message agent..." }).first().click();
+    await page.mouse.move(0, 0);
 
-  const check = page.getByTestId(
-    `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
-  );
-  await expect(check).toHaveCount(0);
-  // A keypress first, so the row's focus counts as keyboard focus (:focus-visible).
-  await page.keyboard.press("Shift");
-  await workspaceRow(page, subject.workspaceId).focus();
-  await expect(check).toBeVisible();
-  for (let presses = 0; presses < 4; presses += 1) {
-    if (await check.evaluate((node) => node === document.activeElement)) break;
-    await page.keyboard.press("Tab");
-  }
-  await expect(check).toBeFocused();
-  await expect(check).toHaveAttribute("aria-label", "Mark main as read");
-  await page.keyboard.press("Enter");
-  await expectStatus(page, subject.workspaceId, "done");
-});
+    const check = page.getByTestId(
+      `sidebar-workspace-mark-as-read-${getServerId()}:${subject.workspaceId}`,
+    );
+    await expect(check).toHaveCount(0);
+    // A keypress first, so the row's focus counts as keyboard focus (:focus-visible).
+    await page.keyboard.press("Shift");
+    await workspaceRow(page, subject.workspaceId).focus();
+    await expect(check).toBeVisible();
+    for (let presses = 0; presses < 4; presses += 1) {
+      if (await check.evaluate((node) => node === document.activeElement)) break;
+      await page.keyboard.press("Tab");
+    }
+    await expect(check).toBeFocused();
+    await expect(check).toHaveAttribute("aria-label", "Mark main as read");
+    await page.keyboard.press(activationKey);
+    await expectStatus(page, subject.workspaceId, "done");
+    await expect(page).toHaveURL(new RegExp(`/workspace/${other.workspaceId}`));
+  });
+}
 
 test("on a touch layout the sidebar check shows without hover and is touch sized", async ({
   page,

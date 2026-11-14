@@ -51,7 +51,7 @@
 - **多提供商：** 通过同一个界面使用 Claude Code、Codex、Copilot、OpenCode 和 Pi。为每个任务选择合适的模型。
 - **语音控制：** 在语音模式下口述任务或讨论问题。需要免手操作时很方便。
 - **跨设备：** 支持 iOS、Android、桌面端、Web 和 CLI。在桌前开始工作，用手机查看进度，也可以从终端脚本化操作。
-- **隐私优先：** Paseo 没有遥测、追踪，也不会强制登录。
+- **隐私优先：** 请参阅[隐私与诊断信息](docs/client-error-diagnostics.md#privacy)。
 
 ## 快速开始
 

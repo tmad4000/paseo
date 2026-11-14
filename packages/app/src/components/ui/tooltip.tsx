@@ -1,3 +1,4 @@
+import { measurePress } from "@/performance/response-monitor";
 import {
   Children,
   cloneElement,
@@ -383,7 +384,7 @@ export function TooltipTrigger({
     onHoverOut: handleHoverOut,
     onFocus: handleFocus,
     onBlur: handleBlur,
-    onPress: handlePress,
+    onPress: (event: unknown) => measurePress("tooltip", () => handlePress(event)),
     ...(isWeb
       ? ({
           // RN Web's hover handling can vary across environments; pointer events are the most reliable.
@@ -413,7 +414,10 @@ export function TooltipTrigger({
       onHoverOut: composeEventHandlers(Reflect.get(rawProps, "onHoverOut"), handleHoverOut),
       onFocus: composeEventHandlers(Reflect.get(rawProps, "onFocus"), handleFocus),
       onBlur: composeEventHandlers(Reflect.get(rawProps, "onBlur"), handleBlur),
-      onPress: composeEventHandlers(Reflect.get(rawProps, "onPress"), handlePress),
+      onPress: (event: unknown) =>
+        measurePress("tooltip", () =>
+          composeEventHandlers(Reflect.get(rawProps, "onPress"), handlePress)(event),
+        ),
       onPointerEnter: composeEventHandlers(Reflect.get(rawProps, "onPointerEnter"), handleHoverIn),
       onPointerLeave: composeEventHandlers(Reflect.get(rawProps, "onPointerLeave"), handleHoverOut),
       onMouseEnter: composeEventHandlers(Reflect.get(rawProps, "onMouseEnter"), handleHoverIn),

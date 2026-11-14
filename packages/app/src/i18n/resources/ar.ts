@@ -436,6 +436,13 @@ export const ar: TranslationResources = {
       removeReview: "إزالة مرفق المراجعة",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "تحتاج عملية التسليم {{messageId}} إلى مراجعة. قد يصل الطلب لاحقًا؛ الرسائل التالية معلّقة. راجع هذه المحادثة قبل رفع التعليق.",
+        title: "رفع تعليق التسليم؟",
+        release: "رفع تعليق التسليم",
+        retryUnsupported: "راجع هذا التسليم لمرة واحدة وارفع تعليقه؛ لا يمكن إعادة إرساله تلقائيًا.",
+      },
       pending: "محفوظة على هذا الجهاز — بانتظار المضيف",
       accepted: "استلمها المضيف",
       delivered: "سُلّمت إلى الوكيل",
@@ -453,6 +460,12 @@ export const ar: TranslationResources = {
       queueAttention: "لم تتم المزامنة بعد — محفوظة هنا وما زالت المحاولة جارية",
       queueOnHost: "لدى المضيف — تُرسل عندما يتفرغ الوكيل",
       unsentHeader: "رسائل غير مرسلة ({{count}})",
+      recoveryHeader: "نسخ المسودات غير المرسلة ({{count}})",
+      recoveryMemory: "تُحفظ فقط ما دام هذا التطبيق مفتوحًا. هذه النسخة غير محفوظة على الجهاز.",
+      recoveryAttachments: "{{count}} مرفقات",
+      restoreFailed: "استعادة المسودة",
+      discardFailed: "حذف النسخة",
+      recoveryOccupied: "أكمل المسودة الحالية أو امسحها قبل استعادة هذه النسخة.",
       unsentPending: "محفوظة على هذا الجهاز — تُرسل عند إعادة اتصال المضيف",
       editUnsent: "أعدها إلى مربع الرسالة",
       discardUnsent: "تجاهل الرسالة غير المرسلة",
@@ -2821,8 +2834,9 @@ export const ar: TranslationResources = {
       placeholder: "رسالة إلى كل الوكلاء في هذا العرض",
       send: "إرسال إلى الكل",
       summary:
-        "سيستلمها {{send}} الآن، و{{queue}} مشغولون سيستلمونها في قائمة الانتظار، و{{skip}} غير متاحين.",
-      result: "البث: أُرسل {{sent}}، وفي الانتظار {{queued}}، وتُخطي {{skipped}}.",
+        "{{send}} غير مشغولين، {{queue}} مشغولون، {{skip}} غير متاحين. تُحفظ الرسائل قبل تسليمها.",
+      result:
+        "البث: أُرسل {{sent}}، وفي قائمة المضيف {{queued}}، وحُفظ على هذا الجهاز بانتظار التسليم {{pending}}، وتُخطي {{skipped}}، وفشل {{failed}}.",
     },
     picker: {
       addTitle: "إضافة جلسة",

@@ -31,6 +31,8 @@ import {
   type FileTransferFrame,
 } from "@getpaseo/protocol/binary-frames/index";
 import { Session } from "./session.js";
+import { MessageReceipts } from "./message-receipts/index.js";
+import type { AgentPromptInput, AgentStreamEvent } from "./agent/agent-sdk-types.js";
 import * as sessionSearchGeneration from "./agent/providers/codex/session-search-generation.js";
 import { AgentQueueService } from "./agent-queue/service.js";
 import { AgentQueueStore } from "./agent-queue/store.js";
@@ -6472,5 +6474,152 @@ test("sidebar message search reads unloaded Claude agents from their transcript 
     if (previousConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function sessionAcceptanceGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+test("direct RPC receipts use their own iterator when a later run supplies different failure proof", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "session-owned-acceptance-"));
+  const directory = join(workdir, "receipts");
+  const receipts = new MessageReceipts(directory);
+  const agentId = "11111111-1111-4111-8111-111111111111";
+  const agent = { id: agentId, provider: "codex", cwd: workdir, lifecycle: "idle" };
+  const ambiguous = new Error("A submission is ambiguous");
+  const definite = Object.assign(new Error("B was not submitted"), {
+    code: "AGENT_PROMPT_NOT_SUBMITTED",
+  });
+  const enteredA = sessionAcceptanceGate();
+  const failA = sessionAcceptanceGate();
+  const failedA = sessionAcceptanceGate();
+  const failedB = sessionAcceptanceGate();
+  const finishedB = sessionAcceptanceGate();
+  let latestError: Error = ambiguous;
+  let attempts = 0;
+  let acceptB = false;
+  const prompts: AgentPromptInput[] = [];
+  async function* providerRun(prompt: AgentPromptInput): AsyncGenerator<AgentStreamEvent> {
+    attempts += 1;
+    prompts.push(prompt);
+    if (prompt === "A") {
+      enteredA.resolve();
+      await failA.promise;
+      latestError = ambiguous;
+      failedA.resolve();
+      throw ambiguous;
+    }
+    if (!acceptB) {
+      latestError = definite;
+      failedB.resolve();
+      throw definite;
+    }
+    yield { type: "turn_started", provider: "codex", turnId: "accepted-B" };
+  }
+  const lateWait = vi.fn(async () => {
+    await failedB.promise;
+    throw latestError;
+  });
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    paseoHome: workdir,
+    agentManager: {
+      getAgent: () => agent,
+      listAgents: () => [agent],
+      waitForAgentClose: async () => {},
+      tryRunOutOfBand: () => false,
+      hasInFlightRun: () => false,
+      streamAgent: (_agentId, prompt) => providerRun(prompt),
+      waitForAgentRunStart: lateWait,
+    },
+    messageReceipts: {
+      ...createMessageReceiptsStub(),
+      send: (input) =>
+        receipts.send({
+          ...input,
+          send: async () => {
+            try {
+              await input.send();
+            } catch (error) {
+              if (input.messageId === "A") await finishedB.promise;
+              throw error;
+            }
+          },
+        }),
+    },
+  });
+  try {
+    const requestA = session.handleMessage({
+      type: "send_agent_message_request",
+      agentId,
+      requestId: "rpc-A",
+      messageId: "A",
+      text: "A",
+      attachments: [],
+      activeTurnBehavior: "interrupt",
+    });
+    await enteredA.promise;
+    failA.resolve();
+    await failedA.promise;
+    await session.handleMessage({
+      type: "send_agent_message_request",
+      agentId,
+      requestId: "rpc-B",
+      messageId: "B",
+      text: "B",
+      images: [{ data: "AAAA", mimeType: "image/png" }],
+      attachments: [],
+      activeTurnBehavior: "interrupt",
+    });
+    finishedB.resolve();
+    await requestA;
+    const reopened = new MessageReceipts(directory);
+    expect(await reopened.get(agentId, "A")).toBe("pending");
+    expect(await reopened.get(agentId, "B")).toBe("absent");
+    expect(messages).toContainEqual({
+      type: "send_agent_message_response",
+      payload: {
+        requestId: "rpc-A",
+        agentId,
+        accepted: false,
+        error: "agent_request_outcome_unknown: A submission is ambiguous",
+      },
+    });
+    await session.handleMessage({
+      type: "send_agent_message_request",
+      agentId,
+      requestId: "retry-A",
+      messageId: "A",
+      text: "A",
+      attachments: [],
+      activeTurnBehavior: "interrupt",
+    });
+    expect(attempts).toBe(2);
+    acceptB = true;
+    await session.handleMessage({
+      type: "send_agent_message_request",
+      agentId,
+      requestId: "retry-B",
+      messageId: "B",
+      text: "B",
+      images: [{ data: "AAAA", mimeType: "image/png" }],
+      attachments: [],
+      activeTurnBehavior: "interrupt",
+    });
+    expect(await reopened.get(agentId, "B")).toBe("completed");
+    expect(prompts[2]).toEqual(prompts[1]);
+    expect(attempts).toBe(3);
+    expect(lateWait).not.toHaveBeenCalled();
+  } finally {
+    failA.resolve();
+    finishedB.resolve();
+    await session.cleanup();
+    rmSync(workdir, { recursive: true, force: true });
   }
 });

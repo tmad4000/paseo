@@ -50,6 +50,17 @@ older cancellation from settling a newer turn. If interruption is rejected or ti
 keeps its active foreground turn and replacement, reload, rewind, and Stop report the failure.
 Accepting new work after an ambiguous interruption would create a split-brain session.
 
+### Run-start failures
+
+Receipt-backed sends wait for the first accepted event from their reserved iterator. Keep the
+provider's original error at that boundary so a proven pre-submission refusal remains retryable.
+An agent-ID observer cannot attribute a settled failure to a particular request; never use its
+latest error as proof for a receipt.
+
+A stale session may be reopened once before acceptance. The replacement iterator resolves the same
+owned acceptance promise. Once the run is accepted, or waiting times out or is canceled, no automatic
+replay is allowed. Timeout, cancellation and generic provider failure remain unknown outcomes.
+
 ## Relationships
 
 Agents can launch other agents via the agent-scoped `create_agent` MCP tool. Agent-scoped creation is always asynchronous and always stamps `paseo.parent-agent-id`, pointing back at the caller. Omit `workspaceId` to use the caller's workspace, or pass an existing workspace ID returned by `create_workspace`. Placement never changes parentage.

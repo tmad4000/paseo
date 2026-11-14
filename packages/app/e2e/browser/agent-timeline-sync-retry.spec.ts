@@ -11,6 +11,53 @@ import {
 } from "../support/helpers/timeline-resume";
 
 test.describe("Agent timeline sync retry", () => {
+  test("phone-width first sync keeps typing and Send available while history is held", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await seedLongMockAgentTimeline({ turns: 2 });
+    try {
+      gate.holdTimelineResponses(agent.agentId);
+      await openAgentTimeline(page, agent);
+      await gate.waitForHeldTimelineResponse();
+      const input = page.getByRole("textbox", { name: "Message agent..." });
+      await expect(input).toBeEditable();
+      await expect(page.getByTestId("agent-updating-toast")).toBeVisible();
+      const statusBox = await page.getByTestId("agent-updating-toast").boundingBox();
+      const contentBox = await page.getByTestId("agent-history-content").boundingBox();
+      expect(statusBox).not.toBeNull();
+      expect(contentBox).not.toBeNull();
+      expect(statusBox!.y).toBeGreaterThanOrEqual(contentBox!.y);
+      expect(statusBox!.y + statusBox!.height).toBeLessThanOrEqual(
+        contentBox!.y + contentBox!.height,
+      );
+      await input.fill("keep typing during first sync");
+      const send = page.getByRole("button", { name: "Send message", exact: true });
+      await expect(send).toBeEnabled();
+      gate.holdNextServerMessage("send_agent_message_response");
+      await send.click();
+      await gate.waitForHeldServerMessage("send_agent_message_response");
+      await expect(input).toHaveValue("");
+      await input.fill("next draft stays usable");
+      await expect(
+        page
+          .getByRole("button", { name: /^(Send message|Queue message|Steer now|Interrupt agent)$/ })
+          .first(),
+      ).toBeEnabled();
+      await page.screenshot({ path: testInfo.outputPath("phone-history-held.png") });
+      gate.releaseHeldServerMessage("send_agent_message_response");
+      gate.releaseHeldTimelineResponses();
+      await expect(page.getByTestId("agent-updating-toast")).toBeHidden({ timeout: 30_000 });
+      await expect(input).toHaveValue("next draft stays usable");
+    } finally {
+      gate.releaseHeldTimelineResponses();
+      gate.restore();
+      await agent.cleanup();
+    }
+  });
+
   test("a refused catch-up offers a retry that reports pending, failure, and recovery", async ({
     page,
   }, testInfo) => {
@@ -54,7 +101,7 @@ test.describe("Agent timeline sync retry", () => {
     }
   });
 
-  test("a refused first load offers a retry instead of a dead panel", async ({
+  test("a refused first load leaves the composer available and offers retry", async ({
     page,
   }, testInfo) => {
     test.setTimeout(120_000);
@@ -64,10 +111,10 @@ test.describe("Agent timeline sync retry", () => {
       gate.failTimelineResponses(agent.agentId);
       await openAgentTimeline(page, agent);
 
-      const loadError = page.getByTestId("agent-load-error");
-      const retry = page.getByTestId("agent-load-error-retry");
+      const loadError = page.getByTestId("agent-timeline-sync-error");
+      const retry = page.getByTestId("agent-timeline-sync-retry");
       await expect(loadError).toBeVisible({ timeout: 60_000 });
-      await expect(loadError).toContainText("already has an active writer");
+      await expect(page.getByRole("textbox", { name: "Message agent..." })).toBeEditable();
       await page.screenshot({ path: testInfo.outputPath("5-load-error.png"), fullPage: true });
 
       await retry.click();

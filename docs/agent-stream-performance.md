@@ -11,7 +11,7 @@ provider deltas (every provider streams incrementally)
   → AgentStreamCoalescer (daemon, leading + trailing, ≤1 message per 60ms per agent)
   → recordTimeline: one canonical row per flushed item
   → agent_stream ws message
-  → reducer queue (app, one commit per frame) → session store
+  → reducer queue (app, bounded cooperative batches) → session store
   → source-item plugin transforms → native Markdown blocks / tool grouping
   → paced reveal (app, per displayed item) → paint
 ```
@@ -48,7 +48,11 @@ So arrival sets a _target_ and the reveal rate is derived from the backlog inste
   occurrence keys.
 - **First sight of a text is revealed whole.** Only growth is paced. This is what makes history hydration, timeline replay, a virtualized row remounting on scroll, and an already-finished message all render complete on first paint without a special case for each.
 - **Leaving `phase: "streaming"` snaps the reveal.** A completed turn must never be left holding characters. `layoutStream` sets the phase, so anything outside the live head with an active turn is already complete.
-- **The reducer queue commits on a frame, with a timer as the ceiling.** A frame callback never fires in a hidden tab, so a timer races it and wins when nothing is painting — the store has to keep advancing either way.
+- **The reducer queue yields during bursts.** Scheduled work takes at most 16 events per chat
+  and stops visiting chats after 8ms of reducer/commit work. A busy chat moves to the back of
+  the queue. One batch can exceed that time budget; it is not a hard real-time bound. Explicit
+  history/disposal flushes still drain preceding events synchronously to preserve sequence order.
+  A timer races the frame callback so hidden apps continue advancing.
 - **A history row re-renders only when its item or layout item identity changes.** The inverted
   FlatList hands every mounted cell a new `index` and `ref` whenever a row is prepended, so without a
   memo boundary each coalesced tick re-rendered every mounted row (about 50 on a phone, 100–250 ms of
@@ -58,6 +62,41 @@ So arrival sets a _target_ and the reveal rate is derived from the backlog inste
   through that hook; the web viewport once skipped it and history hosts of a live tool group went
   stale. A new field on `StreamLayoutItem` must be added to `areLayoutItemsEquivalent`, or sharing
   silently stops.
+
+## Responsive controls during sync
+
+Once a chat's agent is known, mount its controls and composer while history loads. Keep one
+status viewport inside the history bounds above the composer. User toasts take priority over
+passive sync status; sync failures show the retry callout. Passive status passes touches through
+and takes no layout space. Do not cover the panel with a touch-blocking history overlay.
+Missing agents still need resolution. A successful first history load is not a
+prerequisite for typing or submitting a durably saved message. Keep cached text and draft state
+mounted during reconnects. The message outbox owns delivery independently of history sync;
+see [queue mirroring](queue-mirroring.md#direct-sends).
+
+## Responsiveness telemetry
+
+App diagnostics includes session counts, slow counts (>=100ms), worst latency and p50/p95 over
+the latest 256 samples per fixed metric. Common buttons, tooltip-based controls and Send measure
+synchronous handler work and callback-to-next-animation-frame delay separately. Wrapped icon
+tooltips time the child action, and nested wrappers of the same metric count one press. A passive root
+touch-end observer covers other touch controls, but also includes touches that are not buttons.
+The active app samples event-loop timer overshoot once per second. Background/hidden time and
+pending frame samples are discarded on suspension. Reducer batches report their own duration.
+
+These are JS measurements: they do not measure the native touch queue before JS receives an event,
+confirmed display presentation, async action completion, or host acknowledgement. Native release
+profiling remains necessary for end-to-end touch-to-paint latency. A short handler plus a long
+frame delay/stall points to contention elsewhere in the JS workload.
+
+Sampling stays in bounded memory and never stores control labels, routes or chat content. Once per
+minute, metrics with new slow samples emit a warning through existing paired-host diagnostics
+(`code=ui_slow_response`, fixed `operation`, minute-window `phase`). This works with existing
+`clientDiagnostics` hosts and records the app version. Read them with `paseo diagnostics errors
+--source global --since 1h --json`. There is no third-party collector. Fast samples stay in the app
+diagnostics report; warnings use session counts/max and recent-sample percentiles. Telemetry adds
+no persistence, network call, diagnostic-store notification, or React state update inside a measured
+input callback. At most 32 frame probes can be outstanding.
 
 ## Measuring
 

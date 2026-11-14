@@ -12,6 +12,7 @@ import { gateNextAgentMessage } from "../support/helpers/agent-message-gate";
 import {
   attachImageFromMenu,
   expectComposerDraft,
+  expectSavedQueueEntry,
   expectComposerEditable,
   expectAttachmentPill,
   expectComposerVisible,
@@ -29,6 +30,7 @@ import {
   createAgentTabFromMenu,
   waitForWorkspaceTabsVisible,
 } from "../support/helpers/workspace-tabs";
+import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 import { getServerId } from "../support/helpers/server-id";
 import { buildHostWorkspaceRoute } from "@/utils/host-routes";
 import { WORKSPACE_DECK_MAX_MOUNTED_WORKSPACES } from "@/screens/workspace/workspace-deck-retention";
@@ -132,6 +134,7 @@ const test = baseTest.extend<{
     await workspace.cleanup();
   },
   rejectionScenario: async ({ page }, provide, testInfo) => {
+    await overrideServerInfoFeatures(page, { agentRequestReceipts: false });
     const errorMessage = "Requested mock prompt rejection";
     const agent = await seedMockAgentWorkspace({
       repoPrefix: `message-rejection-${testInfo.workerIndex}-`,
@@ -1188,21 +1191,24 @@ test.describe("Agent message submission", () => {
     await expect(
       page.getByTestId("user-message").filter({ hasText: submissionScenario.existingPrompt }),
     ).toBeVisible();
+    const responseText = "I'll take a look at the scroll anchor behavior you described.";
+    const assistantOutput = page
+      .getByTestId("assistant-message")
+      .filter({ hasText: responseText })
+      .first();
+    const readTool = page.getByTestId("tool-call-group").filter({ hasText: /read/i }).first();
+    await expect(assistantOutput).toHaveCount(0);
+    await expect(readTool).toHaveCount(0);
     const finishTimelineRowStabilityCheck = await beginTimelineRowStabilityCheck(
       page,
       page.getByTestId("assistant-message").last(),
     );
-    const assistantMessageCount = await page.getByTestId("assistant-message").count();
-    const toolCallCount = await page.getByTestId("tool-call-group").count();
     await composer.press("Enter");
     const userMessage = page.getByTestId("user-message").filter({ hasText: prompt }).last();
     await expect(userMessage).toBeVisible();
-    await expect
-      .poll(async () => page.getByTestId("assistant-message").count())
-      .toBeGreaterThan(assistantMessageCount);
-    await expect
-      .poll(async () => page.getByTestId("tool-call-group").count())
-      .toBeGreaterThan(toolCallCount);
+    await expect(assistantOutput).toContainText(responseText);
+    await expect(assistantOutput).toBeVisible();
+    await expect(readTool).toBeVisible();
     await finishTimelineRowStabilityCheck();
   });
 
@@ -1218,7 +1224,54 @@ test.describe("Agent message submission", () => {
     await toasts.expectNeverShown("agent-updating-toast");
   });
 
-  test("restores a rejected submission and accepts its retry", async ({
+  test("saved rejected send preserves a newer draft and retries its image once", async ({
+    page,
+  }, testInfo) => {
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `saved-rejection-${testInfo.workerIndex}-`,
+      title: "Saved rejection recovery",
+      model: "ten-second-stream",
+    });
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectAgentIdle(page);
+      gate.holdNextClientRequest("send_agent_message_request");
+      const prompt = "Retry this saved image submission.";
+      await submitMessageThatWillBeRejected(page, prompt);
+      await gate.waitForHeldClientRequest();
+      const composer = composerLocator(page);
+      await expect(composer).toHaveValue("");
+      await composer.fill("Keep my newer draft.");
+      const original = gate.getClientRequests("send_agent_message_request").at(-1);
+      gate.rejectHeldAgentMessage("Refused before provider dispatch");
+      const unsent = page.locator('[data-testid^="unsent-message-"]').filter({ hasText: prompt });
+      await expect(unsent).toBeVisible({ timeout: 30_000 });
+      await expect(composer).toHaveValue("Keep my newer draft.");
+      await unsent.getByRole("button", { name: "Retry now", exact: true }).click();
+      const delivered = page.getByTestId("user-message").filter({ hasText: prompt });
+      await expect(delivered).toHaveCount(1);
+      await expect(delivered).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+      await expect(unsent).toHaveCount(0);
+      await expect(composer).toHaveValue("Keep my newer draft.");
+      const requests = gate.getClientRequests("send_agent_message_request");
+      expect(requests).toHaveLength(2);
+      expect(original).toMatchObject({
+        messageId: expect.any(String),
+        images: [{ data: expect.any(String), mimeType: "image/png" }],
+      });
+      expect(requests[1]).toMatchObject({ messageId: original?.messageId, text: prompt });
+      const { requestId: firstRequestId, ...firstPayload } = original!;
+      const { requestId: retryRequestId, ...retryPayload } = requests[1];
+      expect(retryRequestId).not.toBe(firstRequestId);
+      expect(retryPayload).toEqual(firstPayload);
+    } finally {
+      gate.restore();
+      await agent.cleanup();
+    }
+  });
+
+  test("legacy host restores a rejected submission and accepts its retry", async ({
     page,
     rejectionScenario,
   }) => {
@@ -1228,11 +1281,13 @@ test.describe("Agent message submission", () => {
     await retryRestoredSubmission(page, prompt);
   });
 
-  test("restores an ambiguous Steer failure without retrying or interrupting", async ({
+  test("legacy host restores an ambiguous Steer failure without retrying or interrupting", async ({
     page,
   }, testInfo) => {
     test.setTimeout(120_000);
-    const gate = await installDaemonWebSocketGate(page);
+    const gate = await installDaemonWebSocketGate(page, {
+      serverFeatures: { agentRequestReceipts: false },
+    });
     const prompt = "Restore this ambiguous Steer submission.";
     const agent = await startRunningMockAgent(page, {
       prefix: `steer-ambiguous-${testInfo.workerIndex}-`,
@@ -1335,6 +1390,56 @@ test.describe("Agent message submission", () => {
   test("replays Codex-shaped steering inside one active turn", async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     await replaySteeredSleepTurnInBrowser(page, testInfo, "codex");
+  });
+
+  test("saves Queue B behind a pre-dispatch Send A and delivers them in order", async ({
+    page,
+  }, testInfo) => {
+    const gate = await installDaemonWebSocketGate(page);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `saved-direct-queue-order-${testInfo.workerIndex}-`,
+      title: "Direct and queued device delivery order",
+    });
+    const firstPrompt = "Deliver A before the queued follow-up.";
+    const secondPrompt = "Deliver B after the saved direct request.";
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectComposerVisible(page);
+      await expectAgentIdle(page);
+      gate.holdNextClientRequest("send_agent_message_request");
+      await submitMessage(page, firstPrompt);
+      await gate.waitForHeldClientRequest();
+      expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({
+        text: firstPrompt,
+        activeTurnBehavior: "steer_only",
+      });
+      await expectComposerDraft(page, "");
+      await queueMessage(page, secondPrompt);
+      await expectComposerDraft(page, "");
+      await expectSavedQueueEntry(page, { text: secondPrompt });
+      await fillComposerDraft(page, "Keep typing while delivery waits.");
+      await expectComposerDraft(page, "Keep typing while delivery waits.");
+      expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
+      expect((await agent.client.listQueuedAgentMessages(agent.agentId)).items).toEqual([]);
+      gate.releaseHeldClientRequest();
+      await expect.poll(() => gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(1);
+      const first = page.getByTestId("user-message").filter({ hasText: firstPrompt });
+      const second = page.getByTestId("user-message").filter({ hasText: secondPrompt });
+      await expect(first).toHaveCount(1);
+      await expect(second).toHaveCount(1);
+      await expect(first.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+        "aria-label",
+        "Delivered to the agent",
+      );
+      await expect(second.getByTestId("user-message-delivery-mark")).toHaveAttribute(
+        "aria-label",
+        "Delivered to the agent",
+      );
+      await expectRenderedBefore(first, second);
+      await expectComposerDraft(page, "Keep typing while delivery waits.");
+    } finally {
+      await agent.cleanup();
+    }
   });
 
   test("restores overlapping queued sends when their connection fails", async ({

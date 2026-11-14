@@ -1,4 +1,24 @@
+import { captureDraftPreparation } from "@/composer/submission/preparation-recovery";
+import {
+  failedPreparationRecovery,
+  preparationRecoveryScopeKey,
+  restoreFailedPreparation,
+} from "@/composer/submission/preparation-recovery-store";
+import { createLocalFileAttachmentStore } from "@/attachments/local-file-attachment-store";
+import { createTestAttachmentFileSystem } from "@/attachments/test-attachment-file-system";
+import { __setAttachmentStoreForTests } from "@/attachments/store";
+import {
+  deleteAttachments,
+  encodeAttachmentsForSend,
+  garbageCollectAttachments,
+  persistAttachmentFromBytes,
+} from "@/attachments/service";
+import { retainAttachmentForGarbageCollection } from "@/attachments/gc-retention";
+import { useDraftStore } from "@/stores/draft-store";
+import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
 import { describe, expect, it, vi } from "vitest";
+import { submitAgentInput } from "@/composer/submit";
+import { useSendOutboxStore } from "@/stores/send-outbox-store";
 import { i18n } from "@/i18n/i18next";
 import {
   AgentMessageRejectedError,
@@ -1648,13 +1668,14 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
         if (entry) entries.set(id, { ...entry, rejectedError: error });
       },
     };
+    let latestFlush = Promise.resolve();
     const outbox: DirectSendOutbox = {
       serverId: "server",
       add: async (entry) => {
         entries.set(entry.clientMessageId, { ...entry, createdAt: entries.size, attempts: 0 });
       },
       flush: (agentId) =>
-        flushSendOutbox({
+        (latestFlush = flushSendOutbox({
           serverId: "server",
           agentId,
           outbox: access,
@@ -1663,19 +1684,55 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
               (await client.sendAgentMessage(targetAgentId, text, options)) ?? { queued: false },
           },
           onAccepted: (entry) => submission.accept(entry.agentId, entry.clientMessageId),
-        }),
+        })),
       get: (id) => entries.get(id),
       remove: async (id) => {
         entries.delete(id);
       },
     };
-    return { entries, outbox };
+    return { entries, outbox, settled: () => latestFlush };
   }
+
+  it("releases Send after durable save while the host acknowledgement remains pending", async () => {
+    const stream = createFakeStream();
+    let accept!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      accept = resolve;
+    });
+    const entries: string[] = [];
+    let flushStarted = false;
+    await dispatchComposerAgentMessage({
+      client: createFakeSendClient(),
+      agentId: "agent",
+      text: "first",
+      attachments: [],
+      encodeImages: async () => [],
+      submission: stream,
+      outbox: {
+        serverId: "server",
+        add: async (entry) => {
+          entries.push(entry.text);
+        },
+        flush: async () => {
+          flushStarted = true;
+          await waiting;
+        },
+        get: () => undefined,
+        remove: async () => {},
+      },
+    });
+    // This await cannot complete on the old code until accept() is called.
+    expect(flushStarted).toBe(true);
+    expect(entries).toEqual(["first"]);
+    expect(stream.tail.get("agent")).toHaveLength(1);
+    accept();
+    await waiting;
+  });
 
   it("stores the message before sending and forgets it once the host accepts", async () => {
     const stream = createFakeStream();
     const client = createFakeSendClient();
-    const { entries, outbox } = createFakeOutbox(client, stream);
+    const { entries, outbox, settled } = createFakeOutbox(client, stream);
 
     await dispatchComposerAgentMessage({
       client,
@@ -1688,6 +1745,7 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
       activeTurnBehavior: "steer_only",
     });
 
+    await settled();
     expect(client.calls).toHaveLength(1);
     expect(client.calls[0]?.options).toMatchObject({ activeTurnBehavior: "steer_only" });
     expect(entries.size).toBe(0);
@@ -1697,7 +1755,7 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
   it("keeps an unreachable send pending instead of handing it back to the composer", async () => {
     const stream = createFakeStream();
     const client = createFakeSendClient({ rejection: new DaemonConnectionError("Lost") });
-    const { entries, outbox } = createFakeOutbox(client, stream);
+    const { entries, outbox, settled } = createFakeOutbox(client, stream);
 
     await expect(
       dispatchComposerAgentMessage({
@@ -1710,6 +1768,7 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
         outbox,
       }),
     ).resolves.toBeUndefined();
+    await settled();
 
     const [entry] = [...entries.values()];
     expect(entry).toMatchObject({ text: "survive the outage", attempts: 1 });
@@ -1719,12 +1778,12 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
     expect(readSubmission(stream, "agent").submissions).toHaveLength(1);
   });
 
-  it("hands a refused send back to the composer and stores nothing", async () => {
+  it("keeps a refused send editable in the outbox without overwriting a newer draft", async () => {
     const stream = createFakeStream();
     const client = createFakeSendClient({
       rejection: new AgentMessageRejectedError("Agent not found"),
     });
-    const { entries, outbox } = createFakeOutbox(client, stream);
+    const { entries, outbox, settled } = createFakeOutbox(client, stream);
 
     await expect(
       dispatchComposerAgentMessage({
@@ -1736,9 +1795,12 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
         submission: stream,
         outbox,
       }),
-    ).rejects.toThrow("Agent not found");
+    ).resolves.toBeUndefined();
+    await settled();
 
-    expect(entries.size).toBe(0);
+    expect([...entries.values()]).toEqual([
+      expect.objectContaining({ text: "nowhere to go", rejectedError: "Agent not found" }),
+    ]);
     expect(stream.tail.get("agent")).toHaveLength(0);
   });
 
@@ -1747,7 +1809,7 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
     const client = createFakeSendClient({
       rejection: new AgentMessageRejectedError("agent_request_outcome_unknown"),
     });
-    const { entries, outbox } = createFakeOutbox(client, stream);
+    const { entries, outbox, settled } = createFakeOutbox(client, stream);
 
     await expect(
       dispatchComposerAgentMessage({
@@ -1760,6 +1822,7 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
         outbox,
       }),
     ).resolves.toBeUndefined();
+    await settled();
 
     expect([...entries.values()][0]?.rejectedError).toBe("agent_request_outcome_unknown");
   });
@@ -1788,3 +1851,260 @@ describe("dispatchComposerAgentMessage with a durable outbox", () => {
     expect(stream.tail.get("agent")).toHaveLength(0);
   });
 });
+
+describe("complete image encoding before delivery admission", () => {
+  const cases = (["durable", "one-shot", "legacy"] as const).flatMap((path) =>
+    ([undefined, [], [{ data: "first", mimeType: "image/png" }]] as const).map((encoded) => ({
+      path,
+      encoded,
+    })),
+  );
+  it.each(cases)(
+    "retains both original images when $path encoding is incomplete: $encoded",
+    async ({ path, encoded }) => {
+      const attachments: ComposerAttachment[] = [
+        { kind: "image", metadata: imageWithId("first") },
+        { kind: "image", metadata: imageWithId("second") },
+      ];
+      let draftText = "recover both";
+      let draftAttachments = attachments;
+      let revision = 0;
+      const client = createFakeSendClient();
+      const stream = createFakeStream();
+      const add = vi.fn(async () => {});
+      const flush = vi.fn(async () => {});
+      const beforeDispatch = vi.fn(async () => {});
+      const persisted: string[] = [];
+      const unsubscribe = useSendOutboxStore.subscribe((state, previous) => {
+        for (const id of Object.keys(state.entries)) {
+          if (!previous.entries[id]) persisted.push(id);
+        }
+      });
+      try {
+        expect(
+          await submitAgentInput({
+            message: draftText,
+            attachments,
+            isAgentRunning: false,
+            canSubmit: true,
+            getDraftRevision: () => revision,
+            recovery: new FailedPreparationRecovery<ComposerAttachment>().forScope("test"),
+            queueMessage: vi.fn(),
+            submitMessage: ({ message, attachments: outgoing }) =>
+              dispatchComposerAgentMessage({
+                serverId: path === "one-shot" ? "incomplete-images" : undefined,
+                client,
+                agentId: "agent",
+                text: message,
+                attachments: outgoing,
+                encodeImages: async () => (encoded === undefined ? undefined : [...encoded]),
+                submission: stream,
+                beforeDispatch,
+                outbox:
+                  path === "durable"
+                    ? {
+                        serverId: "incomplete-images",
+                        add,
+                        flush,
+                        get: () => undefined,
+                        remove: async () => {},
+                      }
+                    : undefined,
+              }),
+            clearDraft: () => {
+              throw new Error("Incomplete payload cleared the draft");
+            },
+            setUserInput: (text) => {
+              draftText = text;
+              revision += 1;
+            },
+            setAttachments: (next) => {
+              draftAttachments = next;
+              revision += 1;
+            },
+            setSendError: vi.fn(),
+            setIsProcessing: vi.fn(),
+          }),
+        ).toBe("failed");
+        expect(draftText).toBe("recover both");
+        expect(draftAttachments).toBe(attachments);
+        expect(draftAttachments).toEqual([
+          { kind: "image", metadata: imageWithId("first") },
+          { kind: "image", metadata: imageWithId("second") },
+        ]);
+        expect(client.calls).toEqual([]);
+        expect(add).not.toHaveBeenCalled();
+        expect(flush).not.toHaveBeenCalled();
+        expect(beforeDispatch).not.toHaveBeenCalled();
+        expect(persisted).toEqual([]);
+        expect(stream.tail.get("agent")).toEqual([]);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+});
+
+function attachmentSaveGate() {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+it.each(["restore", "discard"] as const)(
+  "keeps stored image bytes through removal and failed Queue save until %s releases ownership",
+  async (action) => {
+    const fileSystem = createTestAttachmentFileSystem();
+    const store = createLocalFileAttachmentStore({
+      storageType: "native-file",
+      baseDirectoryName: "recovery",
+      fileSystem,
+      resolvePreviewUrl: async (attachment) => attachment.storageKey,
+    });
+    __setAttachmentStoreForTests(store);
+    const scopeKey = preparationRecoveryScopeKey("byte-recovery", action);
+    const draftKey = `byte-recovery:${action}`;
+    const entered = attachmentSaveGate();
+    const write = attachmentSaveGate();
+    const bytes = new Uint8Array([0, 1, 2, 3, 4, 5, 251, 255]);
+    let releaseOtherOwner = () => {};
+    try {
+      const metadata = await persistAttachmentFromBytes({
+        id: `recovery-image-${action}`,
+        bytes,
+        mimeType: "image/png",
+      });
+      const original: UserComposerAttachment[] = [{ kind: "image", metadata }];
+      let current = original;
+      let text = "queued A";
+      let revision = 0;
+      let removal = Promise.resolve();
+      const send = vi.fn(async () => ({ agentId: "agent", revision: 1, items: [] }));
+      const flush = vi.fn(async () => {});
+      const saved: unknown[] = [];
+      const held = captureDraftPreparation({
+        message: text,
+        attachments: original,
+        recovery: failedPreparationRecovery.forScope(scopeKey),
+        getDraftRevision: () => revision,
+      });
+      const queue = async () => {
+        try {
+          const result = await queueComposerMessageOnServer({
+            client: {
+              enqueueAgentMessage: send,
+              removeQueuedAgentMessage: send,
+              getQueuedAgentMessageImages: async () => [],
+            },
+            agentId: "agent",
+            text,
+            attachments: original,
+            encodeImages: encodeAttachmentsForSend,
+            queue: { read: () => [], write: () => {} },
+            applySnapshot: () => {},
+            outbox: {
+              serverId: `byte-recovery-${action}`,
+              add: async (entry) => {
+                entered.resolve();
+                await write.promise;
+                saved.push(entry);
+              },
+              remove: async () => {},
+              flush,
+            },
+          });
+          if (result.error) throw new Error(result.error);
+        } catch (error) {
+          held.failIfChanged(error);
+          throw error;
+        } finally {
+          held.release();
+        }
+      };
+      const queued = queue().then(
+        () => "queued",
+        () => "failed",
+      );
+      await entered.promise;
+      current = removeComposerAttachmentAtIndex({
+        attachments: current,
+        index: 0,
+        deleteAttachments: (attachments) => {
+          removal = deleteAttachments(attachments);
+          return removal;
+        },
+      });
+      revision++;
+      await removal;
+      expect(current).toEqual([]);
+      expect(fileSystem.files.get(`file://${metadata.storageKey}`)).toEqual(bytes);
+      write.reject(new Error("device save rejected"));
+      expect(await queued).toBe("failed");
+      expect(saved).toEqual([]);
+      expect(send).not.toHaveBeenCalled();
+      expect(flush).not.toHaveBeenCalled();
+      const copy = failedPreparationRecovery
+        .getSnapshot()
+        .find((entry) => entry.scopeKey === scopeKey);
+      if (!copy) throw new Error("Missing failed Queue copy");
+      expect(copy.message).toBe("queued A");
+      expect(copy.attachments).toEqual(original);
+      await deleteAttachments([metadata]);
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      await expect(encodeAttachmentsForSend([metadata])).resolves.toEqual([
+        { data: "AAECAwQF+/8=", mimeType: "image/png" },
+      ]);
+      releaseOtherOwner = retainAttachmentForGarbageCollection(metadata.id);
+      if (action === "restore") {
+        text = "";
+        await restoreFailedPreparation({
+          id: copy.id,
+          scopeKey,
+          occupiedMessage: "Draft occupied",
+          getCurrentDraft: () => ({ message: text, attachments: current }),
+          apply: (snapshot) => {
+            text = snapshot.message;
+            current = snapshot.attachments.filter(
+              (attachment): attachment is UserComposerAttachment => attachment.kind === "image",
+            );
+            useDraftStore
+              .getState()
+              .saveDraftInput({ draftKey, draft: { text, attachments: current } });
+          },
+        });
+        expect(text).toBe("queued A");
+        expect(current).toEqual(original);
+        releaseOtherOwner();
+        await garbageCollectAttachments({
+          referencedIds: new Set(useDraftStore.getState().collectActiveAttachmentIds()),
+        });
+        await expect(store.encodeBase64({ attachment: metadata })).resolves.toBe("AAECAwQF+/8=");
+        releaseOtherOwner = retainAttachmentForGarbageCollection(metadata.id);
+        useDraftStore.getState().clearDraftInput({ draftKey });
+      } else {
+        failedPreparationRecovery.discard(copy.id);
+      }
+      expect(
+        failedPreparationRecovery.getSnapshot().some((entry) => entry.scopeKey === scopeKey),
+      ).toBe(false);
+      await deleteAttachments([metadata]);
+      await expect(store.encodeBase64({ attachment: metadata })).resolves.toBe("AAECAwQF+/8=");
+      releaseOtherOwner();
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      expect(fileSystem.files.has(`file://${metadata.storageKey}`)).toBe(false);
+      await expect(store.encodeBase64({ attachment: metadata })).rejects.toThrow();
+    } finally {
+      releaseOtherOwner();
+      for (const entry of failedPreparationRecovery.getSnapshot())
+        if (entry.scopeKey === scopeKey) failedPreparationRecovery.discard(entry.id);
+      useDraftStore.getState().clearDraftInput({ draftKey });
+      await Promise.resolve();
+      await garbageCollectAttachments({ referencedIds: new Set() });
+      __setAttachmentStoreForTests(null);
+    }
+  },
+);

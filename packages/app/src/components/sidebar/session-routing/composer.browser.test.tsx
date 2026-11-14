@@ -1020,6 +1020,8 @@ for (const outcome of ["acknowledged", "rejected"] as const) {
     act(() => submitControl(view).click());
     await waitFor(() => expect(fixture.enqueue).toHaveBeenCalledTimes(2));
     expect(fixture.enqueue.mock.calls[1]?.[0].text).toBe("next prompt");
+    // Finish this delivery's durable cleanup before the next test seeds a new outbox.
+    await waitFor(() => expect(useQueueOutboxStore.getState().entries).toEqual({}));
   });
 }
 

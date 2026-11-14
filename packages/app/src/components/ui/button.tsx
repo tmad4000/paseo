@@ -1,3 +1,4 @@
+import { measurePress } from "@/performance/response-monitor";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   default as React,
@@ -173,6 +174,7 @@ export function Button({
   accessibilityState: accessibilityStateProp,
   onHoverIn,
   onHoverOut,
+  onPress,
   ...props
 }: PropsWithChildren<
   Omit<PressableProps, "style"> & {
@@ -185,6 +187,10 @@ export function Button({
     loading?: boolean;
   }
 >) {
+  const handlePress = useCallback<NonNullable<PressableProps["onPress"]>>(
+    (event) => measurePress("button", () => onPress?.(event)),
+    [onPress],
+  );
   const [hovered, setHovered] = useState(false);
   const isDisabled = disabled || loading;
 
@@ -278,6 +284,7 @@ export function Button({
       accessibilityRole={accessibilityRole ?? "button"}
       accessibilityState={accessibilityState}
       disabled={isDisabled}
+      onPress={onPress ? handlePress : undefined}
       onHoverIn={handleHoverIn}
       onHoverOut={handleHoverOut}
       style={pressableStyle}

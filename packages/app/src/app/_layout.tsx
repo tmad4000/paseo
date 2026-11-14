@@ -1,3 +1,8 @@
+import {
+  installResponseMonitor,
+  measureResponseFrame,
+  setResponseMonitoringActive,
+} from "@/performance/response-monitor";
 import { resolveAppVersion } from "@/utils/app-version";
 import { installGlobalErrorDiagnostics } from "@/diagnostics/client-errors/global-handlers";
 import { installClientDiagnostics } from "@/diagnostics/client-errors/store";
@@ -990,9 +995,11 @@ function RootProviders({ children }: { children: ReactNode }) {
   );
 }
 
+const observeTouchResponse = () => measureResponseFrame("touch.frame");
+
 function RootAppTree() {
   return (
-    <GestureHandlerRootView style={flexStyle}>
+    <GestureHandlerRootView style={flexStyle} onTouchEnd={observeTouchResponse}>
       <View style={layoutStyles.surfaceFill}>
         <RootProviders>
           <RuntimeProviders>
@@ -1006,6 +1013,26 @@ function RootAppTree() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    const stop = installResponseMonitor(resolveAppVersion());
+    const updateActive = () =>
+      setResponseMonitoringActive(
+        AppState.currentState === "active" &&
+          (Platform.OS !== "web" ||
+            typeof document === "undefined" ||
+            document.visibilityState === "visible"),
+      );
+    updateActive();
+    const subscription = AppState.addEventListener("change", updateActive);
+    if (Platform.OS === "web" && typeof document !== "undefined")
+      document.addEventListener("visibilitychange", updateActive);
+    return () => {
+      subscription.remove();
+      if (Platform.OS === "web" && typeof document !== "undefined")
+        document.removeEventListener("visibilitychange", updateActive);
+      stop();
+    };
+  }, []);
   useEffect(() => installWebScrollbarStyles(), []);
   useEffect(() => {
     void installClientDiagnostics();

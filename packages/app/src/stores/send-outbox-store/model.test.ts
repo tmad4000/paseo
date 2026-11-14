@@ -151,6 +151,38 @@ describe("flushSendOutbox", () => {
     expect(entries.get("msg-1")?.rejectedError).toBeUndefined();
   });
 
+  test.each([
+    { parked: false, message: "agent_request_outcome_unknown" },
+    { parked: true, message: "agent_request_outcome_unknown" },
+    {
+      parked: false,
+      message: "Provider submission outcome unknown: the active turn changed during steering",
+    },
+    {
+      parked: true,
+      message: "Provider submission outcome unknown: the active turn changed during steering",
+    },
+  ])(
+    "an ambiguous response blocks later direct sends (already parked: $parked, response: $message)",
+    async ({ parked, message }) => {
+      const { entries, outbox } = createOutbox([
+        pendingSend({
+          clientMessageId: "unknown",
+          createdAt: 1,
+          ...(parked ? { rejectedError: message } : {}),
+        }),
+        pendingSend({ clientMessageId: "later", createdAt: 2 }),
+      ]);
+      const { calls, client } = createClient(async () => {
+        throw new AgentMessageRejectedError(message);
+      });
+      await flushSendOutbox({ serverId: "server-1", outbox, client });
+      expect(calls.map((call) => call.options.messageId)).toEqual(parked ? [] : ["unknown"]);
+      expect(entries.get("later")?.attempts).toBe(0);
+      expect(entries.get("unknown")?.rejectedError).toBe(message);
+    },
+  );
+
   test("parks a refused message for the user and continues with later ones", async () => {
     const { entries, outbox } = createOutbox([
       pendingSend({ clientMessageId: "refused", createdAt: 1 }),
@@ -182,6 +214,14 @@ describe("flushSendOutbox", () => {
     await flushSendOutbox({ serverId: "server-1", outbox, client });
 
     expect(calls).toEqual([]);
+  });
+
+  test("never replays a one-shot entry after its rejection flag is cleared", async () => {
+    const { entries, outbox } = createOutbox([pendingSend({ oneShot: true })]);
+    const { calls, client } = createClient(async () => ({ queued: false }));
+    await flushSendOutbox({ serverId: "server-1", outbox, client });
+    expect(calls).toEqual([]);
+    expect(entries.get("msg-1")).toMatchObject({ oneShot: true });
   });
 
   test("limits a flush to one agent when asked", async () => {
@@ -240,6 +280,14 @@ describe("canEditRefusedSend", () => {
   test("moves only plain-text messages the host definitely refused", () => {
     const refused = { rejectedError: "Agent not found", images: [], attachments: [] };
     expect(canEditRefusedSend(refused)).toBe(true);
+    expect(canEditRefusedSend({ ...refused, oneShot: true })).toBe(false);
+    expect(
+      canEditRefusedSend({
+        ...refused,
+        rejectedError:
+          "Provider submission outcome unknown: the active turn changed during steering",
+      }),
+    ).toBe(false);
     expect(canEditRefusedSend({ ...refused, rejectedError: undefined })).toBe(false);
     expect(canEditRefusedSend({ ...refused, rejectedError: "agent_request_outcome_unknown" })).toBe(
       false,

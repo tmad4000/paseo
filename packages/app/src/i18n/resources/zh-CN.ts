@@ -433,6 +433,13 @@ export const zhCN: TranslationResources = {
       removeReview: "移除 review 附件",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "需要检查投递 {{messageId}}。请求仍可能到达，后续消息已暂停。解除暂停前，请先查看此聊天。",
+        title: "解除投递暂停？",
+        release: "解除投递暂停",
+        retryUnsupported: "请检查此次一次性投递并解除暂停；此请求不会自动重发。",
+      },
       pending: "已保存在此设备 — 等待主机",
       accepted: "主机已收到",
       delivered: "已送达代理",
@@ -449,6 +456,12 @@ export const zhCN: TranslationResources = {
       queueAttention: "尚未同步 — 已保存在此，仍在重试",
       queueOnHost: "已在主机 — 代理空闲时发送",
       unsentHeader: "未发送的消息（{{count}}）",
+      recoveryHeader: "未发送的草稿副本（{{count}}）",
+      recoveryMemory: "仅在此应用打开期间保留。此副本未保存到设备。",
+      recoveryAttachments: "{{count}} 个附件",
+      restoreFailed: "恢复草稿",
+      discardFailed: "丢弃副本",
+      recoveryOccupied: "恢复此副本前，请完成或清空当前草稿。",
       unsentPending: "已保存在此设备 — 主机重新连接时发送",
       editUnsent: "移回消息框",
       discardUnsent: "丢弃未发送的消息",
@@ -2787,8 +2800,9 @@ export const zhCN: TranslationResources = {
       button: "广播",
       placeholder: "发给此视图中所有代理的消息",
       send: "全部发送",
-      summary: "{{send}} 个将立即收到，{{queue}} 个忙碌的将排队收到，{{skip}} 个不可用。",
-      result: "广播：已发送 {{sent}} 个，已排队 {{queued}} 个，已跳过 {{skipped}} 个。",
+      summary: "{{send}} 个空闲，{{queue}} 个忙碌，{{skip}} 个不可用。消息会在投递前保存。",
+      result:
+        "广播：已发送 {{sent}} 个，主机队列中 {{queued}} 个，已保存在此设备等待投递 {{pending}} 个，已跳过 {{skipped}} 个，失败 {{failed}} 个。",
     },
     picker: {
       addTitle: "添加会话",

@@ -3,10 +3,16 @@ import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 
+import { createOutboxWriteTracker } from "@/stores/outbox-write";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
+import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
+import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import {
   flushSendOutbox,
+  isUncertainSendOutcome,
   PendingDirectSendSchema,
   type PendingDirectSend,
   type SendOutboxFlushClient,
@@ -46,6 +52,16 @@ interface SendOutboxActions {
 type SendOutboxStore = PersistedSendOutbox & SendOutboxActions;
 
 const MUTATION_KEY = "send-outbox-mutation";
+
+const writesInFlight = createOutboxWriteTracker<PendingDirectSend>();
+
+export function pendingSendOutboxWrite(clientMessageId: string): Promise<void> | undefined {
+  return writesInFlight.pending(clientMessageId);
+}
+
+export function sendOutboxDeliveryEntries(): PendingDirectSend[] {
+  return writesInFlight.entries(useSendOutboxStore.getState().entries);
+}
 
 let pendingWrite: Promise<void> = Promise.resolve();
 const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedSendOutboxSchema);
@@ -89,6 +105,7 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
           await awaitSendOutboxHydration();
           const previous = get().entries[clientMessageId];
           if (!previous) return;
+          const finishWrite = writesInFlight.retain(clientMessageId, previous);
           const next = update(previous);
           const entries = { ...get().entries };
           if (next) entries[clientMessageId] = next;
@@ -100,6 +117,8 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
             set({ entries: { ...get().entries, [clientMessageId]: previous } });
             await pendingWrite.catch(() => {});
             throw error;
+          } finally {
+            finishWrite();
           }
         });
 
@@ -108,11 +127,11 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
         add: (entry) =>
           serializeQueueOperation(MUTATION_KEY, async () => {
             await awaitSendOutboxHydration();
+            await awaitDeliveryOrderHydration();
+            const saved = { ...entry, createdAt: nextDeliveryCreatedAt(), attempts: 0 };
+            const finishWrite = writesInFlight.retain(entry.clientMessageId, saved);
             set((state) => ({
-              entries: {
-                ...state.entries,
-                [entry.clientMessageId]: { ...entry, createdAt: Date.now(), attempts: 0 },
-              },
+              entries: { ...state.entries, [entry.clientMessageId]: saved },
             }));
             try {
               await pendingWrite;
@@ -121,6 +140,8 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
               delete entries[entry.clientMessageId];
               set({ entries });
               throw error;
+            } finally {
+              finishWrite();
             }
           }),
         removeDurably: (clientMessageId) => replaceDurably(clientMessageId, () => null),
@@ -149,7 +170,9 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
           }),
         entriesForServer: (serverId) =>
           Object.values(get().entries)
-            .filter((entry) => entry.serverId === serverId)
+            .filter(
+              (entry) => entry.serverId === serverId && !writesInFlight.has(entry.clientMessageId),
+            )
             .sort((a, b) => a.createdAt - b.createdAt),
       };
     },
@@ -162,18 +185,32 @@ export const useSendOutboxStore = create<SendOutboxStore>()(
   ),
 );
 
-export async function flushSendOutboxForServer(input: {
+export interface SendOutboxServerInput {
   serverId: string;
   agentId?: string;
-  client: SendOutboxFlushClient;
+  client: SendOutboxFlushClient & Partial<QueueOutboxFlushClient>;
   onAccepted?: (entry: PendingDirectSend, result: { queued: boolean }) => void;
   onRejected?: (entry: PendingDirectSend, message: string) => void;
   onRetryLimit?: (entry: PendingDirectSend) => void;
-}): Promise<void> {
+}
+
+export async function flushSendOutboxForServer(input: SendOutboxServerInput): Promise<void> {
+  await flushDeliveryOutboxes({ ...input, direct: input });
+}
+
+export async function flushSendOutboxEntriesForServer(
+  input: SendOutboxServerInput & { clientMessageId?: string },
+): Promise<void> {
   await awaitSendOutboxHydration();
   const store = useSendOutboxStore.getState();
   await flushSendOutbox({
     ...input,
+    onRejected: (entry, message) => {
+      if (!isUncertainSendOutcome(message)) {
+        createMessageSubmissionWriter(input.serverId).reject(entry.agentId, entry.clientMessageId);
+      }
+      input.onRejected?.(entry, message);
+    },
     outbox: {
       list: (serverId) => useSendOutboxStore.getState().entriesForServer(serverId),
       get: (clientMessageId) => useSendOutboxStore.getState().entries[clientMessageId],

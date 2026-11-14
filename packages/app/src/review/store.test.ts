@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { StateStorage } from "zustand/middleware";
 import type { ParsedDiffFile } from "@/git/use-diff-query";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
-import { buildReviewAttachmentSnapshot, buildReviewDraftKey } from "./store";
+import {
+  buildReviewAttachmentSnapshot,
+  buildReviewDraftKey,
+  clearSubmittedReviewAttachment,
+  resetReviewDraftStore,
+  useReviewDraftStore,
+} from "./store";
 import {
   addCommentToState,
   clearReviewInState,
@@ -303,4 +309,24 @@ describe("buildReviewAttachmentSnapshot", () => {
       },
     });
   });
+});
+
+it("clears only comments included in the submitted diff snapshot", () => {
+  resetReviewDraftStore();
+  const store = useReviewDraftStore.getState();
+  store.addComment({ key: "review:partial", comment: makeComment() });
+  const skipped = store.addComment({
+    key: "review:partial",
+    comment: makeComment({ id: "missing-target", filePath: "missing.ts" }),
+  });
+  const snapshot = buildReviewAttachmentSnapshot({
+    reviewDraftKey: "review:partial",
+    cwd: "/repo",
+    mode: "uncommitted",
+    comments: useReviewDraftStore.getState().drafts["review:partial"],
+    diffFiles: [makeFile()],
+  });
+  if (!snapshot) throw new Error("Missing review snapshot");
+  clearSubmittedReviewAttachment(snapshot);
+  expect(useReviewDraftStore.getState().drafts["review:partial"]).toEqual([skipped]);
 });

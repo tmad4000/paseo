@@ -58,9 +58,10 @@ describe("MockLoadTestAgentClient", () => {
       featureValues: { mockPromptRejections: 1 },
     });
 
-    await expect(session.startTurn("Reject this prompt.")).rejects.toThrow(
-      "Requested mock prompt rejection",
-    );
+    await expect(session.startTurn("Reject this prompt.")).rejects.toMatchObject({
+      message: "Requested mock prompt rejection",
+      code: "AGENT_PROMPT_NOT_SUBMITTED",
+    });
 
     await expect(session.startTurn("Accept this retry.")).resolves.toEqual({
       turnId: expect.any(String),

@@ -1,5 +1,7 @@
 import { useComposerPaneHeight } from "./dock/pane-height";
 import { isShortComposerPane } from "./dock/pane-geometry";
+import { createScopedDraftRevision } from "@/composer/draft/scoped-revision";
+import { captureDraftPreparation } from "@/composer/submission/preparation-recovery";
 import { useDraftStore, flushDraftPersistStorage } from "@/stores/draft-store";
 import type { ComposerTextSource } from "./text-source";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -135,7 +137,11 @@ import {
 } from "@/attachments/service";
 import { resolveAgentControlsMode } from "@/composer/agent-controls/mode";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
-import { resolveActiveSendBehavior, resolveDirectActiveTurnBehavior } from "./input/state";
+import {
+  queueInputMessage,
+  resolveActiveSendBehavior,
+  resolveDirectActiveTurnBehavior,
+} from "./input/state";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
@@ -143,6 +149,12 @@ import { submitAgentInput } from "@/composer/submit";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { createDirectSendOutbox } from "@/composer/submission/direct-send-outbox";
 import { DeliveryMark } from "@/components/delivery-mark";
+import { FailedPreparationTrack } from "@/composer/failed-preparation-track";
+import {
+  failedPreparationRecovery,
+  preparationRecoveryScopeKey,
+  restoreFailedPreparation,
+} from "@/composer/submission/preparation-recovery-store";
 import { UnsentTrack } from "@/composer/unsent-track";
 import {
   resolveQueuedMessageDeliveryState,
@@ -164,7 +176,12 @@ import type {
 import type { SelectedFile } from "@/attachments/selected-file";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
-import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
+import {
+  buildDraftWorkspaceAttachmentScopeKey,
+  collectWorkspaceAttachmentsForScopes,
+  useWorkspaceAttachmentsStore,
+  useWorkspaceAttachmentsForScopes,
+} from "@/attachments/workspace-attachments-store";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -2166,7 +2183,23 @@ function ComposerContentImpl({
     () => textSource.getSnapshot().trim().length > 0,
   );
   const setUserInput = onChangeText;
-  const workspaceAttachments = useWorkspaceAttachmentsForScopes(attachmentScopeKeys);
+  const failedPreparationScope = useMemo(
+    () => preparationRecoveryScopeKey(serverId, agentId),
+    [serverId, agentId],
+  );
+  const recoveredAttachmentScope = useMemo(
+    () => buildDraftWorkspaceAttachmentScopeKey(`recovered:${failedPreparationScope}`),
+    [failedPreparationScope],
+  );
+  const composerAttachmentScopes = useMemo(
+    () =>
+      [...attachmentScopeKeys, recoveredAttachmentScope]
+        .map((scopeKey) => scopeKey.trim())
+        .filter(Boolean),
+    [attachmentScopeKeys, recoveredAttachmentScope],
+  );
+  const workspaceAttachments = useWorkspaceAttachmentsForScopes(composerAttachmentScopes);
+  const workspaceAttachmentsAtRender = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
   const {
     selectedAttachments,
     buildOutgoingAttachments,
@@ -2175,12 +2208,24 @@ function ComposerContentImpl({
     beginSubmit,
     clearSentAttachments,
     completeSubmit,
-    resetSuppression,
+    resetSubmitSuppression,
+    getAttachmentEditRevision,
+    revealAttachments,
   } = composerWorkspaceAttachment.useBinding({
     normalAttachments: attachments,
     workspaceAttachments,
     onOpenWorkspaceAttachment,
   });
+  const getDraftRevision = useMemo(
+    () =>
+      createScopedDraftRevision({
+        getInputRevision: textSource.getRevision ?? textSource.getSnapshot,
+        getAttachmentEditRevision,
+        scopeKeys: composerAttachmentScopes,
+        attachments: workspaceAttachments,
+      }),
+    [textSource, getAttachmentEditRevision, composerAttachmentScopes, workspaceAttachments],
+  );
   const setSelectedAttachments = onChangeAttachments;
   const checkoutStatusQuery = useCheckoutStatusQuery({ serverId, cwd });
   const supportsForgeSearch = useSessionStore(
@@ -2297,6 +2342,62 @@ function ComposerContentImpl({
     [onChangeText],
   );
 
+  const restorePreparation = useCallback(
+    (id: string) =>
+      restoreFailedPreparation({
+        id,
+        scopeKey: failedPreparationScope,
+        occupiedMessage: t("composer.delivery.recoveryOccupied"),
+        getCurrentDraft: () => {
+          const current = textSource.getDraftSnapshot?.();
+          const message =
+            messageInputRef.current?.getText() ?? current?.text ?? textSource.getSnapshot();
+          const latestScopes = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
+          const changedScopeKeys = composerAttachmentScopes.filter(
+            (scopeKey) => latestScopes[scopeKey] !== workspaceAttachmentsAtRender[scopeKey],
+          );
+          const changedWorkspaceAttachments = collectWorkspaceAttachmentsForScopes({
+            attachmentsByScope: latestScopes,
+            scopeKeys: changedScopeKeys,
+          });
+          return {
+            message,
+            attachments: [
+              ...(current?.attachments ?? attachments),
+              ...selectedAttachments.filter(composerWorkspaceAttachment.is),
+              ...changedWorkspaceAttachments,
+            ],
+          };
+        },
+        apply: (draft) => {
+          const workspace = draft.attachments.filter(composerWorkspaceAttachment.is);
+          useWorkspaceAttachmentsStore.getState().setWorkspaceAttachments({
+            scopeKey: recoveredAttachmentScope,
+            attachments: workspace,
+          });
+          setSelectedAttachments(
+            composerWorkspaceAttachment.userAttachmentsOnly(draft.attachments),
+          );
+          replaceUserInput(draft.message);
+          revealAttachments(workspace);
+          messageInputRef.current?.focus();
+        },
+      }),
+    [
+      failedPreparationScope,
+      recoveredAttachmentScope,
+      composerAttachmentScopes,
+      workspaceAttachmentsAtRender,
+      textSource,
+      attachments,
+      selectedAttachments,
+      setSelectedAttachments,
+      replaceUserInput,
+      revealAttachments,
+      t,
+    ],
+  );
+
   const runClientSlashCommand = useCallback(
     (command: ClientSlashCommand): boolean => {
       if (command.execution !== "immediate" || !onClientSlashCommand) {
@@ -2309,7 +2410,7 @@ function ComposerContentImpl({
       clearDraft("sent");
       replaceUserInput("");
       setSelectedAttachments([]);
-      resetSuppression();
+      resetSubmitSuppression();
       setSendError(null);
       setIsProcessing(true);
       void onClientSlashCommand(command)
@@ -2326,7 +2427,7 @@ function ComposerContentImpl({
       blurOnSubmit,
       clearDraft,
       onClientSlashCommand,
-      resetSuppression,
+      resetSubmitSuppression,
       setSelectedAttachments,
       replaceUserInput,
     ],
@@ -2338,7 +2439,7 @@ function ComposerContentImpl({
       clearDraft("sent");
       replaceUserInput("");
       setSelectedAttachments([]);
-      resetSuppression();
+      resetSubmitSuppression();
       setSendError(null);
       executePluginClientSlashCommand({
         command: resolved.command,
@@ -2350,7 +2451,7 @@ function ComposerContentImpl({
       });
       return true;
     },
-    [blurOnSubmit, clearDraft, replaceUserInput, resetSuppression, setSelectedAttachments],
+    [blurOnSubmit, clearDraft, replaceUserInput, resetSubmitSuppression, setSelectedAttachments],
   );
 
   const { pickImages } = useImageAttachmentPicker();
@@ -2474,6 +2575,7 @@ function ComposerContentImpl({
         targetAgentId,
       ).isActive;
       await dispatchComposerAgentMessage({
+        serverId,
         client,
         agentId: targetAgentId,
         text,
@@ -2569,8 +2671,6 @@ function ComposerContentImpl({
     };
   }, [agentId, applyAgentQueueSnapshot, client, isConnected, serverId, supportsAgentMessageQueue]);
 
-  const latestAttachmentsRef = useRef(attachments);
-  latestAttachmentsRef.current = attachments;
   const queueSubmissionInFlight = useRef(new Set<string>());
   const queueMessage = useCallback(
     async (
@@ -2585,55 +2685,67 @@ function ComposerContentImpl({
         throw error;
       }
       queueSubmissionInFlight.current.add(submissionKey);
-      const submittedText = queuedMessage;
-      const submittedAttachments = latestAttachmentsRef.current;
-      const clearComposer = () => {
-        if (messageInputRef.current?.getText() === submittedText) {
-          messageInputRef.current?.replaceText("");
-          setUserInput("");
-        }
-        if (latestAttachmentsRef.current === submittedAttachments) {
-          setSelectedAttachments([]);
-          resetSuppression();
-        }
-        clearSentAttachments(queuedAttachments);
-      };
-
+      const getQueuedDraftRevision = createScopedDraftRevision({
+        getInputRevision: getDraftRevision,
+        scopeKeys: [],
+        attachments: queuedAttachments,
+      });
+      const held = captureDraftPreparation({
+        message: queuedMessage,
+        attachments: queuedAttachments,
+        recovery: failedPreparationRecovery.forScope(failedPreparationScope),
+        getDraftRevision: getQueuedDraftRevision,
+      });
       try {
-        if (supportsAgentMessageQueue && client) {
-          const result = await queueComposerMessageOnServer({
-            client,
-            agentId,
-            text: queuedMessage,
-            attachments: queuedAttachments,
-            attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
-              supportsForgeAttachments: supportsForgeSearch,
-            }),
-            encodeImages,
-            queue: queueWriter,
-            applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
-            outbox: queueOutbox,
-          });
-          if (result.error) {
-            setSendError(result.error);
-            throw new Error(result.error);
-          }
-          if (!result.queued) return false;
-          if (!options?.keepComposer) clearComposer();
-          return true;
-        }
-
-        const result = queueComposerMessage({
-          agentId,
-          text: queuedMessage,
-          attachments: queuedAttachments,
-          queue: queueWriter,
-        });
-        if (!result.queued) return false;
-
-        if (!options?.keepComposer) clearComposer();
-        return true;
+        const queued = await queueInputMessage(
+          { text: queuedMessage, attachments: queuedAttachments, cwd },
+          async () => {
+            if (supportsAgentMessageQueue && client) {
+              const result = await queueComposerMessageOnServer({
+                client,
+                agentId,
+                text: queuedMessage,
+                attachments: queuedAttachments,
+                attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+                  supportsForgeAttachments: supportsForgeSearch,
+                }),
+                encodeImages,
+                queue: queueWriter,
+                applySnapshot: (snapshot) => applyAgentQueueSnapshot(serverId, snapshot),
+                outbox: queueOutbox,
+              });
+              if (result.error) {
+                setSendError(result.error);
+                throw new Error(result.error);
+              }
+              return Boolean(result.queued);
+            }
+            return Boolean(
+              queueComposerMessage({
+                agentId,
+                text: queuedMessage,
+                attachments: queuedAttachments,
+                queue: queueWriter,
+              }).queued,
+            );
+          },
+          {
+            getDraftRevision: getQueuedDraftRevision,
+            keepComposer: options?.keepComposer,
+            clearDraft: () => {
+              replaceUserInput("");
+              setSelectedAttachments([]);
+              resetSubmitSuppression();
+            },
+          },
+        );
+        if (queued && !options?.keepComposer) clearSentAttachments(queuedAttachments);
+        return queued;
+      } catch (error) {
+        held.failIfChanged(error);
+        throw error;
       } finally {
+        held.release();
         queueSubmissionInFlight.current.delete(submissionKey);
       }
     },
@@ -2641,13 +2753,16 @@ function ComposerContentImpl({
       agentId,
       applyAgentQueueSnapshot,
       clearSentAttachments,
+      failedPreparationScope,
+      getDraftRevision,
       client,
+      cwd,
+      replaceUserInput,
       queueOutbox,
       queueWriter,
-      resetSuppression,
+      resetSubmitSuppression,
       serverId,
       setSelectedAttachments,
-      setUserInput,
       supportsAgentMessageQueue,
       supportsForgeSearch,
     ],
@@ -2660,6 +2775,11 @@ function ComposerContentImpl({
       forceSend?: boolean,
       activeTurnBehavior?: MessagePayload["activeTurnBehavior"],
     ) => {
+      const getSubmittedDraftRevision = createScopedDraftRevision({
+        getInputRevision: getDraftRevision,
+        scopeKeys: [],
+        attachments: outgoingAttachments,
+      });
       const result = await submitAgentInput({
         message: outgoingMessage,
         attachments: outgoingAttachments,
@@ -2680,6 +2800,8 @@ function ComposerContentImpl({
           }
           await submitMessage(submitText, submitAttachments, activeTurnBehavior);
         },
+        getDraftRevision: getSubmittedDraftRevision,
+        recovery: failedPreparationRecovery.forScope(failedPreparationScope),
         clearDraft,
         setUserInput: replaceUserInput,
         setAttachments: (nextAttachments) => {
@@ -2702,6 +2824,8 @@ function ComposerContentImpl({
       beginSubmit,
       clearDraft,
       completeSubmit,
+      failedPreparationScope,
+      getDraftRevision,
       hasExternalContent,
       isAgentRunning,
       queueMessage,
@@ -3704,6 +3828,10 @@ function ComposerContentImpl({
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={styles.inputAreaContent}>
+            <FailedPreparationTrack
+              scopeKey={failedPreparationScope}
+              onRestore={restorePreparation}
+            />
             <UnsentTrack
               serverId={serverId}
               agentId={agentId}
@@ -3736,6 +3864,7 @@ function ComposerContentImpl({
                 <StableMessageInput
                   ref={messageInputRef}
                   value={textSource.getSnapshot()}
+                  getDraftRevision={getDraftRevision}
                   onChangeText={setUserInput}
                   onSubmit={handleSubmit}
                   hasExternalContent={hasExternalContent}

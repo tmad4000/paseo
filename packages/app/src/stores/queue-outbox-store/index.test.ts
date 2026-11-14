@@ -61,6 +61,8 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
+await import("@/stores/delivery-outboxes");
+
 async function resetPersistedModules() {
   const { flushDraftPersistStorageDurably } = await import("@/stores/draft-store");
   await flushDraftPersistStorageDurably().catch(() => {});

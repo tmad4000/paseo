@@ -62,15 +62,6 @@ function hasOptimisticCreateContinuity(input: AgentScreenMachineInput): boolean 
   return input.continuity.kind === "optimistic-create";
 }
 
-function shouldBlockInitialAuthoritativeReadyState(input: AgentScreenMachineInput): boolean {
-  return (
-    !input.isArchived &&
-    !hasOptimisticCreateContinuity(input) &&
-    !input.hasHydratedHistoryBefore &&
-    (input.needsAuthoritativeSync || input.isHistorySyncing)
-  );
-}
-
 export interface AgentScreenMachineMemory {
   hasRenderedReady: boolean;
   lastReadyAgent: AgentScreenAgent | null;
@@ -82,7 +73,7 @@ export type AgentScreenReadySyncState =
   | { status: "reconnecting" }
   | {
       status: "catching_up";
-      ui: "overlay" | "status" | "silent";
+      ui: "status" | "silent";
     }
   | { status: "sync_error"; isRetrying: boolean };
 
@@ -159,15 +150,13 @@ function resolveAgentScreenSource(args: {
 
 function resolveCatchingUpUi(args: {
   hasOptimisticCreateContinuity: boolean;
-  isVisibilityCatchUpPending: boolean;
   hasHydratedHistoryBefore: boolean;
   hadInitialSyncFailure: boolean;
-}): "overlay" | "status" | "silent" {
+}): "status" | "silent" {
   if (args.hasOptimisticCreateContinuity) return "silent";
   if (args.hasHydratedHistoryBefore) return "status";
-  if (args.isVisibilityCatchUpPending) return "overlay";
   if (args.hadInitialSyncFailure) return "silent";
-  return "overlay";
+  return "status";
 }
 
 function resolveAgentScreenSync(args: {
@@ -196,7 +185,6 @@ function resolveAgentScreenSync(args: {
       status: "catching_up",
       ui: resolveCatchingUpUi({
         hasOptimisticCreateContinuity: hasOptimisticCreateContinuity(input),
-        isVisibilityCatchUpPending: input.visibilityCatchUpStatus === "pending",
         hasHydratedHistoryBefore: input.hasHydratedHistoryBefore,
         hadInitialSyncFailure,
       }),
@@ -222,7 +210,6 @@ export function deriveAgentScreenViewState({
 
   const useOptimisticCreateFlowAgent = shouldUseOptimisticCreateFlowAgent(input);
   const candidateAgent = resolveCandidateAgent({ input, useOptimisticCreateFlowAgent });
-  const shouldBlockReadyState = shouldBlockInitialAuthoritativeReadyState(input);
 
   if (input.missingAgentState.kind === "not_found") {
     return {
@@ -234,7 +221,7 @@ export function deriveAgentScreenViewState({
     };
   }
 
-  if (input.missingAgentState.kind === "error" && !nextMemory.hasRenderedReady) {
+  if (input.missingAgentState.kind === "error" && !candidateAgent && !nextMemory.hasRenderedReady) {
     return {
       state: {
         tag: "error",
@@ -245,6 +232,7 @@ export function deriveAgentScreenViewState({
   }
 
   if (
+    !candidateAgent &&
     input.visibilityCatchUpStatus === "error" &&
     input.visibilityCatchUpError &&
     !input.hasHydratedHistoryBefore &&
@@ -254,17 +242,6 @@ export function deriveAgentScreenViewState({
       state: {
         tag: "error",
         message: input.visibilityCatchUpError,
-      },
-      memory: nextMemory,
-    };
-  }
-
-  if (candidateAgent && shouldBlockReadyState) {
-    return {
-      state: {
-        tag: "boot",
-        reason: "loading",
-        source: "none",
       },
       memory: nextMemory,
     };

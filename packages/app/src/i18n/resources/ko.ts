@@ -436,6 +436,14 @@ export const ko: TranslationResources = {
       removeReview: "리뷰 첨부 제거",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "전달 {{messageId}}을 확인해야 합니다. 요청이 나중에 도착할 수 있어 이후 메시지를 보류합니다. 보류를 해제하기 전에 이 채팅을 확인하세요.",
+        title: "전달 보류를 해제할까요?",
+        release: "전달 보류 해제",
+        retryUnsupported:
+          "이 일회성 전달을 확인한 후 보류를 해제하세요. 자동으로 다시 전송할 수 없습니다.",
+      },
       pending: "이 기기에 저장됨 — 호스트를 기다리는 중",
       accepted: "호스트가 받음",
       delivered: "에이전트에 전달됨",
@@ -454,6 +462,12 @@ export const ko: TranslationResources = {
       queueAttention: "아직 동기화되지 않음 — 여기에 저장됨, 재시도 중",
       queueOnHost: "호스트에 있음 — 에이전트가 한가해지면 전송",
       unsentHeader: "보내지 않은 메시지 ({{count}})",
+      recoveryHeader: "보내지 않은 초안 사본 ({{count}})",
+      recoveryMemory: "이 앱이 열려 있는 동안만 보관됩니다. 이 사본은 기기에 저장되지 않았습니다.",
+      recoveryAttachments: "첨부 파일 {{count}}개",
+      restoreFailed: "초안 복원",
+      discardFailed: "사본 삭제",
+      recoveryOccupied: "이 사본을 복원하기 전에 현재 초안을 완료하거나 지우세요.",
       unsentPending: "이 기기에 저장됨 — 호스트가 다시 연결되면 전송",
       editUnsent: "메시지 입력창으로 되돌리기",
       discardUnsent: "보내지 않은 메시지 삭제",
@@ -2839,8 +2853,9 @@ export const ko: TranslationResources = {
       placeholder: "이 보기의 모든 에이전트에게 보낼 메시지",
       send: "모두에게 보내기",
       summary:
-        "{{send}}개는 지금 받고, 작업 중인 {{queue}}개는 대기열에 추가되며, {{skip}}개는 사용할 수 없습니다.",
-      result: "브로드캐스트: {{sent}}개 전송, {{queued}}개 대기, {{skipped}}개 건너뜀.",
+        "{{send}}개 유휴, {{queue}}개 작업 중, {{skip}}개 사용 불가. 메시지는 전달 전에 저장됩니다.",
+      result:
+        "브로드캐스트: {{sent}}개 전송, {{queued}}개 호스트 대기열, {{pending}}개 이 기기에 저장되어 전달 대기, {{skipped}}개 건너뜀, {{failed}}개 실패.",
     },
     picker: {
       addTitle: "세션 추가",

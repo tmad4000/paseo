@@ -164,6 +164,22 @@ export const useWorkspaceAttachmentsStore = create<WorkspaceAttachmentsStore>()(
   },
 }));
 
+const scopeRevisions = new Map<string, object>();
+useWorkspaceAttachmentsStore.subscribe((state, previous) => {
+  const keys = new Set([
+    ...Object.keys(state.attachmentsByScope),
+    ...Object.keys(previous.attachmentsByScope),
+  ]);
+  for (const key of keys) {
+    if (state.attachmentsByScope[key] !== previous.attachmentsByScope[key])
+      scopeRevisions.set(key, {});
+  }
+});
+
+export function getWorkspaceAttachmentRevision(scopeKey: string): unknown {
+  return scopeRevisions.get(scopeKey);
+}
+
 export function useWorkspaceAttachmentScopeKey(input: WorkspaceAttachmentScope): string {
   const isDraftScope = input.kind === "draft";
   const draftId = isDraftScope ? input.draftId : "";

@@ -441,6 +441,14 @@ export const fr: TranslationResources = {
       removeReview: "Supprimer la pièce jointe de l'avis",
     },
     delivery: {
+      oneShot: {
+        detail:
+          "La remise {{messageId}} doit être vérifiée. La demande peut encore arriver ; les messages suivants attendent. Vérifiez cette discussion avant de lever le blocage.",
+        title: "Lever le blocage de remise ?",
+        release: "Lever le blocage de remise",
+        retryUnsupported:
+          "Vérifiez cette remise unique puis levez son blocage ; elle ne peut pas être renvoyée automatiquement.",
+      },
       pending: "Enregistré sur cet appareil — en attente de l’hôte",
       accepted: "Reçu par l’hôte",
       delivered: "Remis à l’agent",
@@ -459,6 +467,13 @@ export const fr: TranslationResources = {
       queueAttention: "Pas encore synchronisé — enregistré ici, nouvelles tentatives en cours",
       queueOnHost: "Sur l’hôte — envoyé quand l’agent sera libre",
       unsentHeader: "Messages non envoyés ({{count}})",
+      recoveryHeader: "Copies de brouillons non envoyés ({{count}})",
+      recoveryMemory:
+        "Conservée uniquement tant que cette application est ouverte. Cette copie n’est pas enregistrée sur l’appareil.",
+      recoveryAttachments: "{{count}} pièces jointes",
+      restoreFailed: "Restaurer le brouillon",
+      discardFailed: "Supprimer la copie",
+      recoveryOccupied: "Terminez ou effacez le brouillon actuel avant de restaurer cette copie.",
       unsentPending: "Enregistré sur cet appareil — envoyé à la reconnexion de l’hôte",
       editUnsent: "Remettre dans la zone de message",
       discardUnsent: "Supprimer le message non envoyé",
@@ -2890,8 +2905,9 @@ export const fr: TranslationResources = {
       placeholder: "Message pour tous les agents de cette vue",
       send: "Envoyer à tous",
       summary:
-        "{{send}} le recevront maintenant, {{queue}} occupés le recevront en file, {{skip}} indisponibles.",
-      result: "Diffusion : {{sent}} envoyés, {{queued}} en file, {{skipped}} ignorés.",
+        "{{send}} inactifs, {{queue}} occupés, {{skip}} indisponibles. Les messages sont enregistrés avant leur remise.",
+      result:
+        "Diffusion : {{sent}} envoyés, {{queued}} en file sur l’hôte, {{pending}} enregistrés sur cet appareil en attente de remise, {{skipped}} ignorés, {{failed}} en échec.",
     },
     picker: {
       addTitle: "Ajouter une session",

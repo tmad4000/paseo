@@ -1,3 +1,4 @@
+import { recordClientDiagnostic } from "@/diagnostics/client-errors/record";
 import type { SelectedFile } from "@/attachments/selected-file";
 import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
@@ -19,6 +20,8 @@ import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/mo
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
+import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
+import { runOrderedAdmission, type DeliveryClient } from "@/stores/delivery-outboxes";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import { isUncertainSendOutcome, type PendingDirectSend } from "@/stores/send-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
@@ -48,7 +51,7 @@ export interface AttachmentPersister {
   deleteAttachments: (metadata: AttachmentMetadata[]) => Promise<void> | void;
 }
 
-export interface ComposerSendClient {
+export interface ComposerSendClient extends Partial<QueueOutboxFlushClient> {
   sendAgentMessage: (
     agentId: string,
     text: string,
@@ -190,6 +193,9 @@ export function cancelComposerAgent(input: CancelComposerAgentInput): Promise<vo
 }
 
 export interface DispatchComposerAgentMessageInput {
+  serverId?: string;
+  deliveryClient?: DeliveryClient;
+  beforeDispatch?: () => Promise<void>;
   client: ComposerSendClient;
   agentId: string;
   text: string;
@@ -203,7 +209,7 @@ export interface DispatchComposerAgentMessageInput {
   submission: MessageSubmissionWriter;
   activeTurnBehavior?: ActiveTurnBehavior;
   activeTurnId?: string;
-  /** When present, the send is stored on the device first and retried until the host answers. */
+  /** Device-first delivery; retry rules are owned by docs/queue-mirroring.md, "Direct sends". */
   outbox?: DirectSendOutbox;
 }
 
@@ -220,42 +226,58 @@ export interface DirectSendOutbox {
   remove: (clientMessageId: string) => Promise<void>;
 }
 
+async function encodeComposerImages(
+  input: Pick<DispatchComposerAgentMessageInput, "encodeImages">,
+  images: AttachmentMetadata[],
+) {
+  const encoded = await input.encodeImages(images);
+  if ((encoded?.length ?? 0) !== images.length) {
+    throw new Error(i18n.t("composer.errors.failedToSend"));
+  }
+  return encoded ?? [];
+}
+
 async function dispatchDurableComposerAgentMessage(
   input: DispatchComposerAgentMessageInput & { outbox: DirectSendOutbox },
   clientMessageId: string,
   wirePayload: ReturnType<typeof splitComposerAttachmentsForSubmit>,
+  imagesData: Array<{ data: string; mimeType: string }>,
 ): Promise<void> {
-  try {
-    const imagesData = await input.encodeImages(wirePayload.images);
-    if (wirePayload.images.length > 0 && imagesData?.length !== wirePayload.images.length) {
-      throw new Error(i18n.t("composer.errors.failedToSend"));
-    }
-    await input.outbox.add({
-      serverId: input.outbox.serverId,
-      agentId: input.agentId,
-      clientMessageId,
-      text: input.text,
-      images: imagesData ?? [],
-      attachments: wirePayload.attachments,
-      ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
-      ...(input.interrupt ? { interrupt: true } : {}),
+  await input.outbox.add({
+    serverId: input.outbox.serverId,
+    agentId: input.agentId,
+    clientMessageId,
+    text: input.text,
+    images: imagesData,
+    attachments: wirePayload.attachments,
+    ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
+    ...(input.interrupt ? { interrupt: true } : {}),
+  });
+  // Saving is the composer boundary. Waiting for the relay here locks Send and
+  // the draft until acknowledgement, even though the message is already durable.
+  void input.outbox
+    .flush(input.agentId)
+    .then(() => {
+      const entry = input.outbox.get(clientMessageId);
+      if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
+        // Keep the refused request in Unsent messages, where Edit/Retry/Discard are
+        // available. Never put it over a newer draft the author has started.
+        input.submission.reject(input.agentId, clientMessageId);
+      }
+      return undefined;
+    })
+    .catch(() => {
+      // The saved entry remains retryable; an unexpected bookkeeping failure must
+      // neither clear it nor become an unhandled rejection.
+      recordClientDiagnostic({
+        source: "rpc",
+        severity: "warning",
+        operation: "send-outbox.flush",
+        serverId: input.outbox.serverId,
+        agentId: input.agentId,
+        message: "Saved message delivery could not finish; the request remains on this device.",
+      });
     });
-  } catch (error) {
-    // Nothing was stored, so the composer must keep the text.
-    input.submission.reject(input.agentId, clientMessageId);
-    throw error;
-  }
-  await input.outbox.flush(input.agentId);
-  const entry = input.outbox.get(clientMessageId);
-  if (entry?.rejectedError !== undefined && !isUncertainSendOutcome(entry.rejectedError)) {
-    // The host refused this message while the author is still here: hand the
-    // text back to the composer instead of parking it.
-    await input.outbox.remove(clientMessageId);
-    input.submission.reject(input.agentId, clientMessageId);
-    throw new Error(entry.rejectedError);
-  }
-  // Accepted (the flush removed it), saved for retry on reconnect, or parked
-  // with an uncertain outcome for the user to judge.
 }
 
 export async function dispatchComposerAgentMessage(
@@ -277,23 +299,53 @@ export async function dispatchComposerAgentMessage(
       : {}),
   });
   input.submission.begin(input.agentId, userMessage);
-  if (input.outbox) {
-    await dispatchDurableComposerAgentMessage(
-      { ...input, outbox: input.outbox },
-      clientMessageId,
-      wirePayload,
-    );
-    return;
-  }
   try {
-    const imagesData = await input.encodeImages(wirePayload.images);
-    const result = await input.client.sendAgentMessage(input.agentId, input.text, {
+    const imagesData = await encodeComposerImages(input, wirePayload.images);
+    if (input.outbox) {
+      await dispatchDurableComposerAgentMessage(
+        { ...input, outbox: input.outbox },
+        clientMessageId,
+        wirePayload,
+        imagesData,
+      );
+      return;
+    }
+    const options = {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
-      images: imagesData ?? [],
+      images: imagesData,
       attachments: wirePayload.attachments,
       ...(input.interrupt ? { interrupt: true } : {}),
-    });
+    };
+    const send = async (markDispatched: () => void) => {
+      await input.beforeDispatch?.();
+      markDispatched();
+      return input.client.sendAgentMessage(input.agentId, input.text, options);
+    };
+    const result = input.serverId
+      ? await runOrderedAdmission({
+          serverId: input.serverId,
+          agentId: input.agentId,
+          itemId: clientMessageId,
+          client: input.deliveryClient ?? {
+            sendAgentMessage: async (agentId, text, sendOptions) =>
+              (await input.client.sendAgentMessage(agentId, text, sendOptions)) ?? {
+                queued: false,
+              },
+            enqueueAgentMessage: input.client.enqueueAgentMessage?.bind(input.client),
+            removeQueuedAgentMessage: input.client.removeQueuedAgentMessage?.bind(input.client),
+            getLastServerInfoMessage: input.client.getLastServerInfoMessage?.bind(input.client),
+          },
+          oneShot: {
+            text: input.text,
+            images: options.images,
+            attachments: options.attachments,
+            activeTurnBehavior: input.activeTurnBehavior,
+            ...(input.interrupt ? { interrupt: true } : {}),
+          },
+          run: send,
+        })
+      : await send(() => {});
     if (result?.queued) {
       // Queue admission is not provider submission. Retire only the optimistic
       // bubble; reject preserves a canonical echo that raced the RPC response.
