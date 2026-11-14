@@ -2,7 +2,8 @@ import { expect, test } from "../support/fixtures";
 import { openAgentRoute } from "../support/helpers/mock-agent";
 import { seedWorkspace } from "../support/helpers/seed-client";
 
-test.use({ launchOptions: { chromiumSandbox: true } });
+// System Chrome has a sandbox profile on Ubuntu hosts; downloaded Chromium does not.
+test.use({ channel: "chrome", launchOptions: { chromiumSandbox: true } });
 
 test("stacked panes reduce composer chrome and retain a growing draft through resize", async ({
   page,
