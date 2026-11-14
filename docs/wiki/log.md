@@ -5,8 +5,8 @@ Newest first. Each entry records the ask, its source, and the outcome, and links
 ## 2026-11-14: Should Paseo offer an iTerm2-style layout, splitting the current tab?
 
 - **Ask:** Jacob asked whether the fork should offer a layout more like iTerm2 than cmux, where you split the current tab instead of a dragged pane becoming a separate tab or workspace pane. Should it coexist with the current mode, replace it, or be a setting with defaults? He remembered asking for an investigation before.
-- **Work:** Opus researched the earlier discussions, the current architecture, and iTerm2's and cmux's behaviour. Fable is writing the design recommendation, and Opus will implement it.
-- **Outcome so far:** The earlier investigation was found: the 2026-10-29 entry below. The research is summarised in [split-layouts.md](split-layouts.md); the design decision is pending.
+- **Work:** Opus researched the earlier discussions, the current architecture, and iTerm2's and cmux's behaviour. Fable wrote the design ([spec](split-layouts-design-2026-11-14.md)). Opus is implementing Phase 1.
+- **Outcome:** The earlier investigation was found: the 2026-10-29 entry below. The design recommends **Coexist, with no setting**. Leaves are ordinary tabs, layouts persist in a sidecar store, and Split this tab is ⌘⌥\\. See [split-layouts.md](split-layouts.md#decision). Phase 1 is being implemented on a `feat/` branch.
 
 ## 2026-11-13: Native split windows in the right pane over remote control
 

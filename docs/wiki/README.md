@@ -11,7 +11,7 @@ How it relates to the rest of `docs/`:
 
 | Page | Topic | Status |
 | --- | --- | --- |
-| [split-layouts.md](split-layouts.md) | iTerm2-style "split this tab" compared with the current cmux-style workspace splits | Design in progress (2026-11-14) |
+| [split-layouts.md](split-layouts.md) | iTerm2-style "split this tab" compared with the current cmux-style workspace splits | Coexist recommended; Phase 1 in progress (2026-11-14) |
 
 The [log](log.md) lists every recorded discussion and query, newest first.
 

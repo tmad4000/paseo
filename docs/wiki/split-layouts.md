@@ -1,6 +1,6 @@
 # Split layouts: "split this tab" (iTerm2) and workspace splits (cmux)
 
-**Status (2026-11-14):** Research is done. The design recommendation is in progress and nothing is implemented yet. The code references below are to fork `main` at `accd8743a`.
+**Status (2026-11-14):** Design recommended (Coexist). Phase 1 implementation is next. The code references below are to fork `main` at `accd8743a`.
 
 ## The question
 
@@ -81,4 +81,28 @@ The CLI and remote UI commands can't operate on panes: there is only `tab.open`/
 
 ## Decision
 
-Pending. The design recommendation (Fable, 2026-11-14) will be recorded here with its rationale, Phase 1 scope and how the shortcut conflict is resolved.
+**Recommended 2026-11-14 (Fable design, which confirms the 2026-10-29 direction): Coexist.** Add "Split this tab", but neither replace the current model nor add a mode setting. The full spec is in [split-layouts-design-2026-11-14.md](split-layouts-design-2026-11-14.md).
+
+- **Why not Replace:** FORK.md's "upstream wins" rule, constant upstream churn in the layout code, and the 2026-10-02 Views decision.
+- **Why not a setting:** both engines would have to be built anyway, and ⌘\ would mean different things on different installs. Anyone who wants the iTerm habit can rebind it in Settings → Shortcuts.
+- **Implementation change since 10-29: leaves are ordinary tabs.** A composite tab is a host tab, its member tabs in the same pane, and a split tree over those members. This keeps one tab per target, which is the dedup rule, so splitting never duplicates an agent, terminal or browser. Every upstream tab walker keeps working unchanged.
+- **Persistence:** in a sidecar store, `tab-local-splits` (strict schema, v1). `workspace-layout-state` stays at v2. Older builds ignore the sidecar and show the members as ordinary tabs, so nothing is wiped.
+- **Shortcuts:**
+
+  | Shortcut | Action |
+  | --- | --- |
+  | ⌘\ / ⌘⇧\ | Workspace split, upstream's binding, unchanged |
+  | ⌘⌥\ / ⌘⌥⇧\ | Split this tab |
+  | ⌘⇧↩ | Zoom the leaf; in a tab that isn't split, falls through to maximizing the pane |
+  | ⌘⇧ arrows | Move focus spatially across both levels |
+
+  Ctrl+Alt equivalents are added for Linux and Windows.
+- **Phase 1:**
+  - Web and desktop only.
+  - Split this tab from the tab menu, the command palette and the shortcuts.
+  - The new leaf shows a chooser: an existing tab in this pane, a new terminal, a new agent or a new browser.
+  - Resizable leaves with thin headers, Zoom, closing a leaf, and "Move to its own tab".
+  - A chip in the tab strip showing how many leaves the tab has.
+  - A split tab moves as a unit.
+  - Disabled in Views. No change on compact or native screens.
+- **Phase 2:** inner drop zones (⌥-gated, with labels), grouping in the compact switcher, Views, broadcast to a tab, remote `tab.split`.
