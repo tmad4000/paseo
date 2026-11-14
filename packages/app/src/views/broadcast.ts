@@ -13,6 +13,7 @@ import {
 
 export interface BroadcastResult {
   sent: number;
+  pending: number;
   queued: number;
   skipped: number;
   failed: number;
@@ -35,7 +36,7 @@ export async function runBroadcast(
   text: string,
   plan: BroadcastPlanEntry[],
 ): Promise<BroadcastResult> {
-  const result: BroadcastResult = { sent: 0, queued: 0, skipped: 0, failed: 0 };
+  const result: BroadcastResult = { sent: 0, pending: 0, queued: 0, skipped: 0, failed: 0 };
   const trimmed = text.trim();
   if (!trimmed) return result;
   const runtime = getHostRuntimeStore();
@@ -50,17 +51,29 @@ export async function runBroadcast(
       }
       try {
         if (entry.delivery === "send") {
+          const outbox = createDirectSendOutbox(entry.serverId, client);
+          let hostQueued = false;
           await dispatchComposerAgentMessage({
             serverId: entry.serverId,
-            outbox: createDirectSendOutbox(entry.serverId, client),
-            client,
+            outbox,
+            deliveryClient: client,
+            client: {
+              uploadFile: (input) => client.uploadFile(input),
+              sendAgentMessage: async (agentId, prompt, options) => {
+                const response = await client.sendAgentMessage(agentId, prompt, options);
+                hostQueued = response.queued;
+                return response;
+              },
+            },
             agentId: entry.agentId,
             text: trimmed,
             attachments: [],
             encodeImages: async () => undefined,
             submission: createMessageSubmissionWriter(entry.serverId),
           });
-          result.sent += 1;
+          if (outbox) result.pending += 1;
+          else if (hostQueued) result.queued += 1;
+          else result.sent += 1;
           return;
         }
         await useQueueOutboxStore.getState().add({
@@ -73,14 +86,14 @@ export async function runBroadcast(
           composerAttachments: [],
         });
         queuedServers.add(entry.serverId);
-        result.queued += 1;
+        result.pending += 1;
       } catch {
         result.failed += 1;
       }
     }),
   );
 
-  await Promise.all(
+  void Promise.all(
     [...queuedServers].map(async (serverId) => {
       const client = runtime.getClient(serverId);
       if (!client) return;

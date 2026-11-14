@@ -312,3 +312,39 @@ export async function openGithubWorkspace(
     },
   };
 }
+
+interface SavedQueueExpectation {
+  text?: string;
+  prefix?: string;
+  routingDispatchHeld?: boolean;
+}
+
+function hasSavedQueueEntry(input: SavedQueueExpectation): boolean {
+  const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null") as {
+    state?: { entries?: Record<string, { text?: string; routingDispatchHeld?: boolean }> };
+  } | null;
+  return Object.values(saved?.state?.entries ?? {}).some((entry) =>
+    (input.text === undefined || entry.text === input.text) &&
+    (input.prefix === undefined || entry.text?.startsWith(input.prefix) === true) &&
+    (input.routingDispatchHeld === undefined || entry.routingDispatchHeld === input.routingDispatchHeld),
+  );
+}
+
+export async function expectSavedQueueEntry(page: Page, input: SavedQueueExpectation): Promise<void> {
+  await expect.poll(() => page.evaluate(hasSavedQueueEntry, input)).toBe(true);
+}
+
+function savedOneShotMessageId(text: string): string | null {
+  const saved = JSON.parse(localStorage.getItem("paseo-send-outbox") ?? "null") as {
+    state?: { entries?: Record<string, { text?: string; oneShot?: boolean; clientMessageId?: string }> };
+  } | null;
+  const entry = Object.values(saved?.state?.entries ?? {}).find((candidate) => candidate.oneShot && candidate.text === text);
+  return entry?.clientMessageId ?? null;
+}
+
+export async function waitForSavedOneShotMessage(page: Page, text: string): Promise<string> {
+  await expect.poll(() => page.evaluate(savedOneShotMessageId, text)).not.toBeNull();
+  const id = await page.evaluate(savedOneShotMessageId, text);
+  if (!id) throw new Error("Saved one-time delivery is missing its stable message ID");
+  return id;
+}

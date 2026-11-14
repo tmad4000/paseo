@@ -12,6 +12,7 @@ import {
   discardDirectSend,
   editDirectSend,
   retryDirectSend,
+  releaseOneShotDelivery,
 } from "@/composer/delivery-actions";
 import { needsDirectSendAttention } from "@/composer/delivery-state";
 import { useSessionStore } from "@/stores/session-store";
@@ -100,13 +101,15 @@ const UnsentRow = memo(function UnsentRow({
 }) {
   const { t } = useTranslation();
   const [isBusy, setIsBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const attention = needsDirectSendAttention(entry);
   const run = useCallback(async (action: () => Promise<void>) => {
     setIsBusy(true);
+    setActionError(null);
     try {
       await action();
     } catch (error) {
-      console.warn("[UnsentTrack] Action failed", error);
+      setActionError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsBusy(false);
     }
@@ -126,7 +129,8 @@ const UnsentRow = memo(function UnsentRow({
       ),
     [entry, getComposerText, restoreComposerText, run],
   );
-  const handleDiscard = useCallback(() => void run(() => discardDirectSend(entry)), [entry, run]);
+  const handleDiscard = useCallback(() => void run(() => entry.oneShot ? releaseOneShotDelivery(entry) : discardDirectSend(entry)), [entry, run]);
+  const discardLabel = t(entry.oneShot ? "composer.delivery.oneShot.release" : "composer.delivery.discardUnsent");
 
   return (
     <View style={styles.row} testID={`unsent-message-${entry.clientMessageId}`}>
@@ -137,12 +141,12 @@ const UnsentRow = memo(function UnsentRow({
         <View style={styles.status}>
           <DeliveryMark state={attention ? "attention" : "pending"} />
           <Text style={[styles.statusText, attention && styles.attentionText]} numberOfLines={2}>
-            {attention ? describeDirectSendAttention(entry) : t("composer.delivery.unsentPending")}
+            {actionError ?? (attention ? describeDirectSendAttention(entry) : t("composer.delivery.unsentPending"))}
           </Text>
         </View>
       </View>
       <View style={styles.actions}>
-        <IconTooltip label={t("composer.delivery.retryNow")} wrap={false}>
+        {!entry.oneShot ? <IconTooltip label={t("composer.delivery.retryNow")} wrap={false}>
           <Pressable
             onPress={handleRetry}
             disabled={isBusy || !client}
@@ -152,7 +156,7 @@ const UnsentRow = memo(function UnsentRow({
           >
             <ThemedRotate size={ICON_SIZE.sm} uniProps={iconMapping} />
           </Pressable>
-        </IconTooltip>
+        </IconTooltip> : null}
         {canEditRefusedSend(entry) ? (
           <IconTooltip label={t("composer.delivery.editUnsent")} wrap={false}>
             <Pressable
@@ -166,13 +170,13 @@ const UnsentRow = memo(function UnsentRow({
             </Pressable>
           </IconTooltip>
         ) : null}
-        <IconTooltip label={t("composer.delivery.discardUnsent")} wrap={false}>
+        <IconTooltip label={discardLabel} wrap={false}>
           <Pressable
             onPress={handleDiscard}
             disabled={isBusy}
             style={styles.action}
             accessibilityRole="button"
-            accessibilityLabel={t("composer.delivery.discardUnsent")}
+            accessibilityLabel={discardLabel}
           >
             <ThemedTrash size={ICON_SIZE.sm} uniProps={iconMapping} />
           </Pressable>

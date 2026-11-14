@@ -12,6 +12,7 @@ import { gateNextAgentMessage } from "../support/helpers/agent-message-gate";
 import {
   attachImageFromMenu,
   expectComposerDraft,
+  expectSavedQueueEntry,
   expectComposerEditable,
   expectAttachmentPill,
   expectComposerVisible,
@@ -1410,12 +1411,7 @@ test.describe("Agent message submission", () => {
       await expectComposerDraft(page, "");
       await queueMessage(page, secondPrompt);
       await expectComposerDraft(page, "");
-      await expect.poll(() => page.evaluate((text) => {
-        const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null");
-        return Object.values(saved?.state?.entries ?? {}).some((entry) =>
-          (entry as { text?: string }).text === text,
-        );
-      }, secondPrompt)).toBe(true);
+      await expectSavedQueueEntry(page, { text: secondPrompt });
       await fillComposerDraft(page, "Keep typing while delivery waits.");
       await expectComposerDraft(page, "Keep typing while delivery waits.");
       expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);

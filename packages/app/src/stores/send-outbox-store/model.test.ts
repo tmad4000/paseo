@@ -198,6 +198,14 @@ describe("flushSendOutbox", () => {
     expect(calls).toEqual([]);
   });
 
+  test("never replays a one-shot entry after its rejection flag is cleared", async () => {
+    const { entries, outbox } = createOutbox([pendingSend({ oneShot: true })]);
+    const { calls, client } = createClient(async () => ({ queued: false }));
+    await flushSendOutbox({ serverId: "server-1", outbox, client });
+    expect(calls).toEqual([]);
+    expect(entries.get("msg-1")).toMatchObject({ oneShot: true });
+  });
+
   test("limits a flush to one agent when asked", async () => {
     const { entries, outbox } = createOutbox([
       pendingSend({ clientMessageId: "a", agentId: "agent-1" }),
@@ -254,6 +262,7 @@ describe("canEditRefusedSend", () => {
   test("moves only plain-text messages the host definitely refused", () => {
     const refused = { rejectedError: "Agent not found", images: [], attachments: [] };
     expect(canEditRefusedSend(refused)).toBe(true);
+    expect(canEditRefusedSend({ ...refused, oneShot: true })).toBe(false);
     expect(canEditRefusedSend({ ...refused, rejectedError: undefined })).toBe(false);
     expect(canEditRefusedSend({ ...refused, rejectedError: "agent_request_outcome_unknown" })).toBe(
       false,

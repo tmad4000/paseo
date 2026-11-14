@@ -52,9 +52,11 @@ export function ViewBroadcastModal({
         t("views.broadcast.result", {
           sent: result.sent,
           queued: result.queued,
-          skipped: result.skipped + result.failed,
+          pending: result.pending,
+          skipped: result.skipped,
+          failed: result.failed,
         }),
-        { variant: result.failed > 0 ? "error" : "success" },
+        { variant: result.failed > 0 ? "error" : result.pending > 0 ? "info" : "success" },
       );
       setText("");
       onClose();

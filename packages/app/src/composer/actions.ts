@@ -20,6 +20,8 @@ import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/mo
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
 import type { AgentQueueSnapshot, QueuedComposerAttachment } from "@getpaseo/protocol/messages";
+import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
+import type { DeliveryClient } from "@/stores/delivery-outboxes";
 import { serializeQueueOperation } from "@/stores/queue-outbox-store/model";
 import { isUncertainSendOutcome, type PendingDirectSend } from "@/stores/send-outbox-store/model";
 import { toQueuedComposerAttachments } from "@/composer/queue-sync";
@@ -49,7 +51,7 @@ export interface AttachmentPersister {
   deleteAttachments: (metadata: AttachmentMetadata[]) => Promise<void> | void;
 }
 
-export interface ComposerSendClient {
+export interface ComposerSendClient extends Partial<QueueOutboxFlushClient> {
   sendAgentMessage: (
     agentId: string,
     text: string,
@@ -192,6 +194,8 @@ export function cancelComposerAgent(input: CancelComposerAgentInput): Promise<vo
 
 export interface DispatchComposerAgentMessageInput {
   serverId?: string;
+  deliveryClient?: DeliveryClient;
+  beforeDispatch?: () => Promise<void>;
   client: ComposerSendClient;
   agentId: string;
   text: string;
@@ -303,21 +307,40 @@ export async function dispatchComposerAgentMessage(
   }
   try {
     const imagesData = await input.encodeImages(wirePayload.images);
-    const send = () => input.client.sendAgentMessage(input.agentId, input.text, {
+    const options = {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
       images: imagesData ?? [],
       attachments: wirePayload.attachments,
       ...(input.interrupt ? { interrupt: true } : {}),
-    });
+    };
+    const send = async (markDispatched: () => void) => {
+      await input.beforeDispatch?.();
+      markDispatched();
+      return input.client.sendAgentMessage(input.agentId, input.text, options);
+    };
     const result = input.serverId
       ? await (await import("@/stores/delivery-outboxes")).runOrderedAdmission({
           serverId: input.serverId,
           agentId: input.agentId,
           itemId: clientMessageId,
+          client: input.deliveryClient ?? {
+            sendAgentMessage: async (agentId, text, sendOptions) =>
+              (await input.client.sendAgentMessage(agentId, text, sendOptions)) ?? { queued: false },
+            enqueueAgentMessage: input.client.enqueueAgentMessage?.bind(input.client),
+            removeQueuedAgentMessage: input.client.removeQueuedAgentMessage?.bind(input.client),
+            getLastServerInfoMessage: input.client.getLastServerInfoMessage?.bind(input.client),
+          },
+          oneShot: {
+            text: input.text,
+            images: options.images,
+            attachments: options.attachments,
+            activeTurnBehavior: input.activeTurnBehavior,
+            ...(input.interrupt ? { interrupt: true } : {}),
+          },
           run: send,
         })
-      : await send();
+      : await send(() => {});
     if (result?.queued) {
       // Queue admission is not provider submission. Retire only the optimistic
       // bubble; reject preserves a canonical echo that raced the RPC response.

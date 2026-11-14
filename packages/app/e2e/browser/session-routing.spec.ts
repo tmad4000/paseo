@@ -3,7 +3,7 @@ import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { openMobileAgentSidebar } from "../support/helpers/sidebar";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
-import { submitMessage, expectComposerDraft } from "../support/helpers/composer";
+import { submitMessage, expectComposerDraft, expectSavedQueueEntry, waitForSavedOneShotMessage, fillComposerDraft, sendDraftToQueue } from "../support/helpers/composer";
 import { writeFile } from "node:fs/promises";
 
 test("manual routing restores its draft and delivers to an existing chat without navigating or creating a chat", async ({
@@ -118,13 +118,7 @@ test("routed Queue waits behind a saved direct request before host dispatch", as
     await routing.getByTestId("routing-recipient").click();
     await routing.getByRole("button", { name: /Use .*Ordered routing destination/ }).click();
     await routing.getByTestId("routing-submit").click();
-    await expect.poll(() => page.evaluate((text) => {
-      const state = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null");
-      return Object.values(state?.state?.entries ?? {}).some((value) => {
-        const entry = value as { text?: string; routingDispatchHeld?: boolean };
-        return entry.text === text && entry.routingDispatchHeld === true;
-      });
-    }, routedPrompt)).toBe(true);
+    await expectSavedQueueEntry(page, { text: routedPrompt, routingDispatchHeld: true });
     await expect(routing.getByTestId("routing-send-draft")).toHaveValue(routedPrompt);
     expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
     expect((await destination.client.listQueuedAgentMessages(destination.agentId)).items).toEqual([]);
@@ -141,6 +135,59 @@ test("routed Queue waits behind a saved direct request before host dispatch", as
     expect(await first.evaluate((element, next) => Boolean(element.compareDocumentPosition(next!) & Node.DOCUMENT_POSITION_FOLLOWING), secondElement)).toBe(true);
     expect(gate.getClientRequests("agent.queue.enqueue.request")).toEqual([expect.objectContaining({ text: routedPrompt, expectedWorkspaceId: destination.workspaceId })]);
     await expectComposerDraft(page, "A newer main-chat draft.");
+  } finally {
+    await destination.cleanup();
+  }
+});
+
+test("an ambiguous routed direct send survives reload and holds queued follow-ups until explicit review", async ({ page }) => {
+  test.setTimeout(120_000);
+  const gate = await installDaemonWebSocketGate(page);
+  const destination = await seedMockAgentWorkspace({ repoPrefix: "routing-one-shot-", title: "One-time routing destination" });
+  const prompt = "A one-time routed message whose outcome needs review.";
+  const followUp = "Queue B after reviewing the one-time delivery.";
+  try {
+    await openAgentRoute(page, destination);
+    await waitForSidebarHydration(page);
+    const routing = page.getByTestId("session-routing-composer");
+    await routing.getByTestId("routing-send-mode").click();
+    await routing.getByTestId("routing-send-draft").fill(prompt);
+    await routing.getByTestId("routing-recipient").click();
+    await routing.getByRole("button", { name: /Use .*One-time routing destination/ }).click();
+    await routing.getByTestId("routing-delivery-steer").click();
+    gate.holdNextClientRequest("send_agent_message_request");
+    await routing.getByTestId("routing-submit").click();
+    await gate.waitForHeldClientRequest();
+    const id = await waitForSavedOneShotMessage(page, prompt);
+    expect(gate.getClientRequests("send_agent_message_request").at(-1)).toMatchObject({ messageId: id, text: prompt, activeTurnBehavior: "steer_only" });
+    await fillComposerDraft(page, followUp);
+    await sendDraftToQueue(page);
+    await expectSavedQueueEntry(page, { text: followUp });
+    gate.rejectHeldAgentMessage("agent_request_outcome_unknown");
+    await expect(page.getByTestId(`unsent-message-${id}`)).toBeVisible();
+    await expect(routing.getByTestId("routing-send-draft")).toHaveValue(prompt);
+    expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
+    await page.reload();
+    await waitForSidebarHydration(page);
+    await expect(page.getByTestId(`unsent-message-${id}`)).toBeVisible();
+    expect(await waitForSavedOneShotMessage(page, prompt)).toBe(id);
+    await expectSavedQueueEntry(page, { text: followUp });
+    expect(gate.getClientRequestCount("send_agent_message_request")).toBe(1);
+    expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
+    const held = page.getByTestId(`unsent-message-${id}`);
+    await expect(held.getByRole("button", { name: "Retry now", exact: true })).toHaveCount(0);
+    const confirmation = page.waitForEvent("dialog");
+    const releasing = held.getByRole("button", { name: "Release delivery hold", exact: true }).click();
+    const dialog = await confirmation;
+    expect(dialog.message()).toContain(id);
+    await dialog.accept();
+    await releasing;
+    await expect(held).toHaveCount(0);
+    await expect(page.getByTestId("user-message").filter({ hasText: followUp }).getByTestId("user-message-delivery-mark")).toHaveAttribute("aria-label", "Delivered to the agent");
+    expect(gate.getClientRequestCount("send_agent_message_request")).toBe(1);
+    expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(1);
+    await routing.getByTestId("routing-send-mode").click();
+    await expect(routing.getByTestId("routing-send-draft")).toHaveValue(prompt);
   } finally {
     await destination.cleanup();
   }

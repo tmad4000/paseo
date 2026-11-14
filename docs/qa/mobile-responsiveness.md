@@ -97,6 +97,22 @@ Its existing cold resets, read/write holds and behavioral timeouts are unchanged
 reported 37 passing queue tests with that diagnostic warm-up on interim source; this final repair
 has not been tested here.
 
+The one-shot admission follow-up now saves a stable-ID hold in the existing send outbox before
+dispatch. Ambiguous routed direct sends and Stream replies retain it across restart; their recovery
+track confirms release without replay. Client adapters let earlier retryable entries progress.
+Broadcast results and translated copy distinguish device-pending saves from confirmed sends and
+host queue admission, and queued broadcast flushing remains in the background.
+
+Added unit regressions cover held host preparation followed by timeout and Queue B, slow/failed
+hold storage, restart/slow hydration, known preflight failure, explicit recovery of a never-resolving
+client promise, prior-work adapter progress, legacy hosts and Stream replies. Broadcast cases cover
+unresolved and refused delivery, held queue admission, prior unresolved work and confirmed legacy
+receipts. The routing browser case preserves its draft and B through an ambiguous response/reload,
+then exercises the visible release confirmation and verifies A was never replayed. Existing queue
+E2E persistence predicates now use named helpers; their ordering assertions remain. The reported
+shadowing and promise-return lint errors are corrected in source. All of this follow-up coverage and
+lint/typecheck validation remain pending on GCP; published `c8ef9cda1` CI does not validate these repairs.
+
 The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
 `c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing
 receipt for this source. These additions have not been executed in this M4 review/fix phase. The outer executor must run

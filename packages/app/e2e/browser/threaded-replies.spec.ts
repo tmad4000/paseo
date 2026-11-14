@@ -2,7 +2,7 @@ import { expect, test } from "../support/fixtures";
 import { awaitAssistantMessage } from "../support/helpers/agent-stream";
 import { expectChatHistoryAttachment } from "../support/helpers/assistant-fork";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
-import { expectComposerVisible } from "../support/helpers/composer";
+import { expectComposerVisible, expectSavedQueueEntry } from "../support/helpers/composer";
 import { closeWorkspaceAgentTab } from "../support/helpers/archive-tab";
 import {
   openAgentRoute,
@@ -85,12 +85,7 @@ test.describe("Threaded replies", () => {
     await expect(sendBack).toBeVisible({ timeout: 30_000 });
     await expect(sendBack).not.toHaveAttribute("aria-disabled", "true");
     await sendBack.click();
-    await expect.poll(() => page.evaluate(() => {
-      const saved = JSON.parse(localStorage.getItem("paseo-queue-outbox") ?? "null");
-      return Object.values(saved?.state?.entries ?? {}).some((value) =>
-        (value as { text?: string }).text?.startsWith("From the side thread"),
-      );
-    })).toBe(true);
+    await expectSavedQueueEntry(page, { prefix: "From the side thread" });
     expect(gate.getClientRequestCount("agent.queue.enqueue.request")).toBe(0);
     expect((await session.client.listQueuedAgentMessages(session.agentId)).items).toEqual([]);
     await parentComposer.fill("Keep this newer parent draft.");

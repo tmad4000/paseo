@@ -449,6 +449,12 @@ export const en = {
       removeReview: "Remove review attachment",
     },
     delivery: {
+      oneShot: {
+        detail: "Delivery {{messageId}} needs review. The request may still arrive; later messages are held. Check this chat before releasing the hold.",
+        title: "Release delivery hold?",
+        release: "Release delivery hold",
+        retryUnsupported: "Review this one-time delivery and release its hold; it cannot be replayed automatically.",
+      },
       pending: "Saved on this device — waiting for the host",
       accepted: "Received by the host",
       delivered: "Delivered to the agent",
@@ -2901,9 +2907,8 @@ export const en = {
       button: "Broadcast",
       placeholder: "Message every agent in this View",
       send: "Send to all",
-      summary:
-        "{{send}} will receive it now, {{queue}} busy will get it queued, {{skip}} unavailable.",
-      result: "Broadcast: {{sent}} sent, {{queued}} queued, {{skipped}} skipped.",
+      summary: "{{send}} idle, {{queue}} busy, {{skip}} unavailable. Messages are saved before delivery.",
+      result: "Broadcast: {{sent}} sent, {{queued}} queued on host, {{pending}} saved on this device pending delivery, {{skipped}} skipped, {{failed}} failed.",
     },
     picker: {
       addTitle: "Add a session",

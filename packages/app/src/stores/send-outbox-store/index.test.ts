@@ -1,11 +1,18 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { DirectRouteDeliveryInput } from "@/components/sidebar/session-routing/delivery";
+import { AgentSnapshotPayloadSchema } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SendOutboxFlushClient } from "./model";
+
+const confirmation = vi.hoisted(() => ({ accepted: true }));
+vi.mock("@/utils/confirm-dialog", () => ({ confirmDialog: vi.fn(async () => confirmation.accepted) }));
 
 const storage = vi.hoisted(() => ({
   values: new Map<string, string>(),
   readHold: undefined as Promise<void> | undefined,
   reads: new Map<string, Promise<void>>(),
+  writes: new Map<string, Promise<void>>(),
+  failOnce: undefined as string | undefined,
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
@@ -15,6 +22,8 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       return storage.values.get(key) ?? null;
     },
     setItem: async (key: string, value: string) => {
+      await storage.writes.get(key);
+      if (storage.failOnce === key) { storage.failOnce = undefined; throw new Error("disk full"); }
       storage.values.set(key, value);
     },
     removeItem: async (key: string) => {
@@ -27,6 +36,9 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 // still resets modules before creating the store, so hydration is exercised afresh.
 beforeAll(async () => {
   await import("./index");
+  await import("@/stores/delivery-outboxes");
+  await import("@/views/broadcast");
+  await import("@/companion-stream/send-reply");
 }, 30_000);
 
 const SAVED = {
@@ -75,8 +87,11 @@ describe("send outbox persistence", () => {
 
 async function setupLiveSend() {
   storage.values.clear();
+  confirmation.accepted = true;
   storage.readHold = undefined;
   storage.reads.clear();
+  storage.writes.clear();
+  storage.failOnce = undefined;
   vi.resetModules();
   const { useSessionStore, selectAgentTurnPresentation } = await import("@/stores/session-store");
   const { createMessageSubmissionWriter } = await import("@/composer/submission/writer");
@@ -636,7 +651,7 @@ describe("delivery order across backward-clock restarts", () => {
       const adding = (newer === "direct"
         ? direct.useSendOutboxStore.getState().add({ ...directEntry, clientMessageId: "new-direct", rejectedError: undefined })
         : queue.useQueueOutboxStore.getState().add({ ...queueEntry, itemId: "new-queue" })
-      ).then(() => { saved = true; });
+      ).then(() => { saved = true; return undefined; });
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       expect(saved).toBe(false);
       reading.resolve(undefined);
@@ -661,6 +676,309 @@ describe("delivery order across backward-clock restarts", () => {
       reading.resolve(undefined);
       storage.reads.clear();
       clock.mockRestore();
+    }
+  });
+});
+
+async function oneShotRouteFixture() {
+  const state = await setupOrderedDelivery();
+  await state.useSendOutboxStore.getState().removeDurably("msg-1");
+  const { deliverDirectRoutedPrompt } = await import("@/components/sidebar/session-routing/delivery");
+  const { createMessageSubmissionWriter } = await import("@/composer/submission/writer");
+  const agent = AgentSnapshotPayloadSchema.parse({
+    id: "agent", provider: "mock", cwd: "/project", workspaceId: "workspace", model: null,
+    createdAt: "2026-10-01", updatedAt: "2026-10-01", lastUserMessageAt: null, status: "idle",
+    currentModeId: null, availableModes: [], pendingPermissions: [], persistence: null, title: "Chat",
+    capabilities: { supportsStreaming: true, supportsSessionPersistence: true, supportsDynamicModes: false,
+      supportsMcpServers: true, supportsReasoningStream: true, supportsToolInvocations: true },
+  });
+  const input: DirectRouteDeliveryInput = {
+    recipient: { serverId: "server", agentId: "agent", workspaceId: "workspace", projectId: "project",
+      projectViewKey: "project", hostLabel: "Host", projectName: "Project", title: "Chat", excerpt: "", confidence: 1 },
+    text: "one-shot routed A", mode: "steer", client: { ...state.client,
+      fetchAgent: vi.fn(async () => ({ agent, project: null })), uploadFile: vi.fn() },
+    submission: createMessageSubmissionWriter("server"), isHostEligible: () => true,
+    isDestinationCurrent: () => true, supportsSteerOnly: () => true,
+    getTurn: () => ({ isActive: false, turnId: null }),
+  };
+  const start = () => deliverDirectRoutedPrompt(input).then((value) => ({ value }), (error: unknown) => ({ error }));
+  const saved = () => Object.values(state.useSendOutboxStore.getState().entries).find((entry) => entry.oneShot)!;
+  return { ...state, input, start, saved, agent };
+}
+
+describe("durable one-shot delivery ownership", () => {
+  it("keeps queued B behind a routed request after held host preparation times out, until explicit review releases it", async () => {
+    const state = await oneShotRouteFixture();
+    let rejectHost!: (error: Error) => void;
+    const hostPreparation = new Promise<{ queued: boolean }>((_resolve, reject) => { rejectHost = reject; });
+    state.client.sendAgentMessage.mockImplementationOnce(() => hostPreparation);
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.client.sendAgentMessage).toHaveBeenCalledOnce());
+    const id = state.saved().clientMessageId;
+    expect(state.client.sendAgentMessage.mock.calls[0][2].messageId).toBe(id);
+    const queued = await state.queue("queued B");
+    rejectHost(new Error("Request timed out during host receipt preparation"));
+    expect(await sending).toEqual({ error: expect.objectContaining({ reason: "uncertain" }) });
+    await state.queueSettled();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.values.get("paseo-send-outbox")!).state.entries[id]).toMatchObject({ oneShot: true, clientMessageId: id });
+    await state.flushQueue();
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    await expect(state.retryDirectSend({ entry: state.saved(), client: state.client })).rejects.toThrow("one-time");
+    const { releaseOneShotDelivery } = await import("@/composer/delivery-actions");
+    confirmation.accepted = false;
+    await releaseOneShotDelivery(state.saved());
+    expect(state.useSendOutboxStore.getState().entries[id].oneShot).toBe(true);
+    confirmation.accepted = true;
+    await releaseOneShotDelivery(state.saved());
+    await vi.waitFor(() => expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
+    expect(state.calls).toEqual(["queued B"]);
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+  });
+
+  it("retains a one-shot barrier across restart and slow hydration without replaying it", async () => {
+    const state = await oneShotRouteFixture();
+    state.client.sendAgentMessage.mockRejectedValueOnce(new Error("Connection lost after dispatch"));
+    const sending = state.start();
+    await sending;
+    const id = state.saved().clientMessageId;
+    const queued = await state.queue("after restart");
+    await state.queueSettled();
+    vi.resetModules();
+    const reading = held<void>();
+    storage.reads.set("paseo-send-outbox", reading.promise);
+    const queue = await import("@/stores/queue-outbox-store");
+    const flushing = queue.flushQueueOutboxForServer({ serverId: "server", client: state.client, applySnapshot: vi.fn() });
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    reading.resolve(undefined);
+    storage.reads.clear();
+    await flushing;
+    const direct = await import("./index");
+    expect(direct.useSendOutboxStore.getState().entries[id]).toMatchObject({ oneShot: true, clientMessageId: id });
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    expect(queue.useQueueOutboxStore.getState().entries[queued.queued!.id].text).toBe("after restart");
+    const { useSessionStore } = await import("@/stores/session-store");
+    useSessionStore.getState().initializeSession("server", state.client as unknown as DaemonClient);
+    const { releaseOneShotDelivery } = await import("@/composer/delivery-actions");
+    confirmation.accepted = true;
+    await releaseOneShotDelivery(direct.useSendOutboxStore.getState().entries[id]);
+    await vi.waitFor(() => expect(queue.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    expect(state.calls).toEqual(["after restart"]);
+  });
+
+  it.each([false, true])("waits for durable barrier storage before dispatch (write fails: %s)", async (failWrite) => {
+    const state = await oneShotRouteFixture();
+    const writing = held<void>();
+    storage.writes.set("paseo-send-outbox", writing.promise);
+    if (failWrite) storage.failOnce = "paseo-send-outbox";
+    state.client.sendAgentMessage.mockResolvedValue({ queued: false });
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.saved()?.oneShot).toBe(true));
+    const queued = await state.queue("after storage");
+    await state.queueSettled();
+    expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    writing.resolve(undefined);
+    storage.writes.clear();
+    const result = await sending;
+    if (failWrite) {
+      expect(result).toEqual({ error: new Error("disk full") });
+      expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+    } else {
+      expect(result).toEqual({ value: { queued: false } });
+      expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    }
+    await vi.waitFor(() => expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
+    expect(state.calls).toEqual(["after storage"]);
+  });
+
+  it("releases known destination failure before dispatch and automatically wakes queued B", async () => {
+    const state = await oneShotRouteFixture();
+    const preflight = held<{ agent: typeof state.agent; project: null }>();
+    state.input.client.fetchAgent = () => preflight.promise;
+    state.input.isDestinationCurrent = () => false;
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.saved()?.oneShot).toBe(true));
+    const queued = await state.queue("after failed preflight");
+    preflight.resolve({ agent: state.agent, project: null });
+    expect(await sending).toEqual({ error: expect.objectContaining({ reason: "destination" }) });
+    await state.queueSettled();
+    expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+    expect(state.calls).toEqual(["after failed preflight"]);
+    expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined();
+  });
+
+  it("retains ownership when recovery cannot be saved and lets an explicit release retry succeed", async () => {
+    const state = await oneShotRouteFixture();
+    state.client.sendAgentMessage.mockRejectedValueOnce(new Error("reply lost"));
+    await state.start();
+    const saved = state.saved();
+    const queued = await state.queue("after recovery storage");
+    await state.queueSettled();
+    const { releaseOneShotDelivery } = await import("@/composer/delivery-actions");
+    storage.failOnce = "paseo-send-outbox";
+    await expect(releaseOneShotDelivery(saved)).rejects.toThrow("disk full");
+    expect(state.useSendOutboxStore.getState().entries[saved.clientMessageId]).toEqual(saved);
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    await releaseOneShotDelivery(saved);
+    await vi.waitFor(() => expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined());
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+  });
+
+  it("can explicitly release an in-flight hold without waiting forever for its client promise", async () => {
+    const state = await oneShotRouteFixture();
+    state.client.sendAgentMessage.mockImplementationOnce(() => held<{ queued: boolean }>().promise);
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.client.sendAgentMessage).toHaveBeenCalledOnce());
+    const queued = await state.queue("after live release");
+    await state.discardDirectSend(state.saved());
+    expect(await sending).toEqual({ error: expect.objectContaining({ message: expect.stringContaining("released") }) });
+    await state.queueSettled();
+    expect(state.calls).toEqual(["after live release"]);
+    expect(state.useQueueOutboxStore.getState().entries[queued.queued!.id]).toBeUndefined();
+  });
+
+  it("can cancel a one-shot admission still waiting behind an older unknown request", async () => {
+    const state = await oneShotRouteFixture();
+    await state.useSendOutboxStore.getState().add(state.entry);
+    state.client.sendAgentMessage.mockRejectedValueOnce(refusal("agent_request_outcome_unknown"));
+    await state.composerOutbox.flush("agent");
+    const sending = state.start();
+    await vi.waitFor(() => expect(state.saved()?.oneShot).toBe(true));
+    await state.flushQueue();
+    await state.discardDirectSend(state.saved());
+    expect(await sending).toEqual({ error: expect.objectContaining({ message: expect.stringContaining("released") }) });
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    expect(state.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe("agent_request_outcome_unknown");
+  });
+
+  it("provides the client adapter needed to retry older saved work before a routed direct request", async () => {
+    const state = await oneShotRouteFixture();
+    await state.useSendOutboxStore.getState().add(state.entry);
+    const order: string[] = [];
+    state.client.sendAgentMessage.mockImplementation(async (_agentId, text) => { order.push(text); return { queued: false }; });
+    expect(await state.start()).toEqual({ value: { queued: false } });
+    expect(order).toEqual([state.entry.text, state.input.text]);
+    expect(state.useSendOutboxStore.getState().entries).toEqual({});
+  });
+
+  it("retains ambiguous ownership on legacy hosts without replay and supports explicit recovery", async () => {
+    const state = await oneShotRouteFixture();
+    state.useSessionStore.getState().updateSessionServerInfo("server", {
+      serverId: "server", hostname: null, version: "legacy", features: { agentMessageQueue: true },
+    });
+    state.input.supportsSteerOnly = () => false;
+    state.client.sendAgentMessage.mockRejectedValueOnce(new Error("Legacy response lost"));
+    await state.start();
+    expect(state.client.sendAgentMessage.mock.calls[0][2].activeTurnBehavior).toBeUndefined();
+    await state.queue("legacy queued B");
+    await state.queueSettled();
+    await state.flushQueue();
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    await expect(state.retryDirectSend({ entry: state.saved(), client: state.client })).rejects.toThrow("one-time");
+    await state.discardDirectSend(state.saved());
+    await vi.waitFor(() => expect(state.calls).toEqual(["legacy queued B"]));
+    await state.flushQueue();
+  });
+});
+
+describe("one-shot Stream replies and broadcast receipts", () => {
+  it("keeps an ambiguous Stream reply as a durable ordering hold until explicitly released", async () => {
+    const state = await oneShotRouteFixture();
+    const { sendStreamReply } = await import("@/companion-stream/send-reply");
+    state.client.sendAgentMessage.mockRejectedValueOnce(new Error("Stream reply acknowledgement lost"));
+    await expect(sendStreamReply({ serverId: "server", agentId: "agent", replyTo: "Question", text: "Answer A", client: state.client })).rejects.toThrow("acknowledgement lost");
+    const saved = state.saved();
+    expect(saved.text).toBe("> Question\n\nAnswer A");
+    expect(state.client.sendAgentMessage.mock.calls[0][2].messageId).toBe(saved.clientMessageId);
+    await state.queue("Stream follow-up B");
+    await state.queueSettled();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    await state.flushQueue();
+    expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+    await state.discardDirectSend(saved);
+    await vi.waitFor(() => expect(state.calls).toEqual(["Stream follow-up B"]));
+    await state.flushQueue();
+  });
+
+  it.each(["held", "refused"])("reports a device-saved broadcast as pending when delivery is %s", async (outcome) => {
+    const state = await oneShotRouteFixture();
+    const { runBroadcast } = await import("@/views/broadcast");
+    const { getHostRuntimeStore } = await import("@/runtime/host-runtime");
+    const runtimeClient = vi.spyOn(getHostRuntimeStore(), "getClient").mockReturnValue(state.client as unknown as DaemonClient);
+    const acknowledgement = held<{ queued: boolean }>();
+    if (outcome === "held") state.client.sendAgentMessage.mockImplementationOnce(() => acknowledgement.promise);
+    else state.client.sendAgentMessage.mockRejectedValueOnce(refusal("Broadcast refused"));
+    try {
+      const result = await runBroadcast("broadcast payload", [{ serverId: "server", agentId: "agent", delivery: "send" }]);
+      expect(result).toEqual({ sent: 0, pending: 1, queued: 0, skipped: 0, failed: 0 });
+      await vi.waitFor(() => expect(state.client.sendAgentMessage).toHaveBeenCalledOnce());
+      if (outcome === "held") acknowledgement.resolve({ queued: false });
+      await state.flushSendOutboxForServer({ serverId: "server", client: state.client });
+      if (outcome === "refused") {
+        expect(Object.values(state.useSendOutboxStore.getState().entries)).toEqual([expect.objectContaining({ text: "broadcast payload", rejectedError: "Broadcast refused" })]);
+      }
+      expect(result.sent).toBe(0);
+      const { i18n } = await import("@/i18n/i18next");
+      expect(i18n.t("views.broadcast.result", { ...result, lng: "en" })).toBe("Broadcast: 0 sent, 0 queued on host, 1 saved on this device pending delivery, 0 skipped, 0 failed.");
+    } finally {
+      acknowledgement.resolve({ queued: false });
+      runtimeClient.mockRestore();
+    }
+  });
+
+  it("reports queued broadcasts as device-pending without awaiting host admission", async () => {
+    const state = await oneShotRouteFixture();
+    const { runBroadcast } = await import("@/views/broadcast");
+    const { getHostRuntimeStore } = await import("@/runtime/host-runtime");
+    const runtimeClient = vi.spyOn(getHostRuntimeStore(), "getClient").mockReturnValue(state.client as unknown as DaemonClient);
+    const acknowledgement = held<{ agentId: string; revision: number; items: [] }>();
+    state.client.enqueueAgentMessage.mockImplementationOnce(() => acknowledgement.promise);
+    try {
+      const result = await runBroadcast("queued broadcast", [{ serverId: "server", agentId: "agent", delivery: "queue" }]);
+      expect(result).toEqual({ sent: 0, pending: 1, queued: 0, skipped: 0, failed: 0 });
+      await vi.waitFor(() => expect(state.client.enqueueAgentMessage).toHaveBeenCalledOnce());
+      acknowledgement.resolve({ agentId: "agent", revision: 1, items: [] });
+      await state.flushQueue();
+      expect(state.useQueueOutboxStore.getState().entries).toEqual({});
+    } finally {
+      acknowledgement.resolve({ agentId: "agent", revision: 1, items: [] });
+      runtimeClient.mockRestore();
+    }
+  });
+
+  it("reports broadcasts saved behind unresolved A as pending even when no broadcast request reached the host", async () => {
+    const state = await setupOrderedDelivery();
+    state.client.sendAgentMessage.mockRejectedValue(refusal("agent_request_outcome_unknown"));
+    await state.composerOutbox.flush("agent");
+    const { runBroadcast } = await import("@/views/broadcast");
+    const { getHostRuntimeStore } = await import("@/runtime/host-runtime");
+    const runtimeClient = vi.spyOn(getHostRuntimeStore(), "getClient").mockReturnValue(state.client as unknown as DaemonClient);
+    try {
+      const result = await runBroadcast("broadcast waits", [{ serverId: "server", agentId: "agent", delivery: "send" }]);
+      expect(result).toEqual({ sent: 0, pending: 1, queued: 0, skipped: 0, failed: 0 });
+      await state.composerOutbox.flush("agent");
+      expect(state.client.sendAgentMessage).toHaveBeenCalledOnce();
+      expect(Object.values(state.useSendOutboxStore.getState().entries).map((entry) => entry.text)).toEqual([state.entry.text, "broadcast waits"]);
+    } finally {
+      runtimeClient.mockRestore();
+    }
+  });
+
+  it.each([false, true])("counts only confirmed legacy broadcasts as sent or host-queued (queued: %s)", async (hostQueued) => {
+    const state = await oneShotRouteFixture();
+    state.useSessionStore.getState().updateSessionServerInfo("server", { serverId: "server", hostname: null, version: "legacy", features: { agentMessageQueue: true } });
+    state.client.sendAgentMessage.mockResolvedValueOnce({ queued: hostQueued });
+    const { runBroadcast } = await import("@/views/broadcast");
+    const { getHostRuntimeStore } = await import("@/runtime/host-runtime");
+    const runtimeClient = vi.spyOn(getHostRuntimeStore(), "getClient").mockReturnValue(state.client as unknown as DaemonClient);
+    try {
+      expect(await runBroadcast("legacy broadcast", [{ serverId: "server", agentId: "agent", delivery: "send" }])).toEqual({ sent: hostQueued ? 0 : 1, pending: 0, queued: hostQueued ? 1 : 0, skipped: 0, failed: 0 });
+      expect(state.useSendOutboxStore.getState().entries).toEqual({});
+    } finally {
+      runtimeClient.mockRestore();
     }
   });
 });

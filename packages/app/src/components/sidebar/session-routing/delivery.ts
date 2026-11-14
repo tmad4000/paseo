@@ -47,32 +47,41 @@ export async function deliverDirectRoutedPrompt(
 ): Promise<{ queued: false }> {
   if (!input.isHostEligible()) throw new DirectRouteDeliveryError("host");
   const activeTurnBehavior = input.mode === "steer" ? "steer_only" : "interrupt";
+  let behavior: "steer_only" | "interrupt" | undefined = activeTurnBehavior;
+  let interrupt = false;
   await dispatchComposerAgentMessage({
     serverId: input.recipient.serverId,
+    deliveryClient: {
+      sendAgentMessage: async (agentId, text, options) =>
+        (await input.client.sendAgentMessage(agentId, text, options)) ?? { queued: false },
+      enqueueAgentMessage: input.client.enqueueAgentMessage?.bind(input.client),
+      removeQueuedAgentMessage: input.client.removeQueuedAgentMessage?.bind(input.client),
+      getLastServerInfoMessage: input.client.getLastServerInfoMessage?.bind(input.client),
+    },
+    beforeDispatch: async () => {
+      const current = await input.client.fetchAgent(input.recipient.agentId);
+      if (!input.isHostEligible()) throw new DirectRouteDeliveryError("host");
+      const matchesDestination =
+        current?.agent.id === input.recipient.agentId &&
+        current.agent.workspaceId === input.recipient.workspaceId &&
+        !current.agent.archivedAt &&
+        input.isDestinationCurrent();
+      if (!matchesDestination) throw new DirectRouteDeliveryError("destination");
+      const turn = input.getTurn();
+      if (input.mode === "steer" && !input.supportsSteerOnly()) {
+        if (turn.isActive) throw new DirectRouteDeliveryError("steerUnsupported");
+        behavior = undefined;
+      }
+      interrupt = input.mode === "interrupt" && turn.isActive;
+    },
     client: {
       uploadFile: (value) => input.client.uploadFile(value),
       sendAgentMessage: async (agentId, text, options) => {
-        // Direct sends have no atomic expected-destination guard. Revalidate at
-        // the wire boundary, after the composer's asynchronous preparation.
-        const current = await input.client.fetchAgent(agentId);
-        if (!input.isHostEligible()) throw new DirectRouteDeliveryError("host");
-        const matchesDestination =
-          current?.agent.id === input.recipient.agentId &&
-          current.agent.workspaceId === input.recipient.workspaceId &&
-          !current.agent.archivedAt &&
-          input.isDestinationCurrent();
-        if (!matchesDestination) throw new DirectRouteDeliveryError("destination");
-        const turn = input.getTurn();
-        let behavior: typeof options.activeTurnBehavior = activeTurnBehavior;
-        if (input.mode === "steer" && !input.supportsSteerOnly()) {
-          if (turn.isActive) throw new DirectRouteDeliveryError("steerUnsupported");
-          behavior = undefined;
-        }
         try {
           return await input.client.sendAgentMessage(agentId, text, {
             ...options,
             activeTurnBehavior: behavior,
-            ...(input.mode === "interrupt" && turn.isActive ? { interrupt: true } : {}),
+            ...(interrupt ? { interrupt: true } : {}),
           });
         } catch (cause) {
           const error = new DirectRouteDeliveryError("uncertain");
@@ -140,8 +149,8 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       if (!existing) await input.outbox.add(enqueue);
       const current = await input.outbox.getEntry(itemId);
       if (!current) {
-        const acknowledged = input.outbox.getAcknowledgement?.(itemId);
-        if (acknowledged) return { status: "acknowledged" as const, result: acknowledged };
+        const completed = input.outbox.getAcknowledgement?.(itemId);
+        if (completed) return { status: "acknowledged" as const, result: completed };
         throw new Error("Delivery cancellation is pending.");
       }
       if (current.removalRequested) throw new Error("Delivery cancellation is pending.");
@@ -169,8 +178,8 @@ export async function deliverRoutedPrompt(input: RouteDeliveryInput): Promise<{ 
       async () => {
         const pending = await input.outbox.getEntry(itemId);
         if (!pending) {
-          const acknowledged = input.outbox.getAcknowledgement?.(itemId);
-          if (acknowledged) return acknowledged;
+          const completed = input.outbox.getAcknowledgement?.(itemId);
+          if (completed) return completed;
           throw new Error("Delivery cancellation is pending.");
         }
         if (pending.removalRequested) throw new Error("Delivery cancellation is pending.");

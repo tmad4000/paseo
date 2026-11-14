@@ -548,9 +548,11 @@ it("offers Later and in-place replies only where the host can honour them", asyn
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
   fireEvent.click(rendered.getByText("Send reply"));
   // Queued delivery: no activeTurnBehavior, so a busy agent is never interrupted.
-  expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
+  await waitFor(() => expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
     messageId: expect.any(String),
-  });
+    images: [],
+    attachments: [],
+  }));
 });
 
 it("lets a chat opened from a card offer the way back", () => {

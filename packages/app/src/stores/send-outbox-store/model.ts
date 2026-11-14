@@ -27,6 +27,7 @@ export const PendingDirectSendSchema = z.object({
   attempts: z.number().int().nonnegative(),
   /** Set when the host answered with a refusal; such entries wait for the user. */
   rejectedError: z.string().optional(),
+  oneShot: z.boolean().optional(),
 });
 
 export type PendingDirectSend = z.infer<typeof PendingDirectSendSchema>;
@@ -55,9 +56,10 @@ export function isUncertainSendOutcome(error: string | undefined): boolean {
 
 /** Edit moves only plain text; a message with attachments or an uncertain outcome stays put. */
 export function canEditRefusedSend(
-  entry: Pick<PendingDirectSend, "rejectedError" | "images" | "attachments">,
+  entry: Pick<PendingDirectSend, "rejectedError" | "images" | "attachments" | "oneShot">,
 ): boolean {
   return (
+    entry.oneShot !== true &&
     entry.rejectedError !== undefined &&
     !isUncertainSendOutcome(entry.rejectedError) &&
     entry.images.length === 0 &&
@@ -146,7 +148,7 @@ export async function flushSendOutbox(input: FlushSendOutboxInput): Promise<void
           .filter((item) => item.agentId === agentId && (input.clientMessageId === undefined || item.clientMessageId === input.clientMessageId))) {
           const entry = input.outbox.get(candidate.clientMessageId);
           if (!entry) continue;
-          if (isUncertainSendOutcome(entry.rejectedError)) break;
+          if (entry.oneShot || isUncertainSendOutcome(entry.rejectedError)) break;
           if (entry.rejectedError !== undefined) continue;
           let result: { queued: boolean };
           try {

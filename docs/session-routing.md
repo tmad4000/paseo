@@ -149,8 +149,13 @@ an active turn. Both recheck host, chat/workspace identity, project, and scope i
 sending. The direct-send protocol has no atomic expected-workspace guard, so this is a preflight
 check rather than Queue's atomic admission guarantee.
 
-Direct sends are never replayed by the queue outbox. An uncertain response preserves the draft
-and tells the user to inspect the destination before resending. A successful send remains
+Direct routed sends remain one-shot. Before dispatch, the source draft is checkpointed and the
+shared send outbox saves an ordering hold with the request's stable message ID. A known failure
+before dispatch releases the hold. An ambiguous response preserves both the draft and the hold,
+including after app suspension or restart, so later messages cannot overtake the request. Neither
+reconnect nor Retry replays it. Inspect the destination, then use **Release delivery hold** in its
+Unsent messages track to allow later work. The confirmation warns that the original request may
+still arrive. Releasing the hold preserves the routing draft. A successful send remains
 acknowledged even if saved-draft cleanup fails; the receipt warns about the restored draft
 without offering a delivery retry. Later edits are protected by draft revision and timestamp.
 

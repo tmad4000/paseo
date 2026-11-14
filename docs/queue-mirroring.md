@@ -316,7 +316,7 @@ with an error. Pending delivery remains visible on the saved bubble.
 - Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
   mid-request): the entry stays, the bubble
   stays with its pending mark, and the composer does not take the text back. Every reconnect and
-  cold start resends the **identical** request. The daemon's receipt (or queue item id) makes a
+  cold start resends the **identical** retryable request. The daemon's receipt (or queue item id) makes a
   retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
   receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
 - A definitive answer (`AgentMessageRejectedError` from `accepted: false`, a `DaemonRpcError`,
@@ -355,6 +355,19 @@ Entries with no live chat bubble appear in the composer's **Unsent messages** tr
 relaunch, or for another chat's sends. Each row offers Retry, Discard, and, for refused messages, Edit,
 which moves the text back into the message box. Only a refused message may be edited. One that is
 still retrying could already be on the host.
+
+### One-shot direct admissions
+
+Routed Steer/Interrupt, Stream replies and direct sends to hosts without safe replay support use
+the same send outbox as an ordering hold. Save the stable message ID and full payload before any
+wire dispatch. The live admission alone may issue that one request; the persisted hold never
+replays on reconnect or through Retry. A timeout or connection loss after dispatch retains the
+hold across restart. A known failure before dispatch may release it.
+
+The destination chat's Unsent track identifies the held request and offers **Release delivery hold**.
+Check the conversation before confirming: the original request may still arrive. Confirmation
+releases later work without resending the held request or overwriting a draft. An in-flight client
+promise cannot prevent this explicit recovery. A retained hold continues to block only its own chat.
 
 ## Delivery marks
 
