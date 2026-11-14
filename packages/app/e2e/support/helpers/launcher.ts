@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { buildHostWorkspaceRoute } from "../../../src/utils/host-routes";
 import { createTempGitRepo } from "./workspace";
 import { getServerId } from "./server-id";
-import { createAgentTabFromMenu } from "./workspace-tabs";
+import { createAgentTabFromMenu, WORKSPACE_TAB_BUTTON_SELECTOR } from "./workspace-tabs";
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 
@@ -26,9 +26,7 @@ export async function waitForTabBar(page: Page): Promise<void> {
 
 /** Return all tab test IDs currently in the tab bar. */
 export async function getTabTestIds(page: Page): Promise<string[]> {
-  const tabs = page
-    .locator('[data-testid^="workspace-tab-"]:not([data-testid^="workspace-tab-context-"])')
-    .filter({ visible: true });
+  const tabs = page.locator(WORKSPACE_TAB_BUTTON_SELECTOR).filter({ visible: true });
   const count = await tabs.count();
   const ids: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -48,9 +46,7 @@ export async function countTabsOfKind(page: Page, kind: string): Promise<number>
 export async function getActiveTabTestId(page: Page): Promise<string | null> {
   // Active tab has the focused highlight — check for the aria-selected or data-active attribute
   const activeTab = page
-    .locator(
-      '[data-testid^="workspace-tab-"]:not([data-testid^="workspace-tab-context-"])[aria-selected="true"]',
-    )
+    .locator(`${WORKSPACE_TAB_BUTTON_SELECTOR}[aria-selected="true"]`)
     .filter({ visible: true })
     .first();
   if (await activeTab.isVisible().catch(() => false)) {
@@ -125,7 +121,7 @@ export async function waitForTabWithTitle(
   const matcher = typeof title === "string" ? new RegExp(title, "i") : title;
   await expect(
     page
-      .locator('[data-testid^="workspace-tab-"]:not([data-testid^="workspace-tab-context-"])')
+      .locator(WORKSPACE_TAB_BUTTON_SELECTOR)
       .filter({ hasText: matcher })
       .filter({ visible: true })
       .first(),
@@ -166,33 +162,34 @@ export async function sampleTabsDuringTransition(
   action: () => Promise<void>,
   durationMs = 2_000,
 ): Promise<Array<Array<{ id: string; width: number }>>> {
-  await page.evaluate((duration) => {
-    const scope = globalThis as typeof globalThis & {
-      __paseoTabTrackFrames?: Array<Array<{ id: string; width: number }>>;
-    };
-    scope.__paseoTabTrackFrames = [];
-    const startedAt = performance.now();
-    function sample() {
-      const tabs = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          '[data-testid^="workspace-tab-"][role="button"][aria-selected]',
-        ),
-      ).filter((element) => element.getClientRects().length > 0);
-      scope.__paseoTabTrackFrames?.push(
-        tabs.map((element) => ({
-          id: element.getAttribute("data-testid") ?? "",
-          width: Math.round(element.getBoundingClientRect().width),
-        })),
-      );
-      if (performance.now() - startedAt < duration) {
-        requestAnimationFrame(sample);
+  await page.evaluate(
+    ({ duration, tabSelector }) => {
+      const scope = globalThis as typeof globalThis & {
+        __paseoTabTrackFrames?: Array<Array<{ id: string; width: number }>>;
+      };
+      scope.__paseoTabTrackFrames = [];
+      const startedAt = performance.now();
+      function sample() {
+        const tabs = Array.from(document.querySelectorAll<HTMLElement>(tabSelector)).filter(
+          (element) => element.getClientRects().length > 0,
+        );
+        scope.__paseoTabTrackFrames?.push(
+          tabs.map((element) => ({
+            id: element.getAttribute("data-testid") ?? "",
+            width: Math.round(element.getBoundingClientRect().width),
+          })),
+        );
+        if (performance.now() - startedAt < duration) {
+          requestAnimationFrame(sample);
+        }
       }
-    }
-    // Establish the known-good pre-action state synchronously. Starting on the
-    // next animation frame lets the action race the first sample, which can
-    // misclassify a not-yet-painted test harness frame as a transition blank.
-    sample();
-  }, durationMs);
+      // Establish the known-good pre-action state synchronously. Starting on the
+      // next animation frame lets the action race the first sample, which can
+      // misclassify a not-yet-painted test harness frame as a transition blank.
+      sample();
+    },
+    { duration: durationMs, tabSelector: WORKSPACE_TAB_BUTTON_SELECTOR },
+  );
   await action();
   await page.waitForTimeout(durationMs + 100);
   return page.evaluate(() => {
@@ -209,7 +206,7 @@ export async function expectTabTitleFits(
   widthRange: { min: number; max: number },
 ): Promise<void> {
   const tab = page
-    .locator('[data-testid^="workspace-tab-"]:not([data-testid^="workspace-tab-context-"])')
+    .locator(WORKSPACE_TAB_BUTTON_SELECTOR)
     .filter({ hasText: title })
     .filter({ visible: true })
     .last();

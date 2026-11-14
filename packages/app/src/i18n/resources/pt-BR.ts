@@ -1220,6 +1220,7 @@ export const ptBR: TranslationResources = {
         agent: "Agente",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Alternar abas ({{count}} abertas)",
         title: "Alternar aba",
@@ -3038,6 +3039,7 @@ export const ptBR: TranslationResources = {
         description:
           "Desativado, um chat continua não lido até você marcá-lo como lido ou enviar uma mensagem",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "Abas",
         label: "Ordenar abas por atividade recente",

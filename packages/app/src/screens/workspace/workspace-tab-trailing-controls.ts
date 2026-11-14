@@ -1,10 +1,10 @@
 export interface TabTrailingControlsInput {
   canMarkRead: boolean;
   showCloseButton: boolean;
-  isActive: boolean;
+  isKeyboardFocused: boolean;
   isHovered: boolean;
   isClosingTab: boolean;
-  /** Native and compact layouts have no hover, so their controls stay visible. */
+  /** Touch uses the existing tab menu for mark as read. */
   isTouch: boolean;
 }
 
@@ -22,11 +22,11 @@ export interface TabTrailingControls {
 
 /** Which trailing controls a desktop tab chip shows: its read check and its close button. */
 export function resolveTabTrailingControls(input: TabTrailingControlsInput): TabTrailingControls {
-  const { canMarkRead, showCloseButton, isActive, isHovered, isClosingTab, isTouch } = input;
-  const showCloseControl = showCloseButton && (isHovered || isTouch || isClosingTab);
-  // The open tab keeps its check in view: with explicit reads it is the tab being read, and
-  // hovering to find the control would be a chore.
-  const showReadControl = canMarkRead && !isClosingTab && (isHovered || isTouch || isActive);
+  const { canMarkRead, showCloseButton, isKeyboardFocused, isHovered, isClosingTab, isTouch } =
+    input;
+  const showCloseControl =
+    showCloseButton && (isHovered || isKeyboardFocused || isTouch || isClosingTab);
+  const showReadControl = canMarkRead && !isClosingTab && (isHovered || isKeyboardFocused);
   return {
     showReadControl,
     showCloseControl,

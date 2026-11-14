@@ -1216,6 +1216,7 @@ export const ru: TranslationResources = {
         agent: "Агент",
         workspace: "Рабочее пространство",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Переключить вкладки (открыто: {{count}})",
         title: "Переключить вкладку",
@@ -3034,6 +3035,7 @@ export const ru: TranslationResources = {
         description:
           "Если выключено, чат остаётся непрочитанным, пока вы не отметите его прочитанным или не отправите сообщение",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "Вкладки",
         label: "Сортировать вкладки по недавней активности",

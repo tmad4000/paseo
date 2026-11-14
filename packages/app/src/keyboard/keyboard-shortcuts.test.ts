@@ -1399,3 +1399,62 @@ describe("Needs you shortcut", () => {
     });
   });
 });
+
+describe("workspace tab search", () => {
+  for (const isMac of [true, false]) {
+    const event = { key: "K", code: "KeyK", metaKey: isMac, ctrlKey: !isMac, shiftKey: true };
+    it(`opens on supported platforms, including composer input (${isMac ? "mac" : "non-mac"})`, () => {
+      expect(
+        resolveShortcut({ event, context: { isMac, isDesktop: true, focusScope: "message-input" } })
+          .match?.action,
+      ).toBe("workspace.tab.search");
+      expect(
+        resolveShortcut({ event, context: { isMac, isDesktop: false } }).match?.action ?? null,
+      ).toBe(isMac ? "workspace.tab.search" : null);
+      expect(
+        resolveShortcut({ event, context: { isMac, isDesktop: true, commandCenterOpen: true } })
+          .match,
+      ).toBeNull();
+      expect(
+        resolveShortcut({ event, context: { isMac, isDesktop: true, focusScope: "terminal" } })
+          .match?.action ?? null,
+      ).toBe(isMac ? "workspace.tab.search" : null);
+    });
+    it(`preserves a saved Open project override and reports no conflicting search shortcut (${isMac})`, () => {
+      const openProjectId = isMac ? "agent-new-cmd-shift-o-mac" : "agent-new-ctrl-shift-o-non-mac";
+      const custom = { [openProjectId]: "Mod+Shift+K" };
+      const bindings = buildEffectiveBindings(custom);
+      expect(
+        resolveShortcut({ event, bindings, context: { isMac, isDesktop: true } }).match?.action,
+      ).toBe("agent.new");
+      expect(
+        resolveShortcutKeysForAction("workspace-tab-search", custom, { isMac, isDesktop: true }),
+      ).toBeNull();
+    });
+  }
+});
+
+it("reserves custom chord prefixes without suppressing search on unrelated platforms", () => {
+  const custom = { "agent-new-ctrl-shift-o-non-mac": "Mod+Shift+K Mod+T" };
+  expect(
+    resolveShortcutKeysForAction("workspace-tab-search", custom, { isMac: false, isDesktop: true }),
+  ).toBeNull();
+  expect(
+    resolveShortcutKeysForAction("workspace-tab-search", custom, { isMac: true, isDesktop: true }),
+  ).not.toBeNull();
+});
+
+it("uses the non-Mac browser fallback without stealing Firefox console", () => {
+  expect(
+    resolveShortcut({
+      event: { key: "K", code: "KeyK", altKey: true, shiftKey: true },
+      context: { isMac: false, isDesktop: false },
+    }).match?.action,
+  ).toBe("workspace.tab.search");
+  expect(
+    resolveShortcut({
+      event: { key: "K", code: "KeyK", ctrlKey: true, shiftKey: true },
+      context: { isMac: false, isDesktop: false },
+    }).match,
+  ).toBeNull();
+});

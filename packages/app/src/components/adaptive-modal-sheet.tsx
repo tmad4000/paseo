@@ -533,7 +533,10 @@ export function AdaptiveModalSheet({
   });
   const [shouldRenderWeb, setShouldRenderWeb] = useState(visible);
   const [isWebClosing, setIsWebClosing] = useState(false);
-  const modalLayer = useGlobalWebOverlayLayer("modal", isWeb && !isMobile && shouldRenderWeb);
+  const modalLayer = useGlobalWebOverlayLayer(
+    "modal",
+    isWeb && (isMobile ? visible : shouldRenderWeb),
+  );
   const nativeModalDismissNotifiedRef = useRef(!visible);
   const handleDismiss = useCallback(() => {
     handleSheetDismiss();
@@ -587,7 +590,7 @@ export function AdaptiveModalSheet({
     [onClose],
   );
   const setWebOverlayScope = useWebOverlayRegistration({
-    active: isWeb && !isMobile && visible,
+    active: isWeb && visible,
     layer: modalLayer,
     onKeyDown: handleWebOverlayKeyDown,
   });
@@ -648,6 +651,23 @@ export function AdaptiveModalSheet({
         {footerView}
       </>
     );
+    // Gorhom portals compact content away from the opener. Web needs an owning
+    // focus scope above that picker; native keeps its existing sheet hierarchy.
+    const scopedSheetContent = isWeb ? (
+      <OverlayLayerProvider layer={modalLayer}>
+        <View
+          ref={setWebOverlayScope}
+          style={styles.compactStaticContent}
+          role="dialog"
+          aria-modal
+          tabIndex={-1}
+        >
+          {sheetContent}
+        </View>
+      </OverlayLayerProvider>
+    ) : (
+      sheetContent
+    );
 
     return (
       <IsolatedBottomSheetModal
@@ -668,9 +688,9 @@ export function AdaptiveModalSheet({
         presentation={presentation}
       >
         {sizeContentToCurrentSnapPoint ? (
-          <BottomSheetVisibleContent>{sheetContent}</BottomSheetVisibleContent>
+          <BottomSheetVisibleContent>{scopedSheetContent}</BottomSheetVisibleContent>
         ) : (
-          sheetContent
+          scopedSheetContent
         )}
       </IsolatedBottomSheetModal>
     );

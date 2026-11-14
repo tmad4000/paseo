@@ -47,7 +47,7 @@ describe("useWebOverlayRegistration", () => {
     unmount();
   });
 
-  it("restores opener focus when an overlay closes", () => {
+  it("restores opener focus when an overlay closes", async () => {
     const { result, rerender, unmount } = renderHook(
       ({ active }: { active: boolean }) =>
         useWebOverlayRegistration({ active, layer: 20, onKeyDown: () => false }),
@@ -59,13 +59,14 @@ describe("useWebOverlayRegistration", () => {
     input.focus();
     expect(document.activeElement).toBe(input);
 
-    act(() => rerender({ active: false }));
+    await act(async () => rerender({ active: false }));
 
-    expect(openerFocus).toHaveBeenCalled();
+    expect(openerFocus).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(opener);
     unmount();
   });
 
-  it("restores opener focus when an active overlay unmounts after its scope detaches", () => {
+  it("restores opener focus when an active overlay unmounts after its scope detaches", async () => {
     const { result, unmount } = renderHook(() =>
       useWebOverlayRegistration({ active: true, layer: 20, onKeyDown: () => false }),
     );
@@ -78,9 +79,32 @@ describe("useWebOverlayRegistration", () => {
     act(() => result.current(null));
     expect(openerFocus).not.toHaveBeenCalled();
 
-    unmount();
+    await act(async () => unmount());
 
-    expect(openerFocus).toHaveBeenCalled();
+    expect(openerFocus).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("restores using its owning document after ambient globals are torn down", () => {
+    const { result, unmount } = renderHook(() =>
+      useWebOverlayRegistration({ active: true, layer: 20, onKeyDown: () => false }),
+    );
+    act(() => result.current(scope));
+    input.focus();
+    const ownerDocument = scope.ownerDocument;
+    const openerFocus = vi.spyOn(opener, "focus");
+    vi.useFakeTimers({ toFake: ["queueMicrotask"] });
+    try {
+      unmount();
+      vi.stubGlobal("document", undefined);
+      Reflect.deleteProperty(globalThis, "document");
+      expect(() => vi.runAllTicks()).not.toThrow();
+      expect(ownerDocument.activeElement).toBe(opener);
+      expect(openerFocus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 
   it("leaves IME composition keys with the focused editor", () => {

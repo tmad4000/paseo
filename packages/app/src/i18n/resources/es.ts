@@ -1222,6 +1222,7 @@ export const es: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "Cambiar pestañas ({{count}}abierto)",
         title: "Cambiar pestaña",
@@ -3057,6 +3058,7 @@ export const es: TranslationResources = {
         description:
           "Si está desactivado, un chat sigue sin leer hasta que lo marques como leído o le envíes un mensaje",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "Pestañas",
         label: "Ordenar pestañas por actividad reciente",

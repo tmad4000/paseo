@@ -135,7 +135,9 @@ function focusFirstElement(scope: HTMLElement): void {
     '[data-menu-item="true"]:not([data-menu-disabled="true"])',
   );
   const first = firstMenuItem ?? getFocusableElements(scope)[0];
-  (first ?? scope).focus();
+  // Animated sheets can enter outside an overflow-hidden ancestor. Browser
+  // focus scrolling shifts that ancestor and destroys the visible snap geometry.
+  (first ?? scope).focus({ preventScroll: true });
 }
 
 function handleWebOverlayFocus(event: FocusEvent): void {
@@ -214,6 +216,10 @@ function detachWebOverlayListeners(): void {
 function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptions) => void {
   webOverlayEntries.push(entry);
   attachWebOverlayListeners();
+  const registeredScope = entry.getScope();
+  // Deferred restoration can outlive the ambient DOM globals.
+  const registeredDocument = registeredScope?.ownerDocument ?? document;
+  let restoreFocusQueued = false;
 
   const focusFrame = window.requestAnimationFrame(() => {
     const scope = entry.getScope();
@@ -227,13 +233,24 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
     const index = webOverlayEntries.findIndex((candidate) => candidate.id === entry.id);
     if (index !== -1) webOverlayEntries.splice(index, 1);
     detachWebOverlayListeners();
-    if (
-      options?.restoreFocus !== false &&
-      entry.restoreFocus &&
-      document.contains(entry.restoreFocus)
-    ) {
-      entry.restoreFocus.focus();
-    }
+    if (options?.restoreFocus === false || restoreFocusQueued) return;
+    restoreFocusQueued = true;
+    // A closing animated sheet can retain its input. Restoring from a host-ref
+    // detach runs inside React's mutation phase, whose selection restoration
+    // would refocus that input. Wait for the commit, then respect the live owner.
+    queueMicrotask(() => {
+      const target = entry.restoreFocus;
+      if (!target?.isConnected) return;
+      const top = getTopWebOverlay();
+      if (top?.id === entry.id) return; // This scope reopened before restoration.
+      if (top && !top.getScope()?.contains(target)) return;
+      // A menu command can focus a launcher or inline editor without opening
+      // another overlay. Preserve that move; only return closing/lost focus.
+      const active = registeredDocument.activeElement;
+      if (active && active !== registeredDocument.body && !registeredScope?.contains(active))
+        return;
+      target.focus({ preventScroll: true });
+    });
   };
 }
 

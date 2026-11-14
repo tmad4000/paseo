@@ -8,6 +8,7 @@ export type CommandCenterScope = "files" | "recent" | null;
 interface KeyboardShortcutsState {
   commandCenterOpen: boolean;
   commandCenterScope: CommandCenterScope;
+  commandCenterInitialQuery: string;
   shortcutsDialogOpen: boolean;
   capturingShortcut: boolean;
   altDown: boolean;
@@ -16,7 +17,7 @@ interface KeyboardShortcutsState {
   /** Sidebar-visible workspace targets (up to 9), in top-to-bottom visual order. */
   sidebarShortcutWorkspaceTargets: SidebarShortcutWorkspaceTarget[];
 
-  setCommandCenterOpen: (open: boolean, scope?: CommandCenterScope) => void;
+  setCommandCenterOpen: (open: boolean, scope?: CommandCenterScope, initialQuery?: string) => void;
   setCommandCenterScope: (scope: CommandCenterScope) => void;
   setShortcutsDialogOpen: (open: boolean) => void;
   setCapturingShortcut: (capturing: boolean) => void;
@@ -52,6 +53,7 @@ function updateBadgeTimer(
 export const useKeyboardShortcutsStore = create<KeyboardShortcutsState>((set, get) => ({
   commandCenterOpen: false,
   commandCenterScope: null,
+  commandCenterInitialQuery: "",
   shortcutsDialogOpen: false,
   capturingShortcut: false,
   altDown: false,
@@ -59,8 +61,12 @@ export const useKeyboardShortcutsStore = create<KeyboardShortcutsState>((set, ge
   showShortcutBadges: false,
   sidebarShortcutWorkspaceTargets: [],
 
-  setCommandCenterOpen: (open, scope = null) =>
-    set({ commandCenterOpen: open, commandCenterScope: open ? scope : null }),
+  setCommandCenterOpen: (open, scope = null, initialQuery = "") =>
+    set({
+      commandCenterOpen: open,
+      commandCenterScope: open ? scope : null,
+      commandCenterInitialQuery: open ? initialQuery : "",
+    }),
   setCommandCenterScope: (scope) => set({ commandCenterScope: scope }),
   setShortcutsDialogOpen: (open) => set({ shortcutsDialogOpen: open }),
   setCapturingShortcut: (capturing) => set({ capturingShortcut: capturing }),

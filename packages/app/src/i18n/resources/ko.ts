@@ -1210,6 +1210,7 @@ export const ko: TranslationResources = {
         agent: "에이전트",
         workspace: "워크스페이스",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "탭 전환 ({{count}}개 열림)",
         title: "탭 전환",
@@ -3008,6 +3009,7 @@ export const ko: TranslationResources = {
         description:
           "끄면 읽음으로 표시하거나 메시지를 보낼 때까지 채팅이 읽지 않음 상태로 유지됩니다",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "탭",
         label: "최근 활동순으로 탭 정렬",

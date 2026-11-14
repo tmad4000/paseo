@@ -20,6 +20,7 @@ export type KeyboardActionId =
   | "agent.interrupt"
   | "agent.new"
   | "agent.subthreads.toggle"
+  | "workspace.tab.search"
   | "workspace.tab.menu.open"
   | "workspace.tab.target.agent"
   | "workspace.tab.target.browser"

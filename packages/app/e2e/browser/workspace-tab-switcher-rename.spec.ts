@@ -37,7 +37,7 @@ test.describe("Workspace session rename (compact tab switcher)", () => {
       });
 
       // Open the sessions dropdown (a bottom sheet on compact).
-      await page.getByRole("button", { name: /Switch tabs/ }).click();
+      await page.getByTestId("workspace-tab-switcher-trigger").click();
       await expect(page.getByRole("button", { name: "Bottom sheet backdrop" }).first()).toBeVisible(
         {
           timeout: 10_000,
@@ -60,8 +60,29 @@ test.describe("Workspace session rename (compact tab switcher)", () => {
       await expect(input).toBeVisible({ timeout: 10_000 });
       await expect(input).toHaveValue(initialTitle);
 
+      // A compact modal above the still-open picker owns keyboard focus.
+      await input.focus();
+      await expect(input).toBeFocused();
+      await input.press("ControlOrMeta+A");
+      await page.keyboard.type("Cancelled title");
+      await expect(input).toHaveValue("Cancelled title");
+      await expect(renameModalSubmit(page, modalPrefix)).toBeEnabled();
+      await page.keyboard.press("Escape");
+      await expect(input).toHaveCount(0);
+      const search = page.getByRole("combobox", { name: "Search tabs…" });
+      await expect(search).toBeFocused();
+      await expect.poll(() => fetchAgentTitle(session.client, session.agentId)).toBe(initialTitle);
+
+      await actionsTrigger.click();
+      await renameItem.click();
+      await expect(input).toHaveValue(initialTitle);
+      await input.focus();
+      await expect(input).toBeFocused();
       const renamed = "Renamed from the dropdown";
-      await input.fill(renamed);
+      await input.press("ControlOrMeta+A");
+      await page.keyboard.type(renamed);
+      await expect(input).toHaveValue(renamed);
+      await expect(renameModalSubmit(page, modalPrefix)).toBeEnabled();
       await renameModalSubmit(page, modalPrefix).click();
 
       await expect(input).toHaveCount(0, { timeout: 15_000 });
