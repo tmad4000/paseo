@@ -736,6 +736,11 @@ export const es: TranslationResources = {
         nextAction: "Siguiente: {{action}}",
         openOwnerLabel: "Abrir {{name}}",
         openAskHint: "Salta al mensaje que lo pidió o abre su tarjeta en Stream",
+        spawned: {
+          section: "Agentes iniciados · {{count}}",
+          hint: "Agentes que inició este chat. Selecciona uno para leerlo y responder junto a este chat.",
+          openRegistry: "Abrir panel de subagentes",
+        },
         delegation: {
           running: "En curso",
           runningFor: "En curso · {{time}}",
@@ -758,9 +763,6 @@ export const es: TranslationResources = {
           questionsForYou_one: "{{count}} pregunta para ti",
           questionsForYou_other: "{{count}} preguntas para ti",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "Chats delegados · {{count}}",
-          delegatedChatsHint:
-            "Chats que inició este y que ninguna tarea sigue todavía. Cada uno enlaza a su chat.",
           showMore: "Mostrar {{count}} más",
           showFewer: "Mostrar menos",
         },
@@ -2684,6 +2686,26 @@ export const es: TranslationResources = {
     archiveFinishedRetry: "Reintentar ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "Agentes iniciados",
+      provider: "Subagentes del proveedor",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "última actividad {{time}}",
+      showDetails: "Mostrar detalles de {{label}}",
+      hideDetails: "Ocultar detalles de {{label}}",
+      peek: "Ver al lado",
+      more: "Más acciones para {{label}}",
+      detach: "Desvincular",
+      archive: "Archivar",
+      review: "Revisar",
+      reviewHint: "Muestra el agente en su solicitud de permiso. Apruébala allí.",
+      waitingOn: "Esperando aprobación: {{title}}",
+      tasks: "Tareas {{done}}/{{total}}",
+      showMore: "Mostrar más",
+      type: "Tipo: {{type}}",
+    },
     untitled: "Subagente sin título",
     title: "Subagentes",
     close: "Cerrar panel de subagentes",

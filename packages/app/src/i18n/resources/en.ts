@@ -739,6 +739,11 @@ export const en = {
         nextAction: "Next: {{action}}",
         openOwnerLabel: "Open {{name}}",
         openAskHint: "Jumps to the message that asked it, or opens its card in Stream",
+        spawned: {
+          section: "Spawned agents · {{count}}",
+          hint: "Agents this chat started. Select one to read and reply beside this chat.",
+          openRegistry: "Open Subagents panel",
+        },
         delegation: {
           running: "Running",
           runningFor: "Running · {{time}}",
@@ -761,9 +766,6 @@ export const en = {
           questionsForYou_one: "{{count}} question for you",
           questionsForYou_other: "{{count}} questions for you",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "Delegated chats · {{count}}",
-          delegatedChatsHint:
-            "Chats this one started that no ask tracks yet. Each links to its chat.",
           showMore: "Show {{count}} more",
           showFewer: "Show fewer",
         },
@@ -2700,6 +2702,26 @@ export const en = {
     archiveFinishedRetry: "Retry ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "Spawned agents",
+      provider: "Provider subagents",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "last active {{time}}",
+      showDetails: "Show details for {{label}}",
+      hideDetails: "Hide details for {{label}}",
+      peek: "Peek",
+      more: "More actions for {{label}}",
+      detach: "Detach",
+      archive: "Archive",
+      review: "Review",
+      reviewHint: "Shows the agent at its permission prompt. Approve it there.",
+      waitingOn: "Waiting on approval: {{title}}",
+      tasks: "Tasks {{done}}/{{total}}",
+      showMore: "Show more",
+      type: "Type: {{type}}",
+    },
     untitled: "Untitled subagent",
     title: "Subagents",
     close: "Close subagents drawer",

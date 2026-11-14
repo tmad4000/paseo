@@ -729,6 +729,11 @@ export const ja: TranslationResources = {
         nextAction: "次: {{action}}",
         openOwnerLabel: "{{name}}を開く",
         openAskHint: "依頼したメッセージへ移動するか、Stream のカードを開きます",
+        spawned: {
+          section: "起動したエージェント · {{count}}",
+          hint: "このチャットが起動したエージェントです。選択すると、このチャットの横で読んで返信できます。",
+          openRegistry: "サブエージェントパネルを開く",
+        },
         delegation: {
           running: "実行中",
           runningFor: "実行中 · {{time}}",
@@ -751,9 +756,6 @@ export const ja: TranslationResources = {
           questionsForYou_one: "あなたへの質問 {{count}} 件",
           questionsForYou_other: "あなたへの質問 {{count}} 件",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "委任したチャット · {{count}}",
-          delegatedChatsHint:
-            "このチャットが開始し、まだ依頼で追跡されていないチャット。各行からそのチャットを開けます。",
           showMore: "さらに {{count}} 件表示",
           showFewer: "表示を減らす",
         },
@@ -2646,6 +2648,26 @@ export const ja: TranslationResources = {
     archiveFinishedRetry: "再試行 ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "起動したエージェント",
+      provider: "プロバイダーのサブエージェント",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "最終アクティビティ {{time}}",
+      showDetails: "{{label}} の詳細を表示",
+      hideDetails: "{{label}} の詳細を隠す",
+      peek: "横に表示",
+      more: "{{label}} のその他の操作",
+      detach: "切り離す",
+      archive: "アーカイブ",
+      review: "確認",
+      reviewHint: "権限リクエストの画面でエージェントを表示します。承認はそこで行います。",
+      waitingOn: "承認待ち: {{title}}",
+      tasks: "タスク {{done}}/{{total}}",
+      showMore: "さらに表示",
+      type: "種類: {{type}}",
+    },
     untitled: "無題のサブエージェント",
     title: "サブエージェント",
     close: "サブエージェントパネルを閉じる",

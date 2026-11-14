@@ -172,14 +172,20 @@ owning chat on that ask's card in Stream. The lookup scans snapshots the client 
 (cached per agent map), so an owner outside them is not listed.
 
 Delegation without an ask is tracked too. The host labels every agent another agent creates with
-`paseo.parent-agent-id`, which the client reads as `Agent.parentAgentId`. **Delegated chats · N**
-lists this chat's live children that no ask here links (`selectUntrackedChildren`; an ask links a
-child by `delegatedAgentId` or a `sessions` entry, done or not). It appears in the floating pane
-and above the chat's own Stream Activity and Tasks, so the delegating chat always says the work
-went over there and links to it, even when its agent never recorded an ask. With no ask to leave
-unfinished, these rows read plain **Idle** and **Closed** with a muted dot. Only permission,
-errors and the child's open questions count as attention. Archived children drop out, and the
-first five show, then **Show N more**.
+`paseo.parent-agent-id`, which the client reads as `Agent.parentAgentId`. **Spawned agents · N**
+lists every unarchived agent this chat spawned, in the subagents registry's order (creation time),
+one line each: state dot, title, state word and age. It is the same membership the subagents
+track and registry use, so the three counts agree; it used to list only children no ask linked
+(**Delegated chats**), which made its count disagree with the track's. In the floating pane it
+starts folded to its heading and summary (remembered per pane, in the asks pane's own key shape,
+in the `subagent-registry` store), so a child an ask tracks is not shown twice by default; above
+the chat's own Stream it is open, with its hint. A row peeks the child beside the chat, as the
+pulse chip does ([subagents drawer](agent-lifecycle.md#the-subagents-drawer)); **Open Subagents
+panel** opens the registry. Provider subagents are not listed: this pane is for asks and answers.
+A spawned agent needs the delegator when it waits on a permission, failed, or has its own open
+question for a person; that lights a minimized pane's pill and counts in **N need attention**,
+unless an ask already tracks it (`trackedChildIds`), whose pulse is counted instead. The first
+five show, then **Show N more**.
 
 Evidence (`delegation-pulse.spec.ts`, real mock children): a running and an idle child
 ([running](stream-answers/delegation-pulse-running.png)), the running child stopped and followed

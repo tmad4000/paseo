@@ -14,6 +14,12 @@ export interface SubthreadsHostValue {
   hasChecklistLink: boolean;
   /** Opens the subagents list (or a given subagent). */
   open: (selection?: SubthreadSelection | null) => void;
+  /**
+   * Peeks one of this chat's subagents beside it. Returns false, and does nothing, when the
+   * target is not a subagent of this chat; the caller then keeps its own way in (its tab or
+   * session). Every "open this subagent" in the parent's pane tries this first.
+   */
+  peek: (selection: SubthreadSelection) => boolean;
   openChecklist: () => void;
   close: () => void;
   /** Keyboard semantics: open, move into the drawer, then close. */

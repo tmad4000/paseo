@@ -734,6 +734,11 @@ export const ptBR: TranslationResources = {
         nextAction: "Próximo: {{action}}",
         openOwnerLabel: "Abrir {{name}}",
         openAskHint: "Vai até a mensagem que pediu, ou abre o cartão no Stream",
+        spawned: {
+          section: "Agentes iniciados · {{count}}",
+          hint: "Agentes que este chat iniciou. Selecione um para ler e responder ao lado deste chat.",
+          openRegistry: "Abrir painel de subagentes",
+        },
         delegation: {
           running: "Em execução",
           runningFor: "Em execução · {{time}}",
@@ -756,9 +761,6 @@ export const ptBR: TranslationResources = {
           questionsForYou_one: "{{count}} pergunta para você",
           questionsForYou_other: "{{count}} perguntas para você",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "Chats delegados · {{count}}",
-          delegatedChatsHint:
-            "Chats iniciados por este que nenhum pedido acompanha ainda. Cada um leva ao seu chat.",
           showMore: "Mostrar mais {{count}}",
           showFewer: "Mostrar menos",
         },
@@ -2667,6 +2669,26 @@ export const ptBR: TranslationResources = {
     archiveFinishedRetry: "Tentar novamente ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "Agentes iniciados",
+      provider: "Subagentes do provedor",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "última atividade {{time}}",
+      showDetails: "Mostrar detalhes de {{label}}",
+      hideDetails: "Ocultar detalhes de {{label}}",
+      peek: "Ver ao lado",
+      more: "Mais ações para {{label}}",
+      detach: "Desvincular",
+      archive: "Arquivar",
+      review: "Revisar",
+      reviewHint: "Mostra o agente no pedido de permissão. Aprove lá.",
+      waitingOn: "Aguardando aprovação: {{title}}",
+      tasks: "Tarefas {{done}}/{{total}}",
+      showMore: "Mostrar mais",
+      type: "Tipo: {{type}}",
+    },
     untitled: "Subagente sem título",
     title: "Subagentes",
     close: "Fechar painel de subagentes",

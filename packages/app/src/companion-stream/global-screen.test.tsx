@@ -20,17 +20,15 @@ const state = vi.hoisted(() => ({
 function clickDone() {
   state.updateStatus?.("question:q", "done");
 }
-// Delegated chats have their own coverage in answers-pane and delegation-pulse tests.
+// The Spawned agents section has its own coverage in answers-pane and the registry tests.
 // Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
 vi.mock("@/components/ui/icon-tooltip", () => ({
   IconTooltip: ({ children }: { children: unknown }) => children,
 }));
 
-vi.mock("./delegated-chats", () => ({ DelegatedChatsList: () => null }));
-vi.mock("./use-delegation-pulse", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./use-delegation-pulse")>()),
-  useDelegatedChildren: () => [],
-}));
+vi.mock("./spawned-agents", () => ({ SpawnedAgentsSection: () => null }));
+vi.mock("@/subthreads/use-subthread-rows", () => ({ useSpawnedAgentRows: () => [] }));
+vi.mock("@/subthreads/use-peek-or-open", () => ({ usePeekOrOpenAgent: () => () => {} }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,

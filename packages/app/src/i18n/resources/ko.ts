@@ -727,6 +727,11 @@ export const ko: TranslationResources = {
         nextAction: "다음: {{action}}",
         openOwnerLabel: "{{name}} 열기",
         openAskHint: "요청한 메시지로 이동하거나 Stream에서 카드를 엽니다",
+        spawned: {
+          section: "시작한 에이전트 · {{count}}",
+          hint: "이 채팅이 시작한 에이전트입니다. 하나를 선택하면 이 채팅 옆에서 읽고 답할 수 있습니다.",
+          openRegistry: "하위 에이전트 패널 열기",
+        },
         delegation: {
           running: "실행 중",
           runningFor: "실행 중 · {{time}}",
@@ -749,9 +754,6 @@ export const ko: TranslationResources = {
           questionsForYou_one: "나에게 온 질문 {{count}}개",
           questionsForYou_other: "나에게 온 질문 {{count}}개",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "위임한 채팅 · {{count}}",
-          delegatedChatsHint:
-            "이 채팅이 시작했지만 아직 요청으로 추적되지 않는 채팅입니다. 각 항목에서 해당 채팅을 엽니다.",
           showMore: "{{count}}개 더 보기",
           showFewer: "간단히 보기",
         },
@@ -2637,6 +2639,26 @@ export const ko: TranslationResources = {
     archiveFinishedRetry: "다시 시도 ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "시작한 에이전트",
+      provider: "공급자 하위 에이전트",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "마지막 활동 {{time}}",
+      showDetails: "{{label}} 세부 정보 표시",
+      hideDetails: "{{label}} 세부 정보 숨기기",
+      peek: "옆에서 보기",
+      more: "{{label}} 추가 작업",
+      detach: "분리",
+      archive: "보관",
+      review: "검토",
+      reviewHint: "권한 요청 화면에서 에이전트를 보여 줍니다. 승인은 거기에서 하세요.",
+      waitingOn: "승인 대기 중: {{title}}",
+      tasks: "작업 {{done}}/{{total}}",
+      showMore: "더 보기",
+      type: "유형: {{type}}",
+    },
     untitled: "제목 없는 하위 에이전트",
     title: "하위 에이전트",
     close: "하위 에이전트 패널 닫기",

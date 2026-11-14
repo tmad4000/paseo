@@ -35,6 +35,8 @@ import { ProviderSubagentPanel } from "@/panels/provider-subagent-panel";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
+import { useArchiveSubagent } from "@/subagents/use-archive-subagent";
+import { useDetachSubagent } from "@/subagents/use-detach-subagent";
 import { resolveRowLabel } from "@/subagents/track-presentation";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
@@ -116,7 +118,10 @@ export function SubthreadsHost({
   const [state, dispatch] = useReducer(reduceSubthreadsDrawer, CLOSED_SUBTHREADS_DRAWER);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const { rows, summary } = useSubthreadRows({ serverId, parentAgentId: agentId });
+  const { rows, groups, summary } = useSubthreadRows({ serverId, parentAgentId: agentId });
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const { archive: archiveSubagent, detach: detachSubagent } = useRegistryCardActions(serverId);
   const selected = resolveSelectedSubthread(rows, state.selection);
   const coversParent = isCompact || (paneWidth !== null && paneWidth < SIDE_BY_SIDE_MIN_WIDTH);
   const { parentKnown, parentLabel, parentCwd, sidePanelLabel, checklistUrl } =
@@ -193,9 +198,26 @@ export function SubthreadsHost({
     (selection: SubthreadSelection) => act({ type: "select", selection }),
     [act],
   );
+  // Peek-first: anything in the parent's pane that opens one of its subagents shows it here.
+  // A target that is not this chat's subagent is the caller's to open some other way.
+  const peek = useCallback(
+    (selection: SubthreadSelection) => {
+      const known = rowsRef.current.some(
+        (row) => row.kind === selection.kind && row.id === selection.id,
+      );
+      if (known) select(selection);
+      return known;
+    },
+    [select],
+  );
   const claim = useCallback((focus: SubthreadsFocus) => dispatch({ type: "focus", focus }), []);
   const claimParent = useCallback(() => claim("parent"), [claim]);
   const claimDrawer = useCallback(() => claim("drawer"), [claim]);
+  // Escape in the list hands typing back to the parent; where the panel covers it, it closes.
+  const escapeList = useCallback(() => {
+    if (coversParent) close();
+    else claimParent();
+  }, [claimParent, close, coversParent]);
   const step = useCallback(
     (delta: 1 | -1) => {
       const next = stepSubthreadSelection(rows, state.selection, delta);
@@ -240,11 +262,12 @@ export function SubthreadsHost({
       summary,
       hasChecklistLink: checklistUrl !== null,
       open,
+      peek,
       openChecklist,
       close,
       toggle,
     }),
-    [checklistUrl, close, mode, open, openChecklist, state.open, summary, toggle],
+    [checklistUrl, close, mode, open, openChecklist, peek, state.open, summary, toggle],
   );
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -313,8 +336,10 @@ export function SubthreadsHost({
               ) : (
                 <SubthreadsDrawer
                   serverId={serverId}
+                  parentAgentId={agentId}
                   parentLabel={parentLabel}
                   rows={rows}
+                  groups={groups}
                   summary={summary}
                   selected={selected}
                   showModeSwitch={checklistAvailable}
@@ -324,6 +349,9 @@ export function SubthreadsHost({
                   onStep={step}
                   onClose={close}
                   onOpenInTab={openInTab}
+                  onArchive={archiveSubagent}
+                  onDetach={detachSubagent}
+                  onEscapeList={escapeList}
                 >
                   {selected ? (
                     <SubthreadPane
@@ -348,6 +376,19 @@ export function SubthreadsHost({
       </View>
     </SubthreadsHostContext>
   );
+}
+
+/** A card's lifecycle actions; detach only where the host supports it. */
+function useRegistryCardActions(serverId: string): {
+  archive: (agentId: string) => void;
+  detach: ((agentId: string) => void) | undefined;
+} {
+  const archive = useArchiveSubagent({ serverId });
+  const detach = useDetachSubagent({ serverId });
+  const canDetach = useSessionStore(
+    (s) => s.sessions[serverId]?.serverInfo?.features?.agentDetach === true,
+  );
+  return { archive, detach: canDetach ? detach : undefined };
 }
 
 /**
@@ -673,6 +714,7 @@ function useMoveDomFocus(input: {
     if (!region || (activeElement && region.contains(activeElement))) return;
     const destination =
       region.querySelector<HTMLElement>("textarea") ??
+      region.querySelector<HTMLElement>('[data-registry-current="true"]') ??
       region.querySelector<HTMLElement>('[data-testid^="subthreads-row-"]');
     destination?.focus();
   }, [drawerRegionRef, owner, parentRegionRef]);

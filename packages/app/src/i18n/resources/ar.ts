@@ -723,6 +723,11 @@ export const ar: TranslationResources = {
         nextAction: "التالي: {{action}}",
         openOwnerLabel: "فتح {{name}}",
         openAskHint: "ينتقل إلى الرسالة التي طلبته، أو يفتح بطاقته في Stream",
+        spawned: {
+          section: "الوكلاء الذين تم تشغيلهم · {{count}}",
+          hint: "وكلاء بدأتهم هذه المحادثة. اختر واحدًا لقراءته والرد عليه بجانب هذه المحادثة.",
+          openRegistry: "فتح لوحة الوكلاء الفرعيين",
+        },
         delegation: {
           running: "قيد التشغيل",
           runningFor: "قيد التشغيل · {{time}}",
@@ -745,9 +750,6 @@ export const ar: TranslationResources = {
           questionsForYou_one: "{{count}} سؤال لك",
           questionsForYou_other: "{{count}} أسئلة لك",
           withQuestions: "{{status}} · {{questions}}",
-          delegatedChatsSection: "محادثات مفوَّضة · {{count}}",
-          delegatedChatsHint:
-            "محادثات بدأتها هذه المحادثة ولا يتتبعها أي طلب بعد. كل منها يرتبط بمحادثته.",
           showMore: "عرض {{count}} أخرى",
           showFewer: "عرض أقل",
         },
@@ -2620,6 +2622,26 @@ export const ar: TranslationResources = {
     archiveFinishedRetry: "إعادة المحاولة ({{failed}}/{{total}})",
   },
   subthreads: {
+    groups: {
+      spawned: "الوكلاء الذين تم تشغيلهم",
+      provider: "الوكلاء الفرعيون للمزوّد",
+      heading: "{{name}} · {{count}}",
+    },
+    card: {
+      lastActive: "آخر نشاط {{time}}",
+      showDetails: "عرض تفاصيل {{label}}",
+      hideDetails: "إخفاء تفاصيل {{label}}",
+      peek: "عرض بجانب المحادثة",
+      more: "إجراءات إضافية لـ {{label}}",
+      detach: "فصل",
+      archive: "أرشفة",
+      review: "مراجعة",
+      reviewHint: "يعرض الوكيل عند طلب الإذن. وافق عليه هناك.",
+      waitingOn: "بانتظار الموافقة: {{title}}",
+      tasks: "المهام {{done}}/{{total}}",
+      showMore: "عرض المزيد",
+      type: "النوع: {{type}}",
+    },
     untitled: "وكيل فرعي بلا عنوان",
     title: "الوكلاء الفرعيون",
     close: "إغلاق لوحة الوكلاء الفرعيين",
