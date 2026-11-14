@@ -105,6 +105,7 @@ export function WorkspaceTabSearchPicker({
     new Map(),
   );
   const anchorRef = useRef<View>(null);
+  const invocationFocusRef = useRef<HTMLElement | null>(null);
   const shortcutKeys = useShortcutKeys("workspace-tab-search");
   const layout = useWorkspaceLayoutStore((state) => state.layoutByWorkspace[workspaceKey] ?? null);
   const explorerPaneId = useWorkspaceLayoutStore((state) =>
@@ -124,12 +125,19 @@ export function WorkspaceTabSearchPicker({
       return new Map(previous).set(presentation.key, presentation);
     });
   }, []);
-  const openPicker = useCallback((keyboard = false) => {
-    // Repeated invocations keep the current query/highlight, including through live updates.
-    setKeyboardInvocation(keyboard);
-    if (!keyboard) Keyboard.dismiss();
-    setOpen(true);
-  }, []);
+  const openPicker = useCallback(
+    (keyboard = false) => {
+      // Repeated invocations keep the query, highlight and original focus-return target.
+      if (!open && isWeb) {
+        invocationFocusRef.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      }
+      setKeyboardInvocation(keyboard);
+      if (!keyboard) Keyboard.dismiss();
+      setOpen(true);
+    },
+    [open],
+  );
   useEffect(() => {
     if (!enabled) setOpen(false);
   }, [enabled]);
@@ -249,7 +257,7 @@ export function WorkspaceTabSearchPicker({
     const openCenter = () => {
       if (isWeb)
         setCommandCenterFocusRestoreElement(
-          document.activeElement instanceof HTMLElement ? document.activeElement : null,
+          invocationFocusRef.current?.isConnected ? invocationFocusRef.current : null,
         );
       useKeyboardShortcutsStore.getState().setCommandCenterOpen(true, null, initialQuery);
     };

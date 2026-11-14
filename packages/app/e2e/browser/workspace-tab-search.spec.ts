@@ -277,6 +277,8 @@ for (const compact of [false, true]) {
       const center = page.getByTestId("command-center-panel");
       const globalSearch = center.getByTestId("command-center-input");
       await expect(globalSearch).toHaveValue("Footer source");
+      // Wait for the old picker to finish unmounting before proving typing stays here.
+      await expect(search).toHaveCount(0);
       await expect(globalSearch).toBeFocused();
       await page.keyboard.type(" session");
       await expect(globalSearch).toHaveValue("Footer source session");

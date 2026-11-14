@@ -77,6 +77,13 @@ keyboard/read states, a fixed close target after marking read, and regular `elli
 out and reloading. Captures cover normal/long, unread-active, hover, keyboard focus, narrow width and
 the setting off. Full accessible names and existing title tooltips are retained.
 
+After the combined run, a stronger check waited for the old picker to unmount before typing. It
+exposed compact Escape returning to a disconnected footer. The final fix retains the original
+invoking element across the handoff and repeated opens. Focused lint/app typecheck and the strengthened
+**2/2 desktop/compact flows passed** after this fix; the refreshed handoff captures show the old
+picker fully gone. Origin independently reviewed both the source and the corrected compact capture.
+No additional broad retest ran after this focused correction.
+
 Both desktop and compact **keyboard footer handoff** flows passed with matching results present:
 native Tab reaches the footer, Enter opens Cmd+K with the typed query, subsequent typing stays in
 the global search input, and Escape restores the original invoker. The footer carries the same
