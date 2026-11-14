@@ -467,6 +467,13 @@ export const fr: TranslationResources = {
       queueAttention: "Pas encore synchronisé — enregistré ici, nouvelles tentatives en cours",
       queueOnHost: "Sur l’hôte — envoyé quand l’agent sera libre",
       unsentHeader: "Messages non envoyés ({{count}})",
+      recoveryHeader: "Copies de brouillons non envoyés ({{count}})",
+      recoveryMemory:
+        "Conservée uniquement tant que cette application est ouverte. Cette copie n’est pas enregistrée sur l’appareil.",
+      recoveryAttachments: "{{count}} pièces jointes",
+      restoreFailed: "Restaurer le brouillon",
+      discardFailed: "Supprimer la copie",
+      recoveryOccupied: "Terminez ou effacez le brouillon actuel avant de restaurer cette copie.",
       unsentPending: "Enregistré sur cet appareil — envoyé à la reconnexion de l’hôte",
       editUnsent: "Remettre dans la zone de message",
       discardUnsent: "Supprimer le message non envoyé",

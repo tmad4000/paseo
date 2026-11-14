@@ -63,6 +63,10 @@ Independent review caught gaps in the first implementation:
 - Review cleanup removes only unchanged comments included in the submitted snapshot. Newer
   same-key review/context snapshots remain visible during preparation and survive settlement;
   discarded comments are not reconstructed.
+- Preparation failures after newer edits retain the original message and attachment references in
+  an explicit memory-only recovery track. Restore refuses an occupied composer and never sends;
+  failed restores retain the copy and garbage-collection holds. Successful restore transfers images
+  and immutable context/review snapshots to the composer without changing newer review comments.
 - Direct RPC receipts wait on their reserved iterator's acceptance, preserving its original error.
   A later run cannot supply another request's refusal proof. Stale-session retry resolves the same
   acceptance promise and never replays after acceptance, timeout or cancellation. Generic failures
@@ -95,6 +99,13 @@ The server build, workspace typecheck, expanded unit suites and browser batch we
 when this review began. This round adds owned-acceptance coverage in server `agent/agent-prompt.test.ts`
 and `session.test.ts`, alongside the real-manager receipt race and review reconstruction regressions.
 Those new changes still require GCP validation and a server rebuild before E2E.
+
+At `98589884b07e619ddc07f905da11f115192c3e83`, the outer executor reported formatting,
+lint and server-build passes. Full typecheck, 20 app and eight server suites, four tooltip browser
+tests and eleven daemon browser flows were still in progress when this review began. Recovery-track
+and garbage-collection regressions added in `composer/submit.test.ts`,
+`composer/draft/input-draft.live.test.tsx` and `composer/attachments/workspace.test.ts` await the
+next candidate's GCP checks. No new-source or native rollout pass is claimed here.
 
 Earlier receipts do not validate this new source. The queue cases cover held encoding/device saves,
 legacy local acceptance, failures, A→B→A text edits, attachment changes, unchanged clearing and

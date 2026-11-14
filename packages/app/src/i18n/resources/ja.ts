@@ -465,6 +465,13 @@ export const ja: TranslationResources = {
       queueAttention: "未同期 — この端末に保存、再試行中",
       queueOnHost: "ホスト上 — エージェントが空いたら送信",
       unsentHeader: "未送信のメッセージ ({{count}})",
+      recoveryHeader: "未送信の下書きコピー（{{count}}）",
+      recoveryMemory:
+        "このアプリを開いている間だけ保持されます。このコピーは端末に保存されていません。",
+      recoveryAttachments: "添付ファイル：{{count}}件",
+      restoreFailed: "下書きを復元",
+      discardFailed: "コピーを破棄",
+      recoveryOccupied: "このコピーを復元する前に、現在の下書きを送信するか消去してください。",
       unsentPending: "この端末に保存済み — ホストの再接続時に送信",
       editUnsent: "入力欄に戻す",
       discardUnsent: "未送信のメッセージを破棄",

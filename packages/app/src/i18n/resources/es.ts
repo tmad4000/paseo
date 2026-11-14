@@ -467,6 +467,13 @@ export const es: TranslationResources = {
       queueAttention: "Aún sin sincronizar — guardado aquí, se sigue reintentando",
       queueOnHost: "En el host — se envía cuando el agente quede libre",
       unsentHeader: "Mensajes sin enviar ({{count}})",
+      recoveryHeader: "Copias de borradores sin enviar ({{count}})",
+      recoveryMemory:
+        "Se conserva solo mientras esta aplicación esté abierta. Esta copia no está guardada en el dispositivo.",
+      recoveryAttachments: "{{count}} archivos adjuntos",
+      restoreFailed: "Restaurar borrador",
+      discardFailed: "Descartar copia",
+      recoveryOccupied: "Termina o borra el borrador actual antes de restaurar esta copia.",
       unsentPending: "Guardado en este dispositivo — se envía cuando el host se reconecte",
       editUnsent: "Devolver al cuadro de mensaje",
       discardUnsent: "Descartar mensaje sin enviar",

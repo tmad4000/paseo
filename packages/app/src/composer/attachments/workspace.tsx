@@ -50,6 +50,7 @@ interface ComposerWorkspaceAttachmentBinding {
   clearSentAttachments: (attachments: readonly ComposerAttachment[]) => void;
   completeSubmit: (input: CompleteSubmitInput) => void;
   resetSuppression: () => void;
+  revealAttachments: (attachments: readonly WorkspaceComposerAttachment[]) => void;
 }
 
 function getOpenAccessibilityLabel(
@@ -183,6 +184,12 @@ function useWorkspaceAttachmentBinding({
     setSuppressedAttachments([]);
   }, []);
 
+  const revealAttachments = useCallback((restored: readonly WorkspaceComposerAttachment[]) => {
+    setSuppressedAttachments((current) =>
+      current.filter((attachment) => !hasWorkspaceAttachmentSnapshot(restored, attachment)),
+    );
+  }, []);
+
   const beginSubmit = useCallback((attachments: readonly ComposerAttachment[]) => {
     const submitted = attachments.filter(isWorkspaceAttachment);
     if (submitted.length === 0) return;
@@ -216,6 +223,7 @@ function useWorkspaceAttachmentBinding({
     clearSentAttachments,
     completeSubmit,
     resetSuppression,
+    revealAttachments,
   };
 }
 

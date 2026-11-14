@@ -1,3 +1,4 @@
+import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
 import { describe, expect, it, vi } from "vitest";
 import { submitAgentInput } from "@/composer/submit";
 import { useSendOutboxStore } from "@/stores/send-outbox-store";
@@ -1870,6 +1871,7 @@ describe("complete image encoding before delivery admission", () => {
             isAgentRunning: false,
             canSubmit: true,
             getDraftRevision: () => revision,
+            recovery: new FailedPreparationRecovery<ComposerAttachment>().forScope("test"),
             queueMessage: vi.fn(),
             submitMessage: ({ message, attachments: outgoing }) =>
               dispatchComposerAgentMessage({

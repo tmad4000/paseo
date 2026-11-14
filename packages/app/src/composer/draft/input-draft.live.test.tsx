@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
+import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { getByRole, getByText } from "@testing-library/dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftStore } from "@/stores/draft-store";
@@ -20,6 +22,21 @@ import {
 } from "@/composer/actions";
 import { queueInputMessage } from "@/composer/input/state";
 import type { MessagePayload } from "@/composer/types";
+import { FailedPreparationTrack } from "@/composer/failed-preparation-track";
+import {
+  failedPreparationRecovery,
+  preparationRecoveryScopeKey,
+  restoreFailedPreparation,
+} from "@/composer/submission/preparation-recovery-store";
+import { collectRetainedAttachmentIds } from "@/attachments/gc-retention";
+import {
+  buildReviewAttachmentSnapshot,
+  resetReviewDraftStore,
+  useReviewDraftStore,
+} from "@/review/store";
+import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachments-store";
+import { userAttachmentsOnly } from "@/attachments/workspace-attachment-utils";
+import type { ParsedDiffFile } from "@/git/use-diff-query";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
 const { asyncStorage } = vi.hoisted(() => ({
@@ -732,6 +749,7 @@ describe("draft settlement through submission and device save", () => {
           isAgentRunning: false,
           canSubmit: true,
           getDraftRevision: () => draft().textSource.getRevision!(),
+          recovery: new FailedPreparationRecovery<ComposerAttachment>().forScope("test"),
           queueMessage: vi.fn(),
           submitMessage: ({ message, attachments }) =>
             dispatchComposerAgentMessage({
@@ -931,6 +949,7 @@ function startQueueSubmission(
       isAgentRunning: true,
       canSubmit: true,
       getDraftRevision,
+      recovery: new FailedPreparationRecovery<ComposerAttachment>().forScope("test"),
       queueMessage: async () => {
         await onQueue();
       },
@@ -1128,6 +1147,262 @@ describe("Queue draft settlement", () => {
         ]);
       }
       hostAck.resolve();
+    },
+  );
+});
+
+const recoveryDiffFile: ParsedDiffFile = {
+  path: "review.ts",
+  isNew: false,
+  isDeleted: false,
+  additions: 1,
+  deletions: 0,
+  status: "ok",
+  hunks: [
+    {
+      oldStart: 1,
+      oldCount: 0,
+      newStart: 1,
+      newCount: 1,
+      lines: [
+        { type: "header", content: "@@ -1,0 +1,1 @@" },
+        { type: "add", content: "const original = true;" },
+      ],
+    },
+  ],
+};
+function imageForRecovery(id: string): UserComposerAttachment {
+  return {
+    kind: "image",
+    metadata: {
+      id,
+      storageKey: id,
+      storageType: "web-indexeddb",
+      mimeType: "image/png",
+      createdAt: 1,
+    },
+  };
+}
+function recoveryReviewSnapshot() {
+  const snapshot = buildReviewAttachmentSnapshot({
+    reviewDraftKey: "recovery-review",
+    cwd: "/repo",
+    mode: "uncommitted",
+    comments: useReviewDraftStore.getState().drafts["recovery-review"] ?? [],
+    diffFiles: [recoveryDiffFile],
+  });
+  if (!snapshot) throw new Error("Missing review snapshot");
+  return snapshot;
+}
+const failedPreparations = [
+  { path: "durable", stage: "encode" },
+  { path: "durable", stage: "save" },
+  { path: "legacy", stage: "encode" },
+] as const;
+
+function livePreparationRestore(
+  draft: Awaited<ReturnType<typeof mountQueueDraft>>,
+  scopeKey: string,
+) {
+  return (id: string) =>
+    restoreFailedPreparation({
+      id,
+      scopeKey,
+      occupiedMessage: "Finish B before restoring A",
+      getCurrentDraft: () => {
+        const current = draft().textSource.getDraftSnapshot!();
+        return {
+          message: current.text,
+          attachments: [
+            ...current.attachments,
+            ...(useWorkspaceAttachmentsStore.getState().attachmentsByScope["B-context"] ?? []),
+          ],
+        };
+      },
+      apply: (snapshot) => {
+        useWorkspaceAttachmentsStore.getState().setWorkspaceAttachments({
+          scopeKey: "restored-context",
+          attachments: snapshot.attachments.filter(
+            (attachment) => attachment.kind === "review" || attachment.kind === "chat_history",
+          ),
+        });
+        draft().setAttachments(userAttachmentsOnly(snapshot.attachments));
+        draft().replaceText(snapshot.message);
+      },
+    });
+}
+
+describe("failed preparation copies through the live draft and recovery actions", () => {
+  beforeEach(() => {
+    asyncStorage.clear();
+    document.body.innerHTML = "<div id='root'></div><div id='recovery'></div>";
+    useDraftStore.setState({ drafts: {}, createModalDraft: null });
+    useWorkspaceAttachmentsStore.setState({ attachmentsByScope: {} });
+    resetReviewDraftStore();
+    for (const entry of failedPreparationRecovery.getSnapshot())
+      failedPreparationRecovery.discard(entry.id);
+  });
+  afterEach(() => {
+    for (const entry of failedPreparationRecovery.getSnapshot())
+      failedPreparationRecovery.discard(entry.id);
+  });
+
+  it.each(failedPreparations)(
+    "keeps A recoverable after $path $stage fails while B has newer images and review content",
+    async ({ path, stage }) => {
+      const draft = await mountQueueDraft();
+      const imageA = imageForRecovery("retained-A-image");
+      const imageB = imageForRecovery("newer-B-image");
+      useReviewDraftStore.getState().addComment({
+        key: "recovery-review",
+        comment: {
+          id: "comment",
+          filePath: "review.ts",
+          side: "new",
+          lineNumber: 1,
+          body: "A review version",
+        },
+      });
+      const reviewA = recoveryReviewSnapshot();
+      const contextA: ComposerAttachment = {
+        kind: "chat_history",
+        id: "original-context",
+        source: { serverId: "server", agentId: "source" },
+        attachment: {
+          type: "text",
+          mimeType: "text/plain",
+          contextKind: "chat_history",
+          text: "Original context",
+          title: "Original chat",
+        },
+      };
+      const original: ComposerAttachment[] = [imageA, reviewA, contextA];
+      const messageA = "  exact A\n";
+      await act(async () => {
+        draft().replaceText(messageA);
+        draft().setAttachments([imageA]);
+      });
+      const pending = deferred<void>();
+      const entered = deferred<void>();
+      const send = vi.fn(async () => ({ queued: false }));
+      const add = vi.fn(async () => {
+        entered.resolve();
+        await pending.promise;
+      });
+      const flush = vi.fn(async () => {});
+      const scopeKey = preparationRecoveryScopeKey("server", "agent");
+      const recovery = failedPreparationRecovery.forScope(scopeKey);
+      let result!: ReturnType<typeof submitAgentInput>;
+      await act(async () => {
+        result = submitAgentInput({
+          message: messageA,
+          attachments: original,
+          isAgentRunning: false,
+          canSubmit: true,
+          getDraftRevision: () => draft().textSource.getRevision!(),
+          recovery,
+          queueMessage: () => {},
+          submitMessage: ({ message, attachments }) =>
+            dispatchComposerAgentMessage({
+              client: {
+                sendAgentMessage: send,
+                uploadFile: async () => ({ requestId: "unused", file: null, error: null }),
+              },
+              agentId: "agent",
+              text: message,
+              attachments,
+              encodeImages: async () => {
+                if (stage === "encode") {
+                  entered.resolve();
+                  await pending.promise;
+                }
+                return [{ data: "original-A-bytes", mimeType: "image/png" }];
+              },
+              submission: { begin: () => {}, accept: () => {}, reject: () => "rejected" },
+              outbox:
+                path === "durable"
+                  ? { serverId: "server", add, flush, get: () => undefined, remove: async () => {} }
+                  : undefined,
+            }),
+          clearDraft: draft().clear,
+          setUserInput: (text) => draft().editText(text),
+          setAttachments: (attachments) => draft().setAttachments(userAttachmentsOnly(attachments)),
+          setSendError: () => {},
+          setIsProcessing: () => {},
+        });
+        await entered.promise;
+      });
+      expect(collectRetainedAttachmentIds().has("retained-A-image")).toBe(true);
+      let reviewB!: ReturnType<typeof recoveryReviewSnapshot>;
+      await act(async () => {
+        draft().editText("newer B");
+        draft().setAttachments([imageB]);
+        useReviewDraftStore.getState().updateComment({
+          key: "recovery-review",
+          id: "comment",
+          updates: { body: "B review version" },
+        });
+        reviewB = recoveryReviewSnapshot();
+        useWorkspaceAttachmentsStore
+          .getState()
+          .setWorkspaceAttachments({ scopeKey: "B-context", attachments: [reviewB] });
+        pending.reject(new Error(stage === "encode" ? "image read failed" : "device write failed"));
+        expect(await result).toBe("failed");
+      });
+      expect(draft().textSource.getSnapshot()).toBe("newer B");
+      expect(draft().attachments).toEqual([imageB]);
+      expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope["B-context"]).toEqual([
+        reviewB,
+      ]);
+      expect(failedPreparationRecovery.getSnapshot()).toHaveLength(1);
+      const [copy] = failedPreparationRecovery.getSnapshot();
+      expect(copy.message).toBe(messageA);
+      expect(copy.attachments).toEqual(original);
+      expect(copy.attachments[0]).toBe(imageA);
+      expect(copy.attachments[1]).toBe(reviewA);
+      expect(collectRetainedAttachmentIds().has("retained-A-image")).toBe(true);
+      const restore = livePreparationRestore(draft, scopeKey);
+      const track = createTestRoot(document.getElementById("recovery")!);
+      await act(async () => {
+        track.render(<FailedPreparationTrack scopeKey={scopeKey} onRestore={restore} />);
+      });
+      expect(
+        getByText(
+          document.body,
+          "Kept only while this app is open. This copy is not saved on the device.",
+        ).textContent,
+      ).toBe("Kept only while this app is open. This copy is not saved on the device.");
+      await act(async () => {
+        getByRole(document.body, "button", { name: "Restore draft" }).click();
+      });
+      expect(getByRole(document.body, "alert").textContent).toBe("Finish B before restoring A");
+      expect(draft().textSource.getSnapshot()).toBe("newer B");
+      expect(draft().attachments).toEqual([imageB]);
+      expect(failedPreparationRecovery.getSnapshot()).toHaveLength(1);
+      expect(collectRetainedAttachmentIds().has("retained-A-image")).toBe(true);
+      await act(async () => {
+        draft().clear("sent");
+        useWorkspaceAttachmentsStore
+          .getState()
+          .clearWorkspaceAttachments({ scopeKey: "B-context" });
+      });
+      await act(async () => {
+        getByRole(document.body, "button", { name: "Restore draft" }).click();
+      });
+      expect(draft().textSource.getSnapshot()).toBe(messageA);
+      expect(draft().attachments).toEqual([imageA]);
+      expect(
+        useWorkspaceAttachmentsStore.getState().attachmentsByScope["restored-context"],
+      ).toEqual([reviewA, contextA]);
+      expect(useReviewDraftStore.getState().drafts["recovery-review"][0].body).toBe(
+        "B review version",
+      );
+      expect(failedPreparationRecovery.getSnapshot()).toEqual([]);
+      expect(collectRetainedAttachmentIds().has("retained-A-image")).toBe(false);
+      expect(useDraftStore.getState().collectActiveAttachmentIds()).toContain("retained-A-image");
+      expect(send).not.toHaveBeenCalled();
+      expect(flush).not.toHaveBeenCalled();
+      expect(add).toHaveBeenCalledTimes(stage === "save" ? 1 : 0);
     },
   );
 });

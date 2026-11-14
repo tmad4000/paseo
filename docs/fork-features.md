@@ -39,7 +39,12 @@ visible/retryable, and discarded comments stay discarded. Updated context snapsh
 key must survive cleanup too. Removing a review pill must remain effective after unrelated diff
 updates reconstruct its attachment; actual added, edited and ABA-edited comments must become visible. An unchanged draft still settles or restores on failure, and
 preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
-either delivery path and leave the original images recoverable. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
+either delivery path and leave the original images recoverable. Fail held encoding/device storage
+after newer text/image/review edits: B stays in the composer and exact A remains in the memory-only
+recovery track with its images retained. Restore must refuse an occupied composer, preserve the
+copy on a failed restore, and restore A into an empty composer without sending it or changing newer
+review comments. Discard releases only the chosen copy; successful submissions leave no duplicate
+recovery copy. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
 transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
 then release A and verify host delivery order A then B. Transport loss and unknown outcomes must
 retain the barrier across rehydration; retry/discard must wake delivery, while cancellation and other

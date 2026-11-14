@@ -58,6 +58,7 @@ function isSentContextAttachment(
   attachment: ComposerAttachment,
 ): attachment is WorkspaceComposerAttachment {
   return (
+    attachment.kind === "review" ||
     attachment.kind === "browser_element" ||
     attachment.kind === "chat_history" ||
     isPullRequestContextAttachment(attachment)

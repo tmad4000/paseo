@@ -340,3 +340,22 @@ it("keeps a removed review suppressed when unrelated diff updates reconstruct it
   clearSubmittedWorkspaceAttachments([removed]);
   expect(currentReviewSnapshot()).toBeNull();
 });
+
+it("consumes a restored review snapshot without removing newer review comments", () => {
+  resetReviewDraftStore();
+  resetWorkspaceAttachmentsStore();
+  addReviewComment("first", "original review");
+  const restored = currentReviewSnapshot();
+  if (!restored) throw new Error("Missing restored snapshot");
+  useReviewDraftStore
+    .getState()
+    .updateComment({ key: reviewKey, id: "first", updates: { body: "newer draft review" } });
+  useWorkspaceAttachmentsStore
+    .getState()
+    .setWorkspaceAttachments({ scopeKey: "restored-draft", attachments: [restored] });
+  clearSubmittedWorkspaceAttachments([restored]);
+  expect(
+    useWorkspaceAttachmentsStore.getState().attachmentsByScope["restored-draft"],
+  ).toBeUndefined();
+  expect(useReviewDraftStore.getState().drafts[reviewKey][0].body).toBe("newer draft review");
+});

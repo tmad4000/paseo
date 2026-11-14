@@ -466,6 +466,13 @@ export const ptBR: TranslationResources = {
       queueAttention: "Ainda não sincronizado — salvo aqui, tentando novamente",
       queueOnHost: "No host — enviado quando o agente estiver livre",
       unsentHeader: "Mensagens não enviadas ({{count}})",
+      recoveryHeader: "Cópias de rascunhos não enviados ({{count}})",
+      recoveryMemory:
+        "Mantida apenas enquanto este aplicativo estiver aberto. Esta cópia não está salva no dispositivo.",
+      recoveryAttachments: "{{count}} anexos",
+      restoreFailed: "Restaurar rascunho",
+      discardFailed: "Descartar cópia",
+      recoveryOccupied: "Conclua ou limpe o rascunho atual antes de restaurar esta cópia.",
       unsentPending: "Salvo neste dispositivo — enviado quando o host se reconectar",
       editUnsent: "Voltar para a caixa de mensagem",
       discardUnsent: "Descartar mensagem não enviada",

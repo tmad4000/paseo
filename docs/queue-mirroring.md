@@ -323,7 +323,15 @@ per-agent delivery worker that queued composer messages, reconnects and manual R
 composer finishes its submission and becomes available for the next draft. It does not wait for
 the host acknowledgement. Settlement only clears or restores the draft if no text or attachment edit
 has occurred since submission, including re-entering identical content. Storage/attachment preparation
-failures restore an unchanged draft with an error. Both durable and one-shot delivery require every
+failures restore an unchanged draft with an error. If newer edits prevent restoration, the original
+text and attachment snapshot stays in **Unsent draft copies** above the composer. Explicit Queue
+uses the same recovery owner. These copies are memory-only and do not survive closing the app;
+they are never treated as saved deliveries or automatically sent. Image references remain protected
+from garbage collection until Restore draft or Discard copy succeeds. Restore draft requires the
+current composer to be empty and restores immutable context/review snapshots without changing newer
+review comments. It does not require the failed device write to start working.
+
+Both durable and one-shot delivery require every
 selected image to encode before saving or sending. Pending delivery remains visible on the saved bubble.
 
 - Accepted: the entry is removed and the optimistic bubble proceeds as before.

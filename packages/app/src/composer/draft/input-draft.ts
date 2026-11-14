@@ -120,6 +120,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const textSource = useMemo<ComposerTextSource>(
     () => ({
       getRevision: draftRevision.getSnapshot,
+      getDraftSnapshot: () => {
+        textPublication.flush();
+        return useDraftStore.getState().getDraftInput(draftKey) ?? { text: "", attachments: [] };
+      },
       getSnapshot: () => {
         const record = useDraftStore.getState().drafts[draftKey];
         return record?.lifecycle === "active" ? record.input.text : "";
@@ -133,7 +137,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
             listener();
         }),
     }),
-    [draftKey, draftRevision],
+    [draftKey, draftRevision, textPublication],
   );
   const attachmentFocusRequestId = useDraftStore(
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,

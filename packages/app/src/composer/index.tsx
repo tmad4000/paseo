@@ -147,6 +147,12 @@ import { submitAgentInput } from "@/composer/submit";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { createDirectSendOutbox } from "@/composer/submission/direct-send-outbox";
 import { DeliveryMark } from "@/components/delivery-mark";
+import { FailedPreparationTrack } from "@/composer/failed-preparation-track";
+import {
+  failedPreparationRecovery,
+  preparationRecoveryScopeKey,
+  restoreFailedPreparation,
+} from "@/composer/submission/preparation-recovery-store";
 import { UnsentTrack } from "@/composer/unsent-track";
 import {
   resolveQueuedMessageDeliveryState,
@@ -168,7 +174,12 @@ import type {
 import type { SelectedFile } from "@/attachments/selected-file";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
-import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
+import {
+  buildDraftWorkspaceAttachmentScopeKey,
+  collectWorkspaceAttachmentsForScopes,
+  useWorkspaceAttachmentsStore,
+  useWorkspaceAttachmentsForScopes,
+} from "@/attachments/workspace-attachments-store";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -2170,7 +2181,23 @@ function ComposerContentImpl({
     () => textSource.getSnapshot().trim().length > 0,
   );
   const setUserInput = onChangeText;
-  const workspaceAttachments = useWorkspaceAttachmentsForScopes(attachmentScopeKeys);
+  const failedPreparationScope = useMemo(
+    () => preparationRecoveryScopeKey(serverId, agentId),
+    [serverId, agentId],
+  );
+  const recoveredAttachmentScope = useMemo(
+    () => buildDraftWorkspaceAttachmentScopeKey(`recovered:${failedPreparationScope}`),
+    [failedPreparationScope],
+  );
+  const composerAttachmentScopes = useMemo(
+    () =>
+      [...attachmentScopeKeys, recoveredAttachmentScope]
+        .map((scopeKey) => scopeKey.trim())
+        .filter(Boolean),
+    [attachmentScopeKeys, recoveredAttachmentScope],
+  );
+  const workspaceAttachments = useWorkspaceAttachmentsForScopes(composerAttachmentScopes);
+  const workspaceAttachmentsAtRender = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
   const {
     selectedAttachments,
     buildOutgoingAttachments,
@@ -2180,6 +2207,7 @@ function ComposerContentImpl({
     clearSentAttachments,
     completeSubmit,
     resetSuppression,
+    revealAttachments,
   } = composerWorkspaceAttachment.useBinding({
     normalAttachments: attachments,
     workspaceAttachments,
@@ -2299,6 +2327,64 @@ function ComposerContentImpl({
       onChangeText(text);
     },
     [onChangeText],
+  );
+
+  const restorePreparation = useCallback(
+    (id: string) =>
+      restoreFailedPreparation({
+        id,
+        scopeKey: failedPreparationScope,
+        occupiedMessage: t("composer.delivery.recoveryOccupied"),
+        getCurrentDraft: () => {
+          const current = textSource.getDraftSnapshot?.();
+          const message =
+            messageInputRef.current?.getText() ?? current?.text ?? textSource.getSnapshot();
+          const latestScopes = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
+          const changedScopeKeys = composerAttachmentScopes.filter(
+            (scopeKey) => latestScopes[scopeKey] !== workspaceAttachmentsAtRender[scopeKey],
+          );
+          const changedWorkspaceAttachments = collectWorkspaceAttachmentsForScopes({
+            attachmentsByScope: latestScopes,
+            scopeKeys: changedScopeKeys,
+          });
+          return {
+            message,
+            attachments: [
+              ...(current?.attachments ?? attachments),
+              ...selectedAttachments.filter(composerWorkspaceAttachment.is),
+              ...changedWorkspaceAttachments,
+            ],
+          };
+        },
+        apply: (draft) => {
+          const workspace = draft.attachments.filter(composerWorkspaceAttachment.is);
+          useWorkspaceAttachmentsStore
+            .getState()
+            .setWorkspaceAttachments({
+              scopeKey: recoveredAttachmentScope,
+              attachments: workspace,
+            });
+          setSelectedAttachments(
+            composerWorkspaceAttachment.userAttachmentsOnly(draft.attachments),
+          );
+          replaceUserInput(draft.message);
+          revealAttachments(workspace);
+          messageInputRef.current?.focus();
+        },
+      }),
+    [
+      failedPreparationScope,
+      recoveredAttachmentScope,
+      composerAttachmentScopes,
+      workspaceAttachmentsAtRender,
+      textSource,
+      attachments,
+      selectedAttachments,
+      setSelectedAttachments,
+      replaceUserInput,
+      revealAttachments,
+      t,
+    ],
   );
 
   const runClientSlashCommand = useCallback(
@@ -2588,6 +2674,10 @@ function ComposerContentImpl({
         throw error;
       }
       queueSubmissionInFlight.current.add(submissionKey);
+      const held = failedPreparationRecovery
+        .forScope(failedPreparationScope)
+        .prepare({ message: queuedMessage, attachments: queuedAttachments });
+      const submittedRevision = (textSource.getRevision ?? textSource.getSnapshot)();
       try {
         const queued = await queueInputMessage(
           { text: queuedMessage, attachments: queuedAttachments, cwd },
@@ -2633,7 +2723,12 @@ function ComposerContentImpl({
         );
         if (queued && !options?.keepComposer) clearSentAttachments(queuedAttachments);
         return queued;
+      } catch (error) {
+        if ((textSource.getRevision ?? textSource.getSnapshot)() !== submittedRevision)
+          held.fail(error);
+        throw error;
       } finally {
+        held.release();
         queueSubmissionInFlight.current.delete(submissionKey);
       }
     },
@@ -2641,6 +2736,7 @@ function ComposerContentImpl({
       agentId,
       applyAgentQueueSnapshot,
       clearSentAttachments,
+      failedPreparationScope,
       client,
       cwd,
       textSource,
@@ -2683,6 +2779,7 @@ function ComposerContentImpl({
           await submitMessage(submitText, submitAttachments, activeTurnBehavior);
         },
         getDraftRevision: textSource.getRevision ?? textSource.getSnapshot,
+        recovery: failedPreparationRecovery.forScope(failedPreparationScope),
         clearDraft,
         setUserInput: replaceUserInput,
         setAttachments: (nextAttachments) => {
@@ -2705,6 +2802,7 @@ function ComposerContentImpl({
       beginSubmit,
       clearDraft,
       completeSubmit,
+      failedPreparationScope,
       textSource,
       hasExternalContent,
       isAgentRunning,
@@ -3708,6 +3806,10 @@ function ComposerContentImpl({
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={styles.inputAreaContent}>
+            <FailedPreparationTrack
+              scopeKey={failedPreparationScope}
+              onRestore={restorePreparation}
+            />
             <UnsentTrack
               serverId={serverId}
               agentId={agentId}
