@@ -19,9 +19,9 @@ How work on this fork is tracked, and how the trackers point at each other.
 
 ## Current items
 
-| Feature                                               | Bead                                                                        | WIT                                                                          | PRs           |
-| ----------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------- |
-| Agent peek, spawned-agent registry, collapsible panes | `pspin-sgu` (`.1` side peek, `.2` registry, `.3` collapsible stacked panes) | Pending: WIT write access not yet granted to the tracking agent (2026-11-14) | #215 (design) |
+| Feature                                               | Bead                                                                        | WIT                                                                          | PRs            |
+| ----------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------- |
+| Agent peek, spawned-agent registry, collapsible panes | `pspin-sgu` (`.1` side peek, `.2` registry, `.3` collapsible stacked panes) | Pending: WIT write access not yet granted to the tracking agent (2026-11-14) | Design PR #215 |
 
 Related beads: `pspin-c64` (subthreads drawer, merged in #79), `pspin-c64.1` (session side panel), `pspin-plx` (threads view design), `pspin-787` (orchestration UX epic), `pspin-xq4`, `pspin-4is`, `pspin-w4e`.
 
