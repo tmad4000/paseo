@@ -9267,9 +9267,14 @@ export class Session {
       return;
     }
 
-    // The CLI inside an agent's shell names that agent. A caller this daemon does not have is
-    // refused before anything reaches the target, the way create_agent_request refuses it.
-    if (msg.callerAgentId && !this.agentManager.getAgent(msg.callerAgentId)) {
+    // The CLI inside an agent's shell names that agent. A caller this daemon has no record of is
+    // refused before anything reaches the target. A stored record is enough: a process can
+    // outlive its agent's runtime, and attribution needs only the id.
+    if (
+      msg.callerAgentId &&
+      !this.agentManager.getAgent(msg.callerAgentId) &&
+      !(await this.agentStorage.get(msg.callerAgentId))
+    ) {
       this.emit({
         type: "send_agent_message_response",
         payload: {

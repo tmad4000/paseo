@@ -142,13 +142,22 @@ describe("send_agent_message_request sender", () => {
     session: Session;
     messages: SessionOutboundMessage[];
     delivered: Array<{ messageId: string; sender: string | undefined }>;
+    /** Run options the direct (not queued) path handed to the agent manager. */
+    direct: Array<{ sender?: string; clientMessageId?: string }>;
     close: () => Promise<void>;
   }
 
-  async function createSenderHarness(liveAgentIds: string[]): Promise<SenderHarness> {
+  interface SenderHarnessOptions {
+    liveAgentIds: string[];
+    storedAgentIds?: string[];
+  }
+
+  async function createSenderHarness(options: SenderHarnessOptions): Promise<SenderHarness> {
+    const { liveAgentIds, storedAgentIds = [] } = options;
     const dir = mkdtempSync(join(tmpdir(), "session-send-sender-"));
     const messages: SessionOutboundMessage[] = [];
     const delivered: SenderHarness["delivered"] = [];
+    const direct: SenderHarness["direct"] = [];
     const agentManager = {
       listAgents: vi.fn(() => liveAgentIds.map((id) => ({ id }))),
       getAgent: vi.fn((id: string) =>
@@ -156,7 +165,16 @@ describe("send_agent_message_request sender", () => {
       ),
       hasInFlightRun: vi.fn(() => false),
       getPendingPermissions: vi.fn(() => []),
-      tryRunOutOfBand: vi.fn(() => false),
+      waitForAgentClose: vi.fn(async () => {}),
+      // The direct path offers every prompt to the out-of-band runner first, with the same run
+      // options a turn would get. Accepting it there ends the send without a provider.
+      tryRunOutOfBand: vi.fn(
+        (_agentId: string, _prompt: unknown, runOptions?: SenderHarness["direct"][number]) => {
+          if (!runOptions?.clientMessageId) return false;
+          direct.push({ sender: runOptions.sender, clientMessageId: runOptions.clientMessageId });
+          return true;
+        },
+      ),
       subscribe: vi.fn(() => () => {}),
     };
     const queueService = new AgentQueueService({
@@ -172,11 +190,15 @@ describe("send_agent_message_request sender", () => {
       messages,
       agentQueueService: queueService,
       agentManager,
+      agentStorage: {
+        get: vi.fn(async (id: string) => (storedAgentIds.includes(id) ? { id } : undefined)),
+      },
     });
     return {
       session,
       messages,
       delivered,
+      direct,
       close: async () => {
         await queueService.flushDrains();
         queueService.stop();
@@ -190,7 +212,7 @@ describe("send_agent_message_request sender", () => {
   }
 
   test("a send that names a live calling agent is delivered as that agent", async () => {
-    const harness = await createSenderHarness([TARGET_ID, CALLER_ID]);
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID, CALLER_ID] });
     try {
       await harness.session.handleMessage({
         type: "send_agent_message_request",
@@ -223,7 +245,7 @@ describe("send_agent_message_request sender", () => {
   });
 
   test("a send without a calling agent is delivered as the person", async () => {
-    const harness = await createSenderHarness([TARGET_ID]);
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID] });
     try {
       await harness.session.handleMessage({
         type: "send_agent_message_request",
@@ -240,8 +262,66 @@ describe("send_agent_message_request sender", () => {
     }
   });
 
+  test("an interrupting send that names a calling agent runs as that agent", async () => {
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID, CALLER_ID] });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "direct-from-agent",
+        agentId: TARGET_ID,
+        text: "Stop and read this",
+        messageId: "direct-report",
+        activeTurnBehavior: "interrupt",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(harness.direct).toEqual([
+        { sender: `agent:${CALLER_ID}`, clientMessageId: "direct-report" },
+      ]);
+      expect(harness.delivered).toEqual([]);
+      expect(sendResponses(harness.messages)).toEqual([
+        {
+          type: "send_agent_message_response",
+          payload: {
+            requestId: "direct-from-agent",
+            agentId: TARGET_ID,
+            accepted: true,
+            error: null,
+          },
+        },
+      ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
+  test("a calling agent that is stored but not loaded is still recorded as the sender", async () => {
+    const harness = await createSenderHarness({
+      liveAgentIds: [TARGET_ID],
+      storedAgentIds: [CALLER_ID],
+    });
+    try {
+      await harness.session.handleMessage({
+        type: "send_agent_message_request",
+        requestId: "from-stored-agent",
+        agentId: TARGET_ID,
+        text: "Report from a watcher that outlived its agent",
+        messageId: "late-report",
+        callerAgentId: CALLER_ID,
+      });
+      await harness.close();
+
+      expect(harness.delivered).toEqual([
+        { messageId: "late-report", sender: `agent:${CALLER_ID}` },
+      ]);
+    } finally {
+      await harness.close().catch(() => undefined);
+    }
+  });
+
   test("a send naming a calling agent this daemon does not have is refused and not delivered", async () => {
-    const harness = await createSenderHarness([TARGET_ID]);
+    const harness = await createSenderHarness({ liveAgentIds: [TARGET_ID] });
     try {
       await harness.session.handleMessage({
         type: "send_agent_message_request",
