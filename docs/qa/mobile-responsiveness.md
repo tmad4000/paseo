@@ -133,8 +133,26 @@ failing ordinary direct A save; B must proceed automatically after A disappears.
 cover ordinary unknown and one-shot entries: save and flush B during A's held removal write, fail
 that write, retain A and B, then explicitly recover A successfully and deliver B once.
 
-Validation of this storage-transition repair and its added tests remains pending on GCP. Published
-`c8ef9cda1` CI does not validate the repair commits. Rebuild the server before browser validation of
+The outer executor reported 230 selected app unit tests, lint and app typecheck passing on
+`c0d0379d`. Preparation-time routing rejection exposed another wake-up gap before admission
+registration. The new regression blocks B's final ownership read behind a real queue-store mutation,
+saves direct C, then excludes B's host. C must proceed without another flush after B's durable
+removal; the failed-removal case flushes C during held storage and retains B, C and the draft.
+The routing completion boundary now rescans through the existing worker for preparation rejection,
+cancellation and already-acknowledged outcomes, using the caller's complete client adapters.
+
+The virtualized 81-turn layout case reached submission on `c0d0379d` but failed its mounted-row
+count-growth assertion. The test now checks the default mock's new scroll-anchor response and read
+tool group in rows after the submitted prompt. It retains the same stability recorder and its
+missing-row and two-pixel downward-shift assertions, with unchanged timeouts. The initial fixture
+preparation timeout and the semantic replacement still need final GCP execution; no performance
+claim follows from this test-only repair. The outer executor separately reported ten other selected
+daemon browser flows passing on `0363d5e7` with the fixture patch, including held history, saved image
+retry, ordered Queue B, routed unknown/reload, and Send Back with chip reopening.
+
+The supplied `c0d0379d` formatting patch is applied. The newly changed text files are formatted with
+the existing native formatter using one thread. Validation of this routing repair and its new
+regressions remains pending on GCP. Published `c8ef9cda1` CI does not validate the repair commits. Rebuild the server before browser validation of
 the receipt normalization. No tests, builds or lint ran in this M4 review phase.
 
 The outer executor reported that the corrected composer fixture reproduces B overtaking held A on

@@ -35,7 +35,9 @@ retain the barrier across rehydration; retry/discard must wake delivery, while c
 agents remain available. Repeat the admission check through Find/Send and thread Send Back; routed
 draft escrow and expected destination checks must survive the wait. If routed B is terminally removed
 after unknown A is discarded, ordinary queued C must proceed without another send or reconnect;
-a retained unresolved B must keep C pending. Routed direct sends and Stream replies must retain a
+a retained unresolved B must keep C pending. Repeat with routed B rejected during preparation,
+before admission registration: direct C must proceed after durable B removal without another send;
+failed removal must retain B and C and the routing draft. Routed direct sends and Stream replies must retain a
 stable-ID delivery hold across timeout and restart, without replay; explicit review/release resumes
 later work. The first ambiguous provider response and a failed completion-receipt write must retain
 that barrier for ordinary and one-shot sends, including older hosts' provider ambiguity wording;

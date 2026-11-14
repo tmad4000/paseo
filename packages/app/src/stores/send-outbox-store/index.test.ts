@@ -3,6 +3,7 @@ import type { DirectRouteDeliveryInput } from "@/components/sidebar/session-rout
 import { AgentSnapshotPayloadSchema } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SendOutboxFlushClient } from "./model";
+import type { PendingQueueEnqueue } from "@/stores/queue-outbox-store/model";
 
 const confirmation = vi.hoisted(() => ({ accepted: true }));
 vi.mock("@/utils/confirm-dialog", () => ({
@@ -318,7 +319,9 @@ describe("shared device delivery ordering", () => {
     );
     const pendingA = () => Object.values(state.useQueueOutboxStore.getState().entries)[0];
     await vi.waitFor(() =>
-      expect(pendingA()?.text).toBe('From the side thread "Side thread" (Paseo session thread):\n\n> A'),
+      expect(pendingA()?.text).toBe(
+        'From the side thread "Side thread" (Paseo session thread):\n\n> A',
+      ),
     );
     await state.useSendOutboxStore.getState().add({
       ...state.entry,
@@ -345,14 +348,16 @@ describe("shared device delivery ordering", () => {
     const writing = held<void>();
     storage.writes.set("paseo-send-outbox", writing.promise);
     storage.failOnce = "paseo-send-outbox";
-    const saving = state.composerOutbox.add({
-      ...state.entry,
-      clientMessageId: "failed-A",
-      text: "direct A",
-    }).then(
-      () => null,
-      (error: unknown) => error,
-    );
+    const saving = state.composerOutbox
+      .add({
+        ...state.entry,
+        clientMessageId: "failed-A",
+        text: "direct A",
+      })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
     await vi.waitFor(() =>
       expect(state.useSendOutboxStore.getState().entries["failed-A"]?.text).toBe("direct A"),
     );
@@ -575,6 +580,7 @@ describe("shared device delivery ordering", () => {
 async function prepareRoutedFollowUp(
   state: Awaited<ReturnType<typeof setupOrderedDelivery>>,
   itemId: string,
+  afterSave?: () => void,
 ) {
   const { useDraftStore, awaitDraftHydration, flushDraftPersistStorageDurably } =
     await import("@/stores/draft-store");
@@ -606,7 +612,13 @@ async function prepareRoutedFollowUp(
     draftUpdatedAt: record.updatedAt,
     client: state.client,
     isHostEligible: () => eligible,
-    outbox: state.useQueueOutboxStore.getState(),
+    outbox: {
+      ...state.useQueueOutboxStore.getState(),
+      add: async (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => {
+        await state.useQueueOutboxStore.getState().add(entry);
+        afterSave?.();
+      },
+    },
     applySnapshot: vi.fn(),
   };
   const sending = deliverRoutedPrompt(input).then(
@@ -630,6 +642,85 @@ async function prepareRoutedFollowUp(
 }
 
 describe("all client queue admissions respect unresolved direct sends", () => {
+  it.each([false, true])(
+    "resumes direct C after pre-admission routed B is durably rejected (removal fails: %s)",
+    async (failRemoval) => {
+      const state = await setupOrderedDelivery();
+      await state.useSendOutboxStore.getState().removeDurably("msg-1");
+      const preparationWrite = held<void>();
+      let mutation: Promise<void> = Promise.resolve();
+      const routed = await prepareRoutedFollowUp(state, "preparation-B", () => {
+        storage.writes.set("paseo-queue-outbox", preparationWrite.promise);
+        mutation = state.useQueueOutboxStore.getState().bumpAttemptsDurably("preparation-B");
+      });
+      await vi.waitFor(() =>
+        expect(state.useQueueOutboxStore.getState().entries["preparation-B"].attempts).toBe(1),
+      );
+      await state.useSendOutboxStore.getState().add({
+        ...state.entry,
+        clientMessageId: "direct-C",
+        text: "direct C after preparation rejection",
+      });
+      state.client.sendAgentMessage.mockResolvedValue({ queued: false });
+      await state.flushSendOutboxForServer({ serverId: "server", client: state.client });
+      expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+      expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+      routed.exclude();
+      const removalWrite = held<void>();
+      const removeDurably = routed.input.outbox.removeDurably;
+      routed.input.outbox.removeDurably = (itemId, preserveRemovalIntent) => {
+        storage.writes.set("paseo-queue-outbox", removalWrite.promise);
+        if (failRemoval) storage.failOnce = "paseo-queue-outbox";
+        return removeDurably(itemId, preserveRemovalIntent);
+      };
+      storage.writes.delete("paseo-queue-outbox");
+      preparationWrite.resolve(undefined);
+      await mutation;
+      await vi.waitFor(() =>
+        expect(state.useQueueOutboxStore.getState().entries["preparation-B"]).toBeUndefined(),
+      );
+      if (failRemoval)
+        await state.flushSendOutboxForServer({ serverId: "server", client: state.client });
+      expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+      expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+      expect(routed.draft()).toBe("  routed B  ");
+      storage.writes.delete("paseo-queue-outbox");
+      removalWrite.resolve(undefined);
+      if (failRemoval) {
+        expect(await routed.sending).toEqual({ error: new Error("disk full") });
+        expect(state.useQueueOutboxStore.getState().entries["preparation-B"]).toMatchObject({
+          routingDispatchHeld: true,
+          text: "  routed B  ",
+        });
+        expect(
+          JSON.parse(storage.values.get("paseo-queue-outbox")!).state.entries["preparation-B"],
+        ).toMatchObject({
+          routingDispatchHeld: true,
+          text: "  routed B  ",
+        });
+        expect(state.useSendOutboxStore.getState().entries["direct-C"].text).toBe(
+          "direct C after preparation rejection",
+        );
+        expect(state.client.sendAgentMessage).not.toHaveBeenCalled();
+      } else {
+        expect(await routed.sending).toEqual({
+          error: new Error("The selected host was excluded. Choose a destination again."),
+        });
+        await vi.waitFor(() =>
+          expect(state.useSendOutboxStore.getState().entries["direct-C"]).toBeUndefined(),
+        );
+        expect(state.client.sendAgentMessage).toHaveBeenCalledExactlyOnceWith(
+          "agent",
+          "direct C after preparation rejection",
+          expect.objectContaining({ messageId: "direct-C" }),
+        );
+        expect(state.useQueueOutboxStore.getState().entries["preparation-B"]).toBeUndefined();
+      }
+      expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+      expect(routed.draft()).toBe("  routed B  ");
+    },
+  );
+
   it("holds routed Queue B with its draft escrow until pre-dispatch A is accepted", async () => {
     const state = await setupOrderedDelivery();
     const first = held<{ queued: boolean }>();
@@ -1272,9 +1363,7 @@ describe("durable one-shot delivery ownership", () => {
         await state.composerOutbox.flush("agent");
       }
       const saved =
-        kind === "one-shot"
-          ? state.saved()
-          : state.useSendOutboxStore.getState().entries["msg-1"];
+        kind === "one-shot" ? state.saved() : state.useSendOutboxStore.getState().entries["msg-1"];
       const { releaseOneShotDelivery } = await import("@/composer/delivery-actions");
       const recover = () =>
         kind === "one-shot" ? releaseOneShotDelivery(saved) : state.discardDirectSend(saved);
@@ -1506,14 +1595,12 @@ describe("one-shot Stream replies and broadcast receipts", () => {
     "counts only confirmed legacy broadcasts as sent or host-queued (queued: %s)",
     async (hostQueued) => {
       const state = await oneShotRouteFixture();
-      state.useSessionStore
-        .getState()
-        .updateSessionServerInfo("server", {
-          serverId: "server",
-          hostname: null,
-          version: "legacy",
-          features: { agentMessageQueue: true },
-        });
+      state.useSessionStore.getState().updateSessionServerInfo("server", {
+        serverId: "server",
+        hostname: null,
+        version: "legacy",
+        features: { agentMessageQueue: true },
+      });
       state.client.sendAgentMessage.mockResolvedValueOnce({ queued: hostQueued });
       const { runBroadcast } = await import("@/views/broadcast");
       const { getHostRuntimeStore } = await import("@/runtime/host-runtime");

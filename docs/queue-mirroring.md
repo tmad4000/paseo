@@ -346,8 +346,11 @@ releases its provisional place and resumes later saved work automatically. Disca
 unresolved send permits later delivery only after durable removal succeeds; a failed removal keeps
 ownership even while optimistic UI state temporarily omits the entry.
 Find/Send's active routed admissions join that worker with their existing draft escrow and destination
-checks. A held routed item remains recoverable after restart; an in-memory admission does not grant
-reconnect permission to an undispatched item. Send Back stores its full quoted answer in the queue
+checks. Completing routed preparation must rescan later saved work even when rejection or
+cancellation occurs before an admission is registered. Terminal removal permits that work only
+after persistence succeeds, and the routing draft remains available. A held routed item remains
+recoverable after restart; an in-memory admission does not grant reconnect permission to an
+undispatched item. Send Back stores its full quoted answer in the queue
 outbox before returning. Stream replies, broadcast and legacy composer/direct-routing admissions
 also wait behind older unresolved device sends. Explicit Send now for a host-owned queue item keeps
 its steering behavior.

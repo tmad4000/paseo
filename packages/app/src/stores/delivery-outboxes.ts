@@ -164,9 +164,7 @@ function directEntries(serverId: string): PendingDirectSend[] {
 }
 
 function queueEntries(serverId: string): PendingQueueEnqueue[] {
-  return queueOutboxDeliveryEntries().filter(
-    (saved) => saved.serverId === serverId,
-  );
+  return queueOutboxDeliveryEntries().filter((saved) => saved.serverId === serverId);
 }
 
 function activeAdmissions(serverId: string): OrderedAdmission[] {
@@ -369,8 +367,7 @@ function dispatchNext(candidate: DeliveryCandidate, drivers: DeliveryDrivers): P
 }
 
 function pendingDeliveryWrite(candidate: DeliveryCandidate): Promise<void> | undefined {
-  if (candidate.kind === "direct")
-    return pendingSendOutboxWrite(candidate.entry.clientMessageId);
+  if (candidate.kind === "direct") return pendingSendOutboxWrite(candidate.entry.clientMessageId);
   if (candidate.kind === "admission" && candidate.entry.oneShot)
     return pendingSendOutboxWrite(candidate.entry.itemId);
   return pendingQueueOutboxWrite(candidate.entry.itemId);
@@ -390,9 +387,7 @@ async function flushAgentDelivery(
       if (!candidate) return;
       const writing = pendingDeliveryWrite(candidate);
       if (writing) {
-        void writing
-          .then(() => flushDeliveryOutboxes({ ...input, agentId }))
-          .catch(() => {});
+        void writing.then(() => flushDeliveryOutboxes({ ...input, agentId })).catch(() => {});
         return;
       }
       if (!(await dispatchNext(candidate, drivers))) return;
