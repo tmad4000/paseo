@@ -1205,6 +1205,7 @@ export const ar: TranslationResources = {
         agent: "Agent",
         workspace: "Workspace",
       },
+      search: en.workspace.tabs.search,
       switcher: {
         trigger: "تبديل علامات التبويب (فتح{{count}})",
         title: "علامة التبويب التبديل",
@@ -2988,6 +2989,7 @@ export const ar: TranslationResources = {
         label: "تعليم المحادثات كمقروءة عند فتحها",
         description: "عند الإيقاف، تبقى المحادثة غير مقروءة حتى تعلّمها كمقروءة أو ترسل إليها رسالة",
       },
+      compactTabTitles: en.settings.general.compactTabTitles,
       sortTabsByActivity: {
         section: "علامات التبويب",
         label: "ترتيب علامات التبويب حسب النشاط الأخير",

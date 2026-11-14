@@ -73,7 +73,7 @@ async function closeBottomSheetWithBackdrop(page: Page) {
 }
 
 async function openTabSwitcher(page: Page) {
-  const trigger = page.getByRole("button", { name: /Switch tabs/ });
+  const trigger = page.getByTestId("workspace-tab-switcher-trigger");
   await trigger.click();
   await expectBottomSheetOpen(page);
 }

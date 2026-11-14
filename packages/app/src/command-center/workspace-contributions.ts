@@ -18,6 +18,7 @@ export interface WorkspaceCommandCenterLabelChoice {
 export interface WorkspaceCommandCenterLabels {
   section: string;
   newAgent: string;
+  searchTabs: string;
   newTerminal: string;
   newBrowser: string;
   splitRight: string;
@@ -61,6 +62,7 @@ export interface WorkspaceCommandCenterLabels {
 
 export interface WorkspaceCommandCenterIcons {
   newAgent?: CommandCenterIcon;
+  searchTabs?: CommandCenterIcon;
   newTerminal?: CommandCenterIcon;
   newBrowser?: CommandCenterIcon;
   splitRight?: CommandCenterIcon;
@@ -91,6 +93,7 @@ export interface WorkspaceCommandCenterIcons {
 
 export interface WorkspaceCommandCenterShortcuts {
   newAgent?: ShortcutKey[][];
+  searchTabs?: ShortcutKey[][];
   newTerminal?: ShortcutKey[][];
   splitRight?: ShortcutKey[][];
   splitDown?: ShortcutKey[][];
@@ -575,6 +578,17 @@ export function buildWorkspaceCommandCenterContributions(
   source: WorkspaceCommandCenterSource,
 ): CommandCenterContribution[] {
   const contributions = [
+    buildWorkspaceAction({
+      source,
+      id: "tab:search",
+      rank: 4,
+      title: source.labels.searchTabs,
+      keywords: ["search", "find", "tabs", "workspace"],
+      icon: source.icons.searchTabs,
+      shortcutKeys: source.shortcuts.searchTabs,
+      action: { id: "workspace.tab.search", scope: "workspace" },
+      visibility: "query",
+    }),
     ...buildCreationContributions(source),
     ...buildPanelContributions(source),
     ...buildActiveTabContributions(source),

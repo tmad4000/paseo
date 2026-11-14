@@ -4,6 +4,7 @@ import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import {
   Copy,
+  Search,
   Link,
   Ellipsis,
   Globe,
@@ -30,6 +31,10 @@ import {
   iconButtonChromeStyle,
 } from "@/components/ui/icon-button-chrome";
 import { TerminalProfileIcon } from "@/components/terminal-profile-icon";
+import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { Shortcut } from "@/components/ui/shortcut";
+import { isWeb } from "@/constants/platform";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import {
   getTerminalProfileIcon,
@@ -38,6 +43,7 @@ import {
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import type { Theme } from "@/styles/theme";
 
+const ThemedSearch = withUnistyles(Search);
 const ThemedEllipsis = withUnistyles(Ellipsis);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedLink = withUnistyles(Link);
@@ -51,6 +57,7 @@ const ThemedShare = withUnistyles(Share2);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
+const MENU_SWITCH_TAB_ICON = <ThemedSearch size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_AGENT_ICON = <ThemedSquarePen size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16} />;
@@ -103,8 +110,28 @@ function WorkspaceHeaderWorkspaceActionItems({
   onOpenSetupTab,
 }: WorkspaceHeaderWorkspaceActions) {
   const { t } = useTranslation();
+  const dispatcher = useKeyboardActionDispatcher();
+  const keys = useShortcutKeys("workspace-tab-search");
+  const shortcutHint = useMemo(() => (keys ? <Shortcut chord={keys} /> : undefined), [keys]);
+  const switchTab = useCallback(() => {
+    // Header-menu focus return completes before the picker takes search focus.
+    if (isWeb)
+      requestAnimationFrame(() =>
+        dispatcher.dispatch({ id: "workspace.tab.search", scope: "workspace" }),
+      );
+    else dispatcher.dispatch({ id: "workspace.tab.search", scope: "workspace" });
+  }, [dispatcher]);
   return (
     <>
+      <DropdownMenuItem
+        testID="workspace-header-switch-tab"
+        onSelect={switchTab}
+        leading={MENU_SWITCH_TAB_ICON}
+        trailing={shortcutHint}
+      >
+        {t("workspace.tabs.search.action")}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuItem
         testID="workspace-header-copy-path"
         leading={MENU_COPY_ICON}

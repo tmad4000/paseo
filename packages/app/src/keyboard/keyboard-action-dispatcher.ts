@@ -14,6 +14,7 @@ export type KeyboardActionId =
   | "message-input.voice-mute-toggle"
   | "message-input.mode-cycle"
   | "workspace.agent.new"
+  | "workspace.tab.search"
   | "workspace.tab.menu.open"
   | "workspace.tab.target.agent"
   | "workspace.tab.target.browser"
@@ -69,6 +70,7 @@ export type KeyboardActionDefinition =
   | { id: "message-input.voice-mute-toggle"; scope: KeyboardActionScope }
   | { id: "message-input.mode-cycle"; scope: KeyboardActionScope }
   | { id: "workspace.agent.new"; scope: KeyboardActionScope }
+  | { id: "workspace.tab.search"; scope: KeyboardActionScope }
   | { id: "workspace.tab.menu.open"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.agent"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.browser"; scope: KeyboardActionScope }

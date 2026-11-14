@@ -178,6 +178,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "archive-workspace",
   ],
   "tabs-panes": [
+    "workspace-tab-search",
     "workspace-tab-new",
     "workspace-tab-target-agent",
     "workspace-terminal-new",
@@ -219,6 +220,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "subthreads-toggle": "subthreads.shortcutHelp",
   "switch-project": "settings.shortcuts.help.switchProject",
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
+  "workspace-tab-search": "workspace.tabs.search.action",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
   "workspace-tab-target-agent": "workspace.tabs.actions.newAgent",
   "workspace-tab-target-browser": "workspace.tabs.actions.newBrowser",
@@ -470,6 +472,28 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 
   // --- Tab management ---
+  // Keep binding IDs stable for saved overrides from the first workspace-search design.
+  {
+    id: "workspace-tab-search-cmd-shift-o-mac-desktop",
+    action: "workspace.tab.search",
+    combo: "Cmd+Shift+K",
+    when: { mac: true, commandCenter: false },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
+  },
+  {
+    id: "workspace-tab-search-ctrl-shift-o-non-mac-desktop",
+    action: "workspace.tab.search",
+    combo: "Ctrl+Shift+K",
+    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
+  },
+  {
+    id: "workspace-tab-search-alt-shift-k-non-mac-web",
+    action: "workspace.tab.search",
+    combo: "Alt+Shift+K",
+    when: { mac: false, desktop: false, commandCenter: false, terminal: false },
+    help: { id: "workspace-tab-search", section: "tabs-panes", label: "Switch tab…" },
+  },
   {
     id: "workspace-tab-new-cmd-t-mac",
     action: "workspace.tab.menu.open",
@@ -1450,8 +1474,44 @@ export const DEFAULT_BINDINGS: readonly ParsedShortcutBinding[] =
 
 export type ShortcutOverrides = Record<string, string | null>;
 
+function shortcutChordsOverlap(a: KeyCombo[], b: KeyCombo[], isMac: boolean): boolean {
+  return (
+    a.length >= b.length &&
+    b.every((combo, index) => {
+      const other = a[index];
+      return (
+        combo.code === other.code &&
+        Boolean(combo.alt) === Boolean(other.alt) &&
+        Boolean(combo.shift) === Boolean(other.shift) &&
+        Boolean(combo.meta || (isMac && combo.mod)) ===
+          Boolean(other.meta || (isMac && other.mod)) &&
+        Boolean(combo.ctrl || (!isMac && combo.mod)) ===
+          Boolean(other.ctrl || (!isMac && other.mod))
+      );
+    })
+  );
+}
+
+function shortcutContextsOverlap(a: ParsedShortcutBinding, b: ParsedShortcutBinding): boolean {
+  for (const isMac of [true, false]) {
+    for (const isDesktop of [true, false]) {
+      for (const focusScope of ["other", "message-input", "editable", "terminal"] as const) {
+        const overlap = [true, false].some((commandCenterOpen) => {
+          const context = { isMac, isDesktop, focusScope, commandCenterOpen };
+          return (
+            matchesKeyboardShortcutContext(a.when, context) &&
+            matchesKeyboardShortcutContext(b.when, context)
+          );
+        });
+        if (overlap) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShortcutBinding[] {
-  return DEFAULT_BINDINGS.map(function (binding) {
+  const effective = DEFAULT_BINDINGS.map(function (binding) {
     const override = overrides[binding.id];
     if (override === UNASSIGNED_COMBO) {
       return { ...binding, combo: "", parsedChord: [] };
@@ -1476,6 +1536,21 @@ export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShor
     }
     const { defaultDisplayKeys: _defaultDisplayKeys, ...help } = binding.help;
     return { ...binding, combo: override, parsedChord, when, help };
+  });
+  return effective.map((binding) => {
+    if (binding.action !== "workspace.tab.search" || binding.parsedChord.length === 0)
+      return binding;
+    const original = DEFAULT_BINDINGS.find((candidate) => candidate.id === binding.id);
+    if (binding !== original) return binding;
+    const occupied = effective.some(
+      (other) =>
+        other.id !== binding.id &&
+        shortcutContextsOverlap(other, binding) &&
+        typeof overrides[other.id] === "string" &&
+        other.parsedChord.length > 0 &&
+        shortcutChordsOverlap(other.parsedChord, binding.parsedChord, binding.when?.mac === true),
+    );
+    return occupied ? Object.assign({}, binding, { combo: "", parsedChord: [] }) : binding;
   });
 }
 
@@ -1859,6 +1934,8 @@ export function resolveShortcutKeysForAction(
   overrides: ShortcutOverrides,
   platform: { isMac: boolean; isDesktop: boolean },
 ): ShortcutKey[][] | null {
+  if (actionId === "workspace-tab-search")
+    return getDefaultKeysForAction(actionId, platform, buildEffectiveBindings(overrides));
   const bindingId = getBindingIdForAction(actionId, platform);
   if (bindingId === null) {
     return null;
