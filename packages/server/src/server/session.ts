@@ -9267,6 +9267,22 @@ export class Session {
       return;
     }
 
+    // The CLI inside an agent's shell names that agent. A caller this daemon does not have is
+    // refused before anything reaches the target, the way create_agent_request refuses it.
+    if (msg.callerAgentId && !this.agentManager.getAgent(msg.callerAgentId)) {
+      this.emit({
+        type: "send_agent_message_response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: resolved.agentId,
+          accepted: false,
+          error: `Caller agent ${msg.callerAgentId} not found`,
+        },
+      });
+      return;
+    }
+    const sender = msg.callerAgentId ? agentSender(msg.callerAgentId) : HUMAN_SENDER;
+
     try {
       const agentId = resolved.agentId;
 
@@ -9295,7 +9311,7 @@ export class Session {
           agentId,
           messageId: msg.messageId,
           text: msg.text,
-          sender: HUMAN_SENDER,
+          sender,
           ...(msg.images ? { images: msg.images } : {}),
           ...(msg.attachments ? { attachments: msg.attachments } : {}),
         });
@@ -9323,7 +9339,7 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           clearPendingPermissions: true,
-          runOptions: { sender: HUMAN_SENDER },
+          runOptions: { sender },
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {

@@ -650,7 +650,11 @@ export async function runRunCommand(
             labels: Object.keys(labels).length > 0 ? labels : undefined,
           });
         } else {
-          await client.sendMessage(structuredAgent.id, structuredPrompt);
+          await client.sendMessage(
+            structuredAgent.id,
+            structuredPrompt,
+            callerAgentId ? { callerAgentId } : undefined,
+          );
         }
 
         const state = await client.waitForFinish(structuredAgent.id, waitTimeoutMs);

@@ -80,11 +80,11 @@ A watched child that closes before its finish event also notifies the caller so 
 
 ### Who sent it
 
-Every `user_message` timeline item carries an optional `sender`, and every agent records `createdBy`, in one vocabulary (`packages/protocol/src/user-message-sender.ts`): `human`, `schedule`, or `agent:<id>`. Client sends, voice and the client queue record `human`. `send_agent_prompt`, agent-scoped `create_agent` (detached included) and child finish notifications record the agent. Schedules, heartbeats and hub executions record `schedule`. A queued item keeps its sender until delivery. A provider echo of a prompt Paseo started inherits that turn's sender.
+Every `user_message` timeline item carries an optional `sender`, and every agent records `createdBy`, in one vocabulary (`packages/protocol/src/user-message-sender.ts`): `human`, `schedule`, or `agent:<id>`. Client sends, voice and the client queue record `human`, except a CLI send made by an agent (below). `send_agent_prompt`, agent-scoped `create_agent` (detached included) and child finish notifications record the agent. Schedules, heartbeats and hub executions record `schedule`. A queued item keeps its sender until delivery. A provider echo of a prompt Paseo started inherits that turn's sender.
 
 `createdBy` is independent of `paseo.parent-agent-id`: detach removes the parent label, `createdBy` stays. Top-level MCP callers have no agent id and record no sender, which never counts as human. `messageActivity.lastHumanMessageAt` advances only on `human` turns; it drives the "Your last message" sort ([sidebar sorting](sidebar-sorting.md)) and the [Mine filter](sidebar-filter.md#mine). Records written before this field existed resolve on load: no `createdBy` means `human` unless the agent has a parent label, and a human-created agent's `lastUserMessageAt` seeds its human time. Provider history carries no sender, so imported turns count as human only for human-created agents.
 
-The CLI `paseo send` arrives over the client WebSocket like any app, so it records `human` even when an agent runs it.
+`paseo send` run in an agent's shell names that agent: the CLI passes `callerAgentId` (from `PASEO_AGENT_ID`, when the target daemon has that agent) and the daemon records `agent:<id>`, the way `paseo run` already records the creator. Run anywhere else it records `human`. So does a send aimed at another daemon (`--host`, `--home`), which has no such caller; a cross-host send is not attributed. The daemon refuses a send that names a caller it does not have.
 
 ## Provider-managed child agents
 

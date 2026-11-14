@@ -1568,6 +1568,11 @@ export const SendAgentMessageRequestSchema = z.object({
   // replace behavior); absent/false queues the message to deliver when the
   // turn completes, so in-flight tool calls and subagents are never killed.
   interrupt: z.boolean().optional(),
+  /**
+   * The agent whose shell sent this message (the CLI run inside an agent). The daemon records
+   * it as the message's sender instead of "human". Same meaning as on create_agent_request.
+   */
+  callerAgentId: z.string().optional(),
 });
 
 export const WaitForFinishRequestSchema = z.object({

@@ -9,6 +9,7 @@ import type {
 } from "../../output/index.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
+import { resolveRunCallerAgentId } from "./run.js";
 
 /** Result type for agent send command */
 export interface AgentSendResult {
@@ -191,8 +192,14 @@ export async function runSendCommand(
     const images =
       options.image && options.image.length > 0 ? await readImageFiles(options.image) : undefined;
 
+    // Inside an agent's shell the message comes from that agent, not from the person.
+    const callerAgentId = await resolveRunCallerAgentId(client);
+
     // Send the message
-    await client.sendAgentMessage(agentIdArg, promptInput, { images });
+    await client.sendAgentMessage(agentIdArg, promptInput, {
+      images,
+      ...(callerAgentId ? { callerAgentId } : {}),
+    });
 
     // If --no-wait, return immediately
     if (options.wait === false) {
