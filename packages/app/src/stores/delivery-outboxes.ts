@@ -129,7 +129,13 @@ export async function flushDeliveryOutboxes(input: {
           } catch (error) {
             if (admissions.get(key) === admission) admissions.delete(key);
             admission.reject(error);
-            break;
+            const unresolvedDirect = directEntries().some(
+              (entry) => entry.agentId === agentId && entry.clientMessageId === admission.itemId,
+            );
+            const unresolvedQueue = queueEntries().some(
+              (entry) => entry.agentId === agentId && entry.itemId === admission.itemId,
+            );
+            if (unresolvedDirect || unresolvedQueue) break;
           }
         } else if (next.kind === "direct") {
           if (!direct || isUncertainSendOutcome(next.entry.rejectedError)) break;

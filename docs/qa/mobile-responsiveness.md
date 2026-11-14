@@ -86,6 +86,17 @@ dispatch, assert B remains device-only, and check canonical A-before-B order plu
 preservation. The composer queue regression expects the actual capable-host `steer_only` behavior;
 its ordering assertions are unchanged.
 
+A further review found that a failed routed admission stopped the worker even after its durable
+item was removed. The worker now continues when that admission has no unresolved saved entry.
+Added the exact unknown-A / excluded-routed-B / ordinary-queue-C regression: discarding A must
+automatically deliver C after B is removed, preserving B's draft. Separate cases retain B and C
+after transport loss or an unknown outcome. Execution of these new cases is pending GCP validation.
+
+The queue persistence suite now warms the real delivery dependency graph in a `beforeAll` hook.
+Its existing cold resets, read/write holds and behavioral timeouts are unchanged. The outer executor
+reported 37 passing queue tests with that diagnostic warm-up on interim source; this final repair
+has not been tested here.
+
 The outer executor reported that the corrected composer fixture reproduces B overtaking held A on
 `c8ef9cda1` in GCP (`ordering-before.log` and synthetic trace). That is pre-fix evidence, not a passing
 receipt for this source. These additions have not been executed in this M4 review/fix phase. The outer executor must run

@@ -33,7 +33,9 @@ transport loss. Hold direct Send A before host dispatch, save Queue B locally, k
 then release A and verify host delivery order A then B. Transport loss and unknown outcomes must
 retain the barrier across rehydration; retry/discard must wake delivery, while cancellation and other
 agents remain available. Repeat the admission check through Find/Send and thread Send Back; routed
-draft escrow and expected destination checks must survive the wait. Restart with a backward device
+draft escrow and expected destination checks must survive the wait. If routed B is terminally removed
+after unknown A is discarded, ordinary queued C must proceed without another send or reconnect;
+a retained unresolved B must keep C pending. Restart with a backward device
 clock and delayed hydration of either outbox: new entries must still follow saved ones. User-error toasts temporarily replace passive sync status in the same alert above
 the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
 Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,

@@ -495,6 +495,58 @@ describe("all client queue admissions respect unresolved direct sends", () => {
     expect(routed.draft()).toBe("  routed B  ");
   });
 
+  it("automatically delivers ordinary Queue C after excluded routed B is removed when unknown A is discarded", async () => {
+    const state = await setupOrderedDelivery();
+    state.client.sendAgentMessage.mockRejectedValue(refusal("agent_request_outcome_unknown"));
+    await state.composerOutbox.flush("agent");
+    const routed = await prepareRoutedFollowUp(state, "excluded-routed-B");
+    const ordinary = await state.queue("ordinary C");
+    const ordinaryId = ordinary.queued!.id;
+    await state.queueSettled();
+    await state.flushQueue();
+    expect(state.client.enqueueAgentMessage).not.toHaveBeenCalled();
+    expect(state.useSendOutboxStore.getState().entries["msg-1"].rejectedError).toBe("agent_request_outcome_unknown");
+    expect(state.useQueueOutboxStore.getState().entries[ordinaryId].text).toBe("ordinary C");
+
+    routed.exclude();
+    await state.discardDirectSend(state.useSendOutboxStore.getState().entries["msg-1"]);
+
+    expect(await routed.sending).toEqual({ error: expect.objectContaining({ message: "The selected host was excluded. Choose a destination again." }) });
+    await vi.waitFor(() => expect(state.calls).toEqual(["ordinary C"]));
+    await vi.waitFor(() => expect(state.useQueueOutboxStore.getState().entries[ordinaryId]).toBeUndefined());
+    expect(state.useQueueOutboxStore.getState().entries["excluded-routed-B"]).toBeUndefined();
+    expect(state.useSendOutboxStore.getState().entries["msg-1"]).toBeUndefined();
+    expect(state.client.enqueueAgentMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ itemId: ordinaryId, text: "ordinary C" }));
+    expect(JSON.parse(storage.values.get("paseo-queue-outbox")!).state.entries).toEqual({});
+    expect(routed.draft()).toBe("  routed B  ");
+  });
+
+  it.each(["response lost", "agent_request_outcome_unknown"])("retains the routed B barrier after %s while ordinary C waits", async (message) => {
+    const state = await setupOrderedDelivery();
+    state.client.sendAgentMessage.mockRejectedValue(refusal("agent_request_outcome_unknown"));
+    await state.composerOutbox.flush("agent");
+    const routed = await prepareRoutedFollowUp(state, "unresolved-routed-B");
+    const ordinary = await state.queue("ordinary C");
+    const ordinaryId = ordinary.queued!.id;
+    await state.queueSettled();
+    await state.flushQueue();
+    state.client.enqueueAgentMessage.mockRejectedValue(new Error(message));
+
+    await state.discardDirectSend(state.useSendOutboxStore.getState().entries["msg-1"]);
+
+    expect(await routed.sending).toEqual({ error: new Error(message) });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(state.client.enqueueAgentMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ itemId: "unresolved-routed-B", text: "  routed B  " }));
+    expect(state.useQueueOutboxStore.getState().entries["unresolved-routed-B"].text).toBe("  routed B  ");
+    expect(state.useQueueOutboxStore.getState().entries[ordinaryId].text).toBe("ordinary C");
+    const saved = JSON.parse(storage.values.get("paseo-queue-outbox")!).state.entries;
+    expect(saved).toEqual({
+      "unresolved-routed-B": state.useQueueOutboxStore.getState().entries["unresolved-routed-B"],
+      [ordinaryId]: state.useQueueOutboxStore.getState().entries[ordinaryId],
+    });
+    expect(routed.draft()).toBe("  routed B  ");
+  });
+
   it("cancels routed Queue B behind an unknown A without admitting its payload", async () => {
     const state = await setupOrderedDelivery();
     state.client.sendAgentMessage.mockRejectedValue(refusal("agent_request_outcome_unknown"));
