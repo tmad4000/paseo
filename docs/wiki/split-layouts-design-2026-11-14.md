@@ -12,7 +12,7 @@ Read-only: nothing in any repo, agent or daemon was changed.
 ## 1. Decision
 
 **Coexist. No replace. No mode setting.** Add a tab-owned split ("Split this tab") that
-lives *inside* a workspace pane's tab, alongside the existing workspace-level pane splits.
+lives _inside_ a workspace pane's tab, alongside the existing workspace-level pane splits.
 Both scopes are explicitly named, both are always available, and they compose: a composite
 tab sits in a workspace pane like any other tab and moves with it.
 
@@ -20,11 +20,11 @@ This **confirms the 2026-10-29 recommendation (A + B, not C)** on the product qu
 **changes its implementation direction** in three ways that today's reading of the code
 forces:
 
-| Oct 29 said | Today's spec | Why |
-| --- | --- | --- |
-| "Separate tab-content view tree whose leaves reference view IDs" | A composite tab is a **group of ordinary workspace tabs** plus a tree over their tab IDs. Leaves *are* tabs. | Keeps every upstream walker correct for free: `reconcileWorkspaceTabs`, agent visibility/timeline sync, sidebar counts, deep links, `ui open-tab`, tab picker. A separate leaf tree would make agents in leaves invisible to timeline sync and dead targets linger. Deterministic tab identity stays the single dedup rule. |
-| Typed field in the layout, implying a persisted-schema bump | **Sidecar store** (`tab-local-layouts`, own AsyncStorage key, own strict schema). `workspace-layout-state` v2 is untouched. | The v2 schema is `strictObject`; a new field wipes the layout on any older build (TestFlight/Electron beta switching). A sidecar degrades gracefully: an older build simply shows the member tabs as normal tabs. Views used the same pattern (`paseo-views`). |
-| "Preserve existing bindings; audit new ones" | Audit done; ⌘\ resolved (section 6). | — |
+| Oct 29 said                                                      | Today's spec                                                                                                                | Why                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Separate tab-content view tree whose leaves reference view IDs" | A composite tab is a **group of ordinary workspace tabs** plus a tree over their tab IDs. Leaves _are_ tabs.                | Keeps every upstream walker correct for free: `reconcileWorkspaceTabs`, agent visibility/timeline sync, sidebar counts, deep links, `ui open-tab`, tab picker. A separate leaf tree would make agents in leaves invisible to timeline sync and dead targets linger. Deterministic tab identity stays the single dedup rule. |
+| Typed field in the layout, implying a persisted-schema bump      | **Sidecar store** (`tab-local-layouts`, own AsyncStorage key, own strict schema). `workspace-layout-state` v2 is untouched. | The v2 schema is `strictObject`; a new field wipes the layout on any older build (TestFlight/Electron beta switching). A sidecar degrades gracefully: an older build simply shows the member tabs as normal tabs. Views used the same pattern (`paseo-views`).                                                              |
+| "Preserve existing bindings; audit new ones"                     | Audit done; ⌘\ resolved (section 6).                                                                                        | —                                                                                                                                                                                                                                                                                                                           |
 
 ### Why not replace
 
@@ -90,7 +90,7 @@ Entry points (Phase 1):
 
 What happens: the focused tab becomes a composite (if it was not already); its current
 content becomes the first leaf; a **chooser leaf** opens on the chosen side, taking 50% of
-the leaf that was split (subsequent splits target the *focused leaf*, so T layouts are
+the leaf that was split (subsequent splits target the _focused leaf_, so T layouts are
 possible). Nothing is launched until the user picks.
 
 ### 3.2 The chooser (what a new leaf contains)
@@ -170,12 +170,12 @@ Add to this tab
 
 Precise, restrained (Linear/Stripe register), reuses existing tokens:
 
-| Element | Workspace pane | Leaf inside a tab |
-| --- | --- | --- |
-| Header | Tab strip (existing height, chips) | 24 px header: 14 px target icon · title · spacer · zoom · × · `…`. `theme.colors.textSecondary`; focused leaf title in `theme.colors.text`. |
-| Divider | Existing pane gutter + resize handle | 1 px `theme.colors.border` hairline with a 6 px invisible grab area; same cursor as pane handles |
-| Focus | Existing pane focus treatment | Header text colour only (no rings around content). Dim-inactive is **not** applied (Views-only today, keep it so). |
-| Background | Existing | Same surface as pane content; no inset card |
+| Element    | Workspace pane                       | Leaf inside a tab                                                                                                                           |
+| ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header     | Tab strip (existing height, chips)   | 24 px header: 14 px target icon · title · spacer · zoom · × · `…`. `theme.colors.textSecondary`; focused leaf title in `theme.colors.text`. |
+| Divider    | Existing pane gutter + resize handle | 1 px `theme.colors.border` hairline with a 6 px invisible grab area; same cursor as pane handles                                            |
+| Focus      | Existing pane focus treatment        | Header text colour only (no rings around content). Dim-inactive is **not** applied (Views-only today, keep it so).                          |
+| Background | Existing                             | Same surface as pane content; no inset card                                                                                                 |
 
 The rule a user can state in one sentence: **a strip means a pane; a thin title means a
 leaf.**
@@ -219,19 +219,26 @@ the return to desktop. Phase 2: indent members under their host in the switcher 
 // packages/app/src/tab-local-splits/model.ts  (fork-only module)
 export type TabLocalNode =
   | { kind: "leaf"; tabId: string }
-  | { kind: "group"; id: string; direction: "horizontal" | "vertical";
-      children: TabLocalNode[]; sizes: number[] };
+  | {
+      kind: "group";
+      id: string;
+      direction: "horizontal" | "vertical";
+      children: TabLocalNode[];
+      sizes: number[];
+    };
 
 export interface TabLocalLayout {
-  hostTabId: string;            // the tab shown in the strip; also a leaf
-  root: TabLocalNode;           // every leaf.tabId ∈ {host} ∪ members, each exactly once
+  hostTabId: string; // the tab shown in the strip; also a leaf
+  root: TabLocalNode; // every leaf.tabId ∈ {host} ∪ members, each exactly once
   focusedLeafTabId: string;
 }
 
 // Persisted (sidecar store `tab-local-layouts`, version 1, strict zod schema):
 interface TabLocalSplitsPersistedState {
-  layoutsByWorkspace: Record<WorkspaceKey /* `${serverId}:${workspaceId}` */,
-                             Record<HostTabId, TabLocalLayout>>;
+  layoutsByWorkspace: Record<
+    WorkspaceKey /* `${serverId}:${workspaceId}` */,
+    Record<HostTabId, TabLocalLayout>
+  >;
 }
 ```
 
@@ -291,14 +298,14 @@ those callers.
 
 ### 5.4 Upstream touch points (keep each a one-liner)
 
-| Upstream file | Change |
-| --- | --- |
-| `screens/workspace/workspace-screen.tsx` | Filter member tab ids out of the strip's `tabs` for desktop; pass `tabLocalLayout` for the focused tab to the pane. Mount the normalization hook. |
-| `components/split-container.tsx` (`SplitPaneView`) | If the focused tab is a host, render `<TabLocalSplitView>` (fork) instead of the single `WorkspacePaneContent`. |
-| `screens/workspace/workspace-desktop-tabs-row.tsx` | Composite glyph + count in the chip label measurement and render; context-menu submenu entries. |
-| `keyboard/keyboard-shortcuts.ts` | Add the 3 fork bindings (mac + non-mac). Wrap the 4 focus actions' handlers (fork handler first, fall through). |
-| `i18n/resources/en.ts` | New keys under `workspace.tabs.actions.tabLocal.*`; other locales fall back. |
-| `docs/fork-features.md` | Register entry with preservation notes. |
+| Upstream file                                      | Change                                                                                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `screens/workspace/workspace-screen.tsx`           | Filter member tab ids out of the strip's `tabs` for desktop; pass `tabLocalLayout` for the focused tab to the pane. Mount the normalization hook. |
+| `components/split-container.tsx` (`SplitPaneView`) | If the focused tab is a host, render `<TabLocalSplitView>` (fork) instead of the single `WorkspacePaneContent`.                                   |
+| `screens/workspace/workspace-desktop-tabs-row.tsx` | Composite glyph + count in the chip label measurement and render; context-menu submenu entries.                                                   |
+| `keyboard/keyboard-shortcuts.ts`                   | Add the 3 fork bindings (mac + non-mac). Wrap the 4 focus actions' handlers (fork handler first, fall through).                                   |
+| `i18n/resources/en.ts`                             | New keys under `workspace.tabs.actions.tabLocal.*`; other locales fall back.                                                                      |
+| `docs/fork-features.md`                            | Register entry with preservation notes.                                                                                                           |
 
 Rendering: use `workspace-panel-host.tsx`'s existing per-tab panel cache so leaf content keeps
 its instance when the tree restructures (split, close sibling, break out). Verify terminals
@@ -310,7 +317,7 @@ to the sidecar via `resizeTabLocalGroup`.
 
 ### 5.5 Views
 
-Views reuse `SplitContainer`, so composites will *appear* to work there. Phase 1 explicitly
+Views reuse `SplitContainer`, so composites will _appear_ to work there. Phase 1 explicitly
 **disables** "Split this tab" in Views (Views tabs carry `scope` and cross-host targets; the
 chooser's "Existing tab" semantics need their own pass). Phase 2 enables it.
 
@@ -321,15 +328,15 @@ chooser's "Existing tab" semantics need their own pass). Phase 2 enables it.
 Audit of all `combo:` values in `keyboard-shortcuts.ts` at `accd8743a` (section 2 of the
 research report lists the pane set; full list grepped today):
 
-| Candidate | Status | Decision |
-| --- | --- | --- |
-| ⌘\ / ⌘⇧\ | Upstream: Split pane right/down | **Keep upstream's.** Not remapped. |
-| ⌘D / ⌘⇧D (iTerm's split) | Upstream: dictation / voice mode | Unavailable. |
-| ⌘⌥\ / ⌘⌥⇧\ | Free | **Split this tab right / below.** ⌥ as the "inner variant" modifier of the same key family is a macOS convention and keeps the two scopes on one physical key. |
-| Ctrl+Alt+\ / Ctrl+Alt+Shift+\ | Free | Non-mac equivalents (also what Linux web testing uses). |
-| ⌘⇧↩ / Ctrl+Shift+Enter | Free (`Enter` alone is bound in the composer) | **Zoom leaf**; falls through to Maximize pane in a non-composite tab. |
-| ⌘⌥←→ | Upstream: tab prev/next | Not used for leaf focus; ⌘⇧ arrows go spatial instead (3.3). |
-| ⌘⌥⇧ arrows | Upstream: move tab between panes | Unchanged; moves the composite as a unit. |
+| Candidate                      | Status                                        | Decision                                                                                                                                                       |
+| ------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⌘\ / ⌘⇧\                       | Upstream: Split pane right/down               | **Keep upstream's.** Not remapped.                                                                                                                             |
+| ⌘D / ⌘⇧D (iTerm's split)       | Upstream: dictation / voice mode              | Unavailable.                                                                                                                                                   |
+| ⌘⌥\ / ⌘⌥⇧\                     | Free                                          | **Split this tab right / below.** ⌥ as the "inner variant" modifier of the same key family is a macOS convention and keeps the two scopes on one physical key. |
+| Ctrl+Alt+\ / Ctrl+Alt+Shift+\  | Free                                          | Non-mac equivalents (also what Linux web testing uses).                                                                                                        |
+| ⌘⇧↩ / Ctrl+Shift+Enter         | Free (`Enter` alone is bound in the composer) | **Zoom leaf**; falls through to Maximize pane in a non-composite tab.                                                                                          |
+| ⌘⌥←→                           | Upstream: tab prev/next                       | Not used for leaf focus; ⌘⇧ arrows go spatial instead (3.3).                                                                                                   |
+| ⌘⌥⇧ arrows                     | Upstream: move tab between panes              | Unchanged; moves the composite as a unit.                                                                                                                      |
 
 Resolution of the conflict, stated plainly: **upstream keeps ⌘\; the fork takes ⌘⌥\.** It
 preserves upstream help text and the FORK.md rule, costs no muscle memory for existing

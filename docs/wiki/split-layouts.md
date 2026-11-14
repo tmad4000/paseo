@@ -34,15 +34,16 @@ Should Paseo offer the iTerm-style mode, and if so, should it:
 - **Persistence:** stored per device as `workspace-layout-state` version 2, validated by a strict zod schema (`stores/workspace-layout-storage.ts`:63–115). A new persisted field needs a version bump and a migration, and an older build that reads the new data drops the saved layout.
 - **Shortcuts** (upstream, `keyboard/keyboard-shortcuts.ts`:957–1080):
 
-  | Shortcut | Action |
-  | --- | --- |
-  | ⌘\ | split right |
-  | ⌘⇧\ | split down |
-  | ⌘⇧ arrows | focus pane |
-  | ⌘⌥⇧ arrows | move tab |
-  | ⌘⇧W | close pane |
+  | Shortcut   | Action      |
+  | ---------- | ----------- |
+  | ⌘\         | split right |
+  | ⌘⇧\        | split down  |
+  | ⌘⇧ arrows  | focus pane  |
+  | ⌘⌥⇧ arrows | move tab    |
+  | ⌘⇧W        | close pane  |
 
   There is no maximize shortcut.
+
 - **Platforms:** splits exist only on web and Electron (`constants/layout.ts`:50). Compact and native layouts flatten all tabs into a switcher.
 - **Ownership:** upstream owns the split model, drop zones, maximize, the Explorer pane and the shortcuts, and changes them often: 16 commits to the layout store since September 2026. FORK.md's "Upstream wins" rule favours fork features that sit on top of upstream's layout over a competing engine.
 
@@ -53,6 +54,7 @@ Should Paseo offer the iTerm-style mode, and if so, should it:
 - **The pattern:** terminal emulators split inside a tab; editors and agent IDEs give each pane tabs. Paseo is a hybrid, because a tab can be an agent, a terminal, a browser or a file.
 
 Sources:
+
 - https://iterm2.com/documentation-one-page.html
 - https://cmux.com/docs/concepts
 - https://github.com/manaflow-ai/cmux
@@ -60,13 +62,14 @@ Sources:
 
 ## Options and constraints
 
-| Option | For | Against |
-| --- | --- | --- |
-| Coexist (the 2026-10-29 recommendation) | Additive and keeps upstream's behaviour. Can be fork-only. | Two split scopes and more drop targets, so the most complicated UI. Every piece of code that walks the tabs has to handle nesting. |
-| Replace | One iTerm-like model | Rewrites upstream's busiest code, so every sync conflicts. Reverses the 2026-10-02 decision. Migrating existing multi-pane layouts loses information. |
-| Setting | Lets Jacob try it, with today's behaviour as the default | Costs at least as much as Coexist. ⌘\ would mean different things on different installs. |
+| Option                                  | For                                                        | Against                                                                                                                                               |
+| --------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coexist (the 2026-10-29 recommendation) | Additive and keeps upstream's behaviour. Can be fork-only. | Two split scopes and more drop targets, so the most complicated UI. Every piece of code that walks the tabs has to handle nesting.                    |
+| Replace                                 | One iTerm-like model                                       | Rewrites upstream's busiest code, so every sync conflicts. Reverses the 2026-10-02 decision. Migrating existing multi-pane layouts loses information. |
+| Setting                                 | Lets Jacob try it, with today's behaviour as the default   | Costs at least as much as Coexist. ⌘\ would mean different things on different installs.                                                              |
 
 What forces the choice:
+
 - upstream owns the outer layout tree;
 - the persisted schema is strict;
 - each session has one deterministic tab, so someone has to decide whether one agent can appear in two places;
@@ -89,14 +92,15 @@ The CLI and remote UI commands can't operate on panes: there is only `tab.open`/
 - **Persistence:** in a sidecar store, `tab-local-splits` (strict schema, v1). `workspace-layout-state` stays at v2. Older builds ignore the sidecar and show the members as ordinary tabs, so nothing is wiped.
 - **Shortcuts:**
 
-  | Shortcut | Action |
-  | --- | --- |
-  | ⌘\ / ⌘⇧\ | Workspace split, upstream's binding, unchanged |
-  | ⌘⌥\ / ⌘⌥⇧\ | Split this tab |
-  | ⌘⇧↩ | Zoom the leaf; in a tab that isn't split, falls through to maximizing the pane |
-  | ⌘⇧ arrows | Move focus spatially across both levels |
+  | Shortcut    | Action                                                                         |
+  | ----------- | ------------------------------------------------------------------------------ |
+  | ⌘\ / ⌘⇧\    | Workspace split, upstream's binding, unchanged                                 |
+  | ⌘⌥\ / ⌘⌥⇧\  | Split this tab                                                                 |
+  | ⌘⇧↩         | Zoom the leaf; in a tab that isn't split, falls through to maximizing the pane |
+  | ⌘⇧ arrows   | Move focus spatially across both levels                                        |
 
   Ctrl+Alt equivalents are added for Linux and Windows.
+
 - **Phase 1:**
   - Web and desktop only.
   - Split this tab from the tab menu, the command palette and the shortcuts.
