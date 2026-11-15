@@ -394,7 +394,11 @@ test("context details support keyboard entry and dismiss when the viewport moves
     exact: true,
   });
   await expect(trigger).toHaveAttribute("tabindex", "0");
+  // Enter keyboard modality before moving focus programmatically.
+  await page.keyboard.press("Tab");
   await trigger.focus();
+  await expect(trigger).toBeFocused();
+  await expect.poll(() => trigger.evaluate((node) => node.matches(":focus-visible"))).toBe(true);
   const details = contextWindowDetails(page);
   await expect(details).toBeVisible();
   await expect(details.getByRole("button", { name: "Refresh Claude", exact: true })).toBeVisible();

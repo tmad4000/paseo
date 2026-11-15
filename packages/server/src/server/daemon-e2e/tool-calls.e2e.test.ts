@@ -138,6 +138,7 @@ describe("tool call structure", () => {
       title: "Claude Read Test",
       modeId: "bypassPermissions",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -166,7 +167,7 @@ describe("tool call structure", () => {
     }
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 
@@ -180,6 +181,7 @@ describe("tool call structure", () => {
       title: "Claude Bash Test",
       modeId: "bypassPermissions",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -208,7 +210,7 @@ describe("tool call structure", () => {
     }
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 
@@ -224,6 +226,7 @@ describe("tool call structure", () => {
       title: "Claude Edit Test",
       modeId: "bypassPermissions",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -254,7 +257,7 @@ describe("tool call structure", () => {
     }
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 
@@ -270,6 +273,7 @@ describe("tool call structure", () => {
       title: "Codex Shell Test",
       modeId: "full-access",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -297,7 +301,7 @@ describe("tool call structure", () => {
     expect(echoCall).toBeDefined();
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 
@@ -313,6 +317,7 @@ describe("tool call structure", () => {
       title: "Codex Read Test",
       modeId: "full-access",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -337,7 +342,7 @@ describe("tool call structure", () => {
     }
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 
@@ -355,6 +360,7 @@ describe("tool call structure", () => {
       title: "Codex Edit Test",
       modeId: "full-access",
     });
+    await collector.observeTimeline(agent.id);
 
     collector.clear();
 
@@ -379,7 +385,7 @@ describe("tool call structure", () => {
     }
 
     await ctx.client.deleteAgent(agent.id);
-    collector.unsubscribe();
+    await collector.unsubscribe();
     rmSync(cwd, { recursive: true, force: true });
   }, 180000);
 });

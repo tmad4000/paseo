@@ -17,11 +17,15 @@ describe("daemon E2E - permission flow: Claude", () => {
   beforeEach(async () => {
     ctx = await createDaemonTestContext();
     collector = createMessageCollector(ctx.client);
+    await collector.observeEvents(["agent_permission_request", "agent_permission_resolved"]);
   });
 
   afterEach(async () => {
-    collector.unsubscribe();
-    await ctx.cleanup();
+    try {
+      await collector.unsubscribe();
+    } finally {
+      await ctx.cleanup();
+    }
   }, 60_000);
 
   test("approves permission and executes command", async () => {
@@ -55,13 +59,9 @@ describe("daemon E2E - permission flow: Claude", () => {
       expect(existsSync(filePath)).toBe(false);
 
       const hasPermissionResolved = collector.messages.some((m) => {
-        if (m.type !== "agent_stream") return false;
+        if (m.type !== "agent_permission_resolved") return false;
         if (m.payload.agentId !== agent.id) return false;
-        return (
-          m.payload.event.type === "permission_resolved" &&
-          m.payload.event.requestId === permission.id &&
-          m.payload.event.resolution.behavior === "allow"
-        );
+        return m.payload.requestId === permission.id && m.payload.resolution.behavior === "allow";
       });
       expect(hasPermissionResolved).toBe(true);
 
@@ -105,13 +105,9 @@ describe("daemon E2E - permission flow: Claude", () => {
       expect(existsSync(filePath)).toBe(true);
 
       const hasPermissionResolved = collector.messages.some((m) => {
-        if (m.type !== "agent_stream") return false;
+        if (m.type !== "agent_permission_resolved") return false;
         if (m.payload.agentId !== agent.id) return false;
-        return (
-          m.payload.event.type === "permission_resolved" &&
-          m.payload.event.requestId === permission.id &&
-          m.payload.event.resolution.behavior === "deny"
-        );
+        return m.payload.requestId === permission.id && m.payload.resolution.behavior === "deny";
       });
       expect(hasPermissionResolved).toBe(true);
 

@@ -18,8 +18,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  collector.unsubscribe();
-  await ctx.cleanup();
+  try {
+    await collector.unsubscribe();
+  } finally {
+    await ctx.cleanup();
+  }
 }, 60000);
 
 describe("sendImages", () => {
@@ -37,6 +40,7 @@ describe("sendImages", () => {
       cwd,
       title: "Image Test Agent",
     });
+    await collector.observeTimeline(agent.id);
 
     expect(agent.id).toBeTruthy();
     expect(agent.provider).toBe("claude");
@@ -100,6 +104,7 @@ describe("sendImages", () => {
       cwd,
       title: "Multi-Image Test Agent",
     });
+    await collector.observeTimeline(agent.id);
 
     expect(agent.id).toBeTruthy();
 

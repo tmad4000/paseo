@@ -14,6 +14,7 @@ import {
 } from "./test-utils/index.js";
 import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
 import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
+import { fakeSpeechService } from "./test-utils/fake-speech-service.js";
 import { getFullAccessConfig, getAskModeConfig } from "./daemon-e2e/agent-configs.js";
 import { parsePcm16MonoWav, wordSimilarity } from "./test-utils/dictation-e2e.js";
 import type {
@@ -455,9 +456,15 @@ test("DaemonClient rejects a replacement prompt when cancellation is not acknowl
   try {
     await client.connect();
     const agent = await client.createAgent({ provider: "codex", cwd });
-    await client.sendMessage(agent.id, "Keep working on the first prompt.");
+    await client.sendMessage(agent.id, "Keep working on the first prompt.", {
+      activeTurnBehavior: "interrupt",
+    });
 
-    await expect(client.sendMessage(agent.id, "Replace it with this prompt.")).rejects.toThrow(
+    await expect(
+      client.sendMessage(agent.id, "Replace it with this prompt.", {
+        activeTurnBehavior: "interrupt",
+      }),
+    ).rejects.toThrow(
       `Cannot replace agent ${agent.id} because its active run cancellation was not acknowledged`,
     );
   } finally {
@@ -477,7 +484,9 @@ test("DaemonClient rejects Stop when cancellation is not acknowledged", async ()
   try {
     await client.connect();
     const agent = await client.createAgent({ provider: "codex", cwd });
-    await client.sendMessage(agent.id, "Keep working until stopped.");
+    await client.sendMessage(agent.id, "Keep working until stopped.", {
+      activeTurnBehavior: "interrupt",
+    });
 
     await expect(client.cancelAgent(agent.id)).rejects.toThrow(
       `Cannot stop agent ${agent.id} because its active run cancellation was not acknowledged`,
@@ -713,34 +722,39 @@ afterAll(async () => {
 }, 60000);
 
 test("handles session actions", async () => {
-  expect(ctx.client.isConnected).toBe(true);
+  const voiceCtx = await createDaemonTestContext({ speechService: fakeSpeechService });
+  try {
+    expect(voiceCtx.client.isConnected).toBe(true);
 
-  const agents = await ctx.client.fetchAgents();
-  expect(Array.isArray(agents.entries)).toBe(true);
+    const agents = await voiceCtx.client.fetchAgents();
+    expect(Array.isArray(agents.entries)).toBe(true);
 
-  const cwd = tmpCwd();
-  const created = await ctx.client.createAgent({
-    config: {
-      ...getFullAccessConfig("codex"),
-      cwd,
-    },
-  });
+    const cwd = tmpCwd();
+    const created = await voiceCtx.client.createAgent({
+      config: {
+        ...getFullAccessConfig("codex"),
+        cwd,
+      },
+    });
 
-  await expect(ctx.client.setVoiceMode(true, created.id)).resolves.toMatchObject({
-    enabled: true,
-    agentId: created.id,
-    accepted: true,
-    error: null,
-  });
-  await expect(ctx.client.setVoiceMode(false)).resolves.toMatchObject({
-    enabled: false,
-    agentId: null,
-    accepted: true,
-    error: null,
-  });
+    await expect(voiceCtx.client.setVoiceMode(true, created.id)).resolves.toMatchObject({
+      enabled: true,
+      agentId: created.id,
+      accepted: true,
+      error: null,
+    });
+    await expect(voiceCtx.client.setVoiceMode(false)).resolves.toMatchObject({
+      enabled: false,
+      agentId: null,
+      accepted: true,
+      error: null,
+    });
 
-  await ctx.client.deleteAgent(randomUUID());
-  rmSync(cwd, { recursive: true, force: true });
+    await voiceCtx.client.deleteAgent(randomUUID());
+    rmSync(cwd, { recursive: true, force: true });
+  } finally {
+    await voiceCtx.cleanup();
+  }
 }, 30000);
 
 test("archives agents and excludes them from default listings", async () => {
@@ -847,9 +861,11 @@ test("send_agent_message leaves an archived agent archived when its directory is
     const archived = await ctx.client.archiveAgent(created.id);
     rmSync(cwd, { recursive: true, force: true });
 
-    await expect(ctx.client.sendMessage(created.id, "hello")).rejects.toThrow(
-      "Working directory does not exist",
-    );
+    await expect(
+      ctx.client.sendMessage(created.id, "hello", {
+        activeTurnBehavior: "interrupt",
+      }),
+    ).rejects.toThrow("Working directory does not exist");
 
     const afterSend = await ctx.client.fetchAgent({ agentId: created.id });
     expect(afterSend?.agent.archivedAt).toBe(archived.archivedAt);
@@ -1369,32 +1385,17 @@ test("creates agent and exercises lifecycle", async () => {
   });
 
   const createRequestId = `create-${Date.now()}`;
-  const createdStatusPromise = waitForSignal(15000, (resolve) => {
-    const unsubscribe = ctx.client.on("status", (message) => {
-      if (message.type !== "status") {
-        return;
-      }
-      const payload = message.payload as {
-        status?: string;
-        agentId?: string;
-        requestId?: string;
-      };
-      if (payload.status !== "agent_created") {
-        return;
-      }
-      if (payload.requestId !== createRequestId) {
-        return;
-      }
-      resolve(message);
-    });
-    return unsubscribe;
-  });
+  const creationEvents: Parameters<
+    NonNullable<Parameters<DaemonClient["createAgent"]>[0]["onEvent"]>
+  >[0][] = [];
 
   const agent = await ctx.client.createAgent({
     ...getFullAccessConfig("codex"),
     cwd,
     title: "Daemon Client V2",
     requestId: createRequestId,
+    idempotencyKey: createRequestId,
+    onEvent: (snapshot) => creationEvents.push(snapshot),
   });
 
   expect(agent.id).toBeTruthy();
@@ -1404,29 +1405,17 @@ test("creates agent and exercises lifecycle", async () => {
 
   const agentUpdate = await agentUpdatePromise;
   expect(agentUpdate.payload.agent.id).toBe(agent.id);
-  const createdStatus = await createdStatusPromise;
-  expect((createdStatus.payload as { agentId?: string }).agentId).toBe(agent.id);
+  expect(creationEvents).toContainEqual(
+    expect.objectContaining({
+      kind: "agent",
+      idempotencyKey: createRequestId,
+      agentId: agent.id,
+      phase: "completed",
+    }),
+  );
 
   const failRequestId = `fail-${Date.now()}`;
-  const failedStatusPromise = waitForSignal(15000, (resolve) => {
-    const unsubscribe = ctx.client.on("status", (message) => {
-      if (message.type !== "status") {
-        return;
-      }
-      const payload = message.payload as {
-        status?: string;
-        requestId?: string;
-      };
-      if (payload.status !== "agent_create_failed") {
-        return;
-      }
-      if (payload.requestId !== failRequestId) {
-        return;
-      }
-      resolve(message);
-    });
-    return unsubscribe;
-  });
+  const failedCreationEvents: typeof creationEvents = [];
 
   await expect(
     ctx.client.createAgent({
@@ -1434,9 +1423,18 @@ test("creates agent and exercises lifecycle", async () => {
       cwd: "/this/path/does/not/exist/12345",
       title: "Should Fail",
       requestId: failRequestId,
+      idempotencyKey: failRequestId,
+      onEvent: (snapshot) => failedCreationEvents.push(snapshot),
     }),
   ).rejects.toThrow("Working directory does not exist");
-  await failedStatusPromise;
+  expect(failedCreationEvents).toContainEqual(
+    expect.objectContaining({
+      kind: "agent",
+      idempotencyKey: failRequestId,
+      phase: "failed",
+      error: expect.stringContaining("Working directory does not exist"),
+    }),
+  );
 
   let sawRefresh = false;
   const unsubscribe = ctx.client.subscribe((event) => {
@@ -1624,6 +1622,12 @@ test("handles permission flow", async () => {
     title: "Permission Test",
   });
 
+  const permissionEvents = ctx.client.observeEvents(
+    ["agent_permission_request", "agent_permission_resolved"],
+    { notifications: true },
+  );
+  await permissionEvents.ready;
+
   const permissionRequestPromise = waitForSignal(60000, (resolve) => {
     const unsubscribe = ctx.client.on("agent_permission_request", (message) => {
       if (message.type !== "agent_permission_request") {
@@ -1683,6 +1687,7 @@ test("handles permission flow", async () => {
     // Prevent unhandled rejections if the test fails before promises resolve.
     await permissionRequestPromise.catch(() => {});
     await permissionResolvedPromise.catch(() => {});
+    await permissionEvents.release();
     await ctx.client.deleteAgent(agent.id);
     rmSync(cwd, { recursive: true, force: true });
   }

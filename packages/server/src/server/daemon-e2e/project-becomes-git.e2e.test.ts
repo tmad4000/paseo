@@ -96,6 +96,15 @@ test("an empty project becomes Git without changing its identity or creating a w
       payload.project.projectKind === "git",
   );
   await execFile("git", ["init", "-b", "main"], { cwd: projectRoot });
+  await expect
+    .poll(
+      async () =>
+        JSON.parse(
+          await readFile(path.join(daemon.paseoHome, "projects", "projects.json"), "utf8"),
+        ),
+      { timeout: 5_000 },
+    )
+    .toContainEqual(expect.objectContaining({ projectId: project.projectId, kind: "git" }));
   const update = await withTimeout({
     promise: gitProjectUpdate,
     timeoutMs: 10_000,

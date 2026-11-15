@@ -67,17 +67,22 @@ test("host page shows the restarted daemon's version without reloading", async (
   });
 });
 
-async function readHelpHostVersion(page: Page, serverId: string): Promise<string> {
+async function readHelpHostVersion(
+  page: Page,
+  serverId: string,
+  expectedVersion?: string,
+): Promise<string> {
   await page.getByTestId("sidebar-help").click();
   const row = page.getByTestId(`sidebar-help-host-version-${serverId}`);
   await expect(row).toBeVisible();
+  await expect(row).toContainText(expectedVersion ? `v${expectedVersion}` : /v\d+\.\d+/);
   const text = await row.innerText();
   await page.keyboard.press("Escape");
   return text;
 }
 
 async function expectHelpHostVersion(page: Page, serverId: string, version: string): Promise<void> {
-  const text = await readHelpHostVersion(page, serverId);
+  const text = await readHelpHostVersion(page, serverId, version);
   expect(text).toContain(`v${version}`);
 }
 

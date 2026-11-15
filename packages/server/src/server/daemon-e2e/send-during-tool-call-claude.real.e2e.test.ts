@@ -966,7 +966,7 @@ describe("daemon E2E (real claude) - send message during tool call", () => {
       );
       expect(responded).toBe(true);
 
-      collector.unsubscribe();
+      await collector.unsubscribe();
     } finally {
       await client.close();
       await daemon.close();

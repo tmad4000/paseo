@@ -9,6 +9,7 @@ import {
   type PaseoDaemonConfig,
   type PaseoOpenAIConfig,
   type PaseoSpeechConfig,
+  type PaseoDaemonDependencies,
 } from "../bootstrap.js";
 import type { AgentClient, AgentProvider } from "../agent/agent-sdk-types.js";
 import { createTestAgentClients } from "./fake-agent-client.js";
@@ -39,6 +40,7 @@ interface TestPaseoDaemonOptions {
   cleanup?: boolean;
   openai?: PaseoOpenAIConfig;
   speech?: PaseoSpeechConfig;
+  speechService?: PaseoDaemonDependencies["speechService"];
   voiceLlmProvider?: PaseoDaemonConfig["voiceLlmProvider"];
   voiceLlmProviderExplicit?: boolean;
   voiceLlmModel?: string | null;
@@ -105,6 +107,7 @@ export async function createTestPaseoDaemon(
       await prepareTestDaemonConfig(options);
     const logger = options.logger ?? pino({ level: "silent" });
     const daemon = await createPaseoDaemon(config, logger, {
+      speechService: options.speechService,
       builtinPlugins: options.builtinPlugins ?? new BuiltinPluginLoader(undefined, []),
       serverFeatureOverrides: {
         daemonStatusRpc: options.daemonStatusRpcCapability,

@@ -21,8 +21,11 @@ describe("two-cycle Codex agent resume", () => {
   });
 
   afterEach(async () => {
-    collector.unsubscribe();
-    await ctx.cleanup();
+    try {
+      await collector.unsubscribe();
+    } finally {
+      await ctx.cleanup();
+    }
   }, 60_000);
 
   test("Codex agent remembers original marker after two resume cycles", async () => {
