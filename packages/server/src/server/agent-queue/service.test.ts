@@ -28,6 +28,8 @@ const AGENT_ID = "agent-1";
  */
 class FakeAgentController implements AgentQueueAgentController {
   lifecycle: AgentLifecycleStatus = "idle";
+  restartDraining = false;
+  isRestartAdmissionClosed = () => this.restartDraining;
   pendingPermissions = 0;
   /** Provider history is loaded, so the timeline is authoritative for delivery checks. */
   historyPrimed = false;
@@ -215,6 +217,24 @@ describe("AgentQueueService", () => {
       ["from-parent", "agent:parent-1"],
       ["legacy", undefined],
     ]);
+  });
+
+  test("keeps queued work durable during a restart drain and sends it after admission reopens", async () => {
+    harness.agents.restartDraining = true;
+    await harness.service.enqueue({
+      agentId: AGENT_ID,
+      itemId: "restart-pending",
+      text: "continue later",
+    });
+    await harness.service.flushDrains();
+    expect(harness.sent).toEqual([]);
+    expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+      "restart-pending",
+    ]);
+    harness.agents.restartDraining = false;
+    await harness.service.drainNow(AGENT_ID);
+    expect(harness.sent.map((item) => item.messageId)).toEqual(["restart-pending"]);
+    expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
   });
 
   test("broadcasts the queue to subscribers when an item is enqueued while the agent is busy", async () => {

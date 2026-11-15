@@ -12,13 +12,32 @@ initializing → idle → running → idle (or error → closed)
 
 Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idle`, `running`, or `error`. `closed` is the persisted, resumable state for an agent record that has no live provider runtime. State transitions persist to disk and stream to subscribed clients via WebSocket.
 
-## Desktop app restarts
+## Desktop app and daemon restarts
 
 Enable **Keep agents running across app restarts** in desktop daemon settings to retain the
 existing daemon, agent runtimes and terminals on quit and app update. The daemon keeps its
-current version until you restart it separately. Explicit daemon stop/restart still stops its
-runtimes. See the [restart design](design/restart-without-stopping-agents.html) for host-upgrade
-options and the verification boundary.
+current version until you restart it separately. An older installed app cannot honor the new
+setting during its first upgrade; do not use its **Install & restart** action against live turns.
+
+For daemon replacement, opt in at startup with `daemon.gracefulRestart: true` in the daemon's
+`config.json`. Deployment launches can override it with `PASEO_GRACEFUL_RESTART=1`; managed
+launches use persistent configuration. Restart and self-update wait up to five minutes for
+accepted turns, permissions and provider initialization to settle. Active agents can still
+delegate while waiting. At a quiet boundary, new admissions pause, resident identities are
+checkpointed, and the existing supervisor replaces its worker. The new worker reloads those
+provider handles without replaying a prompt. Queued messages remain durable and resume after
+restoration. A deadline or install failure leaves the existing daemon running; a failed provider
+restore appears as an error on that chat and retains its checkpoint for retry.
+
+Issue the restart from the app or an external CLI. A tool running inside a drained agent would
+wait for its own turn. This startup setting does not retrofit an older running daemon or change
+explicit shutdown semantics.
+
+This mode protects accepted foreground turns and saved conversation identity. It still closes
+provider processes at a boundary: terminals, idle background tools and watches do not survive.
+Use the app-preservation setting when those processes must remain alive. An independent agent
+host is required for uninterrupted worker replacement; see the
+[restart design](design/restart-without-stopping-agents.html).
 
 ## Runtime residency
 

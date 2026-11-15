@@ -93,6 +93,7 @@ async function runUpdate(input: {
   daemonVersion?: string | null;
   desktopManaged?: boolean;
   phases?: DaemonSelfUpdatePhase[];
+  beforeInstall?: () => Promise<void>;
 }) {
   const logger = createLogger();
   const updater = new DaemonSelfUpdater(input.runtime);
@@ -101,6 +102,7 @@ async function runUpdate(input: {
     daemonVersion: input.daemonVersion ?? "0.1.15",
     desktopManaged: input.desktopManaged ?? false,
     onProgress: (phase) => phases.push(phase),
+    beforeInstall: input.beforeInstall,
     logger,
   });
   return { result, logger, phases };
@@ -297,5 +299,22 @@ describe("DaemonSelfUpdater", () => {
     resolveInstall?.({ exitCode: 0, stdout: "updated", stderr: "" });
     await expect(firstUpdate).resolves.toMatchObject({ success: true });
     expect(calls).toEqual(["inspect", "installLatest", "inspect"]);
+  });
+});
+
+test("drain failure prevents npm installation after eligibility checks", async () => {
+  const calls: RuntimeCall[] = [];
+  const { result, phases } = await runUpdate({
+    runtime: createRuntime({ inspections: [npmGlobalPaseoInstall("0.1.15")], calls }),
+    beforeInstall: async () => {
+      throw new Error("active turn did not finish before deadline");
+    },
+  });
+  expect(calls).toEqual(["inspect"]);
+  expect(phases).toEqual(["starting"]);
+  expect(result).toEqual({
+    success: false,
+    error: "active turn did not finish before deadline",
+    newVersion: null,
   });
 });

@@ -25,6 +25,8 @@ function createController(input: {
   updater: TestUpdater;
   daemonVersion?: string | null;
   desktopManaged?: boolean;
+  prepareRestart?: () => Promise<void>;
+  releaseRestart?: () => Promise<void>;
 }): ControllerHarness {
   const emitted: SessionOutboundMessage[] = [];
   const restartIntents: RestartIntent[] = [];
@@ -40,6 +42,8 @@ function createController(input: {
     },
     sessionLogger: createTestLogger(),
     updater: input.updater,
+    prepareRestart: input.prepareRestart,
+    releaseRestart: input.releaseRestart,
   });
 
   return { controller, emitted, restartIntents };
@@ -221,4 +225,68 @@ test("self-update progress is request-owned through the final delivery boundary"
   ]);
   lateProgress?.();
   expect(frames).toHaveLength(3);
+});
+
+test("failed daemon update releases its prepared restart without emitting a restart intent", async () => {
+  const events: string[] = [];
+  const harness = createController({
+    prepareRestart: async () => {
+      events.push("drained");
+    },
+    releaseRestart: async () => {
+      events.push("released");
+    },
+    updater: {
+      async update(input) {
+        await input.beforeInstall?.();
+        events.push("install");
+        return { success: false, error: "npm failed", newVersion: null };
+      },
+    },
+  });
+  await harness.controller.dispatch(updateRequest);
+  expect(events).toEqual(["drained", "install", "released"]);
+  expect(harness.restartIntents).toEqual([]);
+  expect(harness.emitted).toContainEqual({
+    type: "daemon.update.response",
+    payload: {
+      requestId: "update-1",
+      success: false,
+      error: "npm failed",
+      previousVersion: "0.1.15",
+      newVersion: null,
+    },
+  });
+});
+
+test("a failed drain prevents installation and does not release another request's restart", async () => {
+  const events: string[] = [];
+  const harness = createController({
+    prepareRestart: async () => {
+      throw new Error("restart already pending");
+    },
+    releaseRestart: async () => {
+      events.push("released");
+    },
+    updater: {
+      async update(input) {
+        await input.beforeInstall?.();
+        events.push("install");
+        return { success: true, error: null, newVersion: "new" };
+      },
+    },
+  });
+  await harness.controller.dispatch(updateRequest);
+  expect(events).toEqual([]);
+  expect(harness.restartIntents).toEqual([]);
+  expect(harness.emitted).toContainEqual({
+    type: "daemon.update.response",
+    payload: {
+      requestId: "update-1",
+      success: false,
+      error: "restart already pending",
+      previousVersion: "0.1.15",
+      newVersion: null,
+    },
+  });
 });

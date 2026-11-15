@@ -29,6 +29,8 @@ export interface DaemonSelfUpdateSessionControllerOptions {
   emitLifecycleIntent: (intent: DaemonSelfUpdateRestartIntent) => void;
   sessionLogger: pino.Logger;
   updater?: Pick<DaemonSelfUpdater, "update">;
+  prepareRestart?: () => Promise<void>;
+  releaseRestart?: () => Promise<void>;
 }
 
 function isDaemonSelfUpdateMessage(msg: SessionInboundMessage): msg is DaemonUpdateRequest {
@@ -43,6 +45,8 @@ export class DaemonSelfUpdateSessionController {
   private readonly emitLifecycleIntent: (intent: DaemonSelfUpdateRestartIntent) => void;
   private readonly sessionLogger: pino.Logger;
   private readonly updater: Pick<DaemonSelfUpdater, "update">;
+  private readonly prepareRestart: DaemonSelfUpdateSessionControllerOptions["prepareRestart"];
+  private readonly releaseRestart: DaemonSelfUpdateSessionControllerOptions["releaseRestart"];
 
   constructor(options: DaemonSelfUpdateSessionControllerOptions) {
     this.clientId = options.clientId;
@@ -52,6 +56,8 @@ export class DaemonSelfUpdateSessionController {
     this.emitLifecycleIntent = options.emitLifecycleIntent;
     this.sessionLogger = options.sessionLogger;
     this.updater = options.updater ?? daemonSelfUpdater;
+    this.prepareRestart = options.prepareRestart;
+    this.releaseRestart = options.releaseRestart;
   }
 
   dispatch(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -63,6 +69,16 @@ export class DaemonSelfUpdateSessionController {
 
   private async handleDaemonUpdateRequest(msg: DaemonUpdateRequest): Promise<void> {
     const previousVersion = this.daemonVersion;
+    let prepared = false;
+    const release = async () => {
+      if (!prepared) return;
+      prepared = false;
+      try {
+        await this.releaseRestart?.();
+      } catch (error) {
+        this.sessionLogger.warn({ err: error }, "Failed to release deferred update restart");
+      }
+    };
 
     try {
       const result = await this.updater.update({
@@ -70,8 +86,17 @@ export class DaemonSelfUpdateSessionController {
         desktopManaged: this.desktopManaged,
         onProgress: (phase) => this.emitProgress(msg.requestId, phase),
         logger: this.sessionLogger,
+        ...(this.prepareRestart
+          ? {
+              beforeInstall: async () => {
+                await this.prepareRestart!();
+                prepared = true;
+              },
+            }
+          : {}),
       });
 
+      if (!result.success) await release();
       this.emitResponse({
         requestId: msg.requestId,
         success: result.success,
@@ -90,6 +115,7 @@ export class DaemonSelfUpdateSessionController {
         reason: "daemon_update",
       });
     } catch (error) {
+      await release();
       if (error instanceof DaemonSelfUpdateInProgressError) {
         this.emit({
           type: "rpc_error",

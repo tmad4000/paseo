@@ -327,6 +327,15 @@ Run the startup regression on Linux with an isolated display:
 xvfb-run -a npm run test:e2e:window-startup --workspace=@getpaseo/desktop
 ```
 
+### Graceful daemon restart
+
+The [restart lifecycle](agent-lifecycle.md#desktop-app-and-daemon-restarts) owns the setting,
+turn-boundary behavior and limits. Never validate it against a shared daemon. Build the server
+stack, then run the existing integration file with `PASEO_DAEMON_RESTART_QA=1` to opt in to the
+Linux test with an actual supervisor, replacement worker and real Codex turn. Its launcher uses
+private HOME/PASEO_HOME and an ephemeral listen address; it waits for normal turn completion
+before tearing down its captured supervisor.
+
 ### Daemon logs
 
 Check `$PASEO_HOME/daemon.log` for daemon logs. The default level is `info`; set
