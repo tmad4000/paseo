@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { expect } from "@playwright/test";
@@ -50,12 +52,16 @@ for (const width of [390, 1440]) {
     });
     const response =
       "A completed reply remains in Stream.\n\nKeep this exact line.\n\nAnother useful detail.";
+    const finalResponse = "Finished the requested work.\n\nThe final evidence is ready.";
+    const crossBlockExcerpt = "Keep this exact line.\n\nAnother useful detail.";
+    const entireResponse = `${response}\n\n${finalResponse}`;
     const session = await seedMockAgentWorkspace({
       repoPrefix: "chat-stream-pins-",
       title: "Chat Stream pins",
       featureValues: {
-        mockStreamingAssistantResponse: response,
-        mockStreamingAssistantIntervalMs: 75,
+        mockAssistantMessages: [response, finalResponse],
+        mockStreamingAssistantIntervalMs: 5,
+        mockAssistantMessagesWaitForContinue: true,
       },
     });
     try {
@@ -70,6 +76,24 @@ for (const width of [390, 1440]) {
           .getByTestId("assistant-message")
           .filter({ hasText: "A completed reply remains in Stream." }),
       ).toBeVisible();
+      // A message saved before the turn finishes is an explicit editable snapshot.
+      await page
+        .getByTestId("assistant-message")
+        .filter({ hasText: "A completed reply remains in Stream." })
+        .click({ button: "right" });
+      await page.getByText("Save message to Stream", { exact: true }).click();
+      const streamingEditor = page.getByTestId("message-pin-excerpt-body");
+      await expect(streamingEditor.getByTestId("message-pin-streaming-hint")).toBeVisible();
+      await expect(streamingEditor.getByTestId("message-pin-excerpt-input")).toHaveValue(
+        /^A completed reply remains in Stream\./,
+      );
+      expect(
+        (await session.client.listGlobalStream({ agentId: session.agentId, filter: "pinned" }))
+          .rows,
+      ).toHaveLength(0);
+      await streamingEditor.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(streamingEditor).toHaveCount(0);
+      await writeFile(join(session.cwd, ".paseo-mock-stream-continue"), "continue");
       await session.client.waitForFinish(session.agentId, 45_000);
       await page.getByTestId("agent-view-artifacts").click();
       await expect(
@@ -90,7 +114,7 @@ for (const width of [390, 1440]) {
       });
       expect(
         fullPins.rows.map((row) => (row.item.kind === "entry" ? row.item.entry.text : "")),
-      ).toEqual([response]);
+      ).toEqual([entireResponse]);
 
       await pin.last().click();
       await page.getByText("Save excerpt…", { exact: true }).click();
@@ -132,7 +156,34 @@ for (const width of [390, 1440]) {
         messagePins.rows.filter(
           (row) => row.item.kind === "entry" && row.item.entry.text === response,
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
+      expect(
+        messagePins.rows.filter(
+          (row) => row.item.kind === "entry" && row.item.entry.text === entireResponse,
+        ),
+      ).toHaveLength(1);
+      // The visible footer offers the final message separately from the whole turn.
+      await pin.last().click();
+      await page.screenshot({
+        path: testInfo.outputPath(`save-scopes-${width}.png`),
+        fullPage: true,
+      });
+      await page.getByText("Save final message to Stream", { exact: true }).click();
+      await expect(page.getByText("Save final message to Stream", { exact: true })).toHaveCount(0);
+      const assistantPins = await session.client.listGlobalStream({
+        agentId: session.agentId,
+        filter: "pinned",
+      });
+      const finalPin = assistantPins.rows.find(
+        (row) => row.item.kind === "entry" && row.item.entry.text === finalResponse,
+      );
+      if (!finalPin || finalPin.item.kind !== "entry" || finalPin.item.entry.kind !== "pin")
+        throw new Error("Missing final-message pin");
+      expect(finalPin.item.entry.text).toBe(finalResponse);
+      expect(finalPin.item.entry.sourceId).toMatch(/^msg:/);
+      expect(
+        assistantPins.rows.map((row) => (row.item.kind === "entry" ? row.item.entry.text : "")),
+      ).not.toContain("Return a completed reply for pinning.");
 
       const selectedItem = page
         .getByTestId("assistant-message")
@@ -162,30 +213,42 @@ for (const width of [390, 1440]) {
             (await session.client.listGlobalStream({ agentId: session.agentId, filter: "pinned" }))
               .rows.length,
         )
-        .toBe(4);
+        .toBe(5);
       await expect(page.getByText("Save selected text to Stream", { exact: true })).toHaveCount(0);
       // Select again after the acknowledged save has closed its menu.
-      const nextSelectionPoint = await selectedItem.evaluate((element) => {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        let node: Node | null;
-        while ((node = walker.nextNode())) {
-          const index = node.textContent?.indexOf("exact") ?? -1;
-          if (index < 0) continue;
-          const range = document.createRange();
-          range.setStart(node, index);
-          range.setEnd(node, index + 5);
-          window.getSelection()?.removeAllRanges();
-          window.getSelection()?.addRange(range);
-          const rect = range.getBoundingClientRect();
-          return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-        }
-        throw new Error("Expected selectable excerpt");
+      const nextSelectionPoint = await selectedItem.evaluate((startElement) => {
+        const endElement = Array.from(
+          document.querySelectorAll('[data-testid="assistant-message"]'),
+        ).find((element) => element.textContent?.includes("Another useful detail."));
+        if (!endElement) throw new Error("Missing end paragraph");
+        const findText = (element: Element, text: string) => {
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          let node: Node | null;
+          while ((node = walker.nextNode())) if (node.textContent?.includes(text)) return node;
+          throw new Error("Missing selectable text");
+        };
+        const start = findText(startElement, "Keep this exact line.");
+        const end = findText(endElement, "Another useful detail.");
+        const range = document.createRange();
+        range.setStart(start, start.textContent!.indexOf("Keep this exact line."));
+        range.setEnd(
+          end,
+          end.textContent!.indexOf("Another useful detail.") + "Another useful detail.".length,
+        );
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        const endRange = document.createRange();
+        endRange.selectNodeContents(end);
+        const rect = endRange.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
       });
       await page.mouse.click(nextSelectionPoint.x, nextSelectionPoint.y, { button: "right" });
       // Opening the context menu snapshots the selection before the editor steals focus.
       await page.getByText("Save excerpt…", { exact: true }).click();
       const selectedExcerpt = page.getByTestId("message-pin-excerpt-body");
-      await expect(selectedExcerpt.getByTestId("message-pin-excerpt-input")).toHaveValue("exact");
+      await expect(selectedExcerpt.getByTestId("message-pin-excerpt-input")).toHaveValue(
+        crossBlockExcerpt,
+      );
       await page.evaluate(() => window.getSelection()?.removeAllRanges());
       await selectedExcerpt.getByRole("button", { name: "Save to Stream", exact: true }).click();
       await expect(selectedExcerpt).toHaveCount(0);
@@ -220,7 +283,7 @@ for (const width of [390, 1440]) {
             (await session.client.listGlobalStream({ agentId: session.agentId, filter: "pinned" }))
               .rows.length,
         )
-        .toBe(6);
+        .toBe(7);
       await expect(page.getByText("Save message to Stream", { exact: true })).toHaveCount(0);
 
       // The default Activity view includes completed outcomes and newly saved pins.
@@ -238,10 +301,13 @@ for (const width of [390, 1440]) {
       if (!selectedRow || selectedRow.item.kind !== "entry")
         throw new Error("Missing saved excerpt");
       const selectedCard = feed.getByTestId(`companion-entry-${selectedRow.item.entry.id}`);
-      await expect(selectedCard.getByTestId("companion-entry-quote")).toHaveText("exact");
+      expect(selectedRow.item.entry.text).toBe(crossBlockExcerpt);
+      await expect(selectedCard.getByTestId("companion-entry-quote")).toHaveText(crossBlockExcerpt);
       await selectedCard.getByRole("button", { name: "Read", exact: true }).click();
-      await expect(selectedCard.getByText("exact", { exact: true })).toBeVisible();
-      await expect(selectedCard).not.toContainText("Another useful detail.");
+      await expect(selectedCard.getByText("Keep this exact line.", { exact: true })).toBeVisible();
+      await expect(selectedCard.getByText("Another useful detail.", { exact: true })).toBeVisible();
+      await expect(selectedCard).not.toContainText("A completed reply remains in Stream.");
+      await expect(selectedCard).not.toContainText(finalResponse);
       await expect(selectedCard).not.toContainText("Return a completed reply for pinning.");
       await feed.getByRole("button", { name: "Tasks", exact: true }).click();
       await expect(feed.getByText("No items match this view.", { exact: true })).toBeVisible();

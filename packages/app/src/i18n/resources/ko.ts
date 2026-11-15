@@ -652,12 +652,14 @@ export const ko: TranslationResources = {
       possibleAnswerLabel: "답변 후보:",
       unpin: "고정 해제",
       pinToStream: "스트림에 고정",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
+      pinSelection: "선택한 텍스트를 스트림에 저장",
+      pinMessage: "메시지를 스트림에 저장",
       pinResponse: "전체 응답을 스트림에 저장",
-      pinExcerpt: "Save excerpt…",
+      pinExcerpt: "발췌 저장…",
+      pinFinalMessage: "최종 메시지를 스트림에 저장",
+      pinStreamingHint: "응답이 아직 도착 중입니다. 저장하기 전에 현재 내용을 검토하세요.",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "아래 텍스트만 저장됩니다. 원하는 메시지나 구절만 남기도록 편집하세요. 원본 대화 링크는 별도로 제공됩니다. 최대 4,000자입니다.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

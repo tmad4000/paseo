@@ -659,12 +659,15 @@ export const fr: TranslationResources = {
       possibleAnswerLabel: "Réponse possible :",
       unpin: "Désépingler",
       pinToStream: "Épingler dans le flux",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
-      pinResponse: "Enregistrer toute la réponse dans Stream",
-      pinExcerpt: "Save excerpt…",
+      pinSelection: "Enregistrer le texte sélectionné dans le flux",
+      pinMessage: "Enregistrer le message dans le flux",
+      pinResponse: "Enregistrer toute la réponse dans le flux",
+      pinExcerpt: "Enregistrer un extrait…",
+      pinFinalMessage: "Enregistrer le message final dans le flux",
+      pinStreamingHint:
+        "La réponse est encore en cours. Relisez cet instantané avant de l’enregistrer.",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "Seul le texte ci-dessous est enregistré. Modifiez-le pour garder le message ou le passage souhaité. Le lien vers la conversation source est séparé. Limite : 4 000 caractères.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

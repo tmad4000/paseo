@@ -1,4 +1,8 @@
-import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
+import { getStreamItemMessageId } from "./presentation";
+import type {
+  MessagePinHandler,
+  MessageSaveResolver,
+} from "@/companion-stream/message-pin-operations";
 import React, { memo, useCallback, useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -56,6 +60,7 @@ export const TurnFooter = memo(function TurnFooter({
   onForkAssistantTurn,
   onForkInFlightTurn,
   onPin,
+  resolveSaveContent,
 }: {
   isRunning: boolean;
   inFlightTurnStartedAt: Date | null;
@@ -65,6 +70,7 @@ export const TurnFooter = memo(function TurnFooter({
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onForkInFlightTurn?: InFlightTurnForkHandler;
   onPin?: MessagePinHandler;
+  resolveSaveContent?: MessageSaveResolver;
 }) {
   if (isRunning) {
     return (
@@ -88,6 +94,7 @@ export const TurnFooter = memo(function TurnFooter({
       supportsTimelineCursor={supportsTimelineCursor}
       onForkAssistantTurn={onForkAssistantTurn}
       onPin={onPin}
+      resolveSaveContent={resolveSaveContent}
     />
   );
 });
@@ -100,6 +107,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   supportsTimelineCursor,
   onForkAssistantTurn,
   onPin,
+  resolveSaveContent,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
@@ -108,6 +116,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onPin?: MessagePinHandler;
+  resolveSaveContent?: MessageSaveResolver;
 }) {
   return (
     <TurnFooterRow>
@@ -119,6 +128,7 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
         supportsTimelineCursor={supportsTimelineCursor}
         onForkAssistantTurn={onForkAssistantTurn}
         onPin={onPin}
+        resolveSaveContent={resolveSaveContent}
       />
     </TurnFooterRow>
   );
@@ -168,6 +178,22 @@ function RunningTurnFooter({
   );
 }
 
+function getFinalMessageSourceId(
+  strategy: TurnContentStrategy,
+  items: StreamItem[],
+  startIndex: number,
+): string | undefined {
+  let index = startIndex;
+  let item = items[index];
+  while (item) {
+    if (item.kind === "assistant_message") return `msg:${getStreamItemMessageId(item)}`;
+    if (item.kind === "user_message") return undefined;
+    index = strategy.getNeighborIndex(index, "above");
+    item = items[index];
+  }
+  return undefined;
+}
+
 function CompletedTurnFooter({
   strategy,
   items,
@@ -176,6 +202,7 @@ function CompletedTurnFooter({
   supportsTimelineCursor,
   onForkAssistantTurn,
   onPin,
+  resolveSaveContent,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
@@ -184,6 +211,7 @@ function CompletedTurnFooter({
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onPin?: MessagePinHandler;
+  resolveSaveContent?: MessageSaveResolver;
 }) {
   const getContent = useCallback(
     () =>
@@ -194,6 +222,12 @@ function CompletedTurnFooter({
       }),
     [strategy, items, startIndex],
   );
+  const finalSourceId = getFinalMessageSourceId(strategy, items, startIndex);
+  const getFinalMessage = useCallback(() => {
+    const content = finalSourceId && resolveSaveContent?.(finalSourceId);
+    if (!content) throw new Error("Final message is unavailable");
+    return { ...content, sourceId: finalSourceId };
+  }, [finalSourceId, resolveSaveContent]);
   const boundary = resolveAssistantTurnForkBoundary({
     items,
     startIndex,
@@ -218,6 +252,7 @@ function CompletedTurnFooter({
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}
         onPin={onPin}
+        getFinalMessage={finalSourceId && resolveSaveContent ? getFinalMessage : undefined}
       >
         {onForkAssistantTurn ? (
           <ThreadTurnControls boundary={boundary} onStartThread={handleStartThread} />

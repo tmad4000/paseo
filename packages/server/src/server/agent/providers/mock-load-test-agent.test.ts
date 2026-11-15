@@ -30,6 +30,28 @@ describe("MockLoadTestAgentClient", () => {
     vi.useRealTimers();
   });
 
+  test("streams distinct assistant messages within one synthetic turn", async () => {
+    const client = new MockLoadTestAgentClient();
+    const messages = ["Progress.\n\nSecond paragraph.", "Final result.\n\nEvidence."];
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      featureValues: { mockAssistantMessages: messages, mockStreamingAssistantIntervalMs: 1 },
+    });
+    const byId = new Map<string, string>();
+    const turnIds = new Set<string>();
+    session.subscribe((event) => {
+      if (event.type !== "timeline" || event.item.type !== "assistant_message") return;
+      const id = event.item.messageId!;
+      byId.set(id, (byId.get(id) ?? "") + event.item.text);
+      turnIds.add(event.turnId!);
+    });
+    await session.run("Produce progress and a final result.");
+    expect([...byId.values()]).toEqual(messages);
+    expect(turnIds.size).toBe(1);
+    expect(byId.size).toBe(2);
+  });
+
   test("default model is a five minute foreground stream with token-rate intervals", async () => {
     const client = new MockLoadTestAgentClient();
 

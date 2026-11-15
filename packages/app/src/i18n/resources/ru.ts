@@ -654,12 +654,14 @@ export const ru: TranslationResources = {
       possibleAnswerLabel: "Возможный ответ:",
       unpin: "Открепить",
       pinToStream: "Закрепить в потоке",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
+      pinSelection: "Сохранить выделенный текст в поток",
+      pinMessage: "Сохранить сообщение в поток",
       pinResponse: "Сохранить весь ответ в поток",
-      pinExcerpt: "Save excerpt…",
+      pinExcerpt: "Сохранить отрывок…",
+      pinFinalMessage: "Сохранить итоговое сообщение в поток",
+      pinStreamingHint: "Ответ ещё поступает. Проверьте этот снимок перед сохранением.",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "Сохраняется только текст ниже. Оставьте нужное сообщение или отрывок. Ссылка на исходный разговор добавляется отдельно. Лимит: 4000 символов.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

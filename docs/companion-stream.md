@@ -20,12 +20,16 @@ archive. Paired hosts are combined on the client; no additional cloud copy is ma
 
 Save a user message using its save menu. The assistant footer's **Save entire response to
 Stream** includes the assistant progress messages and final text grouped above that footer.
+**Save final message to Stream** saves just the last source message, with its own source link.
 Right-click any paragraph of an assistant message (long-press on native) to save that
 complete source message, including its other paragraphs, without neighboring messages.
-A text selection inside that item adds **Save selected text to Stream** on web and desktop.
+A text selection inside that message, including across its paragraphs, adds **Save selected text to Stream** on web and desktop.
 **Save excerpt…** opens an editor with the selected text, or the action's full message/response
 when there is no selection. Only the editor text is saved, with any explicitly added tags;
-source navigation metadata is separate and does not expand the note body. Messages longer
+source navigation metadata is separate and does not expand the note body. While a reply is
+still arriving, Save message opens a labeled snapshot in this editor for review. A failed
+whole-message save retries that same snapshot until it succeeds or its menu is dismissed.
+Messages longer
 than 4,000 characters open the excerpt editor rather than silently truncating. Pins appear
 in Activity and Saved, including global Stream. Saves wait for durable acknowledgement,
 show progress and errors, and retain an unsaved excerpt and its retry identity after failure.

@@ -648,12 +648,14 @@ export const ar: TranslationResources = {
       possibleAnswerLabel: "إجابة محتملة:",
       unpin: "إلغاء التثبيت",
       pinToStream: "تثبيت في التدفق",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
+      pinSelection: "حفظ النص المحدد في التدفق",
+      pinMessage: "حفظ الرسالة في التدفق",
       pinResponse: "حفظ الرد بالكامل في التدفق",
-      pinExcerpt: "Save excerpt…",
+      pinExcerpt: "حفظ مقتطف…",
+      pinFinalMessage: "حفظ الرسالة النهائية في التدفق",
+      pinStreamingHint: "لا يزال الرد قيد الوصول. راجع هذه اللقطة قبل الحفظ.",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "يُحفظ النص أدناه فقط. حرّره للاحتفاظ بالرسالة أو المقطع المطلوب. رابط المحادثة المصدر منفصل. الحد الأقصى: ٤٬٠٠٠ حرف.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

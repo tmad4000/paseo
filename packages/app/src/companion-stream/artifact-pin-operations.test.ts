@@ -1,45 +1,36 @@
-import type { StreamItem } from "@/types/stream";
-import { createMessageSaveContentIndex } from "./message-pin-operations";
+import { MessageSaveAttempt } from "./message-pin-operations";
 import { describe, expect, it } from "vitest";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { MessagePinOperations, messagePinErrorMessage } from "./message-pin-operations";
 
-describe("logical message save scope", () => {
-  it.each(["live", "history"])(
-    "keeps all paragraphs of one message and excludes neighboring messages in %s",
-    async (location) => {
-      const progress = {
-        kind: "assistant_message" as const,
-        id: "progress",
-        turnId: "turn-1",
-        timestamp: new Date(0),
-        text: "Dispatching the work.\n\nThe brief covers two questions.",
-      };
-      const final = { ...progress, id: "final", text: "Finished.\n\nReview the evidence." };
-      const other = { ...progress, id: "other", turnId: "turn-0", text: "An earlier turn." };
-      const tail: StreamItem[] = location === "history" ? [other, progress, final] : [other];
-      const head: StreamItem[] = location === "live" ? [progress, final] : [];
-      const content = createMessageSaveContentIndex(tail, head);
-      const saved: unknown[] = [];
-      const write = async (input: unknown) => {
-        saved.push(input);
-      };
-      await new MessagePinOperations().save(
-        "host",
-        "agent",
-        content.get("progress")!,
-        "msg:progress",
-        write,
-      );
-      expect(saved).toEqual([
-        expect.objectContaining({
-          text: progress.text,
-          sourceId: "msg:progress",
-          action: "add_pin",
-        }),
-      ]);
-    },
-  );
+describe("whole-message retry", () => {
+  it("keeps one durable snapshot after a lost acknowledgement even if source text changes", async () => {
+    const attempt = new MessageSaveAttempt();
+    const operations = new MessagePinOperations();
+    const stored = new Map<string, string>();
+    const ids: string[] = [];
+    let fail = true;
+    const write = async (input: { entryId: string; text: string }) => {
+      stored.set(input.entryId, input.text);
+      ids.push(input.entryId);
+      if (fail) {
+        fail = false;
+        throw new Error("Acknowledgement lost");
+      }
+    };
+    let source = { text: "Original completed message.\n\nSecond paragraph.", streaming: false };
+    const first = attempt.resolve(() => source);
+    await expect(operations.save("host", "agent", first.text, "msg:reply", write)).rejects.toThrow(
+      "Acknowledgement lost",
+    );
+    source = { text: "Canonical replacement after the first write.", streaming: false };
+    const retry = attempt.resolve(() => source);
+    await operations.save("host", "agent", retry.text, "msg:reply", write);
+    expect(ids[0]).toBe(ids[1]);
+    expect([...stored.values()]).toEqual(["Original completed message.\n\nSecond paragraph."]);
+    attempt.clear();
+    expect(attempt.resolve(() => source).text).toBe(source.text);
+  });
 });
 
 describe("message pin operations", () => {

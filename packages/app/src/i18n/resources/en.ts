@@ -650,6 +650,8 @@ export const en = {
       pinMessage: "Save message to Stream",
       pinResponse: "Save entire response to Stream",
       pinExcerpt: "Save excerpt…",
+      pinFinalMessage: "Save final message to Stream",
+      pinStreamingHint: "The reply is still arriving. Review this snapshot before saving.",
       pinExcerptHint:
         "Only the text below is saved. Edit it to keep the message or passage you want. The source conversation is linked separately. Limit: 4,000 characters.",
       pinSaved: "Saved to Stream",

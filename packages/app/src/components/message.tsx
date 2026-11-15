@@ -1,6 +1,9 @@
 import { MessagePinControl } from "@/companion-stream/message-pin-control";
 import { useMessageReply } from "@/components/reply/composer-quote";
-import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
+import type {
+  MessagePinHandler,
+  MessageSaveContent,
+} from "@/companion-stream/message-pin-operations";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TaskListRow } from "@/components/task-list-row";
@@ -739,6 +742,7 @@ export const UserMessage = memo(function UserMessage({
 
 interface AssistantTurnFooterProps {
   getContent: () => string;
+  getFinalMessage?: () => MessageSaveContent;
   startedAt?: Date;
   completedAt?: Date;
   durationMs?: number | null;
@@ -789,6 +793,7 @@ const TIMESTAMP_REVEAL_MS = 3000;
  */
 export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   getContent,
+  getFinalMessage,
   startedAt,
   completedAt,
   durationMs,
@@ -851,6 +856,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
       {onPin ? (
         <MessagePinControl
           scope="response"
+          getFinalMessage={getFinalMessage}
           getContent={getContent}
           onPin={onPin}
           containerStyle={assistantTurnFooterStylesheet.copyButton}
