@@ -7,7 +7,10 @@ helper at `/opt/google/chrome/chrome-sandbox`, set
 `CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox` for the test process. CI copies the helper shipped with its lockfile-pinned Playwright Chromium into a private job directory, prepares that copy with root
 ownership and mode4755, then removes it in an always-run cleanup step. It never changes `/opt`. This needs no host setting change or new installation; each test still
 owns a temporary browser profile. If the helper is unavailable, record the sandbox launch gate.
-Electron development and test launchers also retain process sandboxing; pass the same helper environment to them.
+Electron development and test launchers also retain process sandboxing. Chromium prefers an adjacent
+`chrome-sandbox` over the environment variable. CI temporarily links its isolated Electron helper
+to the prepared copy and restores the original during cleanup. On a shared host, keep any equivalent
+setup inside the task's own dependency directory; preserve the original and restore it afterward.
 See the [Chromium environment guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
 
 ## Philosophy
