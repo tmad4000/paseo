@@ -96,8 +96,13 @@ export const test = base.extend<{
         `
 import { appendFile, readFile, rm } from "node:fs/promises";
 export default function contribute(server) {
-  return server.before("agent.session_open", async ({ request }) => {
-    if (request.reason !== "create") return request;
+  // Keep background metadata sessions from consuming the foreground failure command.
+  const stopMarking = server.before("agent.create", ({ request }) => ({
+    ...request,
+    env: { ...request.env, PASEO_E2E_STARTUP_TARGET: "1" },
+  }));
+  const stopGating = server.before("agent.session_open", async ({ request }) => {
+    if (request.reason !== "create" || request.env.PASEO_E2E_STARTUP_TARGET !== "1") return request;
     const gate = ${JSON.stringify(gate)};
     const record = (phase, command) => appendFile(${JSON.stringify(events)}, JSON.stringify({
       at: Date.now(), phase, command, agentId: request.agentId,
@@ -117,6 +122,7 @@ export default function contribute(server) {
     }
     return request;
   });
+  return () => { stopGating(); stopMarking(); };
 }
 `,
       );

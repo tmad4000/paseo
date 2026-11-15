@@ -206,7 +206,8 @@ export async function scriptAgentUsage(page: Page): Promise<AgentUsageScript> {
     };
     const observe = () => {
       const dialog = document.querySelector('[role="dialog"][aria-label="Context window"]');
-      const trigger = document.querySelector('[role="button"][aria-label^="Context window"]');
+      const meter = document.querySelector('[role="img"][aria-label^="Context window"]');
+      const trigger = meter?.closest('[role="button"]') ?? meter;
       if (dialog && !identities.has(dialog)) identities.set(dialog, ++nextId);
       const surface = {
         pointer,
