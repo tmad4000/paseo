@@ -326,7 +326,7 @@ async function runScenario(modeId: "auto" | "auto-review") {
       mockResponsesRequests: mockServer.requestBodies,
     };
   } finally {
-    collector.unsubscribe();
+    await collector.unsubscribe();
     await client.close();
     await daemon.close();
     await mockServer.close();

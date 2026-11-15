@@ -144,9 +144,12 @@ export class OwnedSubscriptions {
         if (id) this.routes.delete(id);
         reject(new Error("Subscription released"));
         teardown = (async () => {
-          await pending;
-          await releaseId();
-          this.registrations.delete(registration);
+          try {
+            await pending;
+            await releaseId();
+          } finally {
+            this.registrations.delete(registration);
+          }
         })();
         return teardown;
       },
@@ -218,7 +221,11 @@ export class OwnedSubscriptions {
   }
 
   async close(): Promise<void> {
-    await Promise.all([...this.registrations].map((registration) => registration.release()));
+    const releases = [...this.registrations].map((registration) => registration.release());
+    // A disconnected client cannot receive an outstanding release acknowledgement.
+    // Its original release caller still observes the failure; local disposal must finish.
+    if (this.connected) await Promise.all(releases);
+    else await Promise.allSettled(releases);
   }
 }
 

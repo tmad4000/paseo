@@ -35,7 +35,7 @@ export default defineConfig({
           include: ["src/**/*.browser.{test,spec}.{ts,tsx}"],
           browser: {
             enabled: true,
-            provider: playwright(),
+            provider: playwright({ launchOptions: { chromiumSandbox: true } }),
             headless: true,
             connectTimeout: 180_000,
             instances: [{ browser: "chromium" }],

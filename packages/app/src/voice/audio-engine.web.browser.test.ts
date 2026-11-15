@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { createAudioEngine } from "./audio-engine.web";
-import type { AudioEngine, AudioPlaybackSource } from "./audio-engine-types";
+import { createAudioEngine } from "../audio/audio-engine.web";
+import type { AudioEngine, AudioPlaybackSource } from "../audio/audio-engine-types";
 import { playbackMimeType } from "./audio-format";
 
 // Real Chromium Web Audio: the GPT Realtime silence came from decodeAudioData rejecting raw PCM

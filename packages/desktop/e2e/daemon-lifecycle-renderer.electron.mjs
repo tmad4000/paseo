@@ -60,7 +60,7 @@ export async function verifyAttachedDaemonControls({ repo, root, env, home, port
     // /status means Metro is listening; the app bundle may still need a cold compile.
     await warmMetro(metroPort);
     desktop = await electron.launch({
-      args: [path.join(repo, "packages/desktop/dist/main.js"), "--no-sandbox"],
+      args: [path.join(repo, "packages/desktop/dist/main.js")],
       env: {
         ...env,
         EXPO_DEV_URL: `http://127.0.0.1:${metroPort}`,

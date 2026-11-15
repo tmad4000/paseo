@@ -76,7 +76,7 @@ vi.mock("react-native-reanimated", () => ({
 }));
 // The live elapsed label is covered with the hook; here it reads as a fixed four minutes.
 vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
-vi.mock("@/hooks/use-compact-time-ago", () => ({
+vi.mock("@/hooks/use-time-ago", () => ({
   useCompactTimeAgo: (date: Date | null) => (date ? "4m" : ""),
 }));
 const layout = vi.hoisted(() => ({ compact: false }));

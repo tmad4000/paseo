@@ -110,7 +110,7 @@ test("OpenCode remains idle while an OMO child works and completes the autonomou
       { cause: error },
     );
   } finally {
-    collector.unsubscribe();
+    await collector.unsubscribe();
     await runtime.close(passed);
   }
 }, 2_100_000);

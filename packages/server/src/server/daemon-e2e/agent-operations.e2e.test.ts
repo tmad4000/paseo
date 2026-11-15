@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { createDaemonTestContext, type DaemonTestContext } from "../test-utils/index.js";
+import { createMessageCollector, type MessageCollector } from "../test-utils/message-collector.js";
 import type { AgentSnapshotPayload, SessionOutboundMessage } from "../messages.js";
 
 function tmpCwd(): string {
@@ -15,19 +16,21 @@ const CODEX_TEST_THINKING_OPTION_ID = "low";
 
 let ctx: DaemonTestContext;
 let messages: SessionOutboundMessage[] = [];
-let unsubscribe: (() => void) | null = null;
+let collector: MessageCollector;
 
 beforeEach(async () => {
   ctx = await createDaemonTestContext();
-  messages = [];
-  unsubscribe = ctx.client.subscribeRawMessages((message) => {
-    messages.push(message);
-  });
+  collector = createMessageCollector(ctx.client);
+  await collector.observeAgents();
+  messages = collector.messages;
 });
 
 afterEach(async () => {
-  unsubscribe?.();
-  await ctx.cleanup();
+  try {
+    await collector.unsubscribe();
+  } finally {
+    await ctx.cleanup();
+  }
 }, 60000);
 
 describe("timestamp behavior", () => {
@@ -213,20 +216,23 @@ describe("setAgentMode", () => {
       thinkingOptionId: CODEX_TEST_THINKING_OPTION_ID,
       cwd,
       title: "Mode Switch Test Agent",
+      modeId: "auto",
     });
 
     expect(agent.id).toBeTruthy();
     expect(agent.status).toBe("idle");
 
-    // Verify initial mode is "auto" (the default)
-    expect(agent.currentModeId).toBe("auto");
+    // Creation admission precedes the provider's runtime mode discovery.
+    await expect
+      .poll(async () => (await ctx.client.fetchAgent({ agentId: agent.id }))?.agent.currentModeId)
+      .toBe("auto");
 
     // Clear message queue before mode switch
     messages.length = 0;
     const startPosition = messages.length;
 
-    // Switch to "read-only" mode
-    await ctx.client.setAgentMode(agent.id, "read-only");
+    // Switch to "always-ask" mode
+    await ctx.client.setAgentMode(agent.id, "always-ask");
 
     // Wait for agent_update upsert reflecting the new mode
     const stateAfterModeSwitch = await new Promise<AgentSnapshotPayload>((resolve, reject) => {
@@ -242,7 +248,7 @@ describe("setAgentMode", () => {
             msg.type === "agent_update" &&
             msg.payload.kind === "upsert" &&
             msg.payload.agent.id === agent.id &&
-            msg.payload.agent.currentModeId === "read-only"
+            msg.payload.agent.currentModeId === "always-ask"
           ) {
             clearTimeout(timeout);
             clearInterval(interval);
@@ -255,20 +261,20 @@ describe("setAgentMode", () => {
       const interval = setInterval(checkForModeChange, 50);
     });
 
-    // Verify mode changed to "read-only"
-    expect(stateAfterModeSwitch.currentModeId).toBe("read-only");
+    // Verify mode changed to "always-ask"
+    expect(stateAfterModeSwitch.currentModeId).toBe("always-ask");
 
-    // Now verify the mode persists: send a message and check the mode is still "read-only"
+    // Now verify the mode persists: send a message and check the mode is still "always-ask"
     messages.length = 0;
     await ctx.client.sendMessage(agent.id, "Say 'hello' and nothing else");
 
     const finalState = await ctx.client.waitForFinish(agent.id, 120000);
 
-    // Mode should still be "read-only" after the message
-    expect(finalState.final?.currentModeId).toBe("read-only");
+    // Mode should still be "always-ask" after the message
+    expect(finalState.final?.currentModeId).toBe("always-ask");
 
     // Also verify runtimeInfo has the updated modeId
-    expect(finalState.final?.runtimeInfo?.modeId).toBe("read-only");
+    expect(finalState.final?.runtimeInfo?.modeId).toBe("always-ask");
 
     // Switch to another mode: "full-access"
     messages.length = 0;

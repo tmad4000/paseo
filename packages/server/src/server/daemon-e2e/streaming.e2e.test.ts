@@ -90,7 +90,9 @@ describe("daemon E2E - streaming", () => {
         5_000,
       );
 
-      await ctx.client.sendMessage(agent.id, "Say 'state saved' and nothing else");
+      await ctx.client.sendMessage(agent.id, "Say 'state saved' and nothing else", {
+        activeTurnBehavior: "interrupt",
+      });
       const finalState = await ctx.client.waitForFinish(agent.id, 5_000);
       expect(finalState.status).toBe("idle");
 

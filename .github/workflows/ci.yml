@@ -117,6 +117,9 @@ jobs:
       - name: Build server stack
         run: npm run build:server
 
+      - name: Verify built-in plugins from built output
+        run: node --test scripts/builtin-plugins-dist.test.mjs
+
       - name: Typecheck all packages
         run: npm run typecheck
 
@@ -125,11 +128,21 @@ jobs:
           npx tsgo --ignoreConfig --noEmit --module NodeNext --moduleResolution NodeNext --target es2022 --types node --esModuleInterop --skipLibCheck scripts/reconcile-queue-alias.mts scripts/reconcile-queue-alias.test.mts
           node --import tsx --test scripts/reconcile-queue-alias.test.mts
 
+      - name: Run website tests
+        run: npx vitest run packages/website/src --bail=1
+
       - name: Install website test browsers
         run: npx playwright install --with-deps chromium webkit
 
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Verify website mockups
         run: npm run test:e2e --workspace=@getpaseo/website
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
       - name: Verify public package contents
         run: |
@@ -161,7 +174,7 @@ jobs:
 
       - name: Install agent CLIs for provider tests
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
-        run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code opencode-ai
+        run: node scripts/prepare-test-agent-clis.mjs
 
       - name: Build server dependencies
         run: npm run build:server-deps
@@ -173,6 +186,46 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Run full daemon E2E suite (Linux)
+        if: ${{ runner.os == 'Linux' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false') }}
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          fixture_root="$RUNNER_TEMP/paseo-full-e2e"
+          mkdir -p "$fixture_root"/{home,tmp,models,config,cache,data,state}
+          git rev-parse HEAD HEAD^{tree} > "$fixture_root/source.txt"
+          set +e
+          npm run test:e2e --workspace=@getpaseo/server -- --no-file-parallelism --testTimeout=30000 --hookTimeout=60000 --reporter=default --reporter=json --outputFile.json="$fixture_root/report.json" > "$fixture_root/output.log" 2>&1
+          result=$?
+          tail -n 100 "$fixture_root/output.log"
+          exit "$result"
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
+          HOME: ${{ runner.temp }}/paseo-full-e2e/home
+          PASEO_HOME: ${{ runner.temp }}/paseo-full-e2e/home
+          TMPDIR: ${{ runner.temp }}/paseo-full-e2e/tmp
+          XDG_CONFIG_HOME: ${{ runner.temp }}/paseo-full-e2e/config
+          XDG_CACHE_HOME: ${{ runner.temp }}/paseo-full-e2e/cache
+          XDG_DATA_HOME: ${{ runner.temp }}/paseo-full-e2e/data
+          XDG_STATE_HOME: ${{ runner.temp }}/paseo-full-e2e/state
+          PASEO_LOCAL_MODELS_DIR: ${{ runner.temp }}/paseo-full-e2e/models
+          PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
+          PASEO_DICTATION_ENABLED: "0"
+          PASEO_VOICE_MODE_ENABLED: "0"
+
+      - name: Upload full daemon E2E evidence
+        if: ${{ !cancelled() && runner.os == 'Linux' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: daemon-full-e2e
+          path: ${{ runner.temp }}/paseo-full-e2e
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Run built-in plugin tests
+        if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
+        run: npm run test --workspace=@getpaseo/builtin-plugins
 
       - name: Run Hub CLI/daemon contract
         if: ${{ needs.changes.outputs.full == 'false' && needs.changes.outputs.server == 'false' && needs.changes.outputs.hub != 'false' }}
@@ -255,11 +308,16 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: npx vitest run packages/cli/src/commands/daemon/lifecycle.e2e.test.ts --bail=1 --maxWorkers=1 -t "Windows unbound|managed two-home"
 
+      - name: Prepare Chromium sandbox
+        if: ${{ runner.os == 'Linux' }}
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Run desktop lifecycle E2E (Linux)
         if: ${{ runner.os == 'Linux' }}
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" npm run test:e2e:lifecycle --workspace=@getpaseo/desktop
         env:
           PASEO_DESKTOP_LIFECYCLE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-lifecycle
+          DEBUG: pw:browser
 
       - name: Upload desktop lifecycle screenshots
         uses: actions/upload-artifact@v4
@@ -292,6 +350,10 @@ jobs:
           path: ${{ runner.temp }}/desktop-browser-e2e
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Clean up Chromium sandbox
+        if: always() && runner.os == 'Linux'
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
   desktop-tests-windows:
     name: desktop-tests (windows-latest)
@@ -326,12 +388,19 @@ jobs:
       - name: Build app dependencies
         run: npm run build:app-deps
 
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Verify provider-limit handoff in Chromium
         timeout-minutes: 3
         run: npm run test --workspace=@getpaseo/app -- src/components/agent-limit-handoff.browser.test.tsx --bail=1
 
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
       - name: Upload handoff visual checks
         if: always()
@@ -409,7 +478,10 @@ jobs:
         run: npm run build --workspace=@getpaseo/expo-two-way-audio
 
       - name: Install agent CLIs for provider tests
-        run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code @openai/codex@0.105.0 opencode-ai
+        run: node scripts/prepare-test-agent-clis.mjs --codex
+
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e --workspace=@getpaseo/app -- --shard=${{ env.PLAYWRIGHT_SHARD }}
@@ -419,10 +491,25 @@ jobs:
           # early agent/Changes specs. Required check names remain unchanged.
           PWTEST_SHARD_WEIGHTS: "111:172:137:160"
 
+      - name: Repeat streamed usage and creation failure checks without retries
+        if: ${{ !cancelled() && env.PLAYWRIGHT_SHARD == '2/4' }}
+        timeout-minutes: 15
+        run: >-
+          npm run test:e2e --workspace=@getpaseo/app --
+          e2e/browser/context-window-meter.spec.ts
+          e2e/browser/new-workspace-codex-mode-preferences.spec.ts
+          --grep="the context window hover card shows|keeps Full Access as the global Codex mode"
+          --workers=1 --repeat-each=3 --retries=0
+          --output=test-results/acceptance-repeat
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
+
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         # Keep intentional visual evidence on success as well as failure diagnostics.
-        if: ${{ failure() || hashFiles('packages/app/test-results/*.png') != '' }}
+        if: ${{ failure() || env.PLAYWRIGHT_SHARD == '2/4' || hashFiles('packages/app/test-results/*.png') != '' }}
         with:
           name: playwright-results-${{ env.PLAYWRIGHT_ARTIFACT }}
           path: |
@@ -508,7 +595,7 @@ jobs:
         run: node scripts/npm-retry.mjs ci
 
       - name: Install agent CLIs for provider tests
-        run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code @openai/codex@0.105.0 opencode-ai
+        run: node scripts/prepare-test-agent-clis.mjs --codex
 
       # The local runner builds its dependencies and shards its own E2E files.
       - name: Run CLI E2E tests

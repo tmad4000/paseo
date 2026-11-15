@@ -18,7 +18,7 @@ import {
   isPlaybackStoppedError,
   playbackMimeType,
 } from "@/voice/audio-format";
-import type { AudioEngine, AudioPlaybackSource } from "@/voice/audio-engine-types";
+import type { AudioEngine, AudioPlaybackSource } from "@/audio/audio-engine-types";
 import {
   THINKING_TONE_NATIVE_PCM_BASE64,
   THINKING_TONE_NATIVE_PCM_DURATION_MS,
@@ -209,10 +209,8 @@ interface RuntimePlaybackState {
 }
 
 interface CueState {
-  active: boolean;
-  token: number;
+  controller: AbortController | null;
   timeout: ReturnType<typeof setTimeout> | null;
-  playing: boolean;
 }
 
 const INITIAL_SNAPSHOT: VoiceRuntimeSnapshot = {
@@ -340,10 +338,8 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     textOnly: false,
   };
   const cue: CueState = {
-    active: false,
-    token: 0,
+    controller: null,
     timeout: null,
-    playing: false,
   };
   const failures = createVoiceFailureTracker();
   const inputStatuses = new Map<string, "queued" | "sent" | "removed" | "unknown">();
@@ -423,7 +419,15 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     };
   }
 
+  let voiceOutputController = new AbortController();
+
+  function stopVoiceOutput(): void {
+    voiceOutputController.abort();
+    voiceOutputController = new AbortController();
+  }
+
   function resetPlaybackState(): void {
+    stopVoiceOutput();
     playback.generation += 1;
     playback.groups.clear();
     playback.orderedGroupIds = [];
@@ -545,7 +549,10 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
                 reject(new Error("Audio playback timed out"));
               }, PLAYBACK_TIMEOUT_MS);
             });
-            await Promise.race([deps.engine.play(nextChunk.source), timeout]);
+            await Promise.race([
+              deps.engine.play(nextChunk.source, voiceOutputController.signal),
+              timeout,
+            ]);
             notePlaybackSuccess();
           }
         } catch (error) {
@@ -556,8 +563,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           console.error(
             `[VoiceRuntime] play error chunk=${group.nextChunkToPlay} type=${nextChunk.source.type}: ${playbackError}`,
           );
-          deps.engine.stop();
-          deps.engine.clearQueue();
+          stopVoiceOutput();
           notePlaybackFailure(error, playbackError, nextChunk.source.type);
         } finally {
           clearTimeout(playbackTimeout);
@@ -620,17 +626,11 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   }
 
   function stopCue(): void {
-    const hadActive = cue.active || cue.timeout !== null || cue.playing;
-    cue.active = false;
-    cue.token += 1;
+    cue.controller?.abort();
+    cue.controller = null;
     if (cue.timeout) {
       clearTimeout(cue.timeout);
       cue.timeout = null;
-    }
-    cue.playing = false;
-    if (hadActive) {
-      deps.engine.stop();
-      deps.engine.clearQueue();
     }
   }
 
@@ -645,29 +645,26 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       stopCue();
       return;
     }
-    if (cue.active) {
+    if (cue.controller) {
       return;
     }
-    cue.active = true;
-    cue.token += 1;
-    const token = cue.token;
+    const controller = new AbortController();
+    cue.controller = controller;
 
     const playNext = () => {
-      if (!cue.active || cue.token !== token) {
+      if (controller.signal.aborted) {
         return;
       }
-      cue.playing = true;
       void deps.engine
-        .play(cueSource)
+        .play(cueSource, controller.signal)
         .catch((error) => {
-          if (cue.token !== token) {
+          if (controller.signal.aborted) {
             return;
           }
           console.warn(`[VoiceRuntime#${instanceId}] Cue playback failed:`, error);
         })
         .finally(() => {
-          cue.playing = false;
-          if (!cue.active || cue.token !== token) {
+          if (controller.signal.aborted) {
             return;
           }
           cue.timeout = setTimeout(
@@ -681,7 +678,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   }
 
   function playLocalCue(source: AudioPlaybackSource, label: string): Promise<void> {
-    return deps.engine.play(source).then(
+    return deps.engine.play(source, voiceOutputController.signal).then(
       () => undefined,
       (error) => {
         console.warn(`[VoiceRuntime#${instanceId}] ${label} cue failed:`, error);
@@ -879,8 +876,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     stopCue();
     uploader.reset();
     resetPlaybackState();
-    deps.engine.stop();
-    deps.engine.clearQueue();
+    stopVoiceOutput();
     await deps.engine.stopCapture().catch(() => undefined);
     await deps.deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
     getActiveSession()?.adapter.setAssistantAudioPlaying(false);
@@ -1039,8 +1035,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
         resetCaptureTelemetry();
         resetPlaybackState();
         stopCue();
-        deps.engine.stop();
-        deps.engine.clearQueue();
+        stopVoiceOutput();
         session.adapter.setAssistantAudioPlaying(false);
         void reportFailure("host-disconnected");
         return;
@@ -1306,8 +1301,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           uploader.reset();
           state.transportReady = false;
           resetPlaybackState();
-          deps.engine.stop();
-          deps.engine.clearQueue();
+          stopVoiceOutput();
           activeSession?.adapter.setAssistantAudioPlaying(false);
           if (activeSession) {
             await disableVoice(activeSession.adapter, voiceTransport());
@@ -1417,8 +1411,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       uploader.reset();
       if (action === "clear" || action === "retry" || action === "end_listening") {
         await deps.engine.stopCapture();
-        deps.engine.stop();
-        deps.engine.clearQueue();
+        stopVoiceOutput();
       }
       const generation = state.generation;
       try {
@@ -1498,9 +1491,11 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       resetCaptureTelemetry();
       stopCue();
       // Confirmation uses the existing cross-platform PCM player, never agent TTS.
-      void deps.engine.play(createMicrophoneCue(muted)).catch((error) => {
-        console.warn("[VoiceRuntime] Microphone confirmation failed:", error);
-      });
+      void deps.engine
+        .play(createMicrophoneCue(muted), voiceOutputController.signal)
+        .catch((error) => {
+          console.warn("[VoiceRuntime] Microphone confirmation failed:", error);
+        });
     },
 
     isVoiceModeForAgent(serverId, agentId) {
@@ -1614,12 +1609,10 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       if (isSpeaking) {
         const shouldInterruptPlayback =
           state.snapshot.phase === "playing" || playback.groups.size > 0;
-        const hadCue = cue.active || cue.timeout !== null || cue.playing;
         resetPlaybackState();
         stopCue();
-        if (shouldInterruptPlayback && !hadCue) {
-          deps.engine.stop();
-          deps.engine.clearQueue();
+        if (shouldInterruptPlayback) {
+          stopVoiceOutput();
         }
         getActiveSession()?.adapter.setAssistantAudioPlaying(false);
       }

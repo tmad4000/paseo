@@ -24,8 +24,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  collector.unsubscribe();
-  await ctx.cleanup();
+  try {
+    await collector.unsubscribe();
+  } finally {
+    await ctx.cleanup();
+  }
 }, 30000);
 
 test("waitForFinish immediately after sendMessage", async () => {
@@ -60,6 +63,7 @@ test("rapid fire messages then single wait", async () => {
     title: "Rapid Fire Test",
     modeId: "bypassPermissions",
   });
+  await collector.observeTimeline(agent.id);
 
   // Send 3 messages without waiting - tests that waitForFinish
   // finds the idle AFTER the last running state

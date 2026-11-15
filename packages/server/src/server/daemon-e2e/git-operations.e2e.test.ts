@@ -8,17 +8,17 @@ import { withTimeout } from "../../utils/promise-timeout.js";
 import { deriveWorktreeProjectHash } from "../../utils/worktree.js";
 import { isPlatform } from "../../test-utils/platform.js";
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
-import type { SessionOutboundMessage } from "../messages.js";
 
 function tmpCwd(): string {
   return mkdtempSync(path.join(tmpdir(), "daemon-e2e-"));
 }
 
 function findTimelineToolCall(
-  messages: SessionOutboundMessage[],
+  collector: MessageCollector,
   agentId: string,
   predicate: (item: AgentTimelineItem) => boolean,
 ): AgentTimelineItem | null {
+  const messages = collector.messages;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = messages[i];
     if (msg?.type !== "agent_stream") {
@@ -36,23 +36,29 @@ function findTimelineToolCall(
       return item;
     }
   }
-  return null;
+  return (
+    collector.initialTimeline
+      .get(agentId)
+      ?.map((entry) => entry.item)
+      .find(predicate) ?? null
+  );
 }
 
 async function waitForTimelineToolCall(
-  messages: SessionOutboundMessage[],
+  collector: MessageCollector,
   agentId: string,
   predicate: (item: AgentTimelineItem) => boolean,
   timeoutMs = 10000,
 ): Promise<Extract<AgentTimelineItem, { type: "tool_call" }>> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
-    const existing = findTimelineToolCall(messages, agentId, predicate);
+    const existing = findTimelineToolCall(collector, agentId, predicate);
     if (existing && existing.type === "tool_call") {
       return existing;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  const messages = collector.messages;
   const recentToolCalls: Array<{ name: string; status?: string; callId?: string }> = [];
   for (let i = messages.length - 1; i >= 0 && recentToolCalls.length < 10; i -= 1) {
     const msg = messages[i];
@@ -148,8 +154,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  collector.unsubscribe();
-  await ctx.cleanup();
+  try {
+    await collector.unsubscribe();
+  } finally {
+    await ctx.cleanup();
+  }
 }, 60000);
 
 test("returns diff for modified file in git repo", async () => {
@@ -391,6 +400,7 @@ test("runs paseo.json setup asynchronously and reports status via timeline tool_
     timeoutMs: 2500,
     label: "createAgent should not block on setup",
   });
+  await collector.observeTimeline(agent.id);
 
   expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
   expect(existsSync(path.join(agent.cwd, "setup-done.txt"))).toBe(false);
@@ -398,7 +408,7 @@ test("runs paseo.json setup asynchronously and reports status via timeline tool_
   writeFileSync(path.join(agent.cwd, "allow-setup"), "ok\n");
 
   const completed = await waitForTimelineToolCall(
-    collector.messages,
+    collector,
     agent.id,
     (item) => item.name === "paseo_worktree_setup" && item.status === "completed",
     20000,
@@ -479,6 +489,7 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
       timeoutMs: 2500,
       label: "createAgent should not block on setup",
     });
+    await collector.observeTimeline(agent.id);
 
     expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
     expect(existsSync(path.join(agent.cwd, "setup-done.txt"))).toBe(false);
@@ -488,13 +499,13 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
     writeFileSync(path.join(agent.cwd, "allow-setup"), "ok\n");
 
     await waitForTimelineToolCall(
-      collector.messages,
+      collector,
       agent.id,
       (item) => item.name === "paseo_worktree_setup" && item.status === "completed",
       20000,
     );
     const terminalsBootstrapToolCall = await waitForTimelineToolCall(
-      collector.messages,
+      collector,
       agent.id,
       (item) => item.name === "paseo_worktree_terminals" && item.status === "completed",
       30000,
@@ -617,19 +628,20 @@ test("reports failures via timeline tool_call without deleting the created workt
     timeoutMs: 2500,
     label: "createAgent should not block on failing setup",
   });
+  await collector.observeTimeline(agent.id);
 
   expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
   expect(existsSync(agent.cwd)).toBe(true);
 
   const started = await waitForTimelineToolCall(
-    collector.messages,
+    collector,
     agent.id,
     (item) => item.name === "paseo_worktree_setup" && item.status === "running",
     10000,
   );
 
   const failed = await waitForTimelineToolCall(
-    collector.messages,
+    collector,
     agent.id,
     (item) =>
       item.name === "paseo_worktree_setup" &&
@@ -695,7 +707,7 @@ test("creates agent in ~/.paseo/worktrees/{hash} when worktree is requested", as
   rmSync(cwd, { recursive: true, force: true });
 }, 60000);
 
-test("archiving a worktree shuts down its terminals but leaves the worktree on disk", async () => {
+test("archiving an unreferenced owned worktree shuts down its terminals and removes its backing directory", async () => {
   const repoRoot = tmpCwd();
 
   const { execSync } = await import("child_process");
@@ -753,6 +765,7 @@ test("archiving a worktree shuts down its terminals but leaves the worktree on d
     timeoutMs: 2500,
     label: "createAgent should not block on setup",
   });
+  await collector.observeTimeline(agent.id);
 
   await waitForCondition({
     timeoutMs: 30000,
@@ -777,11 +790,10 @@ test("archiving a worktree shuts down its terminals but leaves the worktree on d
   expect(archive.success).toBe(true);
   expect(archive.removedAgents).toContain(agent.id);
 
-  // Archiving tears down the workspace's terminals but never deletes the
-  // worktree from disk and never runs teardown commands — on-disk removal is a
-  // separate, explicit step.
-  expect(existsSync(agent.cwd)).toBe(true);
-  expect(existsSync(teardownMarkerPath)).toBe(false);
+  // The existing archive policy tears down and removes unreferenced owned backing.
+  expect(existsSync(agent.cwd)).toBe(false);
+  expect(existsSync(teardownMarkerPath)).toBe(true);
+  expect(readFileSync(teardownMarkerPath, "utf8").trim()).toBe(agent.cwd);
 
   const afterArchiveDirectories = ctx.daemon.daemon.terminalManager.listDirectories();
   expect(afterArchiveDirectories).not.toContain(agent.cwd);

@@ -93,7 +93,7 @@ async function openExplorerView(
 ): Promise<void> {
   const explorer = await ensureExplorerSidebar(page);
   const tab = explorer.getByTestId(view.tabTestId);
-  await tab.click();
+  await selectWorkspaceTab(tab);
   await expect(visibleTestId(page, view.contentTestId).first()).toBeVisible({
     timeout: view.timeout ?? 30_000,
   });
@@ -101,7 +101,7 @@ async function openExplorerView(
 
 export async function openChangesTreePanel(page: Page): Promise<void> {
   await openExplorerView(page, {
-    tabTestId: "explorer-sidebar-tab-changes_tree",
+    tabTestId: "workspace-tab-changes_tree",
     contentTestId: "changes-tree-panel",
   });
 }
@@ -121,7 +121,7 @@ export async function openChangesPanel(page: Page, timeout = 30_000): Promise<vo
 
 export async function openFilesPanel(page: Page): Promise<void> {
   await openExplorerView(page, {
-    tabTestId: "explorer-sidebar-tab-files",
+    tabTestId: "workspace-tab-files",
     contentTestId: "file-explorer-tree-scroll",
   });
 }

@@ -10,7 +10,7 @@ import type {
 } from "../workspace-registry.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 
-import { runWorkspaceMutation } from "../workspace-mutations.js";
+import { getWorkspacePreparationRevision, runWorkspaceMutation } from "../workspace-mutations.js";
 
 export const ASIDES_WORKSPACE_LABEL = "paseo:asides";
 
@@ -43,6 +43,10 @@ async function move(
   if (!stored || !agent || stored.archivedAt) throw new Error("Chat is unavailable or archived");
   const source = await deps.workspaceRegistry.get(input.expectedWorkspaceId);
   if (!source || source.archivedAt) throw new Error("Source workspace is unavailable");
+  const sourcePreparation = getWorkspacePreparationRevision(
+    deps.workspaceRegistry,
+    source.workspaceId,
+  );
   const destination = input.destination;
   let workspace = await findDestination(deps, input);
   // A retry after a lost response must reuse the acknowledged destination.
@@ -59,6 +63,10 @@ async function move(
     workspaceId: workspace.workspaceId,
     expectedWorkspaceId: input.expectedWorkspaceId,
     workspaceRegistry: deps.workspaceRegistry,
+    expectedPreparation: {
+      source: sourcePreparation,
+      destination: getWorkspacePreparationRevision(deps.workspaceRegistry, workspace.workspaceId),
+    },
   });
   if (!isRetry)
     await deps.workspaceRegistry.update(source.workspaceId, (record) => ({

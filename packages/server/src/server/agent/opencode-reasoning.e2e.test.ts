@@ -26,16 +26,6 @@ describe("OpenCode reasoning events (e2e)", () => {
       timestamp: string;
     }> = [];
 
-    // Subscribe to all events
-    ctx.client.on((event) => {
-      if (event.type === "agent_stream") {
-        allEvents.push({
-          event: event.event,
-          timestamp: event.timestamp,
-        });
-      }
-    });
-
     // Create agent with gpt-5 nano model
     const agent = await ctx.client.createAgent({
       provider: "opencode",
@@ -43,6 +33,12 @@ describe("OpenCode reasoning events (e2e)", () => {
       model: "opencode/gpt-5-nano",
       title: "reasoning-test",
     });
+
+    const timeline = ctx.client.subscribeAgentTimeline(agent.id, (message) => {
+      if (message.type === "agent_stream")
+        allEvents.push({ event: message.payload.event, timestamp: message.payload.timestamp });
+    });
+    await timeline.ready;
 
     expect(agent.id).toBeTruthy();
 
@@ -97,6 +93,7 @@ describe("OpenCode reasoning events (e2e)", () => {
     expect(allEvents.length).toBeGreaterThan(0);
 
     // Delete the agent
+    await timeline.release();
     await ctx.client.deleteAgent(agent.id);
   }, 180_000);
 });

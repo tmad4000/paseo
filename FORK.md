@@ -7,7 +7,9 @@ stock Paseo rather than replacing it.
 
 ## Branch model
 
-Every branch starts from an upstream release tag, never from another fork branch.
+Upstream contribution branches start from an upstream release tag. Fork maintenance and
+release integration branches start from canonical `tmad4000/paseo` main so they retain
+newer fork behavior and selective upstream fixes.
 
 | Branch          | Base                         | Contents                                                                                | Goes upstream? |
 | --------------- | ---------------------------- | --------------------------------------------------------------------------------------- | -------------- |
@@ -177,13 +179,30 @@ First read the feature register from both the previous fork and the candidate, t
 [preservation matrix](docs/fork-features.md#reviewing-an-upstream-update-or-reconciliation).
 Keep this step and its register when resolving documentation conflicts.
 
+Select an upstream **release tag**, verify its publication time and peeled commit, and audit
+all newly adopted commits and locked external dependencies against the authorized age cutoff.
+A release date alone does not establish dependency age. Record the original fork SHA and
+selected tag SHA before applying source; never replace the selected release with upstream main.
+
 ```bash
 git fetch upstream --tags
-git rebase --onto v<new> v<old> feat/<name>     # repeat per feature branch
-git rebase --onto v<new> v<old> fork/branding
-git checkout main && git merge --no-ff upstream/main    # then merge each rebased branch
-npm install && npm run build
+git switch -c integrate/upstream-<release> origin/main
+# Only for lineages with a usable ancestry merge:
+git merge --no-commit --no-ff v<eligible-release>
 ```
+
+Inspect ancestry first. The fork's rebuilt v0.10 snapshot and subsequent selective sync do not
+share a useful recent merge base with upstream. In that lineage, reconcile the release delta
+from the documented snapshot tag, then account for every behavior against the selected final
+tag and newer fork equivalents. Patch trailers and historical cherry-picks alone do not prove
+current parity. Do not record an ancestry-only merge as evidence that missing behaviors exist.
+
+Resolve the coherent batch before committing. Use the frozen lock in the task's isolated
+checkout (`npm ci`), rebuild workspace declarations, run lint/typecheck/build and the authorized
+test coverage, and obtain independent review. Keep product versions and fork branding separate
+from any explicitly maintained bundled API baseline. Open a PR to canonical main with the
+complete register matrix, included/excluded commits, age evidence, failures and rollback plan.
+A source integration PR does not authorize publishing, installation or daemon/session restart.
 
 Two things reliably break on an upstream bump and are worth checking first:
 

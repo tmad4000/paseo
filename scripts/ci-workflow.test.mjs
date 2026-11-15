@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { relative as relativePath } from "node:path";
@@ -176,7 +177,7 @@ test("PR routing declares stable behavior ownership", () => {
     ],
     quality: ["**/*.{cjs,js,json,jsx,mjs,ts,tsx}", "packages/expo-two-way-audio/**"],
     hub: ["packages/cli/src/commands/hub/**", "packages/server/src/server/hub/**"],
-    server: ["packages/server/**", "packages/app/e2e/support/fixtures/recording.*"],
+    server: ["plugins/**", "packages/server/**", "packages/app/e2e/support/fixtures/recording.*"],
     desktop: [
       "packages/desktop/**",
       "packages/app/src/desktop/**",
@@ -318,4 +319,71 @@ test("desktop packaging smokes main pushes and only the pull requests that touch
   for (const action of ["actions/checkout", "actions/setup-node", "actions/upload-artifact"]) {
     assert.match(source, new RegExp(`${action}@[0-9a-f]{40} # v\\d+\\.\\d+\\.\\d+`));
   }
+});
+
+test("browser sandbox setup is restricted to ephemeral hosted jobs", () => {
+  const result = spawnSync(
+    process.execPath,
+    [new URL("scripts/prepare-browser-sandbox.mjs", repoRoot).pathname],
+    {
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: "false",
+        RUNNER_ENVIRONMENT: "github-hosted",
+        RUNNER_OS: "Linux",
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /restricted to ephemeral GitHub-hosted Linux jobs/);
+});
+
+test("Linux browser jobs prepare and always remove their private sandbox helper", () => {
+  // The changes job runs this contract before npm ci. Keep it dependency-free,
+  // including the shared steps used by the four browser shards.
+  const jobs = jobBlocks(readFileSync(ciWorkflowPath, "utf8"));
+  for (const name of [
+    "typecheck",
+    "app-tests",
+    "desktop-tests-ubuntu",
+    "playwright-1",
+    "playwright-2",
+    "playwright-3",
+    "playwright-4",
+  ]) {
+    let job = jobs.get(name)?.join("\n");
+    assert.ok(job, `${name} exists`);
+    assert.match(job, /runs-on: ubuntu/);
+    const alias = /^    steps: \*([a-z_]+)$/m.exec(job);
+    if (alias) {
+      const definition = [...jobs.values()]
+        .map((lines) => lines.join("\n"))
+        .find((source) => source.includes(`    steps: &${alias[1]}\n`));
+      assert.ok(definition, `${name} resolves its shared steps`);
+      job = definition;
+    }
+    const prepare = job.indexOf("        run: node scripts/prepare-browser-sandbox.mjs\n");
+    const browser = job.search(/^        run: .*?(?:test:e2e|agent-limit-handoff)/m);
+    assert(prepare >= 0 && prepare < browser, `${name} prepares the helper before browser tests`);
+    assert.match(
+      job,
+      /        if: always\(\)(?: && runner.os == 'Linux')?\n        run: node scripts\/prepare-browser-sandbox\.mjs --cleanup/,
+      `${name} always removes its private helper`,
+    );
+  }
+});
+
+test("desktop test launchers retain Chromium process sandboxing", () => {
+  for (const file of [
+    "packages/desktop/scripts/dev-runner-args.mjs",
+    "packages/desktop/e2e/window-startup.e2e.mjs",
+    "packages/desktop/e2e/daemon-lifecycle.e2e.mjs",
+    "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
+    "packages/desktop/e2e/browser-tabs.e2e.mjs",
+  ]) {
+    assert.doesNotMatch(readFileSync(new URL(file, repoRoot), "utf8"), /--no-sandbox/);
+  }
+  const config = readFileSync(new URL("packages/desktop/playwright.config.ts", repoRoot), "utf8");
+  assert.match(config, /chromiumSandbox: true/);
 });

@@ -50,7 +50,7 @@ let desktop;
 let captured;
 async function openDesktop() {
   desktop = await electron.launch({
-    args: ["--no-sandbox", "--ozone-platform=headless", main],
+    args: ["--ozone-platform=headless", main],
     env: {
       ...env,
       PASEO_LISTEN: "127.0.0.1:1",

@@ -1614,7 +1614,9 @@ test("request outcomes for import and attention reach only their requesting sock
       }),
     );
     const agent = await admin.createAgent({
-      provider: "codex",
+      provider: "mock",
+      model: "e2e-fast-stream",
+      modeId: "load-test",
       cwd: daemon.staticDir,
       title: "Attention",
     });

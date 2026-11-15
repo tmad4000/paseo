@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
+import pino from "pino";
 import { WebSocket, type RawData } from "ws";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "./test-utils/index.js";
 import { WSOutboundMessageSchema, type WSOutboundMessage } from "./messages.js";
 
 const LARGE_REQUEST_BYTES = 512 * 1024;
-const BURST_MESSAGE_COUNT = 32;
+// Exceed the retained fork's 64 MiB physical-socket high-water mark.
+const BURST_MESSAGE_COUNT = 160;
 const TEST_TIMEOUT_MS = 30_000;
 
 interface SocketClose {
@@ -18,12 +20,24 @@ class ResumedPhysicalSocketSession {
   private constructor(
     private readonly daemon: TestPaseoDaemon,
     private readonly original: WebSocket,
+    private readonly wasEvicted: () => boolean,
   ) {}
 
   static async launch(): Promise<ResumedPhysicalSocketSession> {
-    const daemon = await createTestPaseoDaemon();
+    let evicted = false;
+    const daemon = await createTestPaseoDaemon({
+      logger: pino(
+        { level: "warn" },
+        {
+          write(line) {
+            if (JSON.parse(line).msg === "Closing physical WebSocket at outbound high-water mark")
+              evicted = true;
+          },
+        },
+      ),
+    });
     const original = await connectSocket(daemon.port, "stale-physical-socket");
-    return new ResumedPhysicalSocketSession(daemon, original);
+    return new ResumedPhysicalSocketSession(daemon, original, () => evicted);
   }
 
   async abandonOriginal(): Promise<void> {
@@ -34,20 +48,14 @@ class ResumedPhysicalSocketSession {
     this.replacement = await connectSocket(this.daemon.port, "stale-physical-socket");
   }
 
-  async broadcastUntilOriginalCloses(): Promise<SocketClose> {
-    const replacement = this.requireReplacement();
+  async backpressureOriginalUntilCloses(): Promise<SocketClose> {
+    this.requireReplacement();
     const originalClose = waitForClose(this.original);
-    const finalRequestId = largeRequestId(BURST_MESSAGE_COUNT - 1);
-    const finalResponse = waitForMessage(replacement, (message) => {
-      return (
-        message.type === "session" &&
-        message.message.type === "pong" &&
-        message.message.payload.requestId === finalRequestId
-      );
-    });
+    // Replies belong to the physical socket that made the request. Fill the
+    // abandoned socket's outbound buffer using its own requests.
 
     for (let index = 0; index < BURST_MESSAGE_COUNT; index += 1) {
-      replacement.send(
+      this.original.send(
         JSON.stringify({
           type: "session",
           message: {
@@ -59,7 +67,7 @@ class ResumedPhysicalSocketSession {
       );
     }
 
-    await finalResponse;
+    await expect.poll(this.wasEvicted, { timeout: 15_000 }).toBe(true);
     this.original.resume();
     return originalClose;
   }
@@ -100,7 +108,7 @@ test(
       await session.abandonOriginal();
       await session.resumeSameClient();
 
-      const originalClose = await session.broadcastUntilOriginalCloses();
+      const originalClose = await session.backpressureOriginalUntilCloses();
 
       expect(originalClose).toEqual({ code: 1006, reason: "" });
       await session.replacementRoundTrip();

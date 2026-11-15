@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useCompactTimeAgo } from "@/hooks/use-time-ago";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import type { DelegationPulse, DelegationPulseKind } from "./delegation-pulse";
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 import pino from "pino";
 import { Writable } from "node:stream";
@@ -6,6 +6,10 @@ import net from "node:net";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
+import { terminateWithTreeKill } from "../../utils/tree-kill.js";
 
 import { generateLocalPairingOffer } from "../pairing-offer.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
@@ -24,6 +28,7 @@ import { WSOutboundMessageSchema } from "@getpaseo/protocol/messages";
 
 const nodeMajor = Number((process.versions.node ?? "0").split(".")[0] ?? "0");
 const shouldRunRelayE2e = process.env.FORCE_RELAY_E2E === "1" || nodeMajor < 25;
+const wranglerCliPath = createRequire(import.meta.url).resolve("wrangler/bin/wrangler.js");
 
 function createCapturingLogger() {
   const lines: string[] = [];
@@ -182,16 +187,23 @@ async function waitForCapturedLog(
 (shouldRunRelayE2e ? describe : describe.skip)("Relay transport (E2EE) - daemon E2E", () => {
   let relayPort: number;
   let relayProcess: ChildProcess | null = null;
+  let relayStateDir: string | null = null;
   let relayStdoutLines: string[] = [];
 
-  const startRelay = async (options: { useLocalRelay?: boolean } = {}) => {
+  const startRelay = async () => {
     relayStdoutLines = [];
     relayPort = await getAvailablePort();
     const relayDir = path.resolve(process.cwd(), "../relay");
+    relayStateDir = await mkdtemp(path.join(tmpdir(), "paseo-daemon-relay-state-"));
     const relayArgs = [
-      "wrangler",
+      wranglerCliPath,
       "dev",
       "--local",
+      // --local still inherits production vars; exercise this fixture's Durable Object.
+      "--var",
+      "PASEO_RELAY_UPSTREAM:",
+      "--persist-to",
+      relayStateDir,
       "--ip",
       "127.0.0.1",
       "--port",
@@ -199,10 +211,7 @@ async function waitForCapturedLog(
       "--live-reload=false",
       "--show-interactive-dev-session=false",
     ];
-    if (options.useLocalRelay) {
-      relayArgs.push("--var", "PASEO_RELAY_UPSTREAM:");
-    }
-    relayProcess = spawn("npx", relayArgs, {
+    relayProcess = spawn(process.execPath, relayArgs, {
       cwd: relayDir,
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
@@ -231,18 +240,44 @@ async function waitForCapturedLog(
       }
     });
 
-    await waitForServer(relayPort, 30000);
-    await waitForRelayWebSocketReady(relayPort, 60000);
+    try {
+      await waitForServer(relayPort, 30000);
+      await waitForRelayWebSocketReady(relayPort, 60000);
+    } catch (error) {
+      try {
+        await stopRelay();
+      } catch (cleanupError) {
+        console.error("Task relay cleanup failed:", cleanupError);
+      }
+      throw error;
+    }
   };
 
   const stopRelay = async () => {
-    if (!relayProcess) return;
-    relayProcess.kill("SIGTERM");
-    relayProcess = null;
+    if (relayProcess) {
+      const result = await terminateWithTreeKill(relayProcess, {
+        gracefulTimeoutMs: 5000,
+        forceTimeoutMs: 2000,
+      });
+      if (result === "kill-timeout") throw new Error("Task relay process did not exit");
+      relayProcess = null;
+    }
+    if (relayStateDir) {
+      await rm(relayStateDir, { recursive: true, force: true });
+      relayStateDir = null;
+    }
   };
 
+  afterEach(async () => {
+    try {
+      await stopRelay();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("daemon connects to relay and client ping/pong works through relay", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    vi.stubEnv("PASEO_PRIMARY_LAN_IP", "192.168.1.12");
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();
@@ -383,10 +418,10 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon closes a relay client that sends an unsupported handshake key", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    vi.stubEnv("PASEO_PRIMARY_LAN_IP", "192.168.1.12");
 
     const { logger, lines } = createCapturingLogger();
-    await startRelay({ useLocalRelay: true });
+    await startRelay();
 
     const daemon = await createTestPaseoDaemon({
       listen: "127.0.0.1",
@@ -499,7 +534,7 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon keeps relay socket open while idle (no handshake timeout loop)", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    vi.stubEnv("PASEO_PRIMARY_LAN_IP", "192.168.1.12");
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();
@@ -645,7 +680,7 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon accepts a relay client that pipelines app hello after E2EE hello", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    vi.stubEnv("PASEO_PRIMARY_LAN_IP", "192.168.1.12");
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();

@@ -1,3 +1,4 @@
+import type { PluginRegistries } from "@getpaseo/protocol/plugin-registry";
 import {
   restartCheckpointWriter,
   clearRestartCheckpoint,
@@ -245,6 +246,7 @@ import {
 } from "./hub/relationship-remote.js";
 import { DaemonExecutions } from "./hub/daemon-executions.js";
 import { PluginService } from "./plugins/index.js";
+import { BuiltinPluginLoader } from "./plugins/builtin/index.js";
 import { ManagedPluginSources } from "./plugins/managed-source.js";
 
 const MCP_DEBUG_BATCH_LIMIT = 10;
@@ -426,6 +428,8 @@ export interface PaseoDaemonConfig {
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
+  pluginRegistries?: PluginRegistries;
+  pluginRegistryUrl?: string;
   staticDir: string;
   mcpDebug: boolean;
   isDev?: boolean;
@@ -502,6 +506,7 @@ export interface PaseoDaemon {
 export interface PaseoDaemonDependencies {
   /** Isolated harnesses can supply synthetic speech without loading local models. */
   speechService?: SpeechService;
+  builtinPlugins?: BuiltinPluginLoader;
   hubRelationshipRemote?: HubRelationshipRemote;
   hubRelationshipClock?: HubRelationshipClock;
   hubRelationshipRetryPolicy?: HubRelationshipRetryPolicy;
@@ -510,6 +515,10 @@ export interface PaseoDaemonDependencies {
     daemonStatusRpc?: boolean;
     relayConfig?: boolean;
   };
+}
+
+function resolveBuiltinPluginLoader(dependencies: PaseoDaemonDependencies): BuiltinPluginLoader {
+  return dependencies.builtinPlugins ?? new BuiltinPluginLoader();
 }
 
 function createBootstrapManagedProcessRegistry(
@@ -635,8 +644,16 @@ export async function createPaseoDaemon(
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
-  const pluginRuntime = new PluginService(logger, daemonConfigStore, daemonVersion, {
-    managedSources: new ManagedPluginSources(config.paseoHome),
+  const pluginRuntime: PluginService = new PluginService(logger, daemonConfigStore, daemonVersion, {
+    usageAgents: {
+      hasAgent: (id) => agentManager.getAgent(id) !== null,
+      usageSession: (id) => agentManager.usageSession(id),
+    },
+    managedSources: new ManagedPluginSources(config.paseoHome, {
+      registries: config.pluginRegistries,
+      defaultUrl: config.pluginRegistryUrl,
+    }),
+    builtinPlugins: resolveBuiltinPluginLoader(dependencies),
     settingsDirectory: path.join(config.paseoHome, "plugin-settings"),
   });
 
@@ -1207,7 +1224,6 @@ export async function createPaseoDaemon(
         emit: emitExternalSessionMessage,
         sessionLogger: logger,
         terminalManager,
-        archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
         serviceProxy,
         scriptRuntimeStore,
         getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
@@ -1803,6 +1819,7 @@ export async function createPaseoDaemon(
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
+            providerSnapshotManager.settlePluginProviders();
             if (restartEnabled) {
               const restored = await restoreRestartCheckpoint(config.paseoHome, {
                 agentManager,

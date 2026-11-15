@@ -69,14 +69,20 @@ test("names an icon-only control on hover and keeps it pressable, wrapped or not
     ),
   );
 
-  await page.getByTestId("wrapped").hover();
+  await act(async () => {
+    await page.getByTestId("wrapped").hover();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
   await expect.element(page.getByText("Copy message", { exact: true })).toBeVisible();
-  await page.getByTestId("wrapped").click();
+  await act(async () => page.getByTestId("wrapped").click());
   expect(onWrapped).toHaveBeenCalledTimes(1);
 
-  await page.getByTestId("direct").hover();
+  await act(async () => {
+    await page.getByTestId("direct").hover();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
   await expect.element(page.getByText("Copy code", { exact: true })).toBeVisible();
-  await page.getByTestId("direct").click();
+  await act(async () => page.getByTestId("direct").click());
   expect(onDirect).toHaveBeenCalledTimes(1);
 });
 

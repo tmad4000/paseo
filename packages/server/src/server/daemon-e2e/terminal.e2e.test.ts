@@ -1187,32 +1187,42 @@ test("fast output to a slow websocket client falls back to a snapshot", async ()
   const terminalId = created.terminal!.id;
   const ws = await connectRawWebSocket(ctx.daemon.port);
 
-  await subscribeRawTerminal(ws, terminalId, "sub-raw");
-  await waitForRawBinaryFrame(ws, (frame) => frame.opcode === TerminalStreamOpcode.Snapshot, 10000);
-
-  const rawSocket = (ws as WebSocket & { _socket?: { pause: () => void; resume: () => void } })
-    ._socket;
-  expect(rawSocket).toBeDefined();
-
-  rawSocket!.pause();
-  ctx.client.sendTerminalInput(terminalId, {
-    type: "input",
-    data: `node -e 'process.stdout.write("A".repeat(${8 * 1024 * 1024}))'\r`,
-  });
-
-  await new Promise((resolve) => setTimeout(resolve, 750));
-  const catchUpFramePromise = waitForRawBinaryFrame(
-    ws,
-    (frame) => frame.opcode === TerminalStreamOpcode.Snapshot,
-    15000,
-  );
-  rawSocket!.resume();
-  const catchUpFrame = await catchUpFramePromise;
-  expect(catchUpFrame.opcode).toBe(TerminalStreamOpcode.Snapshot);
-
-  await closeWebSocket(ws);
-  rmSync(cwd, { recursive: true, force: true });
-}, 40000);
+  try {
+    const initialSnapshot = waitForRawBinaryFrame(
+      ws,
+      (frame) => frame.opcode === TerminalStreamOpcode.Snapshot,
+    );
+    await subscribeRawTerminal(ws, terminalId, "sub-raw");
+    await initialSnapshot;
+    await ctx.client.subscribeTerminal(terminalId);
+    const completed = waitForTerminalOutput(
+      ctx.client,
+      terminalId,
+      (text) => text.includes("slow-client-burst-complete"),
+      30000,
+    );
+    const rawSocket = (ws as WebSocket & { _socket?: { pause: () => void; resume: () => void } })
+      ._socket;
+    expect(rawSocket).toBeDefined();
+    rawSocket!.pause();
+    // Wait for the PTY burst, rather than assuming 750ms fills Linux's TCP buffers.
+    ctx.client.sendTerminalInput(terminalId, {
+      type: "input",
+      data: `node -e 'process.stdout.write("A".repeat(${32 * 1024 * 1024})); console.log(Buffer.from("c2xvdy1jbGllbnQtYnVyc3QtY29tcGxldGU=", "base64").toString())'\r`,
+    });
+    await completed;
+    const catchUpFramePromise = waitForRawBinaryFrame(
+      ws,
+      (frame) => frame.opcode === TerminalStreamOpcode.Snapshot,
+      15000,
+    );
+    rawSocket!.resume();
+    expect((await catchUpFramePromise).opcode).toBe(TerminalStreamOpcode.Snapshot);
+  } finally {
+    await closeWebSocket(ws);
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}, 60000);
 
 test("multiple clients on the same terminal each receive output independently", async () => {
   const cwd = tmpCwd();
@@ -1561,8 +1571,7 @@ test("terminal exit prevents resubscribe and sends no frames after exit", async 
     const exitMessage = await exitMessagePromise;
     expect(exitMessage.message.type).toBe("terminal_stream_exit");
 
-    const subscribeResult = await ctx.client.subscribeTerminal(terminalId);
-    expect(subscribeResult.error).toBe("Terminal not found");
+    await expect(ctx.client.subscribeTerminal(terminalId)).rejects.toThrow("Terminal not found");
     await waitForNoRawBinaryFrame(ws, 750);
   } finally {
     await closeWebSocket(ws);
@@ -1800,18 +1809,19 @@ describe("list terminals across directories", () => {
     const list = await ctx.client.listTerminals();
 
     expect(list).not.toHaveProperty("cwd");
-    expect(list.terminals).toEqual(
-      expect.arrayContaining([
-        {
-          id: firstCreated.terminal!.id,
-          name: "first-terminal",
-        },
-        {
-          id: secondCreated.terminal!.id,
-          name: "second-terminal",
-        },
-      ]),
+    expect(
+      list.terminals.map(({ id, name, cwd, workspaceId }) => ({ id, name, cwd, workspaceId })),
+    ).toEqual(
+      expect.arrayContaining(
+        [firstCreated.terminal!, secondCreated.terminal!].map(({ id, name, cwd, workspaceId }) => ({
+          id,
+          name,
+          cwd,
+          workspaceId,
+        })),
+      ),
     );
+    expect(list.terminals).toHaveLength(2);
   });
 
   test("lists terminals for specific directory when cwd is provided", async () => {
@@ -1828,10 +1838,14 @@ describe("list terminals across directories", () => {
     const list = await ctx.client.listTerminals(cwd1);
 
     expect(list.cwd).toBe(cwd1);
-    expect(list.terminals).toEqual([
+    expect(
+      list.terminals.map(({ id, name, cwd, workspaceId }) => ({ id, name, cwd, workspaceId })),
+    ).toEqual([
       {
         id: firstCreated.terminal!.id,
         name: "cwd-one-terminal",
+        cwd: cwd1,
+        workspaceId: firstCreated.terminal!.workspaceId,
       },
     ]);
   });

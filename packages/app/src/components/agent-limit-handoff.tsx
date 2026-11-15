@@ -8,7 +8,6 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import type { ToastApi } from "@/components/toast-host";
-import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getProviderLimitNotice } from "@/hooks/provider-limit";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
@@ -136,7 +135,7 @@ export function AgentLimitHandoff({
 
 const styles = StyleSheet.create((theme) => ({
   rail: { padding: theme.spacing[4], alignItems: "center" },
-  content: { width: "100%", maxWidth: MAX_CONTENT_WIDTH },
+  content: { width: "100%", maxWidth: theme.contentMaxWidth },
   body: { flex: 1, minWidth: 0, gap: theme.spacing[2] },
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   controls: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },

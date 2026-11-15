@@ -46,15 +46,15 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 });
-afterEach(() => {
-  act(() => root.unmount());
+afterEach(async () => {
+  await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
 });
 
 test("the real handoff controls fit desktop and phone widths and prepare the chosen agent", async () => {
   await page.viewport(900, 700);
-  act(() =>
+  await act(async () =>
     root.render(
       React.createElement(AgentLimitHandoff, {
         serverId: "fixture",
@@ -84,8 +84,8 @@ test("the real handoff controls fit desktop and phone widths and prepare the cho
   await expect.element(page.getByRole("alert")).toBeVisible();
   const prepare = page.getByRole("button", { name: "Prepare handoff", exact: true });
   await expect.element(prepare).toBeDisabled();
-  await page.getByTestId("combined-model-selector").click();
-  await page.getByText("Backup model", { exact: true }).click();
+  await act(async () => page.getByTestId("combined-model-selector").click());
+  await act(async () => page.getByText("Backup model", { exact: true }).click());
   await expect.element(prepare).toBeEnabled();
   await page.screenshot({
     element: container,
@@ -98,7 +98,7 @@ test("the real handoff controls fit desktop and phone widths and prepare the cho
     element: container,
     path: "../../.vitest-screenshots/limit-handoff-phone.png",
   });
-  await prepare.click();
+  await act(async () => prepare.click());
   await expect.poll(() => state.fork.mock.calls.length).toBe(1);
   expect(state.fork).toHaveBeenCalledWith(
     expect.objectContaining({ handoff: { provider: "codex", modelId: "backup" }, target: "split" }),

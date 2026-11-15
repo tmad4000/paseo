@@ -13,8 +13,8 @@ vi.mock("react-native-svg", async (importOriginal) => ({
 }));
 vi.mock("lucide-react-native", async (importOriginal) => ({
   ...(await importOriginal<typeof import("lucide-react-native")>()),
-  // @ts-expect-error Use the real icon's web renderer instead of the harness's empty icon stub.
-  Copy: (await import("lucide-react-native/dist/esm/icons/copy.js")).default,
+  // Use the public icon entry to exercise SVG rendering instead of the empty icon stub.
+  Copy: (await import("lucide-react-native/icons/copy")).default,
 }));
 vi.mock("expo-router", () => ({
   router: {},

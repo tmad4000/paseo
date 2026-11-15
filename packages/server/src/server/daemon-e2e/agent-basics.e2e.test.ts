@@ -16,8 +16,11 @@ describe("daemon E2E", () => {
   });
 
   afterEach(async () => {
-    collector.unsubscribe();
-    await ctx.cleanup();
+    try {
+      await collector.unsubscribe();
+    } finally {
+      await ctx.cleanup();
+    }
   }, 60000);
 
   test("creates agent and receives response", async () => {
@@ -26,15 +29,16 @@ describe("daemon E2E", () => {
       provider: "codex",
       model: CODEX_TEST_MODEL,
       thinkingOptionId: CODEX_TEST_THINKING_OPTION_ID,
-      cwd: "/tmp",
+      cwd: ctx.daemon.staticDir,
       title: "Test Agent",
     });
+    await collector.observeTimeline(agent.id);
 
     expect(agent.id).toBeTruthy();
     expect(agent.provider).toBe("codex");
     expect(agent.status).toBe("idle");
     // Title may or may not be set depending on timing
-    expect(agent.cwd).toBe("/tmp");
+    expect(agent.cwd).toBe(ctx.daemon.staticDir);
 
     // Send a simple message
     await ctx.client.sendMessage(agent.id, "Say 'hello world' and nothing else");

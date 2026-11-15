@@ -105,10 +105,10 @@ interface CreatePaseoWorktreeInBackgroundDependencies {
   worktreesRoot?: string;
   emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   cacheWorkspaceSetupSnapshot: (workspaceId: string, snapshot: WorkspaceSetupSnapshot) => void;
+  invalidateWorkspacePreparation?: (workspaceId: string) => Promise<void>;
   emit: EmitSessionMessage;
   sessionLogger: Logger;
   terminalManager: TerminalManager | null;
-  archiveWorkspaceRecord: (workspaceId: string) => Promise<void>;
   serviceProxy: ServiceProxySubsystem | null;
   scriptRuntimeStore: WorkspaceScriptRuntimeStore | null;
   getDaemonTcpPort: (() => number | null) | null;
@@ -906,12 +906,10 @@ export async function runWorktreeSetupInBackground(
       if (error instanceof WorktreeSetupError) {
         setupResults = error.results;
       }
+      // Keep the repairable worktree open, but fence moves prepared before this failure.
+      if (!setupStarted) await dependencies.invalidateWorkspacePreparation?.(workspaceId);
       const message = error instanceof Error ? error.message : String(error);
       emitSetupProgress("failed", message);
-
-      if (!setupStarted) {
-        await dependencies.archiveWorkspaceRecord(options.workspaceId);
-      }
 
       dependencies.sessionLogger.error(
         {
@@ -920,7 +918,6 @@ export async function runWorktreeSetupInBackground(
           repoRoot: options.repoRoot,
           worktreeSlug: worktree.branchName,
           worktreePath: worktree.worktreePath,
-          setupStarted,
         },
         "Background worktree setup failed",
       );

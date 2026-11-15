@@ -159,7 +159,11 @@ async function listWorkspaces(client: McpClient): Promise<WorkspaceCreation[]> {
 }
 
 interface LaunchRecorder {
-  recordedLaunches: AgentSessionConfig[];
+  recordedLaunches: Array<{ agentId: string | undefined; config: AgentSessionConfig }>;
+}
+
+function recordedLaunch(recorder: LaunchRecorder, agentId: string | null) {
+  return recorder.recordedLaunches.find((launch) => launch.agentId === agentId);
 }
 
 class RecordingAgentClient implements AgentClient {
@@ -181,7 +185,7 @@ class RecordingAgentClient implements AgentClient {
   async createSession(
     ...args: Parameters<AgentClient["createSession"]>
   ): ReturnType<AgentClient["createSession"]> {
-    this.recorder.recordedLaunches.push(args[0]);
+    this.recorder.recordedLaunches.push({ agentId: args[1]?.agentId, config: args[0] });
     return this.inner.createSession(...args);
   }
 
@@ -459,7 +463,8 @@ describe("agent MCP end-to-end (offline)", () => {
       agentId = typeof payload?.agentId === "string" ? payload.agentId : null;
       expect(agentId).toBeTruthy();
 
-      expect(recorder.recordedLaunches.at(-1)?.mcpServers).toMatchObject({
+      await expect.poll(() => recordedLaunch(recorder, agentId) !== undefined).toBe(true);
+      expect(recordedLaunch(recorder, agentId)?.config.mcpServers).toMatchObject({
         paseo: {
           type: "http",
           url: `http://127.0.0.1:${port}/mcp/agents?callerAgentId=${agentId!}`,
@@ -484,7 +489,12 @@ describe("agent MCP end-to-end (offline)", () => {
         typeof disabledPayload?.agentId === "string" ? disabledPayload.agentId : null;
       expect(disabledAgentId).toBeTruthy();
 
-      expect(disabledRecorder.recordedLaunches.at(-1)?.mcpServers?.paseo).toBeUndefined();
+      await expect
+        .poll(() => recordedLaunch(disabledRecorder, disabledAgentId) !== undefined)
+        .toBe(true);
+      expect(
+        recordedLaunch(disabledRecorder, disabledAgentId)?.config.mcpServers?.paseo,
+      ).toBeUndefined();
       const disabledAgent = disabledDaemon.agentManager.getAgent(disabledAgentId!);
       expect(disabledAgent?.config.mcpServers?.paseo).toBeUndefined();
     } finally {
@@ -548,7 +558,8 @@ describe("agent MCP end-to-end (offline)", () => {
       agentId = typeof payload?.agentId === "string" ? payload.agentId : null;
       expect(agentId).toBeTruthy();
 
-      expect(recorder.recordedLaunches.at(-1)?.mcpServers).toMatchObject({
+      await expect.poll(() => recordedLaunch(recorder, agentId) !== undefined).toBe(true);
+      expect(recordedLaunch(recorder, agentId)?.config.mcpServers).toMatchObject({
         paseo: {
           type: "http",
           url: `http://127.0.0.1:${port}/mcp/agents?callerAgentId=${agentId!}`,

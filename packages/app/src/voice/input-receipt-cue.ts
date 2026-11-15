@@ -1,4 +1,4 @@
-import type { AudioPlaybackSource } from "./audio-engine-types";
+import type { AudioPlaybackSource } from "../audio/audio-engine-types";
 
 /** Short local cues distinguish durable admission from provider submission. */
 export function createInputReceiptCue(state: "queued" | "sent"): AudioPlaybackSource {

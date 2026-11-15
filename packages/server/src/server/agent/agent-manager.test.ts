@@ -5303,6 +5303,53 @@ test("persists live mode, model, and thinking changes without an external snapsh
   expect(persisted?.runtimeInfo?.model).toBe("gpt-5.4");
 });
 
+test("model changes persist the resolved thinking and fresh provider handle before another turn", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-model-selection-"));
+  class ModelSession extends TestAgentSession {
+    selection = { model: "source", thinkingOptionId: "medium" as string | undefined };
+    async setModel(model: string | null) {
+      this.selection = { model: model ?? "default", thinkingOptionId: undefined };
+      this.pushEvent({
+        type: "thinking_option_changed",
+        provider: "codex",
+        thinkingOptionId: null,
+      });
+    }
+    describePersistence() {
+      return { provider: "codex" as const, sessionId: this.id, metadata: { ...this.selection } };
+    }
+  }
+  class ModelClient extends TestAgentClient {
+    async createSession(config: AgentSessionConfig) {
+      return new ModelSession(config);
+    }
+  }
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new ModelClient() },
+    registry: storage,
+    logger,
+  });
+  try {
+    const agent = await manager.createAgent(
+      { provider: "codex", cwd: workdir, model: "source", thinkingOptionId: "medium" },
+      undefined,
+      { workspaceId: undefined },
+    );
+    await manager.setAgentModel(agent.id, "target");
+    await manager.flush();
+    const stored = await storage.get(agent.id);
+    expect(stored?.config?.model).toBe("target");
+    expect(stored?.config?.thinkingOptionId).toBeUndefined();
+    expect(stored?.persistence?.metadata?.model).toBe("target");
+    expect(stored?.persistence?.metadata?.thinkingOptionId).toBeUndefined();
+  } finally {
+    for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
+    await manager.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("later explicit config mutations win over events emitted by earlier mutations", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-config-mutation-order-"));
   class ConfigMutationSession extends TestAgentSession {
@@ -12956,6 +13003,36 @@ test("the agent's latest task list rides on its snapshot and survives reopen", a
     if (agentId) await manager.closeAgent(agentId);
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+test("usage session is a pure read of the live adapter and disappears on close", async () => {
+  const descriptor = {
+    provider: "claude",
+    model: "opus",
+    env: { HOME: "/fixture", CLAUDE_CONFIG_DIR: "/fixture/work" },
+    sessionKey: "launch-1",
+  };
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new (class extends TestAgentSession {
+        usageSession() {
+          return descriptor;
+        }
+      })(config);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  expect(manager.usageSession("missing")).toBeNull();
+  const agent = await manager.createAgent({ provider: "codex", cwd: tmpdir() }, undefined, {
+    workspaceId: undefined,
+  });
+  try {
+    expect(manager.usageSession(agent.id)).toBe(descriptor);
+    expect(manager.usageSession(agent.id)).toBe(descriptor);
+  } finally {
+    await manager.closeAgent(agent.id);
+  }
+  expect(manager.usageSession(agent.id)).toBeNull();
 });
 
 async function createGracefulRestartFixture(onCheckpoint?: () => Promise<void>) {

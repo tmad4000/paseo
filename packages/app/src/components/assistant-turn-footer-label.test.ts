@@ -1,6 +1,13 @@
+import { i18n } from "@/i18n/i18next";
 import { describe, expect, it } from "vitest";
 import { formatMessageTimestamp } from "@/utils/time";
-import { getAssistantTurnFooterLabels } from "./assistant-turn-footer-label";
+import {
+  getAssistantTurnFooterLabels as getLabels,
+  getTurnDurationLabel,
+} from "./assistant-turn-footer-label";
+
+const getAssistantTurnFooterLabels = (input: Parameters<typeof getLabels>[0]) =>
+  getLabels(input, i18n.t);
 
 describe("assistant turn footer labels", () => {
   const now = new Date(2026, 9, 6, 17);
@@ -51,5 +58,37 @@ describe("assistant turn footer labels", () => {
     expect(getAssistantTurnFooterLabels({ completedAt, durationMs: 0, now }).label).toBe(
       `Finished ${formatMessageTimestamp(completedAt, now)} · 0s`,
     );
+  });
+});
+
+describe("localized full turn timestamps", () => {
+  it("keeps completion, duration and start in the active language", async () => {
+    await i18n.changeLanguage("fr");
+    try {
+      const now = new Date(2026, 9, 6, 17);
+      const startedAt = new Date(2026, 9, 6, 16, 26);
+      const completedAt = new Date(2026, 9, 6, 16, 32);
+      expect(getLabels({ now, startedAt, completedAt, durationMs: 360_000 }, i18n.t)).toEqual({
+        label: `Terminé ${formatMessageTimestamp(completedAt, now)} · 6m`,
+        hoverLabel: `Commencé ${formatMessageTimestamp(startedAt, now)}`,
+      });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+});
+
+describe("getTurnDurationLabel", () => {
+  it("says how long the turn worked", () => {
+    expect(getTurnDurationLabel(14_000, i18n.t)).toBe("Worked for 14s");
+  });
+
+  it("reads in the active app language", async () => {
+    await i18n.changeLanguage("fr");
+    try {
+      expect(getTurnDurationLabel(14_000, i18n.t)).toBe("A travaillé pendant 14s");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 });

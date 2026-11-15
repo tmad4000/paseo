@@ -9,7 +9,7 @@ import {
   type TextStyle,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ function ProviderGlyph({
   serverId: string;
   color?: string;
 }) {
-  const Icon = getProviderIcon(provider, serverId);
+  const Icon = useProviderIcon(provider, serverId);
   return <Icon size={12} color={color ?? "currentColor"} />;
 }
 
