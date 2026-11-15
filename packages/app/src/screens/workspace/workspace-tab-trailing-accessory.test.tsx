@@ -44,6 +44,7 @@ vi.mock("lucide-react-native", () => {
     CircleCheck: StubIcon,
     Copy: StubIcon,
     CopyX: StubIcon,
+    ExternalLink: StubIcon,
     Ellipsis: StubIcon,
     FileCode2: StubIcon,
     Pencil: StubIcon,
