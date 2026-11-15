@@ -503,3 +503,93 @@ test("per-chat Stream on an older host shows the chat's recent entries instead o
     await repo.cleanup();
   }
 });
+
+for (const width of [390, 1280]) {
+  test(`Needs you reply modes, seen persistence and back at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const repo = await createTempGitRepo("needs-you-controls-");
+    const client = await connectSeedClient();
+    const created = await client.createWorkspace({
+      source: { kind: "directory", path: repo.path },
+    });
+    if (!created.workspace) throw new Error("Missing workspace");
+    try {
+      const agent = await createIdleAgent(client, {
+        cwd: repo.path,
+        workspaceId: created.workspace.id,
+        title: "Needs you controls",
+      });
+      await client.updateStreamEntry({
+        agentId: agent.id,
+        action: "add_question",
+        entryId: "launch",
+        text: "Choose a launch name",
+        inputRequest: { kind: "decision", recipient: "user" },
+      });
+      await resetSeededPageState(page);
+      await page.setViewportSize({ width, height: 900 });
+      await gotoAppShell(page);
+      await page.goto("/stream?view=needs_you");
+      const card = page.getByTestId(`global-stream-row-${agent.id}`);
+      await expect(card.getByText("Choose a launch name", { exact: true })).toBeVisible();
+      await expect(card.getByTestId("needs-you-unseen-dot")).toHaveCount(0, { timeout: 10000 });
+      await card.getByRole("button", { name: "Reply", exact: true }).click();
+      await expect(card.getByTestId("companion-entry-reply-send")).toHaveText("Queue");
+      await card.getByTestId("stream-send-mode").click();
+      await page.getByTestId("stream-send-steer").click();
+      await expect(card.getByTestId("companion-entry-reply-send")).toHaveText("Steer");
+      await card.getByTestId("stream-send-mode").click();
+      await page.getByTestId("stream-send-interrupt").click();
+      await expect(card.getByTestId("companion-entry-reply-send")).toHaveText("Interrupt");
+      await page.screenshot({
+        path: testInfo.outputPath(`needs-you-controls-${width}.png`),
+        fullPage: true,
+      });
+      await page.reload();
+      await expect(card.getByText("Choose a launch name", { exact: true })).toBeVisible();
+      await expect(card.getByTestId("needs-you-unseen-dot")).toHaveCount(0);
+      await page.getByTestId("stream-close").click();
+      await expect(page).not.toHaveURL(/\/stream/);
+    } finally {
+      await client.removeProject(created.workspace.projectId);
+      await client.close();
+      await repo.cleanup();
+    }
+  });
+}
+
+for (const [width, action] of [
+  [390, "implement"],
+  [1280, "dismiss"],
+] as const) {
+  test(`Needs you inline permission ${action} at ${width}px`, async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    const session = await seedMockAgentWorkspace({
+      repoPrefix: "needs-you-permission-",
+      title: "Needs you permission",
+      initialPrompt: "Emit synthetic plan approval.",
+    });
+    try {
+      await page.setViewportSize({ width, height: 900 });
+      await openAgentRoute(page, session);
+      await expect(page.getByTestId("permission-request-question").first()).toBeVisible({
+        timeout: 60000,
+      });
+      await page.goto("/stream?view=needs_you");
+      const inline = page.getByTestId("stream-inline-permission");
+      await expect(inline).toContainText("MockPlanApproval");
+      await expect(inline).toContainText("README note");
+      await page.screenshot({
+        path: testInfo.outputPath(`inline-permission-${width}.png`),
+        fullPage: true,
+      });
+      await inline.getByTestId(`stream-permission-${action}`).click();
+      await expect(inline).toHaveCount(0);
+      await expect(page).toHaveURL(/stream\?view=needs_you/);
+    } finally {
+      await session.cleanup();
+    }
+  });
+}

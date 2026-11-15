@@ -53,6 +53,9 @@ vi.mock("@/components/sidebar/sidebar-header-row", () => ({
     </button>
   ),
 }));
+vi.mock("@/companion-stream/use-global-stream", () => ({
+  useGlobalStream: () => ({ rows: [], hasNextPage: false, isFetching: false }),
+}));
 const emptyViews = { order: [], views: {} };
 vi.mock("@/stores/views-store", () => ({
   useViewsStore: (selector: (state: typeof emptyViews) => unknown) => selector(emptyViews),

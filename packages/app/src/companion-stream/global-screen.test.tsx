@@ -16,6 +16,9 @@ const state = vi.hoisted(() => ({
   queueSupported: false,
   updateStatus: undefined as undefined | ((id: string, status: "done") => void),
   toastShow: vi.fn(),
+  respondToPermission: vi.fn().mockResolvedValue(undefined),
+  permissions: new Map(),
+  replyMode: undefined as undefined | "steer" | "interrupt" | "queue",
 }));
 function clickDone() {
   state.updateStatus?.("question:q", "done");
@@ -65,28 +68,41 @@ vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ show: state.toastShow }) }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
 vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
+vi.mock("@/navigation/focus-history-runtime", () => ({ navigateBackInFocusHistory: () => false }));
+vi.mock("@/components/plan-card", () => ({
+  PlanCard: ({ text }: { text: string }) => <div>{text}</div>,
+}));
+vi.mock("@/components/tool-call-details", () => ({
+  ToolCallDetailsContent: ({ detail }: { detail: unknown }) => <pre>{JSON.stringify(detail)}</pre>,
+}));
 vi.mock("@/stores/session-store", () => ({
-  useSessionStore: (selector: (store: unknown) => unknown) =>
-    selector({
-      sessions: {
-        host: {
-          serverInfo: {
-            features: {
-              globalStream: state.supported,
-              streamAnswers: state.answersSupported,
-              streamDefer: state.deferSupported,
-              agentMessageQueue: state.queueSupported,
+  selectAgentTurnPresentation: () => ({ isActive: true, turnId: "turn" }),
+  useSessionStore: Object.assign(
+    (selector: (store: unknown) => unknown) =>
+      selector({
+        sessions: {
+          host: {
+            pendingPermissions: state.permissions,
+            serverInfo: {
+              features: {
+                globalStream: state.supported,
+                streamAnswers: state.answersSupported,
+                streamDefer: state.deferSupported,
+                agentMessageQueue: state.queueSupported,
+              },
             },
           },
         },
-      },
-    }),
+      }),
+    { getState: () => ({ sessions: { host: { serverInfo: { features: { steerOnly: true } } } } }) },
+  ),
 }));
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => [],
   useHostRuntimeClient: () => ({
     updateStreamEntry: state.updateStreamEntry,
     sendAgentMessage: state.sendAgentMessage,
+    respondToPermissionAndWait: state.respondToPermission,
   }),
   useHostRuntimeConnectionStatus: () => state.connection,
 }));
@@ -169,7 +185,11 @@ vi.mock("./entry-card", () => ({
     onReturnToChat: () => void;
     onReplyInChat: (entry: CompanionEntry) => void;
     onDefer?: (id: string, deferred: boolean) => void;
-    onSendReply?: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
+    onSendReply?: (
+      entry: CompanionEntry,
+      text: string,
+      mode?: "steer" | "interrupt" | "queue",
+    ) => Promise<{ queued: boolean }>;
   }) => {
     state.updateStatus = onUpdateStatus;
     return (
@@ -189,7 +209,10 @@ vi.mock("./entry-card", () => ({
           </button>
         ) : null}
         {onSendReply ? (
-          <button type="button" onClick={() => void onSendReply(entry, "Use staging")}>
+          <button
+            type="button"
+            onClick={() => void onSendReply(entry, "Use staging", state.replyMode)}
+          >
             Send reply
           </button>
         ) : null}
@@ -663,4 +686,158 @@ it("comes back from a chat to the same side, search and host", () => {
   });
   expect(rendered.getByText("globalStream.nothingLater")).toBeTruthy();
   expect(useStreamReturnStore.getState().restore).toBeNull();
+});
+
+it("approves the exact pending request inline with scope IDs and full input visible", async () => {
+  state.permissions = new Map([
+    [
+      "p",
+      {
+        agentId: "agent",
+        request: {
+          id: "p",
+          kind: "tool",
+          name: "send_agent_prompt",
+          input: { agentId: "target", prompt: "Do the task" },
+          actions: [
+            { id: "once", label: "Approve once", behavior: "allow" },
+            { id: "deny", label: "Deny", behavior: "deny" },
+          ],
+        },
+      },
+    ],
+  ]);
+  const permissionRow = {
+    ...row,
+    item: {
+      kind: "entry" as const,
+      entry: {
+        id: "permission:p",
+        kind: "permission" as const,
+        text: "Review request",
+        truncated: false,
+        timestamp: "2026-11-15T12:00:00Z",
+        requestId: "p",
+        requestKind: "tool" as const,
+        status: "pending" as const,
+      },
+    },
+  };
+  const onSaved = vi.fn();
+  const view = render(<GlobalStreamCard row={permissionRow} onSaved={onSaved} triage />);
+  expect(view.getByText(/send_agent_prompt/)).toBeTruthy();
+  expect(view.getByText(/"prompt":"Do the task"/)).toBeTruthy();
+  fireEvent.click(view.getByRole("button", { name: "Approve once" }));
+  await waitFor(() =>
+    expect(state.respondToPermission).toHaveBeenCalledWith(
+      "agent",
+      "p",
+      { behavior: "allow", selectedActionId: "once" },
+      15000,
+    ),
+  );
+  expect(onSaved).toHaveBeenCalled();
+});
+
+it.each(["steer", "interrupt", "queue"] as const)(
+  "maps inline %s to composer wire semantics",
+  async (mode) => {
+    state.queueSupported = true;
+    state.replyMode = mode;
+    const view = render(<GlobalStreamCard row={row} onSaved={vi.fn()} />);
+    fireEvent.click(view.getByText("Send reply"));
+    await waitFor(() =>
+      expect(state.sendAgentMessage).toHaveBeenCalledWith("agent", "> Choose name\n\nUse staging", {
+        messageId: expect.any(String),
+        ...(mode === "steer" ? { activeTurnBehavior: "steer_only" } : {}),
+        ...(mode === "interrupt" ? { activeTurnBehavior: "interrupt", interrupt: true } : {}),
+      }),
+    );
+    state.replyMode = undefined;
+  },
+);
+
+it("keeps a failed inline decision actionable for retry and denial", async () => {
+  state.respondToPermission
+    .mockReset()
+    .mockRejectedValueOnce(new Error("Host declined response"))
+    .mockResolvedValue(undefined);
+  state.permissions = new Map([
+    [
+      "p",
+      {
+        agentId: "agent",
+        request: {
+          id: "p",
+          kind: "tool",
+          name: "send_agent_prompt",
+          input: { agentId: "target", prompt: "Do the task" },
+        },
+      },
+    ],
+  ]);
+  const permissionRow = {
+    ...row,
+    item: {
+      kind: "entry" as const,
+      entry: {
+        id: "permission:p",
+        kind: "permission" as const,
+        text: "Review request",
+        truncated: false,
+        timestamp: "2026-11-15T12:00:00Z",
+        requestId: "p",
+        requestKind: "tool" as const,
+        status: "pending" as const,
+      },
+    },
+  };
+  const view = render(<GlobalStreamCard row={permissionRow} onSaved={vi.fn()} triage />);
+  fireEvent.click(view.getByRole("button", { name: "Approve" }));
+  await waitFor(() => expect(view.getByText("Host declined response")).toBeTruthy());
+  fireEvent.click(view.getByRole("button", { name: "Deny" }));
+  await waitFor(() =>
+    expect(state.respondToPermission).toHaveBeenLastCalledWith(
+      "agent",
+      "p",
+      { behavior: "deny", selectedActionId: "reject", message: "Denied by user" },
+      15000,
+    ),
+  );
+});
+
+it("shows metadata-only plans before offering approval", () => {
+  state.permissions = new Map([
+    [
+      "p",
+      {
+        agentId: "agent",
+        request: {
+          id: "p",
+          kind: "plan",
+          name: "ExitPlanMode",
+          metadata: { planText: "Inspect the rollback before shipping" },
+        },
+      },
+    ],
+  ]);
+  const permissionRow = {
+    ...row,
+    item: {
+      kind: "entry" as const,
+      entry: {
+        id: "permission:p",
+        kind: "permission" as const,
+        text: "Review plan",
+        truncated: false,
+        timestamp: "2026-11-15T12:00:00Z",
+        requestId: "p",
+        requestKind: "plan" as const,
+        status: "pending" as const,
+      },
+    },
+  };
+  const view = render(<GlobalStreamCard row={permissionRow} onSaved={vi.fn()} triage />);
+  expect(view.getByText("Inspect the rollback before shipping")).toBeTruthy();
+  expect(view.getByRole("button", { name: "Approve" })).toBeTruthy();
 });

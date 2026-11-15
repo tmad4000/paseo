@@ -120,3 +120,14 @@ describe("Fork version control", () => {
     );
   });
 });
+
+import { formatBuildStamp } from "@/utils/build-stamp";
+it("shows relative build age, exact time with zone, and commit without inventing missing times", () => {
+  const stamp = { buildTime: "2026-11-15T12:00:00Z", commit: "abcdef123456" };
+  const label = formatBuildStamp(stamp, Date.parse("2026-11-15T12:11:00Z"));
+  expect(label).toContain("Updated 11m ago");
+  expect(label).toContain("build time");
+  expect(label).toContain("abcdef123456");
+  expect(formatBuildStamp(null)).toBeNull();
+  expect(formatBuildStamp({ buildTime: "invalid", commit: "abc" })).toBeNull();
+});

@@ -27,6 +27,8 @@ import { useDelegationPulse } from "./use-delegation-pulse";
 import { entryChatTarget } from "./entry-source";
 import { HashtagText } from "./hashtag-text";
 
+import type { SendBehavior } from "@/composer/input/state";
+
 type TrackedAsk = NonNullable<CompanionEntry["ask"]>;
 type ActionSize = "xs" | "sm" | "md";
 
@@ -51,7 +53,11 @@ export interface EntryCardProps {
    * Answers from the card itself, so triage never leaves the list. Resolves with whether the
    * agent was busy and the reply waits in its queue. Without it, Reply goes to Chat's composer.
    */
-  onSendReply?: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
+  onSendReply?: (
+    entry: CompanionEntry,
+    text: string,
+    mode?: SendBehavior,
+  ) => Promise<{ queued: boolean }>;
   /** Sets a request aside for later (true) or brings it back (false). Status is unchanged. */
   onDefer?: (id: string, deferred: boolean) => void;
   /**
@@ -439,6 +445,26 @@ function ReadToggle({
   );
 }
 
+function SendModeOption({
+  option,
+  mode,
+  setMode,
+}: {
+  option: SendBehavior;
+  mode: SendBehavior;
+  setMode: (mode: SendBehavior) => void;
+}) {
+  const { t } = useTranslation();
+  const select = useCallback(() => setMode(option), [option, setMode]);
+  return (
+    <DropdownMenuItem onSelect={select} testID={`stream-send-${option}`}>
+      {t(`sidebar.routing.${option}`)}
+      {option === "queue" ? " (default)" : ""}
+      {option === mode ? " ✓" : ""}
+    </DropdownMenuItem>
+  );
+}
+
 /**
  * Answer an agent's question in place. The reply quotes the question, as Reply in chat does, and
  * goes through the agent's queue: an idle agent starts on it, a busy one gets it after its turn.
@@ -453,13 +479,18 @@ function InlineReply({
   entry: CompanionEntry;
   disabled: boolean;
   size: ActionSize;
-  onSend: (entry: CompanionEntry, text: string) => Promise<{ queued: boolean }>;
+  onSend: (
+    entry: CompanionEntry,
+    text: string,
+    mode?: SendBehavior,
+  ) => Promise<{ queued: boolean }>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const input = useRef<EditingTextInputHandle>(null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [mode, setMode] = useState<SendBehavior>("queue");
   const [result, setResult] = useState<"sent" | "queued" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const send = useCallback(() => {
@@ -467,7 +498,7 @@ function InlineReply({
     if (!reply || sending) return;
     setSending(true);
     setError(null);
-    onSend(entry, reply)
+    onSend(entry, reply, mode)
       .then(({ queued }) => {
         setResult(queued ? "queued" : "sent");
         setText("");
@@ -478,7 +509,7 @@ function InlineReply({
         setError(failure instanceof Error ? failure.message : t("agentPanel.stream.replyFailed"));
       })
       .finally(() => setSending(false));
-  }, [text, sending, onSend, entry, t]);
+  }, [text, sending, onSend, entry, t, mode]);
   return (
     <View style={styles.reply} testID="companion-entry-inline-reply">
       <View style={styles.replyRow}>
@@ -500,8 +531,23 @@ function InlineReply({
           disabled={disabled || sending || !text.trim()}
           testID="companion-entry-reply-send"
         >
-          {t("agentPanel.stream.send")}
+          {t(`sidebar.routing.${mode}`)}
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            accessibilityLabel="Choose send mode"
+            disabled={disabled || sending}
+            style={styles.sendMode}
+            testID="stream-send-mode"
+          >
+            <Text style={styles.description}>▾</Text>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {(["steer", "interrupt", "queue"] as const).map((option) => (
+              <SendModeOption key={option} option={option} mode={mode} setMode={setMode} />
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button variant="ghost" size={size} onPress={onClose}>
           {t("agentPanel.stream.cancel")}
         </Button>
@@ -915,7 +961,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   moreTriggerLarge: { minHeight: 44 },
   moreLabel: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
-  replyRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  sendMode: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  replyRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },
   replyInput: {
     flex: 1,
     borderWidth: 1,

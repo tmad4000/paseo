@@ -160,6 +160,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "navigation-back",
     "navigation-forward",
     "needs-you",
+    "questions-pane",
     "recent-sessions",
     "show-shortcuts",
     "toggle-settings",
@@ -235,6 +236,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "navigation-forward": "common.actions.forward",
   "recent-sessions": "shell.recentSessions.title",
   "needs-you": "globalStream.needsYou",
+  "questions-pane": "agentPanel.stream.answers.expand",
   "workspace-recent-next": "settings.shortcuts.help.recentWorkspace",
   "workspace-recent-previous": "settings.shortcuts.help.leastRecentWorkspace",
   "workspace-prev": "settings.shortcuts.help.previousWorkspace",
@@ -277,6 +279,20 @@ const SHORTCUT_HELP_NOTE_KEYS: Record<string, string> = {
 // --- Binding definitions ---
 
 const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  {
+    id: "questions-pane-mac",
+    action: "stream.questions.open",
+    combo: "Cmd+Alt+Q",
+    when: { mac: true, terminal: false, commandCenter: false, editable: false },
+    help: { id: "questions-pane", section: "general", label: "Show questions and asks" },
+  },
+  {
+    id: "questions-pane-non-mac",
+    action: "stream.questions.open",
+    combo: "Ctrl+Alt+Q",
+    when: { mac: false, terminal: false, commandCenter: false, editable: false },
+    help: { id: "questions-pane", section: "general", label: "Show questions and asks" },
+  },
   {
     id: "needs-you-cmd-alt-y-mac",
     action: "stream.needs-you.open",
