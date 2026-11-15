@@ -89,11 +89,13 @@ if (process.argv.includes("--cleanup")) {
     // Chromium prefers an adjacent chrome-sandbox over CHROME_DEVEL_SANDBOX.
     // Only this ephemeral job's npm installation is changed, and cleanup restores
     // its original helper. No shared dependency directory or /opt is modified.
-    const electronInfo = lstatSync(electronHelper);
-    assert(electronInfo.isFile() && !electronInfo.isSymbolicLink());
-    assert.equal(electronInfo.uid, process.getuid());
-    renameSync(electronHelper, path.join(directory, "electron-helper-original"));
-    symlinkSync(helper, electronHelper);
+    const electronInfo = lstatSync(electronHelper, { throwIfNoEntry: false });
+    if (electronInfo) {
+      assert(electronInfo.isFile() && !electronInfo.isSymbolicLink());
+      assert.equal(electronInfo.uid, process.getuid());
+      renameSync(electronHelper, path.join(directory, "electron-helper-original"));
+      symlinkSync(helper, electronHelper);
+    }
     appendFileSync(
       process.env.GITHUB_ENV,
       `CHROME_DEVEL_SANDBOX=${helper}\nPASEO_TEST_SANDBOX_DIR=${directory}\n`,
