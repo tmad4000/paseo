@@ -10,6 +10,16 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Fork icon badge
+
+`fork-icon-badge`: Preserve the upstream butterfly while identifying Paseo Fork with a blue
+branch badge. The provisional Ideaflow accent is `#294ac4`; Jacob can override it.
+[The source and generation instructions](../assets/fork-icon/README.md) cover desktop,
+iOS, Android adaptive and web/PWA identity assets. Acceptance: distinguish the fork from
+upstream at 16, 32, 64 and 1024 px on light/dark surfaces; keep the branch readable at 16 px
+and avoid badge clipping under launcher masks. Deterministic asset checks and visual review
+pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.34.
+
 ## App restart preservation
 
 `preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
@@ -346,11 +356,11 @@ Repository issues are disabled, so this stable ID also serves as the follow-up t
 
 The 2026-11-15 age-limited reconciliation targets upstream `v0.11.4`
 (`dc5b02f7d`, published2026-10-15), preserving newer selective fork fixes.
-The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all90 IDs,
+The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all91 IDs,
 including the prose-owned features above, and every behavior in the261-commit release delta.
 Its source adaptations preserve recoverable setup failure with stale-move fencing, bundled API
 compatibility, shared audio ownership, SDK subscription cleanup and full localized turn timestamps. Newer canonical PR225 app-restart
-preservation and PR226 actionable Needs you/build provenance remain in the candidate.
+preservation, PR226 actionable Needs you/build provenance and PR227 fork icon assets remain in the candidate.
 The receipt and [PR224 checks](https://github.com/tmad4000/paseo/pull/224/checks) separate immutable
 source review, actual full-suite outcomes and later fixture corrections. Existing acceptance gaps
 below remain open; source preservation is not installed-build verification.
