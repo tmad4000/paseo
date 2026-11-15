@@ -81,7 +81,8 @@ export function InlinePermission({
     },
     [client, online, agentId, entry.requestId, onSaved],
   );
-  if (!request || request.kind === "question" || resolved) return null;
+  if (!request) return <Text style={styles.text}>{entry.text}</Text>;
+  if (request.kind === "question" || resolved) return null;
   const preview = typeof prompt === "string" ? prompt.slice(0, 300) : request.description;
   return (
     <View style={styles.root} testID="stream-inline-permission">

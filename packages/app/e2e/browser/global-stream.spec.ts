@@ -5,7 +5,11 @@ import { test } from "../support/fixtures";
 import { overrideServerInfoFeatures } from "../support/helpers/server-info-features";
 import { connectSeedClient } from "../support/helpers/seed-client";
 import { createTempGitRepo } from "../support/helpers/workspace";
-import { createIdleAgent, resetSeededPageState } from "../support/helpers/archive-tab";
+import {
+  createIdleAgent,
+  createMockIdleAgent,
+  resetSeededPageState,
+} from "../support/helpers/archive-tab";
 import { gotoAppShell } from "../support/helpers/app";
 
 for (const width of [390, 1440]) {
@@ -516,7 +520,7 @@ for (const width of [390, 1280]) {
     });
     if (!created.workspace) throw new Error("Missing workspace");
     try {
-      const agent = await createIdleAgent(client, {
+      const agent = await createMockIdleAgent(client, {
         cwd: repo.path,
         workspaceId: created.workspace.id,
         title: "Needs you controls",

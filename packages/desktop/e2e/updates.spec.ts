@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { expect, test } from "../../app/e2e/support/fixtures";
 import { gotoAppShell, openSettings } from "../../app/e2e/support/helpers/app";
 import { getServerId } from "../../app/e2e/support/helpers/server-id";
@@ -192,14 +193,27 @@ for (const width of [390, 1280]) {
     const trigger = page.getByTestId("fork-version-trigger");
     await expect(trigger).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`status-${width}.png`), fullPage: true });
-    await trigger.hover();
-    await expect(page.getByText(/Updated .*ago|Updated just now/).first()).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`version-hover-${width}.png`),
-      fullPage: true,
-    });
+    if (width >= 768) {
+      await trigger.hover();
+      await expect(page.getByText(/Updated .*ago|Updated just now/).first()).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath(`version-hover-${width}.png`),
+        fullPage: true,
+      });
+    }
     await trigger.click();
-    await expect(page.getByTestId("fork-build-stamp")).toContainText("Commit");
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const expectedTime = process.env.PASEO_BUILD_TIME;
+    expect(expectedTime).toBeTruthy();
+    const localTime = await page.evaluate(
+      (value) =>
+        new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "long" }).format(
+          new Date(value),
+        ),
+      expectedTime!,
+    );
+    await expect(page.getByTestId("fork-build-stamp")).toContainText(commit);
+    await expect(page.getByTestId("fork-build-stamp")).toContainText(localTime);
     await expect(page.getByTestId("fork-build-stamp")).toContainText("build time");
   });
 }

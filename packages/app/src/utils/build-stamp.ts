@@ -1,4 +1,4 @@
-import Constants from "expo-constants";
+import buildStamp from "./build-stamp-data";
 
 export function formatBuildStamp(stamp: unknown, now = Date.now()): string | null {
   if (!stamp || typeof stamp !== "object") return null;
@@ -24,5 +24,5 @@ export function formatBuildStamp(stamp: unknown, now = Date.now()): string | nul
   return `Updated ${relative}\n${exact} (build time)\nCommit ${commit}`;
 }
 export function resolveBuildStamp(): unknown {
-  return Constants.expoConfig?.extra?.buildStamp;
+  return buildStamp;
 }

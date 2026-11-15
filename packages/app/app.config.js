@@ -1,4 +1,3 @@
-const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const pkg = require("./package.json");
@@ -99,20 +98,6 @@ const variants = {
   },
 };
 
-// Captured once by Expo at bundle creation, never inferred from the viewing device.
-const buildStamp = (() => {
-  try {
-    return {
-      buildTime: process.env.PASEO_BUILD_TIME || new Date().toISOString(),
-      commit: execFileSync("git", ["rev-parse", "HEAD"], {
-        cwd: __dirname,
-        encoding: "utf8",
-      }).trim(),
-    };
-  } catch {
-    return null;
-  }
-})();
 const variant = variants[appVariant] ?? variants.production;
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
@@ -208,7 +193,6 @@ export default {
       autolinkingModuleResolution: true,
     },
     extra: {
-      buildStamp,
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       router: {},

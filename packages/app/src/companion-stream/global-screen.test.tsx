@@ -172,6 +172,7 @@ vi.mock("./use-global-stream", () => ({ useGlobalStream: vi.fn() }));
 vi.mock("./entry-card", () => ({
   EntryCard: ({
     entry,
+    permissionContent,
     disabled,
     onUpdateStatus,
     onReturnToChat,
@@ -180,6 +181,7 @@ vi.mock("./entry-card", () => ({
     onSendReply,
   }: {
     entry: CompanionEntry;
+    permissionContent?: React.ReactNode;
     disabled: boolean;
     onUpdateStatus: typeof state.updateStatus;
     onReturnToChat: () => void;
@@ -194,6 +196,7 @@ vi.mock("./entry-card", () => ({
     state.updateStatus = onUpdateStatus;
     return (
       <div>
+        {permissionContent}
         <button type="button" disabled={disabled} onClick={clickDone}>
           Done
         </button>

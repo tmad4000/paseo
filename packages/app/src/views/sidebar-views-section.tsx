@@ -79,7 +79,7 @@ export function SidebarStreamNavigation({ onBeforeNavigate }: { onBeforeNavigate
     enabled: true,
     view: "needs_you",
     filter: "all",
-    includeArchived: false,
+    includeArchived: true,
   });
   const { hasNextPage, isFetching, fetchNextPage } = attention;
   useEffect(() => {

@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+import type { GlobalStreamRow } from "@/companion-stream/use-global-stream";
+import { useNeedsYouSeen } from "@/companion-stream/needs-you-seen";
 
 const navigation = vi.hoisted(() => ({
   pathname: "/",
   view: undefined as string | undefined,
   events: [] as string[],
+  rows: [] as GlobalStreamRow[],
+  streamOptions: vi.fn(),
   navigate: vi.fn((route: string) => navigation.events.push(route)),
 }));
 // Tooltips are desktop hover chrome; these tests exercise the controls, not their hover labels.
@@ -41,20 +46,26 @@ vi.mock("lucide-react-native", () => ({
 vi.mock("@/components/sidebar/sidebar-header-row", () => ({
   SidebarHeaderRow: ({
     label,
+    badge,
     onPress,
     isActive,
   }: {
     label: string;
+    badge?: string;
     onPress: () => void;
     isActive?: boolean;
   }) => (
     <button type="button" aria-pressed={isActive} onClick={onPress}>
       {label}
+      {badge ? <span data-testid="unread-badge">{badge}</span> : null}
     </button>
   ),
 }));
 vi.mock("@/companion-stream/use-global-stream", () => ({
-  useGlobalStream: () => ({ rows: [], hasNextPage: false, isFetching: false }),
+  useGlobalStream: (options: unknown) => {
+    navigation.streamOptions(options);
+    return { rows: navigation.rows, hasNextPage: false, isFetching: false };
+  },
 }));
 const emptyViews = { order: [], views: {} };
 vi.mock("@/stores/views-store", () => ({
@@ -68,6 +79,8 @@ beforeEach(() => {
   navigation.view = undefined;
   navigation.events.length = 0;
   navigation.navigate.mockClear();
+  navigation.rows = [];
+  navigation.streamOptions.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -125,4 +138,37 @@ it("highlights Needs you separately from other Stream views", () => {
   expect(
     screen.getByRole("button", { name: "globalStream.title" }).getAttribute("aria-pressed"),
   ).toBe("true");
+});
+
+it("counts archived requests like the default feed and clears a viewed request's badge", () => {
+  const request: GlobalStreamRow = {
+    id: "unread",
+    timestamp: "2026-11-15T12:00:00Z",
+    serverId: "host",
+    serverLabel: "Host",
+    agentId: "agent",
+    agentTitle: "Chat",
+    cwd: "/p",
+    archived: true,
+    item: {
+      kind: "entry",
+      entry: {
+        id: "question:unread",
+        kind: "question",
+        status: "open",
+        timestamp: "2026-11-15T12:00:00Z",
+        text: "Choose a name",
+        truncated: false,
+      },
+    },
+  };
+  navigation.rows = [request];
+  useNeedsYouSeen.setState({ hydrated: true, seen: {} });
+  const screen = render(<SidebarStreamNavigation />);
+  expect(navigation.streamOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({ view: "needs_you", includeArchived: true }),
+  );
+  expect(screen.getByTestId("unread-badge").textContent).toBe("1");
+  act(() => useNeedsYouSeen.getState().markSeen([request]));
+  expect(screen.queryByTestId("unread-badge")).toBeNull();
 });

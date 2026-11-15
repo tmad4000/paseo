@@ -3,7 +3,7 @@ import {
   needsUserInput,
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -38,6 +38,7 @@ const ReplyInput = withUnistyles(EditingTextInput, (theme) => ({
 
 export interface EntryCardProps {
   entry: CompanionEntry;
+  permissionContent?: ReactNode;
   serverId?: string;
   disabled?: boolean;
   onReturnToChat: () => void;
@@ -70,6 +71,7 @@ export interface EntryCardProps {
 /** Eyebrow (kind · state · time), then the entry text as the headline. Details sit behind Read. */
 export function EntryCard({
   entry,
+  permissionContent,
   serverId,
   onReturnToChat,
   onReplyInChat,
@@ -99,13 +101,15 @@ export function EntryCard({
       testID={`companion-entry-${entry.id}`}
     >
       <EntryHeader entry={entry} pending={pending} disabled={disabled} onRemovePin={onRemovePin} />
-      <EntryBody
-        entry={entry}
-        expanded={expanded}
-        quote={quote}
-        previewLines={triage ? 2 : 5}
-        onTagPress={onTagPress}
-      />
+      {permissionContent ?? (
+        <EntryBody
+          entry={entry}
+          expanded={expanded}
+          quote={quote}
+          previewLines={triage ? 2 : 5}
+          onTagPress={onTagPress}
+        />
+      )}
       <AskDelegationPulse ask={entry.ask} serverId={serverId} />
       <EntryExtras entry={entry} serverId={serverId} expanded={expanded} triage={triage} />
 

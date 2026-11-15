@@ -614,26 +614,6 @@ function UnseenDot({ row, enabled }: { row: GlobalStreamRow; enabled: boolean })
     </View>
   );
 }
-function CardPermission({
-  row,
-  entry,
-  onSaved,
-}: {
-  row: GlobalStreamRow;
-  entry?: CompanionEntry;
-  onSaved: () => void;
-}) {
-  if (entry?.kind !== "permission" || entry.status !== "pending") return null;
-  return (
-    <InlinePermission
-      entry={entry}
-      serverId={row.serverId}
-      agentId={row.agentId}
-      onSaved={onSaved}
-    />
-  );
-}
-
 export function GlobalStreamCard({
   row,
   onSaved,
@@ -659,6 +639,22 @@ export function GlobalStreamCard({
     agentId: sourceAgentId,
     workspaceId: sourceWorkspaceId,
   } = streamCardSource(row);
+  const permissionContent = useMemo(() => {
+    if (
+      entry?.kind !== "permission" ||
+      entry.status !== "pending" ||
+      entry.requestKind === "question"
+    )
+      return undefined;
+    return (
+      <InlinePermission
+        entry={entry}
+        serverId={row.serverId}
+        agentId={row.agentId}
+        onSaved={onSaved}
+      />
+    );
+  }, [entry, row.serverId, row.agentId, onSaved]);
   const localSource = localContextForSource(localContext, sourceServerId, sourceAgentId);
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
@@ -865,9 +861,9 @@ export function GlobalStreamCard({
           {t("globalStream.copiedTask")}
         </Text>
       ) : null}
-      <CardPermission row={row} entry={entry} onSaved={onSaved} />
       {row.item.kind === "entry" ? (
         <EntryCard
+          permissionContent={permissionContent}
           entry={row.item.entry}
           serverId={row.serverId}
           onReturnToChat={openChat}
