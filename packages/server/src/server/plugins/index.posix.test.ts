@@ -204,6 +204,11 @@ describe("PluginService", () => {
       return () => {};
     }`,
       );
+      // The same fixture runs in the legacy daemon and the reviewed bundled API runtime.
+      await writeFile(
+        path.join(directory, "paseo-plugin.json"),
+        JSON.stringify({ id: "provider-status", requirements: { paseo: ">=0.4.0" } }),
+      );
       const store = createStore(home);
       await store.patch({
         providers: {

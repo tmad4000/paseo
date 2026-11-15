@@ -71,7 +71,7 @@ describe("CLI executable selection", () => {
           throw new Error("Packaged apps use their bundled shim");
         },
       }),
-    ).toBe("/Applications/Paseo Fork.app/Contents/Resources/bin/paseo-fork");
+    ).toBe(path.join("/Applications/Paseo Fork.app/Contents/Resources/bin/paseo-fork"));
   });
 
   const resolveWorkspaceCli = () =>

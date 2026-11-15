@@ -1,5 +1,14 @@
 # Testing
 
+## Sandboxed Chromium on Linux
+
+Keep `chromiumSandbox: true`. On Ubuntu hosts that already provide the root-owned setuid
+helper at `/opt/google/chrome/chrome-sandbox`, set
+`CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox` for the test process. CI uses the
+hosted image's helper. This needs no host setting change or new installation; each test still
+owns a temporary browser profile. If the helper is unavailable, record the sandbox launch gate.
+See the [Chromium environment guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
+
 ## Philosophy
 
 Tests prove behavior, not structure. Every test should answer: "what user-visible or API-visible behavior does this verify?"

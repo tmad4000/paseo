@@ -26,6 +26,11 @@ async function findEntry(directory, names) {
 
 test("built output compiles and starts every listed built-in", async () => {
   assert.equal(resolveBuiltinPluginsRoot(), packagedRoot);
+  assert.equal(
+    await stat(path.join(packagedRoot, "tsconfig.json")).catch(() => null),
+    null,
+    "workspace-only TypeScript config must not ship with runtime sources",
+  );
   const { version } = JSON.parse(
     await readFile(path.join(repoRoot, "packages/server/package.json"), "utf8"),
   );

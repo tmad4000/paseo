@@ -2,7 +2,7 @@
 
 Neither beta is adopted. The GO ceiling is a release published by the end of
 2026-10-15 UTC. Publication and annotated-tag targets were independently read from
-GitHub's release/ref/tag APIs; JSON receipts live beside this report.
+GitHub's release/ref/tag APIs; JSON receipts are in `/home/dev/code/paseo-maintenance/upstream-go-20261115/`.
 
 | Release                                                                         | Publication UTC     | Annotated tag → commit                                   | 30-day release age reached UTC |
 | ------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------------- | ------------------------------ |
@@ -51,7 +51,7 @@ The behavior changes include:
   long prompts and nested-button fixes. These intersect fork archive semantics,
   long-prompt preview and sidebar actions; their tests are not fork parity proof.
 
-`beta2-commits.tsv` records every exact SHA, UTC committer date and subject.
+The task-owned `beta2-commits.tsv` receipt records every exact SHA, UTC committer date and subject.
 The [v0.15.4 → beta.1 comparison](https://github.com/getpaseo/paseo/compare/v0.15.4...v0.16.0-beta.1)
 contains 205 commits across the upstream release histories. This is not the same
 measurement as commits after PR193's selectively synced main commit; do not label
@@ -66,6 +66,19 @@ Examples: Expo `54.0.33 → 57.0.30`, React Native `0.81.5 → 0.86.3`,
 Reanimated `4.3.1 → 4.5.5`, expo-modules-core `3.0.29 → 57.0.23`,
 electron-builder `26.8.1 → 26.18.0`, and @electron/rebuild `4.0.3 → 4.2.1`.
 The compared Claude Agent SDK (`0.3.246`) and OpenCode SDK (`1.14.46`) are unchanged.
+
+Representative version publication times were independently read from the npm registry:
+
+| Package/version                                                                     | Published UTC            | One-month gate at execution           |
+| ----------------------------------------------------------------------------------- | ------------------------ | ------------------------------------- |
+| [expo 57.0.30](https://registry.npmjs.org/expo)                                     | 2026-10-15T14:38:57.611Z | Already aged                          |
+| [react-native 0.86.3](https://registry.npmjs.org/react-native)                      | 2026-08-24T16:16:06.034Z | Already aged                          |
+| [react-native-reanimated 4.5.5](https://registry.npmjs.org/react-native-reanimated) | 2026-08-27T09:54:46.024Z | Already aged                          |
+| [expo-modules-core 57.0.23](https://registry.npmjs.org/expo-modules-core)           | 2026-10-14T16:35:22.439Z | Already aged                          |
+| [electron-builder 26.18.0](https://registry.npmjs.org/electron-builder)             | 2026-10-20T21:24:08.041Z | 2026-11-20T21:24:08.041Z; still gated |
+| [@electron/rebuild 4.2.1](https://registry.npmjs.org/@electron%2frebuild)           | 2026-10-06T22:35:19.105Z | Already aged                          |
+
+These six examples do not establish age closure for all551records. Electron-builder reaches30days on2026-11-19 and one calendar month on2026-11-20; no exception or adoption is inferred from either date.
 
 The Android patch incompatibility recorded in PR193 remains relevant: dependency
 and patch-package versions must move together. Do not apply the beta lock wholesale
