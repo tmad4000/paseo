@@ -54,6 +54,31 @@ describe("quit-lifecycle", () => {
     expect(shouldStopDesktopManagedDaemonOnQuit(SETTINGS_KEEP_RUNNING)).toBe(false);
   });
 
+  it("preserves a live daemon across app restarts even when ordinary keep-running is off", async () => {
+    const settings = {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon, preserveAgentsOnAppRestart: true },
+    };
+    const events: string[] = [];
+    expect(shouldStopDesktopManagedDaemonOnQuit(settings)).toBe(false);
+    expect(
+      await stopDesktopManagedDaemonOnQuitIfNeeded({
+        settingsStore: { get: async () => settings },
+        isDesktopManagedDaemonRunning: () => {
+          events.push("inspect");
+          return true;
+        },
+        stopDaemon: async () => {
+          events.push("stop");
+        },
+        showShutdownFeedback: () => {
+          events.push("feedback");
+        },
+      }),
+    ).toBe(false);
+    expect(events).toEqual([]);
+  });
+
   it("short-circuits without inspecting the daemon when keep-running is on", async () => {
     const events: string[] = [];
 

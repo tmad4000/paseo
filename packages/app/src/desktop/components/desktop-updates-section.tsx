@@ -208,6 +208,9 @@ interface DaemonInfoCardProps {
   activityIcon: ReactElement;
   handleToggleDaemonManagement: () => void;
   isUpdatingDaemonManagement: boolean;
+  preserveAgentsOnAppRestart: boolean;
+  handleTogglePreserveAgents: () => void;
+  isUpdatingPreserveAgents: boolean;
   keepRunningAfterQuit: boolean;
   handleToggleKeepRunningAfterQuit: () => void;
   isUpdatingKeepRunningAfterQuit: boolean;
@@ -229,6 +232,9 @@ function DaemonInfoCard(props: DaemonInfoCardProps) {
     activityIcon,
     handleToggleDaemonManagement,
     isUpdatingDaemonManagement,
+    preserveAgentsOnAppRestart,
+    handleTogglePreserveAgents,
+    isUpdatingPreserveAgents,
     keepRunningAfterQuit,
     handleToggleKeepRunningAfterQuit,
     isUpdatingKeepRunningAfterQuit,
@@ -273,6 +279,18 @@ function DaemonInfoCard(props: DaemonInfoCardProps) {
           onValueChange={handleToggleKeepRunningAfterQuit}
           disabled={isUpdatingKeepRunningAfterQuit}
           accessibilityLabel={t("desktop.daemon.keepRunning.title")}
+        />
+      </View>
+      <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>{t("desktop.daemon.preserveAgents.title")}</Text>
+          <Text style={settingsStyles.rowHint}>{t("desktop.daemon.preserveAgents.hint")}</Text>
+        </View>
+        <Switch
+          value={preserveAgentsOnAppRestart}
+          onValueChange={handleTogglePreserveAgents}
+          disabled={isUpdatingPreserveAgents}
+          accessibilityLabel={t("desktop.daemon.preserveAgents.title")}
         />
       </View>
       <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
@@ -371,6 +389,18 @@ export function LocalDaemonSection() {
       updateSettings: updateDaemonSettings,
     });
 
+  const [isUpdatingPreserveAgents, setIsUpdatingPreserveAgents] = useState(false);
+  const handleTogglePreserveAgents = useCallback(() => {
+    setIsUpdatingPreserveAgents(true);
+    void updateDaemonSettings({
+      preserveAgentsOnAppRestart: !daemonSettings.preserveAgentsOnAppRestart,
+    })
+      .catch(() => {
+        // useDesktopSettings owns the user-visible IPC error.
+      })
+      .finally(() => setIsUpdatingPreserveAgents(false));
+  }, [daemonSettings.preserveAgentsOnAppRestart, updateDaemonSettings]);
+
   const { isLogsModalOpen, handleCopyLogPath, handleOpenLogs, handleCloseLogsModal } =
     useDaemonLogsModal(daemonLogs);
 
@@ -450,6 +480,9 @@ export function LocalDaemonSection() {
             activityIcon={activityIcon}
             handleToggleDaemonManagement={handleToggleDaemonManagement}
             isUpdatingDaemonManagement={isUpdatingDaemonManagement}
+            preserveAgentsOnAppRestart={daemonSettings.preserveAgentsOnAppRestart}
+            handleTogglePreserveAgents={handleTogglePreserveAgents}
+            isUpdatingPreserveAgents={isUpdatingPreserveAgents}
             keepRunningAfterQuit={daemonSettings.keepRunningAfterQuit}
             handleToggleKeepRunningAfterQuit={handleToggleKeepRunningAfterQuit}
             isUpdatingKeepRunningAfterQuit={isUpdatingKeepRunningAfterQuit}

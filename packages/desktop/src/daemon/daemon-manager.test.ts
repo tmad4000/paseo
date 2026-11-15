@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
+import * as daemonControl from "@getpaseo/server/daemon-control";
 import { createDaemonCommandHandlers } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     releaseChannel: "stable",
     daemon: {
       manageBuiltInDaemon: true,
+      preserveAgentsOnAppRestart: false,
       keepRunningAfterQuit: true,
     },
   },
@@ -98,8 +100,56 @@ describe("daemon-manager commands", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(fixtureRoot, { recursive: true, force: true });
   });
+
+  it.each([
+    { preserve: true, expectedStops: 0 },
+    { preserve: false, expectedStops: 1 },
+  ])(
+    "app update preserves its owned daemon only when opted in (%s)",
+    async ({ preserve, expectedStops }) => {
+      mocks.settings = {
+        ...DEFAULT_DESKTOP_SETTINGS,
+        daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon, preserveAgentsOnAppRestart: preserve },
+      };
+      const instance = {
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        hostname: hostname(),
+        uid: process.getuid?.() ?? 0,
+        listen: "127.0.0.1:7999",
+        desktopManaged: true,
+      };
+      const read = vi.spyOn(daemonControl, "readDaemonInstance").mockResolvedValue(null);
+      vi.spyOn(daemonControl, "startDaemonInstance").mockImplementation(async (input) => {
+        read.mockResolvedValue(instance);
+        input.onAcquired?.(instance);
+        return { instance, spawned: true };
+      });
+      const stop = vi.spyOn(daemonControl, "stopDaemonInstance").mockResolvedValue({
+        action: "stopped",
+        pid: instance.pid,
+        forced: false,
+        usedLifecycleRpc: true,
+      });
+      mocks.runExternalCliJsonCommand.mockResolvedValue({
+        ...instance,
+        localDaemon: "running",
+        daemonVersion: "0.0.1",
+        serverId: "srv_test",
+      });
+      const handlers = createDaemonCommandHandlers();
+      const started = await handlers.start_desktop_daemon();
+      expect(started).toMatchObject({ ownedByDesktop: true, pid: instance.pid });
+      // Reopening the app with a newer version must retain a preserved worker.
+      await handlers.start_desktop_daemon();
+      expect(stop).toHaveBeenCalledTimes(expectedStops);
+      await handlers.stop_desktop_daemon({ reason: "app_update" });
+      expect(stop).toHaveBeenCalledTimes(expectedStops * 2);
+    },
+  );
 
   it("returns the Electron main-process log tail from electron-log", () => {
     writeFileSync(

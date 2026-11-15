@@ -29,6 +29,23 @@ describe("desktop-settings", () => {
     directories.clear();
   });
 
+  it("persists app restart preservation independently of ordinary quit", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    expect((await store.get()).daemon.preserveAgentsOnAppRestart).toBe(false);
+    await store.patch({ daemon: { preserveAgentsOnAppRestart: true } });
+    expect((await createDesktopSettingsStore({ userDataPath }).get()).daemon).toEqual({
+      manageBuiltInDaemon: true,
+      keepRunningAfterQuit: false,
+      preserveAgentsOnAppRestart: true,
+    });
+    await store.patch({ daemon: { preserveAgentsOnAppRestart: "false" } });
+    expect((await store.get()).daemon.preserveAgentsOnAppRestart).toBe(true);
+    await store.patch({ daemon: { preserveAgentsOnAppRestart: false } });
+    expect((await store.get()).daemon.preserveAgentsOnAppRestart).toBe(false);
+  });
+
   it("persists default settings for new users", async () => {
     const userDataPath = await createTempUserDataDir();
     directories.add(userDataPath);
@@ -84,6 +101,7 @@ describe("desktop-settings", () => {
       notifications: { playSound: true },
       daemon: {
         manageBuiltInDaemon: true,
+        preserveAgentsOnAppRestart: false,
         keepRunningAfterQuit: false,
       },
     });
@@ -106,6 +124,7 @@ describe("desktop-settings", () => {
       notifications: { playSound: true },
       daemon: {
         manageBuiltInDaemon: true,
+        preserveAgentsOnAppRestart: false,
         keepRunningAfterQuit: false,
       },
     });
@@ -123,6 +142,7 @@ describe("desktop-settings", () => {
           releaseChannel: "stable",
           daemon: {
             manageBuiltInDaemon: true,
+            preserveAgentsOnAppRestart: false,
             keepRunningAfterQuit: false,
           },
         },
@@ -186,6 +206,7 @@ describe("desktop-settings", () => {
         releaseChannel: "stable",
         daemon: {
           manageBuiltInDaemon: false,
+          preserveAgentsOnAppRestart: false,
           keepRunningAfterQuit: true,
         },
       },
@@ -273,6 +294,7 @@ describe("desktop-settings", () => {
       notifications: { playSound: true },
       daemon: {
         manageBuiltInDaemon: false,
+        preserveAgentsOnAppRestart: false,
         keepRunningAfterQuit: false,
       },
     });
@@ -316,7 +338,11 @@ describe("desktop-settings", () => {
     expect(next).toEqual({
       releaseChannel: "beta",
       notifications: { playSound: false },
-      daemon: { manageBuiltInDaemon: true, keepRunningAfterQuit: false },
+      daemon: {
+        manageBuiltInDaemon: true,
+        keepRunningAfterQuit: false,
+        preserveAgentsOnAppRestart: false,
+      },
     });
   });
 
