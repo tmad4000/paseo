@@ -38,8 +38,10 @@ pass; Dock/home-screen runtime acceptance belongs to each native build, starting
 `preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
 running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-and-daemon-restarts)
 and [restart design](design/restart-without-stopping-agents.html). Explicit daemon stop/restart
-retains its existing behavior unless graceful daemon restart is enabled. Merged in [PR #225](https://github.com/tmad4000/paseo/pull/225); installed-build and
-Apple installer verification pending. Regressions: desktop `quit-lifecycle.test.ts`,
+retains its existing behavior unless graceful daemon restart is enabled. Merged in [PR #225](https://github.com/tmad4000/paseo/pull/225).
+The [beta.33 native receipt](#0100-beta33-macos-arm64) verifies the installed switch,
+persistence and normal app restart with a retained daemon; live-turn continuity and
+manual Apple installer verification remain unchecked. Regressions: desktop `quit-lifecycle.test.ts`,
 `daemon-manager.test.ts`, `desktop-settings.test.ts`, app settings storage and locale parity.
 The existing `daemon-restart-resume.e2e.test.ts` includes opt-in Linux live Codex coverage via
 `PASEO_APP_RESTART_QA=1`: a gated foreground tool completes across lifecycle-owner process
@@ -423,6 +425,39 @@ sessions and follow the existing installation/restart authorization rules. Agent
 checks hands-free where possible; mark unavailable checks explicitly rather than asking Jacob to
 repeat routine QA. Report **code merged**, **artifact built**, **installed**, and **smoke verified**
 as separate states, with results for each target machine/platform.
+
+### 0.10.0-beta.33 macOS arm64
+
+[Published release](https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.33), verified
+2026-11-15. Source: `b180a7baf1ffffc57c4292e5a9e419dd9ebc9da9`; ZIP SHA-256:
+`b74a8b8d93751f980284b30da9ebfc4f0c259e0d8bcd1440217b8673b6c2bcab`.
+The extracted ZIP passed strict/deep code-signature verification, stapled-ticket validation and
+Gatekeeper's notarized Developer ID assessment. The installed app is beta.33; its bundled CLI/server
+are beta.30. Both checked Macs retained their already-running beta.27 daemons.
+
+- **Pass — `preserve-agents-on-app-restart`:** both installed UIs changed the switch from off to
+  on. Disk readback and a subsequent normal app restart retained the setting, the original daemon
+  processes and all baseline agent IDs. Checked queue files remained byte-identical; no queue was
+  sent, drained or restored. One daemon was external/launchd-owned; the other was a retained
+  desktop-launched daemon. This does not prove a foreground turn survives lifecycle-owner recreation.
+- **Pass, bounded — `help-version-status`:** the Fork menu identified the actual installed
+  beta.33 app, beta channel, `tmad4000/paseo` feed and retained beta.27 host separately. Before
+  publication it truthfully showed the installed app as newer than the published beta.32.
+  Other update surfaces and native install dialogs were not exercised in this receipt.
+- **Pass, bounded — `markdown-preview`:** an HTTP Markdown fixture rendered with preview/source
+  switching in the installed browser pane. A raw GitHub page carrying a restrictive sandbox policy
+  could not be read back through guest script execution and stayed raw. File-tab preview and
+  hostile-content cases were not rechecked in the installed app.
+- **Pass, bounded — `shared-stream-workflow`:** Needs you and Stream loaded existing entries, and
+  a disposable agent accepted a message from the installed UI and returned the expected reply.
+  The disposable agent was archived after becoming idle. No protocol errors were observed in the
+  canary log window; the recorded validation-failure counters remained zero. This release excludes
+  the later #226 controls.
+- **Not checked:** every other register acceptance check, including `footer-time`, live-turn
+  continuity, explicit daemon restart, reboot recovery, manual DMG installation, iOS/Android home
+  screens and non-macOS platforms. The `fork-icon-badge` source assets landed after this frozen beta.33 receipt;
+  the corrected consumed desktop icons target beta.35. Private native screenshots and detailed preservation receipts remain with
+  the release owner; they are not source-tree or browser-fixture evidence.
 
 ## Deferred automation
 
