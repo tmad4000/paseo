@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## App restart preservation
+
+`preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
+running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-restarts)
+and [restart design](design/restart-without-stopping-agents.html). Explicit daemon stop/restart
+retains its existing behavior. Candidate on `sol/restart-preserve-fork`; installed-build and
+Apple installer verification pending. Regressions: desktop `quit-lifecycle.test.ts`,
+`daemon-manager.test.ts`, `desktop-settings.test.ts`, app settings storage and locale parity.
+The existing `daemon-restart-resume.e2e.test.ts` includes opt-in Linux live Codex coverage via
+`PASEO_APP_RESTART_QA=1`: a gated foreground tool completes across lifecycle-owner process
+recreation and client reconnection with the same provider session.
+
 ## Stacked-pane composer
 
 `composer-stacked-panes`: short desktop panes reduce empty composer space and bound growing

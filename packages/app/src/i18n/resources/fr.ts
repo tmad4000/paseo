@@ -2183,6 +2183,10 @@ export const fr: TranslationResources = {
           "La gestion du démon intégré a été suspendue, maisPaseon'a ​​pas pu arrêter le démon.",
         updateFailed: "Impossible de mettre à jour la gestion des démons intégrés.",
       },
+      preserveAgents: {
+        title: "Conserver les agents au redémarrage de l’app",
+        hint: "Le daemon, les agents et les terminaux restent actifs à la fermeture ou à la mise à jour. Le daemon conserve sa version jusqu’à son redémarrage séparé.",
+      },
       keepRunning: {
         title: "Laisser le démon fonctionner après avoir quitté",
         hint: "Daemoncontinue de fonctionner lorsque vous quittezPaseo",

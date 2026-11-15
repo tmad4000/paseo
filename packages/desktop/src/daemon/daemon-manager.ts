@@ -279,7 +279,8 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
 }
 
 async function startDaemon(): Promise<DesktopDaemonStatus> {
-  assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
+  const settings = await getDesktopSettingsStore().get();
+  assertBuiltInDaemonManagementEnabled(settings);
 
   const current = await resolveDesktopDaemonStatus();
   logDesktopDaemonLifecycle("initial status check before start", {
@@ -291,7 +292,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     desktopManaged: current.desktopManaged,
   });
   if (current.status === "running" || current.status === "starting") {
-    if (shouldRestartForVersion(current)) {
+    if (!settings.daemon.preserveAgentsOnAppRestart && shouldRestartForVersion(current)) {
       logDesktopDaemonLifecycle("daemon version mismatch, restarting", {
         appVersion: normalizeVersion(resolveDesktopAppVersion()),
         daemonVersion: normalizeVersion(current.version),
@@ -331,6 +332,12 @@ export async function stopDesktopDaemon(
   reason: DesktopDaemonStopReason = DEFAULT_DESKTOP_DAEMON_STOP_REASON,
   confirmedInstance?: { pid: number; startedAt: string },
 ): Promise<DesktopDaemonStatus> {
+  // Keeping the existing worker preserves its SDK pipes and live process trees.
+  // Explicit stop/restart remains available when the user chooses to upgrade it.
+  if (reason === "app_update" || reason === "quit") {
+    const settings = await getDesktopSettingsStore().get();
+    if (settings.daemon.preserveAgentsOnAppRestart) return resolveDesktopDaemonStatus();
+  }
   const home = getPaseoHome();
   const instance = await readDaemonInstance(home);
   const owned = Boolean(

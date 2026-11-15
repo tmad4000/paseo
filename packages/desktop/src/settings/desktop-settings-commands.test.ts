@@ -15,6 +15,7 @@ function createStoreMock(): DesktopSettingsStore {
       releaseChannel: "beta",
       daemon: {
         manageBuiltInDaemon: false,
+        preserveAgentsOnAppRestart: false,
         keepRunningAfterQuit: true,
       },
     })),
@@ -56,6 +57,7 @@ describe("desktop-settings-commands", () => {
       releaseChannel: "beta",
       daemon: {
         manageBuiltInDaemon: false,
+        preserveAgentsOnAppRestart: false,
         keepRunningAfterQuit: true,
       },
     });

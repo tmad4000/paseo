@@ -2113,6 +2113,10 @@ export const zhCN: TranslationResources = {
         pausedStopFailed: "内置 daemon 管理已暂停，但 Paseo 无法停止 daemon。",
         updateFailed: "无法更新内置 daemon 管理设置。",
       },
+      preserveAgents: {
+        title: "应用重启后保持智能体运行",
+        hint: "退出或更新应用时保持守护进程、智能体和终端运行。守护进程在单独重启前保持当前版本。",
+      },
       keepRunning: {
         title: "退出后保持 daemon 运行",
         hint: "退出 Paseo 后 daemon 会继续运行",

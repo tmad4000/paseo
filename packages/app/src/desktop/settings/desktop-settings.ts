@@ -19,6 +19,7 @@ export interface DesktopSettings {
   daemon: {
     manageBuiltInDaemon: boolean;
     keepRunningAfterQuit: boolean;
+    preserveAgentsOnAppRestart: boolean;
   };
 }
 
@@ -36,6 +37,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   daemon: {
     manageBuiltInDaemon: true,
     keepRunningAfterQuit: false,
+    preserveAgentsOnAppRestart: false,
   },
 };
 
@@ -167,6 +169,7 @@ function parseDesktopSettings(raw: unknown): DesktopSettings {
         typeof daemon.manageBuiltInDaemon === "boolean"
           ? daemon.manageBuiltInDaemon
           : DEFAULT_DESKTOP_SETTINGS.daemon.manageBuiltInDaemon,
+      preserveAgentsOnAppRestart: daemon.preserveAgentsOnAppRestart === true,
       keepRunningAfterQuit:
         typeof daemon.keepRunningAfterQuit === "boolean"
           ? daemon.keepRunningAfterQuit
