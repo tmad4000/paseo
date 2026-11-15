@@ -55,14 +55,22 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 vi.mock("react-native-unistyles", () => ({
   StyleSheet: { create: () => new Proxy({}, { get: () => ({}) }) },
+  withUnistyles: () => () => null,
 }));
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }),
 }));
 vi.mock("lucide-react-native", () => ({
+  ChevronDown: () => null,
+  ChevronRight: () => null,
   HelpCircle: () => null,
   Minimize2: () => null,
+}));
+vi.mock("@/composer/tracks", () => ({ ComposerTrackMark: () => null }));
+vi.mock("@/subthreads/peek-intent", () => ({
+  wantsTabInstead: (event?: { metaKey?: boolean }) => Boolean(event?.metaKey),
+  useMiddleClickOpensTab: () => {},
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
 vi.mock("react-native-reanimated", () => ({
@@ -115,7 +123,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 import { TrackedAnswersPane, type AskDelegation, type TrackedAnswerActions } from "./answers-pane";
-import type { DelegatedChildPulse } from "./use-delegation-pulse";
+import type { SubthreadRow } from "@/subthreads/model";
 import { useAnswersPaneStore } from "./answers-pane-store";
 import { computeChatSessions, type ChatMessageEvent } from "./answers-sessions";
 import { describeSegment } from "./answers-pane";
@@ -708,7 +716,10 @@ describe("TrackedAnswersPane delegated asks", () => {
       handlers,
     );
     fireEvent.click(screen.getByTestId("open-ask-owner"));
-    expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "laptop", agentId: "c-remote" });
+    expect(handlers.openSession).toHaveBeenCalledWith(
+      { serverId: "laptop", agentId: "c-remote" },
+      { tab: false },
+    );
   });
 
   it("a minimized pane's pill counts a delegated child that newly needs attention", () => {
@@ -726,47 +737,84 @@ describe("TrackedAnswersPane delegated asks", () => {
     fireEvent.click(screen.getByTestId("tracked-answers-expand"));
   });
 
-  it("lists chats this one started that no ask tracks, live, each opening its chat", () => {
-    const handlers = actions({ openSession: vi.fn() });
-    const pulse = (snapshot: DelegationChildSnapshot) =>
-      deriveDelegationPulse(snapshot, { tracked: false });
-    const delegatedChildren: DelegatedChildPulse[] = [
-      {
-        child: { agentId: "c-ask", title: "Schema worker", createdAt: 2 },
-        target: { serverId: "srv", agentId: "c-ask" },
-        pulse: pulse(child({ title: "Schema worker", openQuestionCount: 1 })),
-      },
-      {
-        child: { agentId: "c-rest", title: "Docs worker", createdAt: 1 },
-        target: { serverId: "srv", agentId: "c-rest" },
-        pulse: pulse(child({ title: "Docs worker" })),
-      },
+  it("lists every spawned agent under a folded Spawned agents line that peeks each row", () => {
+    const spawnedRow = (overrides: Partial<SubthreadRow> & Pick<SubthreadRow, "id">) =>
+      ({
+        kind: "paseo",
+        provider: "codex",
+        label: `Worker ${overrides.id}`,
+        subtitle: null,
+        bucket: "done",
+        needsInput: false,
+        unread: false,
+        canReply: true,
+        workspaceId: null,
+        activity: null,
+        model: null,
+        lastActivityAt: new Date(1),
+        openQuestions: 0,
+        detail: {
+          report: null,
+          pendingPermission: null,
+          tasks: null,
+          modeId: null,
+          location: null,
+          description: null,
+          subagentType: null,
+        },
+        createdAt: new Date(1),
+        ...overrides,
+      }) as SubthreadRow;
+    const onPeek = vi.fn();
+    const onOpenTab = vi.fn();
+    const onToggle = vi.fn();
+    const rows = [
+      spawnedRow({ id: "c-ask", label: "Schema worker", bucket: "needs_input", needsInput: true }),
+      spawnedRow({ id: "c-run", label: "Build worker", bucket: "running" }),
+      spawnedRow({ id: "c-rest", label: "Docs worker" }),
     ];
-    render(
+    const section = (collapsed: boolean) => ({
+      rows,
+      collapsed,
+      onToggle,
+      onPeek,
+      onOpenTab,
+      attentionKeys: ["chat:c-ask:needs_input"],
+    });
+    const view = render(
       <TrackedAnswersPane
         entries={[]}
         agentId="parent-1"
-        actions={handlers}
+        actions={actions()}
         showOpenAsks
-        delegatedChildren={delegatedChildren}
+        spawned={section(true)}
       />,
     );
     expect(screen.getByText("Questions and asks")).toBeTruthy();
-    expect(screen.getByText("Delegated chats · 2")).toBeTruthy();
-    const statusIn = (agentId: string) =>
-      screen
-        .getByTestId(`delegated-chat-${agentId}`)
-        .querySelector('[data-testid="delegated-chat-open-status"]')?.textContent;
-    // An idle child no ask tracks is at rest; its question for you is what needs attention.
-    expect(statusIn("c-ask")).toBe("Idle 4m · 1 question for you");
-    expect(statusIn("c-rest")).toBe("Idle 4m");
+    // Folded: one line, its count and what needs you, and no rows.
+    const toggle = screen.getByTestId("spawned-agents-toggle");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Spawned agents · 3, 1 needs input, 1 working");
+    expect(screen.queryByTestId("spawned-agents-row-c-rest")).toBeNull();
     expect(screen.getByText("1 needs attention")).toBeTruthy();
-    fireEvent.click(
-      screen
-        .getByTestId("delegated-chat-c-rest")
-        .querySelector('[data-testid="delegated-chat-open"]')!,
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <TrackedAnswersPane
+        entries={[]}
+        agentId="parent-1"
+        actions={actions()}
+        showOpenAsks
+        spawned={section(false)}
+      />,
     );
-    expect(handlers.openSession).toHaveBeenCalledWith({ serverId: "srv", agentId: "c-rest" });
+    expect(screen.getByTestId("spawned-agents-row-state-c-ask").textContent).toBe("Needs input");
+    expect(screen.getByTestId("spawned-agents-row-state-c-run").textContent).toBe("Working");
+    fireEvent.click(screen.getByTestId("spawned-agents-row-c-rest"));
+    expect(onPeek).toHaveBeenCalledWith(rows[2]);
+    fireEvent.click(screen.getByTestId("spawned-agents-row-c-run"), { metaKey: true });
+    expect(onOpenTab).toHaveBeenCalledWith(rows[1]);
   });
 
   it("lists asks delegated to this chat, each linking back to its owner's ask", () => {

@@ -6,7 +6,6 @@ import {
   delegationTarget,
   deriveDelegationPulse,
   selectDelegatedHere,
-  selectUntrackedChildren,
   toDelegationChildSnapshot,
   trackedChildIds,
   type DelegationChildSnapshot,
@@ -242,15 +241,6 @@ describe("untracked children", () => {
     truncated: false,
     ask: value,
   });
-  const agent = (id: string, extra: Partial<Agent> = {}) =>
-    ({
-      id,
-      title: `Chat ${id}`,
-      archivedAt: null,
-      parentAgentId: "orch",
-      createdAt: new Date(1_000),
-      ...extra,
-    }) as Agent;
 
   it("collects every child an ask here follows, done or not, but never the chat itself", () => {
     const ids = trackedChildIds(
@@ -272,25 +262,6 @@ describe("untracked children", () => {
       "orch",
     );
     expect([...ids].sort()).toEqual(["kid-a", "kid-b", "kid-c"]);
-  });
-
-  it("lists live children of this chat that no ask tracks, newest first", () => {
-    const children = selectUntrackedChildren(
-      [
-        agent("old", { createdAt: new Date(1_000) }),
-        agent("new", { createdAt: new Date(3_000), title: "  Build worker " }),
-        agent("tracked", { createdAt: new Date(2_000) }),
-        agent("archived", { archivedAt: new Date(5_000) }),
-        agent("stranger", { parentAgentId: "someone-else" }),
-        agent("top-level", { parentAgentId: null }),
-      ],
-      "orch",
-      new Set(["tracked"]),
-    );
-    expect(children).toEqual([
-      { agentId: "new", title: "Build worker", createdAt: 3_000 },
-      { agentId: "old", title: "Chat old", createdAt: 1_000 },
-    ]);
   });
 });
 

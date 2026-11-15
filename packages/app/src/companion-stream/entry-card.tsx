@@ -4,7 +4,7 @@ import {
   type CompanionEntry,
 } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Text, View, type GestureResponderEvent } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { describeEntry, splitEntryText } from "./entry-labels";
 import { delegationTarget } from "./delegation-pulse";
 import { DelegationPulseChip } from "./delegation-pulse-chip";
 import { useDelegationPulse } from "./use-delegation-pulse";
+import { wantsTabInstead } from "@/subthreads/peek-intent";
+import { usePeekOrOpenAgent } from "@/subthreads/use-peek-or-open";
 import { entryChatTarget } from "./entry-source";
 import { HashtagText } from "./hashtag-text";
 
@@ -599,9 +601,17 @@ function AskDelegationPulse({ ask, serverId }: { ask?: TrackedAsk; serverId?: st
     [ask, serverId],
   );
   const pulse = useDelegationPulse(target);
-  const open = useCallback(() => {
-    if (target) navigateToAgent({ serverId: target.serverId, agentId: target.agentId });
-  }, [target]);
+  // Peek-first: a child of the chat showing this card opens beside it; anything else keeps its tab.
+  const peekOrOpen = usePeekOrOpenAgent(serverId ?? "");
+  const open = useCallback(
+    (event?: GestureResponderEvent) => {
+      if (target) peekOrOpen(target, { tab: wantsTabInstead(event) });
+    },
+    [peekOrOpen, target],
+  );
+  const openTab = useCallback(() => {
+    if (target) peekOrOpen(target, { tab: true });
+  }, [peekOrOpen, target]);
   if (!target || !pulse) return null;
   return (
     <View style={styles.delegation}>
@@ -609,6 +619,7 @@ function AskDelegationPulse({ ask, serverId }: { ask?: TrackedAsk; serverId?: st
         pulse={pulse}
         name={pulse.title || target.agentId.slice(0, 8)}
         onOpen={open}
+        onOpenTab={openTab}
         testID="companion-entry-delegation"
       />
     </View>

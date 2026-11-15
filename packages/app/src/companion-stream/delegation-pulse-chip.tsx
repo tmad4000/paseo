@@ -1,6 +1,6 @@
-import React, { memo, useEffect, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type GestureResponderEvent } from "react-native";
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -12,6 +12,7 @@ import Animated, {
 import { StyleSheet } from "react-native-unistyles";
 import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
 import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useMiddleClickOpensTab } from "@/subthreads/peek-intent";
 import type { DelegationPulse, DelegationPulseKind } from "./delegation-pulse";
 
 const PULSE_MS = 1100;
@@ -38,14 +39,20 @@ export const DelegationPulseChip = memo(function DelegationPulseChip({
   pulse,
   name,
   onOpen,
+  onOpenTab,
   testID = "delegation-pulse",
 }: {
   pulse: DelegationPulse;
   name: string;
-  onOpen: () => void;
+  /** Receives the press, so Mod+click on web can ask for the child's tab instead of a peek. */
+  onOpen: (event?: GestureResponderEvent) => void;
+  /** Web middle-click: the child's tab directly. */
+  onOpenTab?: () => void;
   testID?: string;
 }) {
   const { t } = useTranslation();
+  const ref = useRef<View>(null);
+  useMiddleClickOpensTab(ref, onOpenTab ?? null);
   const status = useDelegationStatusLabel(pulse);
   const dataSet = useMemo(
     () => ({ pulse: pulse.kind, attention: pulse.needsAttention ? "true" : "false" }),
@@ -53,6 +60,7 @@ export const DelegationPulseChip = memo(function DelegationPulseChip({
   );
   return (
     <Pressable
+      ref={ref}
       onPress={onOpen}
       style={styles.chip}
       accessibilityRole="link"

@@ -35,6 +35,8 @@ export interface ProviderSubagentRow {
   status: ProviderSubagentDescriptorPayload["status"];
   requiresAttention: boolean;
   createdAt: Date;
+  /** The descriptor's last change: a provider subagent's last activity. */
+  updatedAt: Date;
 }
 
 export type SubagentRow = PaseoSubagentRow | ProviderSubagentRow;
@@ -49,10 +51,10 @@ interface SelectSubagentsParams {
   providerParentSubagentId?: string;
 }
 
-const EMPTY_SUBAGENT_ROWS: SubagentRow[] = [];
+const EMPTY_SUBAGENT_ROWS: PaseoSubagentRow[] = [];
 const EMPTY_PROVIDER_SUBAGENT_ROWS: ProviderSubagentRow[] = [];
 
-function toSubagentRow(agent: Agent): SubagentRow {
+function toSubagentRow(agent: Agent): PaseoSubagentRow {
   return {
     kind: "paseo",
     id: agent.id,
@@ -71,13 +73,13 @@ export function selectSubagentsForParent(
   state: SessionStoreSnapshot,
   params: SelectSubagentsParams,
   pendingArchiveIds: ReadonlySet<string>,
-): SubagentRow[] {
+): PaseoSubagentRow[] {
   const agents = state.sessions[params.serverId]?.agents;
   if (!agents || agents.size === 0) {
     return EMPTY_SUBAGENT_ROWS;
   }
 
-  const rows: SubagentRow[] = [];
+  const rows: PaseoSubagentRow[] = [];
   for (const agent of agents.values()) {
     if (
       agent.archivedAt ||
@@ -126,10 +128,39 @@ export function selectProviderSubagentsForParent(
       status: subagent.status,
       requiresAttention: subagent.status === "failed",
       createdAt: new Date(subagent.createdAt),
+      updatedAt: new Date(subagent.updatedAt),
     });
   }
   rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   return rows;
+}
+
+/**
+ * Spawned agents (managed children) first, then provider subagents, each in creation order. The
+ * two kinds are never interleaved: a chat with three workers and twenty Explore tasks must not
+ * read as twenty-three of one thing. Every surface that lists both relies on this order.
+ */
+export function orderSubagentRows(
+  spawned: readonly PaseoSubagentRow[],
+  provider: readonly ProviderSubagentRow[],
+): SubagentRow[] {
+  return [...spawned, ...provider];
+}
+
+export interface SubagentRowGroups {
+  spawned: PaseoSubagentRow[];
+  provider: ProviderSubagentRow[];
+}
+
+/** Splits an ordered row list back into its two kinds, keeping each kind's order. */
+export function partitionSubagentRows(rows: readonly SubagentRow[]): SubagentRowGroups {
+  const spawned: PaseoSubagentRow[] = [];
+  const provider: ProviderSubagentRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "paseo") spawned.push(row);
+    else provider.push(row);
+  }
+  return { spawned, provider };
 }
 
 export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRow[] {
@@ -162,9 +193,6 @@ export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRo
 
   return useMemo(() => {
     if (params.providerParentSubagentId) return providerRows;
-    if (providerRows.length === 0) return paseoRows;
-    const rows = [...paseoRows, ...providerRows];
-    rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-    return rows;
+    return orderSubagentRows(paseoRows, providerRows);
   }, [params.providerParentSubagentId, paseoRows, providerRows]);
 }

@@ -8,6 +8,7 @@ import {
   ScrollView,
   Text,
   View,
+  type GestureResponderEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
@@ -39,8 +40,9 @@ import {
 import { splitEntryText } from "./entry-labels";
 import { entryChatTarget } from "./entry-source";
 import { DelegationPulseChip } from "./delegation-pulse-chip";
-import { DelegatedChatsList } from "./delegated-chats";
-import type { DelegatedChildPulse } from "./use-delegation-pulse";
+import { SpawnedAgentsSection } from "./spawned-agents";
+import type { SubthreadRow } from "@/subthreads/model";
+import { wantsTabInstead } from "@/subthreads/peek-intent";
 import {
   delegationAttentionKey,
   type DelegatedHereAsk,
@@ -48,6 +50,21 @@ import {
   type DelegationTarget,
 } from "./delegation-pulse";
 import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
+
+/** The pane's Spawned agents section: its rows, its fold, and where a row goes. */
+export interface SpawnedAgentsPaneSection {
+  rows: readonly SubthreadRow[];
+  collapsed: boolean;
+  onToggle: () => void;
+  onPeek: (row: SubthreadRow) => void;
+  onOpenTab: (row: SubthreadRow) => void;
+  onOpenRegistry?: () => void;
+  /**
+   * Attention keys for spawned agents that need the delegator and that no ask already counts:
+   * they light a minimized pane's pill, as a delegated child's ask does.
+   */
+  attentionKeys: readonly string[];
+}
 
 /** The child working an ask, with its live state. */
 export interface AskDelegation {
@@ -68,8 +85,11 @@ export interface TrackedAnswerActions {
   hasMessage: (messageId: string) => boolean;
   /** Shows the ask's card in this chat's Stream. */
   openAsk: (entry: CompanionEntry) => void;
-  /** Opens the session working a delegated ask, which may live on another host. */
-  openSession?: (target: DelegationTarget) => void;
+  /**
+   * Opens the session working a delegated ask, which may live on another host. A subagent of
+   * this chat peeks beside it first; `tab` asks for its tab instead (Mod+click, middle-click).
+   */
+  openSession?: (target: DelegationTarget, options?: { tab?: boolean }) => void;
   /** Opens the chat that delegated an ask to this one, on that ask's card. */
   openOwnerAsk?: (item: DelegatedHereAsk) => void;
 }
@@ -87,8 +107,8 @@ interface TrackedAnswersPaneProps {
   delegation?: (entry: CompanionEntry) => AskDelegation | null;
   /** Asks other chats delegated to this one, each linking back to its owner. */
   delegatedHere?: readonly DelegatedHereAsk[];
-  /** Chats this one started that no ask tracks, live; each links to the child. */
-  delegatedChildren?: readonly DelegatedChildPulse[];
+  /** Every unarchived agent this chat spawned, live; a row peeks it beside the chat. */
+  spawned?: SpawnedAgentsPaneSection | null;
   /** The chat's sessions, computed from its whole loaded timeline; omitted, no dividers show. */
   sessions?: ChatSessions | null;
 }
@@ -107,7 +127,8 @@ const ASK_BADGES = {
 
 const NO_ASKS: OpenAsk[] = [];
 const NO_DELEGATED_HERE: readonly DelegatedHereAsk[] = [];
-const NO_DELEGATED_CHILDREN: readonly DelegatedChildPulse[] = [];
+const NO_SPAWNED_ROWS: readonly SubthreadRow[] = [];
+const NO_KEYS: readonly string[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 
 type PaneRow<T> = { type: "divider"; segment: PaneSegment } | { type: "item"; item: T };
@@ -144,9 +165,10 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
   agentTitle,
   delegation,
   delegatedHere = NO_DELEGATED_HERE,
-  delegatedChildren = NO_DELEGATED_CHILDREN,
+  spawned = null,
   sessions,
 }: TrackedAnswersPaneProps) {
+  const { rows: spawnedRows, attentionKeys: spawnedAttentionKeys } = spawnedParts(spawned);
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const items = useMemo(() => selectTrackedAnswers(entries), [entries]);
@@ -165,18 +187,9 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
         const pulse = delegations.get(item.entry.id)?.pulse;
         return (pulse && delegationAttentionKey(item.entry.id, pulse)) ?? [];
       }),
-      ...delegatedChildren.flatMap(
-        (item) => delegationAttentionKey(`chat:${item.child.agentId}`, item.pulse) ?? [],
-      ),
+      ...spawnedAttentionKeys,
     ],
-    [asks, delegations, delegatedChildren],
-  );
-  const openChild = useCallback(
-    (target: DelegationTarget) => {
-      if (actions.openSession) actions.openSession(target);
-      else actions.openChat(target.agentId);
-    },
-    [actions],
+    [asks, delegations, spawnedAttentionKeys],
   );
   const minimized = useAnswersPaneStore((state) => state.minimized) ?? isCompact;
   const setMinimized = useAnswersPaneStore((state) => state.setMinimized);
@@ -221,9 +234,9 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     if (scrollY.current > 0) scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
   }, []);
 
-  const total = items.length + asks.length + delegatedHere.length + delegatedChildren.length;
+  const total = items.length + asks.length + delegatedHere.length + spawnedRows.length;
   if (total === 0) return null;
-  const hasAsks = asks.length + delegatedHere.length + delegatedChildren.length > 0;
+  const hasAsks = asks.length + delegatedHere.length + spawnedRows.length > 0;
 
   const summary = paneSummary(t, {
     newCount,
@@ -360,14 +373,10 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
               )}
             </View>
           ) : null}
-          <DelegatedChatsList
-            items={delegatedChildren}
-            first={items.length + asks.length === 0}
-            onOpen={openChild}
-          />
+          <PaneSpawnedAgents spawned={spawned} first={items.length + asks.length === 0} />
           <DelegatedHereSection
             items={delegatedHere}
-            first={items.length + asks.length + delegatedChildren.length === 0}
+            first={items.length + asks.length + spawnedRows.length === 0}
             actions={actions}
           />
         </ScrollView>
@@ -375,6 +384,34 @@ export const TrackedAnswersPane = memo(function TrackedAnswersPane({
     </View>
   );
 });
+
+function spawnedParts(spawned: SpawnedAgentsPaneSection | null) {
+  return {
+    rows: spawned?.rows ?? NO_SPAWNED_ROWS,
+    attentionKeys: spawned?.attentionKeys ?? NO_KEYS,
+  };
+}
+
+function PaneSpawnedAgents({
+  spawned,
+  first,
+}: {
+  spawned: SpawnedAgentsPaneSection | null;
+  first: boolean;
+}) {
+  if (!spawned) return null;
+  return (
+    <SpawnedAgentsSection
+      rows={spawned.rows}
+      collapsed={spawned.collapsed}
+      onToggle={spawned.onToggle}
+      onPeek={spawned.onPeek}
+      onOpenTab={spawned.onOpenTab}
+      onOpenRegistry={spawned.onOpenRegistry}
+      first={first}
+    />
+  );
+}
 
 /**
  * A fast, desktop-only explanation of a pane control. Every control also carries its label and
@@ -594,10 +631,16 @@ const OpenAskRow = memo(function OpenAskRow({
     if (delegatedAgentId) actions.openChat(delegatedAgentId);
   }, [actions, delegatedAgentId]);
   const target = delegation?.target;
-  const openChild = useCallback(() => {
-    if (!target) return;
-    if (actions.openSession) actions.openSession(target);
-    else actions.openChat(target.agentId);
+  const openChild = useCallback(
+    (event?: GestureResponderEvent) => {
+      if (!target) return;
+      if (actions.openSession) actions.openSession(target, { tab: wantsTabInstead(event) });
+      else actions.openChat(target.agentId);
+    },
+    [actions, target],
+  );
+  const openChildTab = useCallback(() => {
+    if (target) actions.openSession?.(target, { tab: true });
   }, [actions, target]);
   const owner = delegatedAgentId ? ownerTitle?.trim() || shortAgentId(delegatedAgentId) : null;
   const childName = delegation
@@ -615,6 +658,7 @@ const OpenAskRow = memo(function OpenAskRow({
             pulse={delegation.pulse}
             name={childName}
             onOpen={openChild}
+            onOpenTab={openChildTab}
             testID="open-ask-owner"
           />
         ) : null}

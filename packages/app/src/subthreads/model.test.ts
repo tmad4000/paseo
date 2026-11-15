@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { Agent } from "@/stores/session-store";
 import type { PaseoSubagentRow, ProviderSubagentRow } from "@/subagents/select";
 import {
+  buildRegistryFocusItems,
   buildSubthreadRows,
+  groupSubthreadRows,
+  moveRegistryFocus,
+  plainReportText,
+  registryCardFocusKey,
+  registryGroupFocusKey,
+  resolveGroupCollapsed,
+  resolveRegistryFocusAfterRemoval,
+  summarizeRegistryHeader,
+  summarizeTaskProgress,
   CLOSED_SUBTHREADS_DRAWER,
   condenseActivityText,
   reduceSubthreadsDrawer,
@@ -47,7 +57,8 @@ function providerRow(
     subtitle: null,
     status: overrides.status ?? "running",
     requiresAttention: overrides.status === "failed",
-    createdAt: new Date("2026-10-10T00:01:00.000Z"),
+    createdAt: overrides.createdAt ?? new Date("2026-10-10T00:01:00.000Z"),
+    updatedAt: overrides.updatedAt ?? new Date("2026-10-10T00:02:00.000Z"),
   };
 }
 
@@ -301,5 +312,189 @@ describe("condensed activity", () => {
       }),
     );
     expect(rows.map((row) => row.activity)).toEqual([{ kind: "report", text: "Shipped" }, null]);
+  });
+});
+
+describe("registry cards", () => {
+  it("carries model, last activity and the expanded detail without loading the timeline", () => {
+    const lastActivityAt = new Date("2026-11-14T09:30:00.000Z");
+    const rows = buildSubthreadRows([paseoRow({ id: "a" })], () =>
+      agent({
+        model: null,
+        runtimeInfo: { provider: "claude", sessionId: null, model: "claude-opus-5-5" },
+        lastActivityAt,
+        currentModeId: "bypassPermissions",
+        cwd: "/home/dev/worktrees/registry-phase-1/",
+        pendingPermissions: [
+          { id: "p1", name: "Bash", title: "Run npm test" } as never,
+          { id: "p2", name: "Bash", title: "Run npm run typecheck" } as never,
+        ],
+        tasks: [
+          { text: "Read the spec", completed: true },
+          {
+            text: "Write tests",
+            completed: false,
+            status: "in_progress",
+            activeForm: "Writing tests",
+          },
+          { text: "Open the PR", completed: false, status: "pending" },
+        ],
+        companionEntries: [
+          {
+            id: "o1",
+            kind: "outcome",
+            text: "## Done\n\nFiled the issue and **mirrored** it.\n\nWaiting on the tracker.",
+            timestamp: "2026-11-14T09:00:00.000Z",
+          } as never,
+        ],
+      }),
+    );
+    expect(rows[0]).toMatchObject({
+      model: "claude-opus-5-5",
+      lastActivityAt,
+      detail: {
+        report: {
+          kind: "report",
+          text: "Done\n\nFiled the issue and mirrored it.\n\nWaiting on the tracker.",
+        },
+        pendingPermission: "Run npm run typecheck",
+        tasks: { done: 1, total: 3, current: "Writing tests" },
+        modeId: "bypassPermissions",
+        location: "registry-phase-1",
+      },
+    });
+  });
+
+  it("prefers the agent's chosen model over the runtime's report", () => {
+    const rows = buildSubthreadRows([paseoRow({ id: "a" })], () =>
+      agent({
+        model: "gpt-5.5",
+        runtimeInfo: { provider: "codex", sessionId: null, model: "gpt-5.5-mini" },
+      }),
+    );
+    expect(rows[0]?.model).toBe("gpt-5.5");
+  });
+
+  it("gives a provider subagent its descriptor's update time, full task and type, no model", () => {
+    const updatedAt = new Date("2026-11-14T10:00:00.000Z");
+    const rows = buildSubthreadRows(
+      [providerRow({ id: "t1", description: "Map the auth flow end to end", updatedAt })],
+      () => undefined,
+    );
+    expect(rows[0]).toMatchObject({
+      model: null,
+      lastActivityAt: updatedAt,
+      detail: { description: "Map the auth flow end to end", subagentType: "Explore", tasks: null },
+    });
+  });
+
+  it("omits task progress when the agent reports no tasks", () => {
+    expect(summarizeTaskProgress(undefined)).toBeNull();
+    expect(summarizeTaskProgress([])).toBeNull();
+  });
+
+  it("keeps a report's paragraphs but drops its markdown", () => {
+    expect(plainReportText("# Title\n\n- [link](http://x)   done\n\n\n\nnext `code`")).toBe(
+      "Title\n\n- link done\n\nnext code",
+    );
+  });
+});
+
+describe("registry groups", () => {
+  const rows = buildSubthreadRows(
+    [
+      paseoRow({ id: "spawned-new", createdAt: new Date("2026-10-10T00:05:00.000Z") }),
+      providerRow({ id: "task-old", createdAt: new Date("2026-10-10T00:00:00.000Z") }),
+      paseoRow({ id: "spawned-old", createdAt: new Date("2026-10-10T00:01:00.000Z") }),
+      providerRow({ id: "task-failed", status: "failed" }),
+    ].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime()),
+    () => agent({}),
+  );
+
+  it("never interleaves the kinds and keeps creation order inside each", () => {
+    const groups = groupSubthreadRows(rows);
+    expect(groups.map((group) => group.kind)).toEqual(["paseo", "provider"]);
+    expect(groups[0]?.rows.map((row) => row.id)).toEqual(["spawned-old", "spawned-new"]);
+    expect(groups[1]?.rows.map((row) => row.id)).toEqual(["task-old", "task-failed"]);
+    expect(groups[1]?.summary).toMatchObject({ total: 2, failed: 1 });
+  });
+
+  it("drops an empty group", () => {
+    const groups = groupSubthreadRows(rows.filter((row) => row.kind === "provider"));
+    expect(groups.map((group) => group.kind)).toEqual(["provider"]);
+  });
+
+  it("counts spawned agents only in the header, so a failed Explore task does not need you", () => {
+    expect(summarizeRegistryHeader(rows)).toEqual({
+      total: 2,
+      needsInput: 0,
+      failed: 0,
+      unread: 0,
+      running: 0,
+    });
+    const providerOnly = rows.filter((row) => row.kind === "provider");
+    expect(summarizeRegistryHeader(providerOnly)).toMatchObject({ total: 2, failed: 0 });
+  });
+
+  it("folds provider subagents by default only when the chat has spawned agents", () => {
+    expect(resolveGroupCollapsed({ kind: "paseo", stored: undefined, hasSpawned: true })).toBe(
+      false,
+    );
+    expect(resolveGroupCollapsed({ kind: "provider", stored: undefined, hasSpawned: true })).toBe(
+      true,
+    );
+    expect(resolveGroupCollapsed({ kind: "provider", stored: undefined, hasSpawned: false })).toBe(
+      false,
+    );
+    expect(resolveGroupCollapsed({ kind: "provider", stored: false, hasSpawned: true })).toBe(
+      false,
+    );
+    expect(resolveGroupCollapsed({ kind: "paseo", stored: true, hasSpawned: true })).toBe(true);
+  });
+});
+
+describe("registry roving focus", () => {
+  const rows = buildSubthreadRows(
+    [paseoRow({ id: "a" }), paseoRow({ id: "b" }), providerRow({ id: "t" })],
+    () => agent({}),
+  );
+  const groups = groupSubthreadRows(rows);
+  const expanded = buildRegistryFocusItems(groups, () => false);
+
+  it("walks headings and cards across groups, and skips a folded group's cards", () => {
+    expect(expanded.map((item) => item.key)).toEqual([
+      "group:paseo",
+      "card:paseo:a",
+      "card:paseo:b",
+      "group:provider",
+      "card:provider:t",
+    ]);
+    const folded = buildRegistryFocusItems(groups, (kind) => kind === "paseo");
+    expect(folded.map((item) => item.key)).toEqual([
+      "group:paseo",
+      "group:provider",
+      "card:provider:t",
+    ]);
+  });
+
+  it("stops at the ends instead of wrapping", () => {
+    expect(moveRegistryFocus(expanded, null, 1)).toBe("group:paseo");
+    expect(moveRegistryFocus(expanded, "card:paseo:b", 1)).toBe("group:provider");
+    expect(moveRegistryFocus(expanded, "card:provider:t", 1)).toBe("card:provider:t");
+    expect(moveRegistryFocus(expanded, "group:paseo", -1)).toBe("group:paseo");
+    expect(moveRegistryFocus([], null, 1)).toBeNull();
+  });
+
+  it("never loses focus when the focused card leaves", () => {
+    const withoutA = expanded.filter(
+      (item) => item.key !== registryCardFocusKey({ kind: "paseo", id: "a" }),
+    );
+    expect(resolveRegistryFocusAfterRemoval(expanded, withoutA, "card:paseo:a")).toBe(
+      "card:paseo:b",
+    );
+    const last = expanded.filter((item) => item.key !== "card:provider:t");
+    expect(resolveRegistryFocusAfterRemoval(expanded, last, "card:provider:t")).toBe(
+      registryGroupFocusKey("provider"),
+    );
   });
 });

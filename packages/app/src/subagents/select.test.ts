@@ -1,6 +1,11 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { selectProviderSubagentsForParent, selectSubagentsForParent } from "./select";
+import {
+  orderSubagentRows,
+  partitionSubagentRows,
+  selectProviderSubagentsForParent,
+  selectSubagentsForParent,
+} from "./select";
 import { useProviderSubagentStore } from "./provider-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 
@@ -433,5 +438,51 @@ describe("selectSubagentsForParent", () => {
         EMPTY_PENDING_ARCHIVE_IDS,
       ),
     );
+  });
+});
+
+describe("orderSubagentRows", () => {
+  it("lists spawned agents before provider subagents even when a provider task is older", () => {
+    setAgents([
+      makeAgent({
+        id: "spawned",
+        parentAgentId: "parent-a",
+        createdAt: new Date("2026-03-08T10:05:00.000Z"),
+      }),
+    ]);
+    useProviderSubagentStore.getState().applyUpdate(SERVER_ID, {
+      kind: "upsert",
+      subagent: {
+        id: "explore",
+        parentAgentId: "parent-a",
+        provider: "claude",
+        title: "Explore",
+        description: "Map the auth flow",
+        status: "completed",
+        createdAt: "2026-03-08T10:00:00.000Z",
+        updatedAt: "2026-03-08T10:03:00.000Z",
+        toolCallId: null,
+      },
+    });
+    const spawned = selectSubagentsForParent(
+      useSessionStore.getState(),
+      { serverId: SERVER_ID, parentAgentId: "parent-a" },
+      EMPTY_PENDING_ARCHIVE_IDS,
+    );
+    const provider = selectProviderSubagentsForParent(
+      useProviderSubagentStore.getState(),
+      { serverId: SERVER_ID, parentAgentId: "parent-a" },
+      true,
+    );
+    const rows = orderSubagentRows(spawned, provider);
+    expect(rows.map((row) => `${row.kind}:${row.id}`)).toEqual([
+      "paseo:spawned",
+      "provider:explore",
+    ]);
+    expect(provider[0]?.updatedAt).toEqual(new Date("2026-03-08T10:03:00.000Z"));
+
+    const groups = partitionSubagentRows(rows);
+    expect(groups.spawned.map((row) => row.id)).toEqual(["spawned"]);
+    expect(groups.provider.map((row) => row.id)).toEqual(["explore"]);
   });
 });

@@ -206,17 +206,9 @@ export function delegationAttentionKey(entryId: string, pulse: DelegationPulse):
   return `child:${entryId}:${pulse.kind}${pulse.questions > 0 ? `:q${pulse.questions}` : ""}`;
 }
 
-/** A chat this one started (the host's parent label) that no ask in this chat links. */
-export interface DelegatedChild {
-  agentId: string;
-  title: string | null;
-  /** Epoch ms; newest children list first after those that need attention. */
-  createdAt: number;
-}
-
 /**
- * Every agent id an ask in this chat already follows, done or not: those children show on their
- * ask's card and need no second row.
+ * Every agent id an ask in this chat already follows, done or not: those children's attention is
+ * counted on their ask's card, so the Spawned agents section does not count it again.
  */
 export function trackedChildIds(
   entries: readonly CompanionEntry[],
@@ -235,27 +227,4 @@ export function trackedChildIds(
     }
   }
   return ids;
-}
-
-/**
- * Chats this one delegated to without recording an ask: live children whose parent is this chat.
- * The host labels every agent created from another agent with its parent, so this works even when
- * the delegating agent never wrote to the Stream. Archived children are finished business.
- */
-export function selectUntrackedChildren(
-  agents: Iterable<Agent>,
-  parentAgentId: string,
-  tracked: ReadonlySet<string>,
-): DelegatedChild[] {
-  const children: DelegatedChild[] = [];
-  for (const agent of agents) {
-    if (agent.parentAgentId !== parentAgentId || agent.archivedAt) continue;
-    if (agent.id === parentAgentId || tracked.has(agent.id)) continue;
-    children.push({
-      agentId: agent.id,
-      title: agent.title?.trim() || null,
-      createdAt: agent.createdAt?.getTime?.() ?? 0,
-    });
-  }
-  return children.sort((a, b) => b.createdAt - a.createdAt);
 }

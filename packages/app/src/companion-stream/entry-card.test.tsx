@@ -126,6 +126,11 @@ vi.mock("@/components/markdown/renderer", () => ({
   MarkdownRenderer: ({ text }: { text: string }) => <div data-testid="markdown">{text}</div>,
 }));
 vi.mock("@/utils/navigate-to-agent", () => ({ navigateToAgent: vi.fn() }));
+// The mocked react-native has no Platform; Mod+click and middle-click are web-only gestures.
+vi.mock("@/subthreads/peek-intent", () => ({
+  wantsTabInstead: () => false,
+  useMiddleClickOpensTab: () => {},
+}));
 vi.mock("@/utils/time", () => ({ formatMessageTimestamp: () => "Oct 24, 2:10 PM" }));
 
 import { EntryCard } from "./entry-card";
