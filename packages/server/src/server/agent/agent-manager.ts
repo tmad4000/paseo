@@ -1094,7 +1094,11 @@ export class AgentManager {
 
   private assertRestartAdmissionOpen(): void {
     if (this.restartAdmissionClosed) {
-      throw new Error("Daemon is restarting; retry after reconnecting");
+      // A queue drain can already hold a receipt when admission closes. This
+      // rejection precedes provider dispatch, so its receipt is safe to retry.
+      throw Object.assign(new Error("Daemon is restarting; retry after reconnecting"), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      });
     }
   }
 

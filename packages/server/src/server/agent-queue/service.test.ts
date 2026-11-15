@@ -7,7 +7,7 @@ import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import type { AgentManagerEvent, ManagedAgent } from "../agent/agent-manager.js";
+import { AgentManager, type AgentManagerEvent, type ManagedAgent } from "../agent/agent-manager.js";
 import type { AgentStorage } from "../agent/agent-storage.js";
 import {
   AgentQueueService,
@@ -711,6 +711,46 @@ describe("AgentQueueService", () => {
     await harness.service.flushDrains();
     expect(harness.sent.map((item) => item.messageId)).toEqual(["notice", "question"]);
     expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+  });
+
+  test("a restart fence closing after queue admission leaves its receipt retryable", async () => {
+    const receipts = new MessageReceipts(join(dir, "agent-requests"));
+    harness.service.setMessageReceipts(receipts);
+    harness.agents.emitLifecycle("running");
+    await harness.service.enqueue({ agentId: AGENT_ID, itemId: "restart-race", text: "once" });
+    await harness.service.flushDrains();
+    const manager = new AgentManager({
+      logger: createTestLogger(),
+      clients: {},
+      restartCheckpoint: async () => {},
+    });
+    await manager.prepareForRestart(AbortSignal.timeout(5_000));
+    try {
+      let rejection: Error | null = null;
+      try {
+        manager.streamAgent(AGENT_ID, "once");
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        rejection = error;
+      }
+      expect(rejection).not.toBeNull();
+      // The queue already passed its admission check before the manager fenced.
+      harness.failSends(rejection);
+      harness.agents.emitLifecycle("idle");
+      await harness.service.flushDrains();
+      expect(await receipts.get(AGENT_ID, "restart-race")).toBe("absent");
+      expect((await harness.service.list(AGENT_ID)).items.map((item) => item.id)).toEqual([
+        "restart-race",
+      ]);
+      await manager.releasePreparedRestart();
+      harness.failSends(null);
+      await harness.service.drainNow(AGENT_ID);
+      expect(harness.sent.map((item) => item.messageId)).toEqual(["restart-race"]);
+      expect(await receipts.get(AGENT_ID, "restart-race")).toBe("completed");
+      expect((await harness.service.list(AGENT_ID)).items).toEqual([]);
+    } finally {
+      await manager.releasePreparedRestart();
+    }
   });
 
   test("receipt-backed refused steer stays queued and can be edited", async () => {
