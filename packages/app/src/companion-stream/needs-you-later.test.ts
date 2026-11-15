@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GlobalStreamRow } from "./use-global-stream";
 import { splitLater } from "./needs-you-later";
 
@@ -44,4 +44,35 @@ describe("splitLater", () => {
     expect(splitLater(plain, "needs_you", true)).toEqual({ data: [], nowCount: 1, laterCount: 0 });
     expect(splitLater(rows, "tasks", true)).toEqual({ data: rows, nowCount: 0, laterCount: 0 });
   });
+});
+
+const savedStorage = vi.hoisted(() => ({ value: null as string | null }));
+vi.mock("@react-native-async-storage/async-storage", () => ({
+  default: {
+    getItem: vi.fn(async () => savedStorage.value),
+    setItem: vi.fn(async (_key: string, value: string) => {
+      savedStorage.value = value;
+    }),
+    removeItem: vi.fn(async () => {
+      savedStorage.value = null;
+    }),
+  },
+}));
+import { needsYouIdentity, needsYouRevision, useNeedsYouSeen } from "./needs-you-seen";
+
+it("keeps unseen revisions distinct across hosts and saves only viewed requests", async () => {
+  await useNeedsYouSeen.persist.rehydrate();
+  useNeedsYouSeen.setState({ seen: {}, hydrated: true });
+  const first = row("first");
+  const otherHost = { ...first, serverId: "another-host" };
+  useNeedsYouSeen.getState().markSeen([first]);
+  expect(useNeedsYouSeen.getState().seen[needsYouIdentity(first)]).toBe(needsYouRevision(first));
+  expect(useNeedsYouSeen.getState().seen[needsYouIdentity(otherHost)]).toBeUndefined();
+  const revised = row("first");
+  if (revised.item.kind === "entry") revised.item.entry.text = "Changed question";
+  expect(useNeedsYouSeen.getState().seen[needsYouIdentity(revised)]).not.toBe(
+    needsYouRevision(revised),
+  );
+  await useNeedsYouSeen.persist.rehydrate();
+  expect(useNeedsYouSeen.getState().seen[needsYouIdentity(first)]).toBe(needsYouRevision(first));
 });

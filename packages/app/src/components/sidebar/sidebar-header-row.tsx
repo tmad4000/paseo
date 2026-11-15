@@ -15,6 +15,7 @@ type SidebarHeaderRowVariant = "header" | "compact";
 
 interface SidebarHeaderRowProps {
   icon: LucideIcon;
+  badge?: string;
   label: string;
   onPress: () => void;
   isActive?: boolean;
@@ -33,6 +34,7 @@ interface SidebarHeaderRowProps {
 
 export function SidebarHeaderRow({
   icon: Icon,
+  badge,
   label,
   onPress,
   isActive = false,
@@ -67,13 +69,14 @@ export function SidebarHeaderRow({
             uniProps={isHighlighted ? foregroundColorMapping : foregroundMutedColorMapping}
           />
           <SidebarHeaderRowLabel label={label} isHighlighted={isHighlighted} />
+          {badge ? <Text style={styles.badge}>{badge}</Text> : null}
           {shortcutKeys && Boolean(state.hovered) ? (
             <Shortcut chord={shortcutKeys} style={styles.shortcut} />
           ) : null}
         </>
       );
     },
-    [ThemedIcon, isActive, label, shortcutKeys, variant],
+    [ThemedIcon, isActive, label, badge, shortcutKeys, variant],
   );
 
   return (
@@ -108,6 +111,15 @@ function SidebarHeaderRowLabel({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  badge: {
+    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surface3,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: theme.spacing[2],
+    fontSize: theme.fontSize.sm,
+    minWidth: 22,
+    textAlign: "center",
+  },
   container: {
     height: {
       xs: HEADER_INNER_HEIGHT_MOBILE,

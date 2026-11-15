@@ -1,3 +1,4 @@
+import { useAnswersPaneStore } from "@/companion-stream/answers-pane-store";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { getIsElectronRuntime } from "@/constants/layout";
@@ -208,6 +209,9 @@ export function useKeyboardShortcuts({
         return true;
       case "router-back":
         router.back();
+        return true;
+      case "questions-pane-open":
+        useAnswersPaneStore.getState().setMinimized(false);
         return true;
       case "router-push":
         router.push(action.route as Parameters<typeof router.push>[0]);

@@ -27,10 +27,14 @@ import {
 } from "@/runtime/host-runtime";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { useSessionStore } from "@/stores/session-store";
+import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
 import { buildReplyQuote } from "@/components/reply/composer-quote";
+import { resolveDirectActiveTurnBehavior, type SendBehavior } from "@/composer/input/state";
+import { needsYouIdentity, needsYouRevision, useNeedsYouSeen } from "./needs-you-seen";
+import { InlinePermission } from "./inline-permission";
+import { navigateBackInFocusHistory } from "@/navigation/focus-history-runtime";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
@@ -59,6 +63,47 @@ export function GlobalStreamScreen() {
   const { view } = useLocalSearchParams<{ view?: string }>();
   const navigateView = useCallback((next: WorkflowView) => router.setParams({ view: next }), []);
   return <StreamWorkflowFeed initialView={parseWorkflowView(view)} onViewChange={navigateView} />;
+}
+
+function StreamCloseButton() {
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const close = useCallback(() => {
+    if (!navigateBackInFocusHistory({ isCompact })) router.replace("/sessions");
+  }, [isCompact]);
+  return (
+    <Button variant="ghost" size="sm" onPress={close} testID="stream-close">
+      {t("common.actions.back")}
+    </Button>
+  );
+}
+
+function useNeedsYouViewability(
+  focused: boolean,
+  panelActive: boolean,
+  view: WorkflowView,
+  rows: GlobalStreamRow[],
+) {
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ item: GlobalStreamRow }> }) => {
+      const next = viewableItems.map(({ item }) => needsYouIdentity(item));
+      setVisibleKeys((previous) => (previous.join("\n") === next.join("\n") ? previous : next));
+    },
+  ).current;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const revisionSignature = JSON.stringify(
+    rows.map((row) => [needsYouIdentity(row), needsYouRevision(row)]),
+  );
+  useEffect(() => {
+    if (!focused || !panelActive || view !== "needs_you") return;
+    const visible = rowsRef.current.filter((row) => visibleKeys.includes(needsYouIdentity(row)));
+    const timer = setTimeout(() => useNeedsYouSeen.getState().markSeen(visible), 800);
+    return () => clearTimeout(timer);
+  }, [focused, panelActive, view, revisionSignature, visibleKeys]);
+  return { viewabilityConfig, onViewableItemsChanged };
 }
 
 export interface WorkflowScope {
@@ -99,6 +144,7 @@ export function StreamWorkflowFeed({
   localContext?: WorkflowLocalContext;
 }) {
   const { t } = useTranslation();
+  const closeControl = useMemo(() => <StreamCloseButton />, []);
   const focused = useIsFocused();
   const panelActive = useRetainedPanelActive();
   const hosts = useHosts();
@@ -177,6 +223,12 @@ export function StreamWorkflowFeed({
   const { data, nowCount, laterCount } = useMemo(
     () => splitLater(queryRows, view, showLater),
     [view, queryRows, showLater],
+  );
+  const { viewabilityConfig, onViewableItemsChanged } = useNeedsYouViewability(
+    focused,
+    panelActive,
+    view,
+    data,
   );
   // Counts cover loaded pages only. An empty side with more pages keeps loading until it finds
   // an item or runs out, so "Later · 0" never hides deferred items on a later page.
@@ -407,6 +459,7 @@ export function StreamWorkflowFeed({
       {!scope ? (
         <MenuHeader
           title={t(view === "needs_you" ? "globalStream.needsYou" : "globalStream.title")}
+          rightContent={closeControl}
         />
       ) : null}
       {triage ? (
@@ -420,7 +473,10 @@ export function StreamWorkflowFeed({
         />
       ) : null}
       <FlatList
+        key={view}
         ref={listRef}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         onScroll={trackScroll}
         scrollEventThrottle={100}
         data={data}
@@ -541,6 +597,23 @@ function NowLaterSwitch({
   );
 }
 
+function UnseenDot({ row, enabled }: { row: GlobalStreamRow; enabled: boolean }) {
+  const seen = useNeedsYouSeen((state) => state.seen[needsYouIdentity(row)]);
+  if (!enabled) return null;
+  return (
+    <View style={styles.unseenSlot}>
+      {seen !== needsYouRevision(row) ? (
+        <Text
+          accessibilityLabel="New since last viewed"
+          style={styles.notice}
+          testID="needs-you-unseen-dot"
+        >
+          ●
+        </Text>
+      ) : null}
+    </View>
+  );
+}
 export function GlobalStreamCard({
   row,
   onSaved,
@@ -566,6 +639,22 @@ export function GlobalStreamCard({
     agentId: sourceAgentId,
     workspaceId: sourceWorkspaceId,
   } = streamCardSource(row);
+  const permissionContent = useMemo(() => {
+    if (
+      entry?.kind !== "permission" ||
+      entry.status !== "pending" ||
+      entry.requestKind === "question"
+    )
+      return undefined;
+    return (
+      <InlinePermission
+        entry={entry}
+        serverId={row.serverId}
+        agentId={row.agentId}
+        onSaved={onSaved}
+      />
+    );
+  }, [entry, row.serverId, row.agentId, onSaved]);
   const localSource = localContextForSource(localContext, sourceServerId, sourceAgentId);
   const client = useHostRuntimeClient(row.serverId);
   const connection = useHostRuntimeConnectionStatus(row.serverId);
@@ -629,17 +718,34 @@ export function GlobalStreamCard({
   );
   // Answer from the card: the reply quotes what it answers, as Reply in chat would.
   const sendReply = useCallback(
-    async (replyTo: CompanionEntry, text: string) => {
+    async (replyTo: CompanionEntry, text: string, mode: SendBehavior = "queue") => {
       if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
+      const turn = selectAgentTurnPresentation(
+        useSessionStore.getState().sessions[row.serverId],
+        row.agentId,
+      );
+      if (
+        mode === "steer" &&
+        turn.isActive &&
+        !useSessionStore.getState().sessions[row.serverId]?.serverInfo?.features?.steerOnly
+      ) {
+        throw new Error(t("composer.errors.steerRequiresUpdatedHost"));
+      }
+      const behavior =
+        mode === "steer" && !turn.isActive ? undefined : resolveDirectActiveTurnBehavior(mode);
       const quoted = buildReplyQuote(replyTo.text);
       const result = await client.sendAgentMessage(
         row.agentId,
         quoted ? `${quoted}\n\n${text}` : text,
-        { messageId: globalThis.crypto.randomUUID() },
+        {
+          messageId: globalThis.crypto.randomUUID(),
+          ...(behavior ? { activeTurnBehavior: behavior } : {}),
+          ...(mode === "interrupt" && turn.isActive ? { interrupt: true } : {}),
+        },
       );
       return { queued: result.queued };
     },
-    [client, connection, row.agentId, t],
+    [client, connection, row.agentId, row.serverId, t],
   );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {
@@ -744,6 +850,7 @@ export function GlobalStreamCard({
   return (
     <View style={styles.row} testID={`global-stream-row-${row.agentId}`}>
       <CardSourceLine
+        triage={triage}
         row={row}
         copiedTask={copiedTask}
         sourceServerId={sourceServerId}
@@ -756,6 +863,7 @@ export function GlobalStreamCard({
       ) : null}
       {row.item.kind === "entry" ? (
         <EntryCard
+          permissionContent={permissionContent}
           entry={row.item.entry}
           serverId={row.serverId}
           onReturnToChat={openChat}
@@ -802,11 +910,13 @@ export function GlobalStreamCard({
 
 /** One muted line says where the card is from; the chat title opens it. */
 function CardSourceLine({
+  triage,
   row,
   copiedTask,
   sourceServerId,
   onOpen,
 }: {
+  triage: boolean;
   row: GlobalStreamRow;
   copiedTask: boolean;
   sourceServerId: string;
@@ -815,6 +925,7 @@ function CardSourceLine({
   const { t } = useTranslation();
   return (
     <View style={styles.sourceLine}>
+      <UnseenDot row={row} enabled={triage} />
       <Pressable onPress={onOpen} accessibilityRole="button" style={styles.sourcePress}>
         <Text style={styles.source} numberOfLines={1}>
           {copiedTask ? t("globalStream.openTaskSource") : row.agentTitle}
@@ -870,6 +981,7 @@ const styles = StyleSheet.create((theme) => ({
   description: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   notice: { color: theme.colors.statusWarning, fontSize: theme.fontSize.sm },
   row: { gap: theme.spacing[1], marginBottom: theme.spacing[4] },
+  unseenSlot: { width: 12, alignItems: "center" },
   sourceLine: {
     flexDirection: "row",
     alignItems: "center",

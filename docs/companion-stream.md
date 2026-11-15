@@ -195,6 +195,18 @@ card opened from it at [390](stream-answers/open-asks-card-390.png) /
 
 ## Cards
 
+Reopen global Needs you from the sidebar, Help menu, or Cmd/Ctrl+Alt+Y. Back returns
+from the global pane. The floating Questions and asks widget minimizes to the ? count
+pill at Chat's right edge; click it, choose Help → Show questions and asks, or press
+Cmd/Ctrl+Alt+Q to expand it.
+
+Needs you's badge counts requests changed since this device viewed them. A card clears
+its new dot after it stays at least half visible for 800 ms; task completion and answer
+review remain separate. Seen state stays on this device. Pending tool permissions use
+Chat's request details, scope options and acknowledged response; they never auto-approve.
+Inline replies default to Queue. The adjacent menu also offers Steer and Interrupt with
+the same meaning and host requirements as Chat's composer.
+
 Each card leads with its content. One muted eyebrow line combines kind, state and time
 (“Ask · In progress · Oct 24, 2:10 PM”); the first line of the entry text is the headline and
 the rest is body copy. Evidence, remaining work, subtasks, source message and delegation
