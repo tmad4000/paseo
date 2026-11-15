@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ChevronDown, ChevronLeft, ChevronUp, SquareArrowOutUpRight, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
 import {
   PaneContentToolbar,
@@ -213,21 +213,23 @@ function useRowPresentation(
   serverId: string,
   t: TFunction,
 ): WorkspaceTabPresentation {
+  const icon = useProviderIcon(row.provider, serverId);
   return useMemo(() => {
     const label = rowLabel(t, row);
     return {
       key: `subthread_${row.kind}_${row.id}`,
       kind: "agent",
+      showCloseButton: false,
       label,
       subtitle: row.subtitle ?? "",
       tooltip: label,
       modified: false,
       titleState: row.label ? "ready" : "loading",
-      icon: getProviderIcon(row.provider, serverId),
+      icon,
       statusBucket: row.bucket,
       running: row.bucket === "running",
     };
-  }, [row, serverId, t]);
+  }, [row, icon, t]);
 }
 
 function SubthreadList({ serverId, rows, onSelect }: SubthreadsDrawerProps): ReactElement {

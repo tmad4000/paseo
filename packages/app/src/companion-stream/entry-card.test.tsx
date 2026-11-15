@@ -48,7 +48,7 @@ vi.mock("react-native-reanimated", () => ({
   withTiming: (value: number) => value,
 }));
 vi.mock("@/components/retained-panel", () => ({ useRetainedPanelActive: () => true }));
-vi.mock("@/hooks/use-compact-time-ago", () => ({
+vi.mock("@/hooks/use-time-ago", () => ({
   useCompactTimeAgo: (date: Date | null) => (date ? "12m" : ""),
 }));
 const pulseFixture = vi.hoisted(() => ({

@@ -1,5 +1,5 @@
 import { Buffer } from "buffer";
-import type { AudioPlaybackSource } from "@/voice/audio-engine-types";
+import type { AudioPlaybackSource } from "@/audio/audio-engine-types";
 import { playbackMimeType } from "@/voice/audio-format";
 
 export interface BufferedAudioChunk {

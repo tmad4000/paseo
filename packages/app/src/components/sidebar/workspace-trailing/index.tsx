@@ -5,7 +5,7 @@ import { DiffStat } from "@/components/diff-stat";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useCompactTimeAgo } from "@/hooks/use-time-ago";
 import { useSessionStore } from "@/stores/session-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

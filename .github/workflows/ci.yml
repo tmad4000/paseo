@@ -117,6 +117,9 @@ jobs:
       - name: Build server stack
         run: npm run build:server
 
+      - name: Verify built-in plugins from built output
+        run: node --test scripts/builtin-plugins-dist.test.mjs
+
       - name: Typecheck all packages
         run: npm run typecheck
 
@@ -124,6 +127,9 @@ jobs:
         run: |
           npx tsgo --ignoreConfig --noEmit --module NodeNext --moduleResolution NodeNext --target es2022 --types node --esModuleInterop --skipLibCheck scripts/reconcile-queue-alias.mts scripts/reconcile-queue-alias.test.mts
           node --import tsx --test scripts/reconcile-queue-alias.test.mts
+
+      - name: Run website tests
+        run: npx vitest run packages/website/src --bail=1
 
       - name: Install website test browsers
         run: npx playwright install --with-deps chromium webkit
@@ -173,6 +179,10 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Run built-in plugin tests
+        if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
+        run: npm run test --workspace=@getpaseo/builtin-plugins
 
       - name: Run Hub CLI/daemon contract
         if: ${{ needs.changes.outputs.full == 'false' && needs.changes.outputs.server == 'false' && needs.changes.outputs.hub != 'false' }}

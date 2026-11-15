@@ -331,6 +331,15 @@ Repository issues are disabled, so this stable ID also serves as the follow-up t
 
 ## Reviewing an upstream update or reconciliation
 
+The 2026-11-15 age-limited reconciliation targets upstream `v0.11.4`
+(`dc5b02f7d`, published2026-10-15), preserving newer selective fork fixes.
+The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all88 IDs,
+including the prose-owned features above, and every behavior in the261-commit release delta.
+Its source adaptations preserve recoverable setup failure with stale-move fencing, bundled API
+compatibility, shared audio ownership and full localized turn timestamps. Full validation and
+final independent review remain in progress. Existing acceptance gaps below remain open;
+source preservation is not installed-build verification.
+
 1. Record the previous shipped fork commit, candidate fork commit, and incoming upstream tag/commit.
    Read this register from the previous fork as well as the candidate: a merge can delete its own
    checklist or tests. Preserve this register and the links to it during conflict resolution.

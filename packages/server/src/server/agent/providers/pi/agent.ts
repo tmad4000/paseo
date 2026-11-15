@@ -1,3 +1,4 @@
+import { mapCustomMessageToToolCall } from "../custom-message.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -105,15 +106,13 @@ const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
 const QUESTION_RESPONSE_HEADER = "Response";
 
-export const PiProviderParamsSchema = z
+export const PiProviderOptionsSchema = z
   .object({
     sessionDir: z.string().min(1).optional(),
     rpcTimeoutMs: z.number().int().positive().default(DEFAULT_PI_RPC_TIMEOUT_MS),
     extensionTimeoutMs: z.number().int().positive().default(DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS),
   })
   .strict();
-
-type PiProviderParams = z.infer<typeof PiProviderParamsSchema>;
 
 const PI_HANDLED_BUILTIN_SLASH_COMMANDS: AgentSlashCommand[] = [
   {
@@ -186,7 +185,6 @@ const PI_THINKING_OPTIONS: ReadonlyArray<{
 export interface PiRpcAgentClientOptions {
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
-  providerParams?: unknown;
   runtime?: PiRuntime;
   usagePollScheduler?: PiUsagePollScheduler;
 }
@@ -498,7 +496,6 @@ function buildResumeStartInput(input: {
     cwd: input.resumeConfig.cwd,
     env: input.launchContext?.env,
     session: input.sessionFile,
-    model: input.resumeConfig.model,
     thinkingOptionId: normalizePiThinkingOption(input.resumeConfig.thinkingOptionId) ?? undefined,
     mcpConfigPath: input.mcpConfigFile?.path,
     extensionPaths: input.paseoExtension ? [input.paseoExtension.path] : undefined,
@@ -1208,6 +1205,19 @@ export class PiRpcAgentSession implements AgentSession {
   // Pi publishes the terminal before acknowledging abort. Autonomous runs have no
   // turn ID; retain their errors too until the cancellation request settles.
   private interruptingTurn: { turnId: string | undefined; error: string | null } | null = null;
+
+  private readonly usageSessionKey = randomUUID();
+
+  usageSession() {
+    const env = this.runtimeSession.environment;
+    if (this.closed) return null;
+    return {
+      provider: "pi",
+      model: modelToId(this.state.model) ?? undefined,
+      env,
+      sessionKey: this.usageSessionKey,
+    };
+  }
 
   constructor(options: PiRpcAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
@@ -2400,12 +2410,16 @@ export class PiRpcAgentSession implements AgentSession {
       const customMapping = this.extensionHost.mapCustomMessage(event.message);
       this.emitExtensionOutput(customMapping, turnId);
       const text = getUserMessageText(event.message.content);
-      if (text) {
+      if (event.message.display !== false && text) {
         this.emit({
           type: "timeline",
           provider: this.provider,
           turnId,
-          item: { type: "assistant_message", text },
+          item: mapCustomMessageToToolCall(
+            event.message,
+            text,
+            `${this.provider}-custom-${randomUUID()}`,
+          ),
         });
       }
       if (!this.activeTurnStarted) {
@@ -2506,8 +2520,7 @@ export class PiRpcAgentClient implements AgentClient {
 
   private readonly logger: Logger;
   private readonly runtimeSettings?: ProviderRuntimeSettings;
-  private readonly providerParams: PiProviderParams;
-  private readonly runtime: PiRuntime;
+  private readonly runtime?: PiRuntime;
   private readonly usagePollScheduler?: PiUsagePollScheduler;
 
   constructor(options: PiRpcAgentClientOptions) {
@@ -2515,10 +2528,7 @@ export class PiRpcAgentClient implements AgentClient {
     this.capabilities = capabilitiesForClient();
     this.logger = options.logger;
     this.runtimeSettings = options.runtimeSettings;
-    this.providerParams = PiProviderParamsSchema.parse(options.providerParams ?? {});
-    this.runtime =
-      options.runtime ??
-      createRuntime(options.logger, options.runtimeSettings, this.providerParams.rpcTimeoutMs);
+    this.runtime = options.runtime;
     this.usagePollScheduler = options.usagePollScheduler;
   }
 
@@ -2526,11 +2536,13 @@ export class PiRpcAgentClient implements AgentClient {
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
+    const providerOptions = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
+    const runtime = this.resolveRuntime(providerOptions.rpcTimeoutMs);
     const mcpEnv = {
       ...this.runtimeSettings?.env,
       ...launchContext?.env,
     };
-    const mcp = await this.prepareMcpInjection(config.cwd, config.mcpServers, mcpEnv);
+    const mcp = await this.prepareMcpInjection(config.cwd, config.mcpServers, mcpEnv, runtime);
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
       systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
@@ -2538,7 +2550,7 @@ export class PiRpcAgentClient implements AgentClient {
     });
     let runtimeSession: PiRuntimeSession;
     try {
-      runtimeSession = await this.runtime.startSession({
+      runtimeSession = await runtime.startSession({
         cwd: config.cwd,
         model: config.model,
         thinkingOptionId: normalizePiThinkingOption(config.thinkingOptionId) ?? undefined,
@@ -2559,7 +2571,7 @@ export class PiRpcAgentClient implements AgentClient {
         initialState: await runtimeSession.getState(),
         capabilities: capabilitiesForSession(mcp !== null),
         cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
-        extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
+        extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
       });
@@ -2584,6 +2596,10 @@ export class PiRpcAgentClient implements AgentClient {
     const persistenceMetadata = parsePersistenceMetadata(handle.metadata);
     const resumeConfig = buildResumeConfig(persistenceMetadata, overrides, this.provider);
 
+    const providerOptions = PiProviderOptionsSchema.parse(
+      resumeConfig.config.providerOptions ?? {},
+    );
+    const runtime = this.resolveRuntime(providerOptions.rpcTimeoutMs);
     const mcpEnv = {
       ...this.runtimeSettings?.env,
       ...launchContext?.env,
@@ -2592,6 +2608,7 @@ export class PiRpcAgentClient implements AgentClient {
       resumeConfig.cwd,
       resumeConfig.config.mcpServers,
       mcpEnv,
+      runtime,
     );
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
@@ -2603,7 +2620,7 @@ export class PiRpcAgentClient implements AgentClient {
     });
     let runtimeSession: PiRuntimeSession;
     try {
-      runtimeSession = await this.runtime.startSession(
+      runtimeSession = await runtime.startSession(
         buildResumeStartInput({
           resumeConfig,
           sessionFile,
@@ -2618,13 +2635,17 @@ export class PiRpcAgentClient implements AgentClient {
       throw error;
     }
     try {
+      const initialState = await this.applyResumeModel(runtimeSession, resumeConfig.model);
       return new PiRpcAgentSession({
         runtimeSession,
-        config: resumeConfig.config,
-        initialState: await runtimeSession.getState(),
+        config: {
+          ...resumeConfig.config,
+          model: modelToId(initialState.model) ?? resumeConfig.config.model,
+        },
+        initialState,
         capabilities: capabilitiesForSession(mcp !== null),
         cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
-        extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
+        extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
       });
@@ -2636,10 +2657,45 @@ export class PiRpcAgentClient implements AgentClient {
     }
   }
 
+  // Pi resumes a session on the model it recorded, or on its default when that model
+  // is gone. Switching afterwards keeps a removed model from blocking the resume.
+  private resolveRuntime(rpcTimeoutMs: number): PiRuntime {
+    return this.runtime ?? createRuntime(this.logger, this.runtimeSettings, rpcTimeoutMs);
+  }
+
+  private async applyResumeModel(
+    runtimeSession: PiRuntimeSession,
+    requestedModel: string | undefined,
+  ): Promise<PiSessionState> {
+    const state = await runtimeSession.getState();
+    const reference = parseModelReference(requestedModel ?? null);
+    if (!reference?.provider) {
+      return state;
+    }
+    const { provider, id } = reference;
+    const isRequested = (model: PiModel | null | undefined) =>
+      model?.provider === provider && model.id === id;
+    if (isRequested(state.model)) {
+      return state;
+    }
+    const availableModels = await runtimeSession.getAvailableModels();
+    if (!availableModels.some(isRequested)) {
+      this.logger.warn(
+        { requestedModel, sessionModel: modelToId(state.model) },
+        "Pi resumed on the session's model because the requested model is unavailable",
+      );
+      return state;
+    }
+    await runtimeSession.setModel(provider, id);
+    return runtimeSession.getState();
+  }
+
   async fetchCatalog(
     options: FetchCatalogOptions,
     context?: ProviderRefreshContext,
   ): Promise<ProviderCatalog> {
+    const providerOptions = PiProviderOptionsSchema.parse(options.providerOptions ?? {});
+    const runtime = this.resolveRuntime(providerOptions.rpcTimeoutMs);
     let runtimeSession: PiRuntimeSession | undefined;
     let closePromise: Promise<void> | undefined;
     const closeSession = () => {
@@ -2651,7 +2707,7 @@ export class PiRpcAgentClient implements AgentClient {
     context?.signal.addEventListener("abort", handleAbort, { once: true });
     try {
       await runProviderRefreshActivity(context, "runtime.start", async () => {
-        runtimeSession = await this.runtime.startSession({
+        runtimeSession = await runtime.startSession({
           cwd: options.scope === "global" ? homedir() : options.cwd,
           signal: context?.signal,
         });
@@ -2693,7 +2749,7 @@ export class PiRpcAgentClient implements AgentClient {
   ): Promise<ImportableProviderSession[]> {
     return await listPiImportableSessions({
       ...options,
-      sessionDir: this.providerParams.sessionDir,
+      sessionDir: PiProviderOptionsSchema.parse(options?.providerOptions ?? {}).sessionDir,
       runtimeSettings: this.runtimeSettings,
     });
   }
@@ -2749,11 +2805,12 @@ export class PiRpcAgentClient implements AgentClient {
     cwd: string,
     servers: Record<string, McpServerConfig> | undefined,
     env: Record<string, string> | undefined,
+    runtime: PiRuntime,
   ): Promise<PiMcpInjection | null> {
     if (!servers || Object.keys(servers).length === 0) {
       return null;
     }
-    const mcpSupport = await this.detectMcpSupport(cwd, env);
+    const mcpSupport = await this.detectMcpSupport(cwd, env, runtime);
     if (mcpSupport === "builtin") {
       return { kind: "builtin", servers: toPiBuiltinMcpServers(servers) };
     }
@@ -2768,9 +2825,10 @@ export class PiRpcAgentClient implements AgentClient {
 
   private async detectMcpSupport(
     cwd: string,
-    env?: Record<string, string>,
+    env: Record<string, string> | undefined,
+    runtime: PiRuntime,
   ): Promise<PiMcpInjection["kind"] | null> {
-    const runtimeSession = await this.runtime.startSession({ cwd, env }).catch((error) => {
+    const runtimeSession = await runtime.startSession({ cwd, env }).catch((error) => {
       this.logger.debug({ err: error, cwd }, "Pi MCP probe failed to start");
       return null;
     });

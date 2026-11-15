@@ -1,5 +1,5 @@
 import type { WorkspaceRegistry } from "../workspace-registry.js";
-import { runWorkspaceMutation } from "../workspace-mutations.js";
+import { getWorkspacePreparationRevision, runWorkspaceMutation } from "../workspace-mutations.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -57,7 +57,7 @@ import {
 } from "@getpaseo/protocol/agent-labels";
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
 import type { Logger } from "pino";
-import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
@@ -357,11 +357,6 @@ interface AgentManagerRescueTimeouts {
 interface ProviderEnabledFlag {
   enabled: boolean;
   derivedFromProviderId?: string | null;
-  validateOptions?: (options: ProviderOptions | undefined) => ProviderOptions | undefined;
-  applyOptions?: (
-    config: AgentSessionConfig,
-    options: ProviderOptions | undefined,
-  ) => AgentSessionConfig;
   applyToolPolicy?: (
     config: AgentSessionConfig,
     toolPolicy: ToolPolicy | undefined,
@@ -655,6 +650,7 @@ interface AgentWorkspaceMoveInput {
   workspaceId: string;
   expectedWorkspaceId: string;
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
+  expectedPreparation?: { source: number; destination: number };
 }
 
 interface AgentMetadataPatch {
@@ -1282,6 +1278,11 @@ export class AgentManager {
         );
       }
     }
+  }
+
+  usageSession(id: string) {
+    const agent = this.agents.get(id);
+    return agent?.session?.usageSession?.() ?? null;
   }
 
   getAgent(id: string): ManagedAgent | null {
@@ -2193,6 +2194,7 @@ export class AgentManager {
     if (agent.runtimeInfo) {
       agent.runtimeInfo = { ...agent.runtimeInfo, model: normalizedModelId };
     }
+    this.refreshSessionPersistence(agent);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
@@ -2556,6 +2558,18 @@ export class AgentManager {
         const destination = await input.workspaceRegistry.get(input.workspaceId);
         if (!destination || destination.archivedAt)
           throw new Error("Destination workspace is unavailable or archived");
+        if (!isCommittedRetry && input.expectedPreparation) {
+          if (
+            getWorkspacePreparationRevision(input.workspaceRegistry, source.workspaceId) !==
+            input.expectedPreparation.source
+          )
+            throw new Error("Source workspace setup changed. Try the move again.");
+          if (
+            getWorkspacePreparationRevision(input.workspaceRegistry, destination.workspaceId) !==
+            input.expectedPreparation.destination
+          )
+            throw new Error("Destination workspace setup changed. Try the move again.");
+        }
         if (!isCommittedRetry)
           await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
       }),
@@ -5751,22 +5765,15 @@ export class AgentManager {
 
   private applyProviderConfiguration(config: AgentSessionConfig): AgentSessionConfig {
     const definition = this.providerDefinitions.get(config.provider);
-    if (config.providerOptions !== undefined && !definition?.validateOptions) {
-      throw new Error(`Provider '${config.provider}' does not accept providerOptions`);
-    }
-    const validatedOptions = definition?.validateOptions?.(config.providerOptions);
-    const withOptions = definition?.applyOptions
-      ? definition.applyOptions(config, validatedOptions)
-      : config;
-    this.validateToolPolicyServers(withOptions);
-    if (withOptions.toolPolicy && !definition?.applyToolPolicy) {
+    this.validateToolPolicyServers(config);
+    if (config.toolPolicy && !definition?.applyToolPolicy) {
       throw new Error(
         `Provider '${config.provider}' cannot preapprove exact MCP tools for unattended execution`,
       );
     }
     return definition?.applyToolPolicy
-      ? definition.applyToolPolicy(withOptions, withOptions.toolPolicy)
-      : withOptions;
+      ? definition.applyToolPolicy(config, config.toolPolicy)
+      : config;
   }
 
   private validateToolPolicyServers(config: AgentSessionConfig): void {

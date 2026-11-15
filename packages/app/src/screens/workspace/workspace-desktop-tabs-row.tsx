@@ -1,3 +1,4 @@
+import { panelTargetSupportsHost } from "@/plugins/workspace-panels/locations";
 import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
 import type { ManualStatusTarget } from "@/agent-status/model";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -65,13 +66,16 @@ import {
 } from "@/screens/workspace/workspace-tab-menu";
 import { renderWorkspaceTabMenuIcon } from "@/screens/workspace/workspace-tab-menu-icon";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import type { PaneHost } from "@/panels/panel-manifest";
+import type { WorkspaceTabLaunchPurpose } from "@/workspace-tabs/launcher";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import type { TabReadState } from "@/screens/workspace/workspace-tab-activity";
 import type { Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { formatCompactTimeAgoAsProse } from "@/utils/time";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
@@ -124,7 +128,7 @@ const TAB_ICON_WIDTH = 14;
 const TAB_CONTENT_GAP = 4;
 const TAB_DROP_INDICATOR_WIDTH = 4;
 const TAB_MODIFIED_DOT_SIZE = 8;
-const TAB_MIN_WIDTH = 96;
+const TAB_MIN_WIDTH = 64;
 const TAB_MAX_WIDTH = 160;
 const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 0;
 const TAB_LABEL_LAYOUT_ALLOWANCE = 4;
@@ -161,12 +165,6 @@ function formatAgentTooltipTitle(singleLineTitle: string): string {
   return `${singleLineTitle.slice(0, AGENT_TOOLTIP_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
-function formatAgentTooltipActivity(compactActivity: string): string {
-  if (compactActivity === "now") return "just now";
-  if (/^\d/.test(compactActivity)) return `${compactActivity} ago`;
-  return compactActivity;
-}
-
 function AgentTabTooltipBody({
   serverId,
   agentId,
@@ -182,7 +180,7 @@ function AgentTabTooltipBody({
     return state.agentLastActivity.get(agentId) ?? agent?.lastActivityAt ?? null;
   });
   const compactActivity = useCompactTimeAgo(lastActivityAt);
-  const activity = formatAgentTooltipActivity(compactActivity);
+  const activity = formatCompactTimeAgoAsProse(compactActivity);
 
   return (
     <View style={styles.tooltipAgentContent}>
@@ -227,7 +225,12 @@ function TabLabelMeasurement({
   );
 }
 
+type PanePanelKinds = readonly WorkspaceTabDescriptor["kind"][];
+
 interface WorkspaceNewTabButtonProps {
+  panePanelKinds: PanePanelKinds;
+  host: PaneHost;
+  launchPurpose: WorkspaceTabLaunchPurpose;
   serverId: string;
   paneId?: string;
   shortcutKeys: ShortcutKey[][] | null;
@@ -239,6 +242,9 @@ interface WorkspaceNewTabButtonProps {
 }
 
 function WorkspaceNewTabButton({
+  panePanelKinds,
+  host,
+  launchPurpose,
   serverId,
   paneId,
   shortcutKeys,
@@ -284,8 +290,9 @@ function WorkspaceNewTabButton({
         </ToolbarButton>
         <WorkspaceNewTabMenuContent
           serverId={serverId}
-          purpose="primary"
-          host="main"
+          purpose={launchPurpose}
+          host={host}
+          panePanelKinds={panePanelKinds}
           paneId={paneId}
           onSplitRight={splitEnabled ? onSplitRight : undefined}
           onSplitDown={splitEnabled ? onSplitDown : undefined}
@@ -306,6 +313,9 @@ function WorkspaceNewTabButton({
 }
 
 function WorkspacePaneToolbarActions({
+  panePanelKinds,
+  host,
+  launchPurpose,
   showNewTabButton,
   showSplitActions,
   showMaximizeAction,
@@ -317,6 +327,9 @@ function WorkspacePaneToolbarActions({
   onSplitDown,
   onTogglePaneMaximized,
 }: {
+  panePanelKinds: PanePanelKinds;
+  host: PaneHost;
+  launchPurpose: WorkspaceTabLaunchPurpose;
   showNewTabButton: boolean;
   showSplitActions: boolean;
   showMaximizeAction: boolean;
@@ -364,6 +377,9 @@ function WorkspacePaneToolbarActions({
     <ToolbarControls style={styles.paneSplitActions}>
       {showNewTabButton ? (
         <WorkspaceNewTabButton
+          panePanelKinds={panePanelKinds}
+          host={host}
+          launchPurpose={launchPurpose}
           placement="toolbar"
           serverId={serverId}
           paneId={paneId}
@@ -571,9 +587,12 @@ function sameWidths(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((width, index) => width === right[index]);
 }
 
-interface WorkspaceDesktopTabsRowProps {
+export interface WorkspaceDesktopTabsRowProps {
+  host?: PaneHost;
+  launchPurpose?: WorkspaceTabLaunchPurpose;
   paneId?: string;
   isFocused?: boolean;
+  ownsKeyboardShortcuts?: boolean;
   tabs: WorkspaceDesktopTabRowItem[];
   normalizedServerId: string;
   normalizedWorkspaceId: string;
@@ -589,6 +608,7 @@ interface WorkspaceDesktopTabsRowProps {
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  onMoveTabToMain?: (tabId: string) => void;
   onCreateNewTab: (input: { paneId?: string }) => void;
   onReorderTabs: (nextTabs: WorkspaceTabDescriptor[]) => void;
   externalDndContext?: boolean;
@@ -1100,9 +1120,8 @@ function TabChip({
               {...(dragHandleProps?.listeners as object | undefined)}
               testID={`workspace-tab-${testIdentity}`}
               triggerRef={dragHandleProps?.setActivatorNodeRef as unknown as undefined}
-              enabledOnMobile={false}
               style={tabChipStyle}
-              onPressIn={handleNavigateTab}
+              onPressIn={isWeb ? handleNavigateTab : undefined}
               onPress={handleNavigateTab}
               accessibilityRole="button"
               accessibilityLabel={accessibilityLabel}
@@ -1237,8 +1256,11 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
 }
 
 function ResolvedWorkspaceDesktopTabsRow({
+  host = "main",
+  launchPurpose = "primary",
   paneId,
   isFocused = false,
+  ownsKeyboardShortcuts = isFocused,
   tabs,
   normalizedServerId,
   normalizedWorkspaceId,
@@ -1254,6 +1276,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   onCloseTabsToLeft,
   onCloseTabsToRight,
   onCloseOtherTabs,
+  onMoveTabToMain,
   onCreateNewTab,
   onReorderTabs,
   externalDndContext = false,
@@ -1307,6 +1330,8 @@ function ResolvedWorkspaceDesktopTabsRow({
     }),
     [exitFocusModeWidth, focusModeEnabled, showPaneMaximizeAction, showPaneSplitActions],
   );
+
+  const panePanelKinds = useMemo(() => tabs.map(({ tab }) => tab.kind), [tabs]);
 
   const fallbackTabLabels = useMemo(
     () => ({
@@ -1454,14 +1479,14 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const handleNewTabKeyboardAction = useCallback(
     (action: KeyboardActionDefinition): boolean => {
-      if (!isFocused) return false;
+      if (!ownsKeyboardShortcuts) return false;
       if (action.id === "workspace.tab.menu.open") {
         createNewTab();
         return true;
       }
       return false;
     },
-    [createNewTab, isFocused],
+    [createNewTab, ownsKeyboardShortcuts],
   );
 
   useKeyboardActionHandler({
@@ -1472,7 +1497,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       paneId,
     }),
     actions: ["workspace.tab.menu.open"],
-    enabled: isFocused,
+    enabled: ownsKeyboardShortcuts,
     priority: 200,
     handle: handleNewTabKeyboardAction,
   });
@@ -1484,7 +1509,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       dragHandleProps,
       isActive,
     }: DraggableRenderItemInfo<ResolvedWorkspaceDesktopTabRowItem>) => {
-      const shouldShowCloseButton = layout.closeButtonPolicy === "all";
+      const shouldShowCloseButton =
+        layout.closeButtonPolicy === "all" && item.presentation.showCloseButton;
       const layoutItem = layout.items[index] ?? null;
       const resolvedTabWidth = layoutItem?.width ?? 150;
       const showLabel = layoutItem?.showLabel ?? true;
@@ -1513,6 +1539,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           onCloseTabsToLeft={onCloseTabsToLeft}
           onCloseTabsToRight={onCloseTabsToRight}
           onCloseOtherTabs={onCloseOtherTabs}
+          onMoveTabToMain={onMoveTabToMain}
           resolvedTabWidth={resolvedTabWidth}
           showLabel={showLabel}
           showCloseButton={shouldShowCloseButton}
@@ -1534,6 +1561,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       normalizedServerId,
       normalizedWorkspaceId,
       onCloseOtherTabs,
+      onMoveTabToMain,
       onCloseTab,
       onCloseTabsToLeft,
       onCloseTabsToRight,
@@ -1613,6 +1641,9 @@ function ResolvedWorkspaceDesktopTabsRow({
           />
           {!layout.requiresHorizontalScrollFallback ? (
             <WorkspaceNewTabButton
+              panePanelKinds={panePanelKinds}
+              host={host}
+              launchPurpose={launchPurpose}
               placement="inline"
               serverId={normalizedServerId}
               paneId={paneId}
@@ -1632,6 +1663,9 @@ function ResolvedWorkspaceDesktopTabsRow({
         />
       </View>
       <WorkspacePaneToolbarActions
+        panePanelKinds={panePanelKinds}
+        host={host}
+        launchPurpose={launchPurpose}
         showNewTabButton={layout.requiresHorizontalScrollFallback}
         showSplitActions={showPaneSplitActions}
         showMaximizeAction={showPaneMaximizeAction}
@@ -1665,6 +1699,7 @@ function ResolvedDesktopTabChip({
   onCloseTabsToLeft,
   onCloseTabsToRight,
   onCloseOtherTabs,
+  onMoveTabToMain,
   resolvedTabWidth,
   showLabel,
   showCloseButton,
@@ -1692,6 +1727,7 @@ function ResolvedDesktopTabChip({
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  onMoveTabToMain?: (tabId: string) => void;
   resolvedTabWidth: number;
   showLabel: boolean;
   showCloseButton: boolean;
@@ -1775,8 +1811,23 @@ function ResolvedDesktopTabChip({
       }),
     [baseResolvedTab.contextMenuTestId, readAction, t],
   );
+  const moveToMainEntries = useMemo<WorkspaceTabMenuEntry[]>(() => {
+    if (!onMoveTabToMain || !panelTargetSupportsHost(serverId, item.tab.target, "main")) return [];
+    return [
+      {
+        kind: "item",
+        key: "move-to-main",
+        label: t("workspace.tabs.menu.moveToMain"),
+        icon: "arrow-left-to-line",
+        testID: `${baseResolvedTab.contextMenuTestId}-move-to-main`,
+        onSelect: () => onMoveTabToMain(item.tab.tabId),
+      },
+      { kind: "separator", key: "move-to-main-separator" },
+    ];
+  }, [baseResolvedTab.contextMenuTestId, item.tab, onMoveTabToMain, serverId, t]);
   const resolvedTab = useMemo(
     () =>
+      moveToMainEntries.length === 0 &&
       openInViewEntries.length === 0 &&
       markUnreadEntries.length === 0 &&
       markReadEntries.length === 0 &&
@@ -1786,6 +1837,7 @@ function ResolvedDesktopTabChip({
         : {
             ...baseResolvedTab,
             menuEntries: [
+              ...moveToMainEntries,
               ...browserEntries,
               ...agentControlEntries,
               ...markReadEntries,
@@ -1799,6 +1851,7 @@ function ResolvedDesktopTabChip({
       baseResolvedTab,
       browserEntries,
       markReadEntries,
+      moveToMainEntries,
       markUnreadEntries,
       openInViewEntries,
     ],

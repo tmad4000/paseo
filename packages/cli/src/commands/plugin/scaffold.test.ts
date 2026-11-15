@@ -93,6 +93,8 @@ describe("plugin scaffold", () => {
       expect(JSON.parse(await readFile(path.join(directory, "paseo-plugin.json"), "utf8"))).toEqual(
         {
           id: "hello-plugin",
+          $comment: expect.stringContaining('"icon": "assets/icon.png"'),
+          media: [],
           requirements: { paseo: `>=${cliPackageJson.version}` },
         },
       );
@@ -271,7 +273,7 @@ import { AgentPanel, contributeClient, Surface } from "./client/main";
 import { inspect } from "./shared/inspect";
 
 export default function contribute(client: PluginClientContext) {
-  client.addSurface("main", Surface);
+  client.addScreen({ id: "main", title: "Review", Component: Surface });
   client.addWorkspacePanel({
     id: "review",
     title: "Review",
@@ -337,7 +339,9 @@ export default function contribute(client: PluginClientContext) {
 `,
     );
     const check = typecheckPlugin(directory);
-    await expect(check).rejects.toThrow("has no exported member 'PluginComposerPillProps'");
+    await expect(check).rejects.toThrow(
+      /has no exported member (named )?'PluginComposerPillProps'/,
+    );
     await expect(check).rejects.toThrow("Property 'button' is missing");
     await expect(check).rejects.toThrow("has no call signatures");
   }, 20_000);

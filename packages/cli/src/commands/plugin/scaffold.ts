@@ -48,17 +48,23 @@ const TSCONFIG = {
   include: ["**/*.ts", "**/*.tsx"],
 };
 
-const CLIENT_ENTRY = `import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { GreetingSurface } from "./client/greeting";
+const CLIENT_ENTRY = `import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import { SidebarRow } from "@getpaseo/plugin/client/ui";
+import { GreetingScreen } from "./client/greeting";
+
+function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
+  return (
+    <SidebarRow
+      icon="MessageCircle"
+      active={currentScreen?.screenId === "greeting"}
+      onPress={() => openScreen({ screenId: "greeting" })}
+    />
+  );
+}
 
 export default function contribute(client: PluginClientContext) {
-  client.addSurface("greeting", GreetingSurface);
-  client.addSidebarItem({
-    id: "greeting",
-    title: "Greeting",
-    icon: "MessageCircle",
-    surface: "greeting",
-  });
+  client.addScreen({ id: "greeting", title: "Greeting", Component: GreetingScreen });
+  client.addSidebarHeaderItem({ id: "greeting", title: "Greeting", Component: GreetingItem });
   return () => {};
 }
 `;
@@ -91,7 +97,7 @@ export function createGreeting({ name }: RpcInput<typeof greetingRpc>) {
 }
 `;
 
-const CLIENT_GREETING = `import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
+const CLIENT_GREETING = `import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -99,7 +105,7 @@ import { Pressable, Text, View } from "react-native";
 import { greetingRpc } from "../shared/greeting";
 import { openExternal } from "./web";
 
-export function GreetingSurface({ theme, layout }: PluginSurfaceProps) {
+export function GreetingScreen({ theme, layout }: PluginScreenProps) {
   const createGreeting = useRpc(greetingRpc);
   const greeting = useMutation({ mutationFn: createGreeting });
   const styles = useMemo(
@@ -200,7 +206,17 @@ export async function scaffoldPluginDirectory(
   const files = new Map<string, string>([
     [
       "paseo-plugin.json",
-      `${JSON.stringify({ id, requirements: { paseo: `>=${version}` } }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          id,
+          $comment:
+            'Add "name": "My plugin" to set a display name. Add "icon": "assets/icon.png" for a PNG inside the package. Add image or video paths (relative to this manifest) or HTTPS URLs to media. Include local assets in package.json files.',
+          media: [],
+          requirements: { paseo: `>=${version}` },
+        },
+        null,
+        2,
+      )}\n`,
     ],
     ["OVERVIEW.md", OVERVIEW],
     ["package.json", `${JSON.stringify(packageJson, null, 2)}\n`],

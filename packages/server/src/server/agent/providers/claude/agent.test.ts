@@ -3424,9 +3424,8 @@ describe("ClaudeAgentSession context window usage", () => {
     }
   });
 
-  test("a compaction abandoned in an autonomous turn does not suppress the next marker", async () => {
-    // Trailing output after the foreground result opens an autonomous turn, which starts
-    // compacting and is then ended by the next foreground turn, never reaching a boundary.
+  test("an orphan trailing compaction does not suppress the next foreground marker", async () => {
+    // A trailing status without init has no turn owner, but must not suppress the next marker.
     const session = await createSessionForTurns([
       [createSuccessResult(), createMessageStartEvent(), createCompactingStatus()],
       [createCompactingStatus(), createSuccessResult()],
@@ -3441,6 +3440,69 @@ describe("ClaudeAgentSession context window usage", () => {
       await collectStreamEvents(session, "foreground turn");
       await vi.waitFor(() => {
         expect(observed.filter(isLoadingCompactionEvent)).toHaveLength(1);
+      });
+      unsubscribe();
+
+      const nextTurn = await collectStreamEvents(session, "next compaction");
+      expect(nextTurn.filter(isLoadingCompactionEvent)).toHaveLength(1);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("an abandoned autonomous compaction does not suppress the next foreground marker", async () => {
+    // A trailing status without init has no turn owner, but must not suppress the next marker.
+    const session = await createSessionForTurns([
+      [
+        createSuccessResult(),
+        createInitMessage(),
+        createMessageStartEvent(),
+        createCompactingStatus(),
+      ],
+      [createCompactingStatus(), createSuccessResult()],
+    ]);
+
+    try {
+      const observed: AgentStreamEvent[] = [];
+      const unsubscribe = session.subscribe((event) => {
+        observed.push(event);
+      });
+
+      await collectStreamEvents(session, "foreground turn");
+      await vi.waitFor(() => {
+        expect(observed.filter(isLoadingCompactionEvent)).toHaveLength(1);
+      });
+      unsubscribe();
+
+      const nextTurn = await collectStreamEvents(session, "next compaction");
+      expect(nextTurn.filter(isLoadingCompactionEvent)).toHaveLength(1);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("orphan compaction does not suppress a new autonomous marker", async () => {
+    // A trailing status without init has no turn owner, but must not suppress the next marker.
+    const session = await createSessionForTurns([
+      [
+        createSuccessResult(),
+        createCompactingStatus(),
+        createInitMessage(),
+        createMessageStartEvent(),
+        createCompactingStatus(),
+      ],
+      [createCompactingStatus(), createSuccessResult()],
+    ]);
+
+    try {
+      const observed: AgentStreamEvent[] = [];
+      const unsubscribe = session.subscribe((event) => {
+        observed.push(event);
+      });
+
+      await collectStreamEvents(session, "foreground turn");
+      await vi.waitFor(() => {
+        expect(observed.filter(isLoadingCompactionEvent)).toHaveLength(2);
       });
       unsubscribe();
 

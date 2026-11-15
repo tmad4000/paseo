@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaemonServerInfo } from "@/stores/session-store";
-import type { AudioEngine } from "@/voice/audio-engine-types";
+import type { AudioEngine } from "@/audio";
 import { createVoiceRuntime, type VoiceSessionAdapter } from "@/voice/voice-runtime";
 import { REALTIME_VOICE_VAD_CONFIG } from "@/voice/realtime-voice-config";
 import type { SpokenVoiceFailureKind } from "@/voice/voice-failure";
@@ -638,8 +638,9 @@ describe("voice runtime", () => {
 
     runtime.onServerSpeechStateChanged("server-1", true);
 
-    expect(engine.stop).toHaveBeenCalledTimes(1);
-    expect(engine.clearQueue).toHaveBeenCalledTimes(1);
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(engine.clearQueue).not.toHaveBeenCalled();
+    expect(vi.mocked(engine.play).mock.calls[0][1]?.aborted).toBe(true);
 
     resolvePlay(0.1);
   });
@@ -750,12 +751,24 @@ describe("voice runtime", () => {
     runtime.registerSession(adapter);
 
     await runtime.startVoice("server-1", "agent-1");
-    runtime.onAssistantAudioStarted("server-1");
+    runtime.handleAudioOutput(
+      "server-1",
+      createAudioPayload({
+        id: "playing",
+        groupId: "speaking",
+        chunkIndex: 0,
+        isLastChunk: false,
+      }),
+    );
 
     runtime.onServerSpeechStateChanged("server-1", true);
 
-    expect(engine.stop).toHaveBeenCalled();
-    expect(engine.clearQueue).toHaveBeenCalled();
+    const signal = vi
+      .mocked(engine.play)
+      .mock.calls.find(([source]) => source.type === SEGMENT_MIME_TYPE)?.[1];
+    expect(signal?.aborted).toBe(true);
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(engine.clearQueue).not.toHaveBeenCalled();
     expect(adapter.setAssistantAudioPlaying).toHaveBeenCalledWith(false);
     expect(runtime.getTelemetrySnapshot().isSpeaking).toBe(true);
   });
@@ -793,8 +806,12 @@ describe("voice runtime", () => {
       }),
     );
 
-    expect(engine.stop).toHaveBeenCalled();
-    expect(engine.clearQueue).toHaveBeenCalled();
+    const signal = vi
+      .mocked(engine.play)
+      .mock.calls.find(([source]) => source.type === SEGMENT_MIME_TYPE)?.[1];
+    expect(signal?.aborted).toBe(true);
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(engine.clearQueue).not.toHaveBeenCalled();
     expect(vi.mocked(adapter.audioPlayed).mock.calls.flat()).not.toContain("chunk-1");
   });
 
@@ -902,8 +919,12 @@ describe("voice runtime", () => {
     );
     await vi.advanceTimersByTimeAsync(90_000);
     expect(adapter.audioPlayed).toHaveBeenCalledWith("stalled", "Audio playback timed out");
-    expect(engine.stop).toHaveBeenCalled();
-    expect(engine.clearQueue).toHaveBeenCalled();
+    const signal = vi
+      .mocked(engine.play)
+      .mock.calls.find(([source]) => source.type === SEGMENT_MIME_TYPE)?.[1];
+    expect(signal?.aborted).toBe(true);
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(engine.clearQueue).not.toHaveBeenCalled();
     runtime.handleAudioOutput(
       "server-1",
       createAudioPayload({
@@ -957,8 +978,12 @@ describe("voice runtime", () => {
     finishOldPlayback(1);
     await vi.advanceTimersByTimeAsync(0);
     expect(adapter.audioPlayed).toHaveBeenCalledTimes(1);
-    expect(engine.stop).toHaveBeenCalled();
-    expect(engine.clearQueue).toHaveBeenCalled();
+    const signal = vi
+      .mocked(engine.play)
+      .mock.calls.find(([source]) => source.type === SEGMENT_MIME_TYPE)?.[1];
+    expect(signal?.aborted).toBe(true);
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(engine.clearQueue).not.toHaveBeenCalled();
     expect(engine.initialize).toHaveBeenCalledTimes(2);
     await runtime.destroy();
   });

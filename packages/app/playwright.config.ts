@@ -27,6 +27,7 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL,
+    launchOptions: { chromiumSandbox: true },
     trace: process.env.CI ? "on-first-retry" : "retain-on-failure",
     screenshot: "only-on-failure",
     video: videoMode(),

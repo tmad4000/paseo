@@ -1,3 +1,4 @@
+import { invalidateWorkspacePreparation } from "../workspace-mutations.js";
 import { writeJsonFileAtomic } from "../atomic-file.js";
 import { createWorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -14,7 +15,6 @@ import { AgentManager } from "./agent-manager.js";
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { WorkspaceReconciliationService } from "../workspace-reconciliation-service.js";
 import { runWorktreeSetupInBackground } from "../worktree-session.js";
-import { archivePersistedWorkspaceRecord } from "../workspace-archive-service.js";
 import type { MoveAgentWorkspaceDependencies, MoveAgentWorkspaceInput } from "./workspace-move.js";
 import { moveAgentWorkspace, ASIDES_WORKSPACE_LABEL } from "./workspace-move.js";
 import {
@@ -514,11 +514,15 @@ describe("move chat workspace", () => {
       });
       const before = await h.agentStorage.get(h.input.agentId);
       const moving = moveAgentWorkspace(h.deps, h.input);
-      const rejected = expect(moving).rejects.toThrow(
+      let rejection =
         targetId === "source"
           ? "Source workspace is unavailable"
-          : "Destination workspace is unavailable or archived",
-      );
+          : "Destination workspace is unavailable or archived";
+      if (background === "setup failure") {
+        const label = targetId === "source" ? "Source" : "Destination";
+        rejection = `${label} workspace setup changed`;
+      }
+      const rejected = expect(moving).rejects.toThrow(rejection);
       await waiting.promise;
       const target = targetId === "source" ? h.source : h.destination;
       try {
@@ -550,12 +554,8 @@ describe("move chat workspace", () => {
               emit: () => {},
               sessionLogger: h.logger,
               terminalManager: null,
-              archiveWorkspaceRecord: async (workspaceId) => {
-                await archivePersistedWorkspaceRecord({
-                  workspaceRegistry: h.workspaceRegistry,
-                  workspaceId,
-                });
-              },
+              invalidateWorkspacePreparation: (workspaceId) =>
+                invalidateWorkspacePreparation(h.workspaceRegistry, workspaceId),
             },
             {
               requestCwd: target.cwd,
@@ -571,7 +571,10 @@ describe("move chat workspace", () => {
         } else {
           await h.workspaceRegistry.remove(targetId);
         }
-        if (background === "removal") expect(await h.workspaceRegistry.get(targetId)).toBeNull();
+        if (background === "setup failure")
+          expect((await h.workspaceRegistry.get(targetId))?.archivedAt).toBeNull();
+        else if (background === "removal")
+          expect(await h.workspaceRegistry.get(targetId)).toBeNull();
         else
           expect((await h.workspaceRegistry.get(targetId))?.archivedAt).toEqual(expect.any(String));
       } finally {
@@ -579,6 +582,11 @@ describe("move chat workspace", () => {
       }
       await Promise.all([blocking, rejected]);
       expect(await h.agentStorage.get(h.input.agentId)).toEqual(before);
+      if (background === "setup failure") {
+        // A new request captures the current preparation state; repair remains possible.
+        await moveAgentWorkspace(h.deps, h.input);
+        expect((await h.agentStorage.get(h.input.agentId))?.workspaceId).toBe("destination");
+      }
     },
   );
 

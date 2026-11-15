@@ -1,5 +1,5 @@
 import { Buffer } from "buffer";
-import type { AudioPlaybackSource } from "./audio-engine-types";
+import type { AudioPlaybackSource } from "../audio/audio-engine-types";
 import type { SpokenVoiceFailureKind } from "./voice-failure";
 import {
   VOICE_FAILURE_PHRASE_MULAW_BASE64,

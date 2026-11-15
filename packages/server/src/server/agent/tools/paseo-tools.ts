@@ -80,7 +80,7 @@ import {
   toScheduleSummary,
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
-import { setupFinishNotification } from "../agent-prompt.js";
+import { setupFinishNotification, waitForAgentRunStartWithTimeout } from "../agent-prompt.js";
 import { sendOrQueuePromptToAgent } from "../../agent-queue/send-or-queue.js";
 import type { AgentQueueService } from "../../agent-queue/service.js";
 import { respondToAgentPermission } from "../permission-response.js";
@@ -2076,8 +2076,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
 
       const notifying = armFinishNotification();
 
-      // Return immediately if background=true
-      // Re-fetch snapshot since the state may have changed
+      // Return once the provider has accepted the turn, so the status reports it running.
+      if (!dispatch.outOfBand) {
+        await waitForAgentRunStartWithTimeout(agentManager, agentId);
+      }
       const currentSnapshot = agentManager.getAgent(agentId);
 
       const responseData = {

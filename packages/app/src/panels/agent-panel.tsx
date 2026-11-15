@@ -49,15 +49,11 @@ import {
 } from "@/components/reply/composer-quote";
 import { ThreadsHostProvider } from "@/threads/context";
 import { ThreadOriginControls } from "@/threads/origin-controls";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { useToastHost, type ToastApi, type ToastState } from "@/components/toast-host";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
-import {
-  COMPACT_FORM_FACTOR_WIDTH,
-  MAX_CONTENT_WIDTH,
-  useIsCompactFormFactor,
-} from "@/constants/layout";
+import { COMPACT_FORM_FACTOR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { useAgentAttentionClear } from "@/hooks/use-agent-attention-clear";
 import { useAgentInputDraft, type AgentInputDraft } from "@/composer/draft/input-draft";
@@ -375,7 +371,7 @@ function useAgentPanelDescriptor(
   );
   const provider = descriptorState.provider;
   const label = resolveWorkspaceAgentTabLabel(descriptorState.title);
-  const icon = getProviderIcon(provider, context.serverId);
+  const icon = useProviderIcon(provider, context.serverId);
   const marker = manualStatus(descriptorState.labels ?? {});
   const baseTooltip = label ?? `${formatProviderLabel(provider)} agent`;
   const tooltip =
@@ -2008,7 +2004,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   timelineSyncCalloutContent: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
   },
   timelineSyncCallout: {
     flexDirection: "row",

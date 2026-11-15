@@ -13,8 +13,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
-import { createAudioEngine } from "@/voice/audio-engine";
-import type { AudioEngine } from "@/voice/audio-engine-types";
+import { createAudioEngine } from "@/audio";
+import type { AudioEngine } from "@/audio";
 import {
   createVoiceRuntime,
   type VoiceRuntime,

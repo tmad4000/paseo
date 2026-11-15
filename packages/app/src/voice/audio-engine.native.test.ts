@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as native from "@getpaseo/expo-two-way-audio";
-import { createAudioEngine } from "./audio-engine.native";
-import type { AudioPlaybackSource } from "./audio-engine-types";
+import { createAudioEngine } from "../audio/audio-engine.native";
+import type { AudioPlaybackSource } from "../audio/audio-engine-types";
 
 const listeners: Record<string, Function> = {};
 

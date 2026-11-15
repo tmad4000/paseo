@@ -1155,12 +1155,7 @@ async function main() {
     children.push(remoteDaemon.child);
     await waitForPort(remotePort, "remote daemon", remoteDaemon);
 
-    const desktopArgs = [
-      process.execPath,
-      devRunner,
-      `--inspect=127.0.0.1:${inspectorPort}`,
-      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-    ];
+    const desktopArgs = [process.execPath, devRunner, `--inspect=127.0.0.1:${inspectorPort}`];
     const desktopCommand = process.platform === "linux" ? "xvfb-run" : desktopArgs.shift();
     const desktopCommandArgs =
       process.platform === "linux"

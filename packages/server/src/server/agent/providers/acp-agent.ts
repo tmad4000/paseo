@@ -1,3 +1,4 @@
+import { ACPProviderOptionsSchema } from "./acp-options.js";
 import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -86,6 +87,7 @@ import {
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentUsage,
+  type AgentCreateSessionOptions,
   type FetchCatalogOptions,
   type ProviderRefreshContext,
   type ImportableProviderSession,
@@ -214,15 +216,22 @@ export function summarizeACPRequestError(error: unknown): {
   return { message: toDiagnosticErrorMessage(error) };
 }
 
+// Keeps the JSON-RPC code so callers can still tell invalid params from other failures.
+class ACPRequestError extends Error {
+  readonly code: number;
+
+  constructor(error: ACPError) {
+    super(summarizeACPRequestError(error).message, { cause: error });
+    this.name = "ACPRequestError";
+    this.code = error.code;
+  }
+}
+
 function toACPRequestError(error: unknown): Error {
   if (!isACPError(error)) {
     return error instanceof Error ? error : new Error(toDiagnosticErrorMessage(error));
   }
-
-  const summary = summarizeACPRequestError(error);
-  const next = new Error(summary.message);
-  next.name = "ACPRequestError";
-  return next;
+  return new ACPRequestError(error);
 }
 
 function resolveTerminalCommand(
@@ -478,6 +487,7 @@ interface ACPAgentClientOptions {
 }
 
 interface ACPAgentSessionOptions {
+  configuredModelIds?: readonly string[];
   provider: string;
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
@@ -972,8 +982,10 @@ export class ACPAgentClient implements AgentClient {
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
+    options?: AgentCreateSessionOptions,
   ): Promise<AgentSession> {
     this.assertProvider(config);
+    const providerOptions = ACPProviderOptionsSchema.parse(config.providerOptions ?? {});
     const session = new ACPAgentSession(
       { ...config, provider: this.provider },
       {
@@ -986,14 +998,19 @@ export class ACPAgentClient implements AgentClient {
         sessionResponseTransformer: this.sessionResponseTransformer,
         configOptionsTransformer: this.configOptionsTransformer,
         configFeatureOptions: this.configFeatureOptions,
-        clientCapabilities: this.clientCapabilities,
+        clientCapabilities: providerOptions.clientCapabilities ?? this.clientCapabilities,
         clientCapabilityMeta: this.clientCapabilityMeta,
         modeIdTransformer: this.modeIdTransformer,
         toolSnapshotTransformer: this.toolSnapshotTransformer,
         providerModeWriter: this.providerModeWriter,
         beforeModeWriter: this.beforeModeWriter,
         thinkingOptionWriter: this.thinkingOptionWriter,
-        capabilities: this.capabilities,
+        capabilities: {
+          ...this.capabilities,
+          supportsMcpServers:
+            providerOptions.supportsMcpServers ?? this.capabilities.supportsMcpServers,
+        },
+        configuredModelIds: options?.configuredModelIds,
         agentId: launchContext?.agentId,
         launchEnv: launchContext?.env,
         extensionCommandsParser: this.extensionCommandsParser,
@@ -1027,6 +1044,7 @@ export class ACPAgentClient implements AgentClient {
       provider: this.provider,
       cwd,
     };
+    const providerOptions = ACPProviderOptionsSchema.parse(mergedConfig.providerOptions ?? {});
     const session = new ACPAgentSession(mergedConfig, {
       provider: this.provider,
       logger: this.logger,
@@ -1037,16 +1055,21 @@ export class ACPAgentClient implements AgentClient {
       sessionResponseTransformer: this.sessionResponseTransformer,
       configOptionsTransformer: this.configOptionsTransformer,
       configFeatureOptions: this.configFeatureOptions,
-      clientCapabilities: this.clientCapabilities,
+      clientCapabilities: providerOptions.clientCapabilities ?? this.clientCapabilities,
       clientCapabilityMeta: this.clientCapabilityMeta,
       modeIdTransformer: this.modeIdTransformer,
       toolSnapshotTransformer: this.toolSnapshotTransformer,
       providerModeWriter: this.providerModeWriter,
       beforeModeWriter: this.beforeModeWriter,
       thinkingOptionWriter: this.thinkingOptionWriter,
-      capabilities: this.capabilities,
+      capabilities: {
+        ...this.capabilities,
+        supportsMcpServers:
+          providerOptions.supportsMcpServers ?? this.capabilities.supportsMcpServers,
+      },
       handle,
       resumePurpose: options?.purpose,
+      configuredModelIds: options?.configuredModelIds,
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       extensionCommandsParser: this.extensionCommandsParser,
@@ -1097,6 +1120,7 @@ export class ACPAgentClient implements AgentClient {
         raceProviderRefreshAbort(
           context?.signal,
           this.spawnProcess(PROBE_ENV, {
+            providerOptions: options.providerOptions,
             onSpawned: (spawned) => {
               probe = spawned;
               if (context?.signal.aborted) void closeProbe().catch(() => undefined);
@@ -1342,6 +1366,7 @@ export class ACPAgentClient implements AgentClient {
     launchEnv?: Record<string, string>,
     options?: {
       initializeTimeoutMs?: number;
+      providerOptions?: Record<string, unknown>;
       onSpawned?: (probe: UninitializedACPProcess) => void;
       client?: ACPClient;
     },
@@ -1354,7 +1379,11 @@ export class ACPAgentClient implements AgentClient {
     };
     options?.onSpawned?.(probe);
     try {
-      const initialize = await this.initializeTransport(transport, options?.initializeTimeoutMs);
+      const initialize = await this.initializeTransport(
+        transport,
+        options?.initializeTimeoutMs,
+        options?.providerOptions,
+      );
       const initializedProbe: SpawnedACPProcess = {
         ...probe,
         initialize,
@@ -1413,7 +1442,9 @@ export class ACPAgentClient implements AgentClient {
   protected async initializeTransport(
     transport: ACPProcessTransport,
     initializeTimeoutMs?: number,
+    providerOptions?: Record<string, unknown>,
   ): Promise<InitializeResponse> {
+    const configuredOptions = ACPProviderOptionsSchema.parse(providerOptions ?? {});
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const initializeTimeoutPromise = initializeTimeoutMs
       ? new Promise<never>((_, reject) => {
@@ -1430,7 +1461,7 @@ export class ACPAgentClient implements AgentClient {
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: buildACPClientCapabilities(
               this.clientCapabilityMeta,
-              this.clientCapabilities,
+              configuredOptions.clientCapabilities ?? this.clientCapabilities,
             ),
             clientInfo: { name: "Paseo", version: "dev" },
           }),
@@ -1667,6 +1698,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     configOptions: SessionConfigOption[],
   ) => SessionConfigOption[];
   private readonly configFeatureOptions: ACPConfigFeatureOption[];
+  private readonly configuredModelIds: ReadonlySet<string>;
   private readonly clientCapabilities?: ACPClientCapabilities;
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
@@ -1736,6 +1768,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.sessionResponseTransformer = options.sessionResponseTransformer;
     this.configOptionsTransformer = options.configOptionsTransformer;
     this.configFeatureOptions = options.configFeatureOptions ?? [];
+    this.configuredModelIds = new Set(options.configuredModelIds);
     this.clientCapabilities = options.clientCapabilities;
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
@@ -1763,13 +1796,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async initializeNewSession(): Promise<void> {
+    const pendingSessionUpdates: SessionNotification[] = [];
+    this.pendingSessionUpdates = pendingSessionUpdates;
     try {
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
       this.agentCapabilities = spawned.initialize.agentCapabilities ?? null;
 
-      this.pendingSessionUpdates = [];
       const response = await this.runACPRequest(() =>
         this.connection!.newSession({
           cwd: this.config.cwd,
@@ -1779,7 +1813,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.sessionId = response.sessionId;
       this.bootstrapThreadEventPending = true;
       this.applySessionState(response);
-      const pendingSessionUpdates = this.pendingSessionUpdates;
       this.pendingSessionUpdates = null;
       for (const notification of pendingSessionUpdates) {
         this.applySessionUpdate(notification);
@@ -1798,6 +1831,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
    * from these calls regardless of capabilities.
    */
   async initializeResumedSession(): Promise<void> {
+    const pendingSessionUpdates: SessionNotification[] = [];
+    this.pendingSessionUpdates = pendingSessionUpdates;
     try {
       const handle = this.initialHandle;
       if (!handle) {
@@ -1810,6 +1845,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.agentCapabilities = spawned.initialize.agentCapabilities ?? null;
       this.sessionId = handle.sessionId;
       this.bootstrapThreadEventPending = true;
+      this.pendingSessionUpdates = null;
+      for (const notification of pendingSessionUpdates) {
+        this.applySessionUpdate(notification);
+      }
 
       const sessionCapabilities = this.agentCapabilities?.sessionCapabilities;
       if (this.agentCapabilities?.loadSession) {
@@ -2076,8 +2115,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     const context = this.createProviderModeWriterContext(modeId, selection);
-    const providerResult = this.providerModeWriter
-      ? await this.providerModeWriter(context)
+    const providerModeWriter = this.providerModeWriter;
+    const providerResult = providerModeWriter
+      ? await this.runACPRequest(() => providerModeWriter(context))
       : { handled: false };
     if (providerResult.handled) {
       this.currentMode = providerResult.currentModeId ?? modeId;
@@ -2122,8 +2162,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
     }
 
-    if (this.beforeModeWriter) {
-      const beforeResult = await this.beforeModeWriter(context);
+    const beforeModeWriter = this.beforeModeWriter;
+    if (beforeModeWriter) {
+      const beforeResult = await this.runACPRequest(() => beforeModeWriter(context));
       if (beforeResult?.configOptions) {
         this.configOptions = this.transformConfigOptions(beforeResult.configOptions);
       }
@@ -2198,12 +2239,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
+    await this.setModelWithSelection({ modelId, selection: this.resolveModelSelection(modelId) });
+  }
+
+  private resolveModelSelection(modelId: string): ACPModelSelection {
     const selection = resolveACPModelSelection({
       modelId,
       availableModels: this.availableModels,
       configOptions: this.configOptions,
     });
-    await this.setModelWithSelection({ modelId, selection });
+    if (selection.availableModel || !this.configuredModelIds.has(modelId)) {
+      return selection;
+    }
+    // A model the user added in provider config is applied even when the agent does not advertise it.
+    return { ...selection, availableModel: { modelId, name: modelId } };
   }
 
   private async setModelWithSelection({
@@ -2217,21 +2266,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error("ACP session not initialized");
     }
 
-    if (selection.hasAvailableModels) {
-      if (!selection.availableModel) {
-        this.warnInvalidSelection(
-          modelId,
-          `is not a valid ${this.provider} model. Available options: ${this.availableModels
-            ?.map((model) => model.modelId)
-            .join(", ")}`,
-        );
-        return;
-      }
+    if (selection.hasAvailableModels && !selection.availableModel) {
+      this.warnInvalidSelection(
+        modelId,
+        `is not a valid ${this.provider} model. Available options: ${this.availableModels
+          ?.map((model) => model.modelId)
+          .join(", ")}`,
+      );
+      return;
+    }
 
-      if (typeof this.connection.unstable_setSessionModel !== "function") {
-        throw new Error(this.modelSelectionUnavailableMessage());
-      }
-
+    if (
+      selection.availableModel &&
+      typeof this.connection.unstable_setSessionModel === "function"
+    ) {
       try {
         await this.connection.unstable_setSessionModel({
           sessionId: this.sessionId,
@@ -2265,11 +2313,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
-    const response = await this.connection.setSessionConfigOption({
-      sessionId: this.sessionId,
-      configId: modelOption.id,
-      value: modelId,
-    });
+    const { connection, sessionId } = this;
+    const response = await this.runACPRequest(() =>
+      connection.setSessionConfigOption({
+        sessionId,
+        configId: modelOption.id,
+        value: modelId,
+      }),
+    );
     this.currentModel = this.applyConfigOptionResponse({
       response,
       configId: modelOption.id,
@@ -2293,8 +2344,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
-    if (this.thinkingOptionWriter) {
-      await this.thinkingOptionWriter(this.connection, this.sessionId, thinkingOptionId);
+    const thinkingOptionWriter = this.thinkingOptionWriter;
+    if (thinkingOptionWriter) {
+      const { connection, sessionId } = this;
+      await this.runACPRequest(() => thinkingOptionWriter(connection, sessionId, thinkingOptionId));
       this.thinkingOptionId = thinkingOptionId;
       this.pushEvent({
         type: "thinking_option_changed",
@@ -2311,11 +2364,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (!option) {
       throw new Error(`${this.provider} does not expose ACP thought-level selection`);
     }
-    const response = await this.connection.setSessionConfigOption({
-      sessionId: this.sessionId,
-      configId: option.id,
-      value: thinkingOptionId,
-    });
+    const { connection, sessionId } = this;
+    const response = await this.runACPRequest(() =>
+      connection.setSessionConfigOption({
+        sessionId,
+        configId: option.id,
+        value: thinkingOptionId,
+      }),
+    );
     this.thinkingOptionId = this.applyConfigOptionResponse({
       response,
       configId: option.id,
@@ -2361,11 +2417,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       );
     }
 
-    const response = await this.connection.setSessionConfigOption({
-      sessionId: this.sessionId,
-      configId: option.id,
-      value: requestedValue,
-    });
+    const { connection, sessionId } = this;
+    const response = await this.runACPRequest(() =>
+      connection.setSessionConfigOption({
+        sessionId,
+        configId: option.id,
+        value: requestedValue,
+      }),
+    );
     const currentValue = this.applyConfigOptionResponse({
       response,
       configId: option.id,
@@ -2454,12 +2513,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (!this.sessionId) {
       return null;
     }
+    const { providerOptions: _providerOptions, ...persistedConfig } = this.config;
     return {
       provider: this.provider,
       sessionId: this.sessionId,
       nativeHandle: this.sessionId,
       metadata: {
-        ...this.config,
+        ...persistedConfig,
         title: this.currentTitle,
       },
     };
@@ -2922,13 +2982,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const configuredModelId = this.config.model;
     let switchedModel = false;
     if (configuredModelId && configuredModelId !== this.currentModel) {
-      const selection = resolveACPModelSelection({
-        modelId: configuredModelId,
-        availableModels: this.availableModels,
-        configOptions: this.configOptions,
-      });
       try {
-        await this.setModelWithSelection({ modelId: configuredModelId, selection });
+        await this.setModelWithSelection({
+          modelId: configuredModelId,
+          selection: this.resolveModelSelection(configuredModelId),
+        });
         switchedModel = true;
       } catch (error) {
         if (!this.isModelSelectionUnavailableError(error)) {

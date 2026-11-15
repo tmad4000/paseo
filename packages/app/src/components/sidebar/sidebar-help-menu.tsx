@@ -14,6 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
@@ -109,6 +111,7 @@ function HostVersionHint({ host, check }: { host: HostProfile; check: ReleaseVer
 }
 
 export function SidebarHelpMenu() {
+  const isCompact = useIsCompactFormFactor();
   const { t } = useTranslation();
   const shortcutsAvailable = useKeyboardShortcutsAvailable();
   const openAppDiagnostic = useAppDiagnosticStore((state) => state.open);
@@ -147,14 +150,14 @@ export function SidebarHelpMenu() {
         <TooltipTrigger asChild>
           <View>
             <DropdownMenuTrigger
-              style={styles.trigger}
+              style={styles.trigger(isCompact)}
               testID="sidebar-help"
               accessibilityRole="button"
               accessibilityLabel={t("sidebar.help.trigger")}
             >
               {({ hovered }) => (
                 <ThemedCircleHelp
-                  size={ICON_SIZE.md}
+                  size={isCompact ? ICON_SIZE.lg : ICON_SIZE.md}
                   uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
                 />
               )}
@@ -245,14 +248,14 @@ export function SidebarHelpMenu() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  trigger: {
-    width: 28,
-    height: 28,
+  trigger: (isCompact: boolean) => ({
+    width: isCompact ? buttonControlHeight.md : buttonControlHeight.xs,
+    height: isCompact ? buttonControlHeight.md : buttonControlHeight.xs,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[1],
-  },
+  }),
   tooltipText: {
     fontSize: theme.fontSize.base,
     color: theme.colors.popoverForeground,
