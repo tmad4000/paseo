@@ -17,20 +17,27 @@ Unset it (or set it to the worktree) before `npm run dev` in a worktree.
 
 ## Results
 
-| Check                                                  | Result                                                                          |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `--url http://…/storage-decision.md` (text/markdown)   | Preview by default: front matter table, headings, GFM table, lists, code, links |
-| Charset-less UTF-8 (`$1–3`)                            | Preview shows `$1–3`; Source shows Chromium's own `$1â€“3`                      |
-| `<script>` and `<img onerror>` in the document         | Shown as text; guest title unchanged; no script elements in the preview         |
-| Source toggle                                          | Real guest page shown; Preview restores the rendered document                   |
-| Relative link `./other.md`                             | Tab navigates to `/other.md`, which renders                                     |
-| HTML page (`/` directory listing)                      | No mode bar; real webview                                                       |
-| `--file storage-decision.md`                           | File tab renders formatted by default with Preview/Source                       |
-| Dark theme switch while a preview is open; app restart | Preview stays rendered (regression fixed by re-probing once the guest attaches) |
+| Check                                                          | Result                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `--url http://…/storage-decision.md` (text/markdown)           | Preview by default: front matter table, headings, GFM table, lists, code, links |
+| Charset-less UTF-8 (`$1–3`)                                    | Preview shows `$1–3`; Source shows Chromium's own `$1â€“3`                      |
+| `<script>` and `<img onerror>` in the document                 | Shown as text; guest title unchanged; no script elements in the preview         |
+| Source toggle                                                  | Real guest page shown; Preview restores the rendered document                   |
+| Relative link `./other.md`                                     | Tab navigates to `/other.md`, which renders                                     |
+| HTML page (`/` directory listing)                              | No mode bar; real webview                                                       |
+| `--file storage-decision.md`                                   | File tab renders formatted by default with Preview/Source                       |
+| Dark theme switch while a preview is open; app restart         | Preview stays rendered (regression fixed by re-probing once the guest attaches) |
+| `paseo://` link, cross-origin image, same-origin `./chart.svg` | Link stays text; cross-origin image shows its alt text; same-origin image loads |
+| Annotate armed in Source, then Preview                         | Selector cancelled; Annotate disabled while the preview shows                   |
 
 Screenshots: [browser tab, light](01-browser-tab-preview-light.png),
 [browser tab, dark after a theme switch](01-browser-tab-preview-dark-after-theme-switch.png),
 [code, links and inert HTML](02-preview-code-links-inert-html.png), [Source](03-source-mode.png),
-[relative link](04-relative-link.png), [file tab via `--file`, dark](05-file-tab-open-tab-file-dark.png).
+[relative link](04-relative-link.png), [file tab via `--file`, dark](05-file-tab-open-tab-file-dark.png),
+[hostile links and images](06-hostile-links-and-images.png).
+
+The guest probe runs in the page's own world, so a page can fake what it reports. The app therefore
+treats the text as hostile everywhere: only http(s) links, only same-origin or inline data images, no
+inline HTML. A raw page can still show for a moment before the preview replaces it.
 
 Not verified: macOS Electron and the installed Paseo Fork build. GFM task-list checkboxes render as text, as in chat.
