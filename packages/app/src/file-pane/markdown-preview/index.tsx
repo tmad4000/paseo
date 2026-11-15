@@ -1,11 +1,21 @@
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { MarkdownRenderer } from "@/components/markdown/renderer";
+import { MarkdownRenderer, type MarkdownRendererProps } from "@/components/markdown/renderer";
 import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import { parseMarkdownPreviewDocument } from "./document";
 
-export function FileMarkdownPreview({ source }: { source: string }) {
+export function FileMarkdownPreview({
+  source,
+  onLinkPress,
+  markdownit,
+  enableHtmlish,
+}: {
+  source: string;
+  onLinkPress?: (url: string) => boolean;
+  markdownit?: MarkdownRendererProps["markdownit"];
+  enableHtmlish?: boolean;
+}) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
 
   return (
@@ -32,7 +42,12 @@ export function FileMarkdownPreview({ source }: { source: string }) {
             ))}
           </View>
         ) : null}
-        <MarkdownRenderer text={document.body} />
+        <MarkdownRenderer
+          text={document.body}
+          onLinkPress={onLinkPress}
+          markdownit={markdownit}
+          enableHtmlish={enableHtmlish}
+        />
       </View>
     </View>
   );

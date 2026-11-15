@@ -59,6 +59,13 @@ import type { AttachmentMetadata, BrowserElementAttachment } from "@/attachments
 import { persistAttachmentFromDataUrl } from "@/attachments/service";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT } from "@/constants/layout";
 import { getOverlayRoot } from "@/lib/overlay-root";
+import { MARKDOWN_DOCUMENT_PROBE_SCRIPT } from "@/desktop/browser/markdown-document/model";
+import { useBrowserMarkdownDocument } from "@/desktop/browser/markdown-document/use-markdown-document";
+import {
+  BrowserMarkdownDocument,
+  BrowserMarkdownModeBar,
+  type BrowserMarkdownMode,
+} from "@/desktop/browser/markdown-document/view";
 import {
   getDesktopHost,
   isElectronRuntime,
@@ -621,7 +628,6 @@ export function BrowserPane({
   browserViewportRef.current = browserViewport;
   const isPresented = useRetainedPanelActive();
   const isPresentedRef = useRef(isPresented);
-  isPresentedRef.current = isPresented;
   const webviewRef = useRef<ElectronWebview | null>(null);
   const webviewHostRef = useRef<HTMLDivElement | null>(null);
   const webviewClipRef = useRef<HTMLElement | null>(null);
@@ -633,6 +639,28 @@ export function BrowserPane({
   browserRef.current = browser;
   const pendingNavigationUrlRef = useRef<string | null>(null);
   const annotationMarkersRef = useRef<BrowserAnnotationMarker[]>([]);
+  const probeMarkdownDocument = useCallback(() => {
+    const webview = webviewRef.current;
+    return webview
+      ? executeWebviewJavaScript(webview, MARKDOWN_DOCUMENT_PROBE_SCRIPT)
+      : Promise.resolve(null);
+  }, []);
+  // The webview attaches in an effect that runs after the probe's; a remount
+  // (theme change, pane move) must probe again once the guest is reachable.
+  const [webviewAttachRevision, setWebviewAttachRevision] = useState(0);
+  const markdownSource = useBrowserMarkdownDocument({
+    url: browser?.url ?? null,
+    isLoading: browser?.isLoading ?? false,
+    probe: probeMarkdownDocument,
+    revision: webviewAttachRevision,
+  });
+  const [markdownMode, setMarkdownMode] = useState<BrowserMarkdownMode>("preview");
+  useEffect(() => setMarkdownMode("preview"), [browser?.url]);
+  const showMarkdownDocument = markdownSource !== null && markdownMode === "preview";
+  // The guest paints on its own plane above the app, so it is parked while the
+  // rendered document takes its place.
+  const isWebviewPresented = isPresented && !showMarkdownDocument;
+  isPresentedRef.current = isWebviewPresented;
   const [selectorMode, setSelectorMode] = useState<"annotate" | "screenshot" | null>(null);
   const selectorControllerRef = useRef<ReturnType<typeof createElementSelectorController> | null>(
     null,
@@ -802,6 +830,7 @@ export function BrowserPane({
     const residentWebview = takeResidentBrowserWebview(browserId) as ElectronWebview | null;
     const webview = residentWebview ?? (document.createElement("webview") as ElectronWebview);
     webviewRef.current = webview;
+    setWebviewAttachRevision((revision) => revision + 1);
     if (!residentWebview) {
       prepareBrowserWebview(webview, {
         browserId,
@@ -977,7 +1006,7 @@ export function BrowserPane({
     if (!webview) {
       return;
     }
-    if (!isPresented) {
+    if (!isWebviewPresented) {
       releaseResidentBrowserWebview(browserId, webview);
       return;
     }
@@ -995,7 +1024,7 @@ export function BrowserPane({
     } else {
       rememberResolvedBrowserWebviewSize(browserId, webview);
     }
-  }, [browserId, browserViewport, isPresented]);
+  }, [browserId, browserViewport, isWebviewPresented]);
 
   const navigate = useCallback(
     (nextUrl: string) => {
@@ -1317,6 +1346,15 @@ export function BrowserPane({
     setSelectorMode(null);
   }, []);
 
+  // The guest is parked while the rendered document shows: nothing may stay
+  // armed against it or keep keyboard focus inside it.
+  useEffect(() => {
+    if (!showMarkdownDocument) return;
+    cancelElementSelector();
+    cancelAnnotation();
+    webviewRef.current?.blur();
+  }, [showMarkdownDocument, cancelElementSelector, cancelAnnotation]);
+
   const currentPageUrl = browser?.url ?? null;
   const annotationMarkers = useMemo<BrowserAnnotationMarker[]>(() => {
     if (!currentPageUrl) {
@@ -1613,6 +1651,7 @@ export function BrowserPane({
                 : t("workspace.browser.controls.annotateElement")
             }
             active={selectorMode === "annotate"}
+            disabled={showMarkdownDocument}
             onPress={handleToggleElementSelector}
             style={annotateIconButtonStyle}
           >
@@ -1630,6 +1669,7 @@ export function BrowserPane({
                 : t("workspace.browser.controls.screenshotElement")
             }
             active={selectorMode === "screenshot"}
+            disabled={showMarkdownDocument}
             onPress={handleToggleScreenshot}
             style={screenshotIconButtonStyle}
           >
@@ -1649,6 +1689,9 @@ export function BrowserPane({
           </Text>
         </View>
       ) : null}
+      {markdownSource !== null ? (
+        <BrowserMarkdownModeBar mode={markdownMode} onModeChange={setMarkdownMode} />
+      ) : null}
       <View
         ref={setWebviewClipNode}
         style={webviewWrapStyle}
@@ -1658,6 +1701,13 @@ export function BrowserPane({
           ref: setWebviewHostNode,
           style: webviewHostStyle,
         })}
+        {showMarkdownDocument && markdownSource !== null && browser?.url ? (
+          <BrowserMarkdownDocument
+            source={markdownSource}
+            documentUrl={browser.url}
+            onNavigate={navigate}
+          />
+        ) : null}
         {pendingSelection ? (
           <BrowserElementAnnotationCard
             anchor={webviewClipRef.current}
