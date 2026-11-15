@@ -4,14 +4,26 @@ Run nice -n 19 python3 scripts/generate-fork-icons.py [--check].
 """
 from pathlib import Path
 from io import BytesIO
-import argparse, json, hashlib, struct
+import argparse, json, hashlib, struct, math
 import xml.etree.ElementTree as ET
 import cairosvg
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 ROOT=Path(__file__).resolve().parent.parent
 SOURCE=ROOT/'assets/fork-icon/source.svg'
 CHECK='--check' in __import__('sys').argv
-master=Image.open(BytesIO(cairosvg.svg2png(url=str(SOURCE),output_width=2048,output_height=2048))).convert('RGBA')
+def raster_source(data):
+    # CairoSVG does not evaluate viewport media queries like browsers. Select the
+    # bitmap optical variant explicitly after padding, leaving CSS to SVG viewers.
+    root=ET.fromstring(data)
+    for child in list(root):
+        if child.tag.endswith('style') or child.get('id') in ('badge16-responsive','badge32-responsive'):
+            root.remove(child)
+    return ET.tostring(root)
+master=Image.open(BytesIO(cairosvg.svg2png(bytestring=raster_source(SOURCE.read_bytes()),output_width=2048,output_height=2048))).convert('RGBA')
+plain_svg=ET.fromstring(raster_source(SOURCE.read_bytes()))
+for child in list(plain_svg):
+ if child.get('id')=='fork-badge':plain_svg.remove(child)
+plain=Image.open(BytesIO(cairosvg.svg2png(bytestring=ET.tostring(plain_svg),output_width=2048,output_height=2048))).convert('RGBA')
 paseo=(ROOT/'packages/app').exists()
 outputs={}
 cache={}
@@ -19,26 +31,29 @@ def png(path,size,style='square'):
     key=(size,style)
     if key in cache:
         im,data=cache[key];outputs[path]=data;return im
-    art=master
-    if style in ('mac','adaptive'):
+    optical=(size[0]==size[1] and size[0]<=32 and style in ('mac','web','square')) or style=='tray'
+    source_art=plain if optical else master
+    art=source_art
+    if style in ('mac','adaptive','round','maskable'):
         art=Image.new('RGBA',master.size)
-        extent=1648 if style=='mac' else 1320
-        tile=master.resize((extent,extent),Image.Resampling.LANCZOS)
+        extent={'mac':1648,'adaptive':1000,'round':1648,'maskable':1320}[style]
+        tile=source_art.resize((extent,extent),Image.Resampling.LANCZOS)
         if style=='mac':
             mask=Image.new('L',tile.size);ImageDraw.Draw(mask).rounded_rectangle((0,0,extent-1,extent-1),radius=370,fill=255);tile.putalpha(mask)
         art.alpha_composite(tile,((2048-extent)//2,)*2)
     im=art.resize(size,Image.Resampling.LANCZOS)
-    if style=='square':
+    if style in ('square','round','maskable'):
         opaque=Image.new('RGBA',size,'black');opaque.alpha_composite(im);im=opaque
-    if size==(16,16):
-        symbol=ET.parse(SOURCE).getroot().find(".//*[@id='small-badge']")
-        svg=b'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'+ET.tostring(symbol)+b'</svg>'
+    if optical:
+        dimension=32 if style=='tray' or size[0]>16 else 16
+        symbol=ET.parse(SOURCE).getroot().find(f".//*[@id='small-badge-{dimension}']")
+        svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="{size[0]}" height="{size[1]}" viewBox="0 0 {dimension} {dimension}">'.encode()+ET.tostring(symbol)+b'</svg>'
         overlay=Image.open(BytesIO(cairosvg.svg2png(bytestring=svg))).convert('RGBA');im.alpha_composite(overlay)
     out=BytesIO();im.save(out,format='PNG');outputs[path]=out.getvalue();cache[key]=(im,out.getvalue())
     return im
 # Regenerate only application identity assets, preserving illustrations and notification/status glyphs.
 if paseo:
-    targets=[ROOT/'packages/desktop/assets'/n for n in ['icon.png','icon-dev.png','32x32.png','64x64.png','128x128.png','128x128@2x.png']]
+    targets=[ROOT/'packages/desktop/assets'/n for n in ['icon.png','icon-fork.png','icon-dev.png','32x32.png','64x64.png','128x128.png','128x128@2x.png']]
     targets += [ROOT/'packages/app/assets/images'/n for n in ['icon.png','android-icon-foreground.png','favicon.png']]
     targets += list((ROOT/'packages/app/public').glob('*icon*.png'))
     targets += [ROOT/'fastlane/metadata/android/en-US/images/icon.png']
@@ -53,7 +68,12 @@ else:
     targets+=list((ROOT/'desktop/public').glob('app-icon*.png'))
 for p in targets:
     with Image.open(p) as old:size=old.size
-    style='adaptive' if 'foreground' in p.name else 'mac' if ('desktop' in p.parts and p.parent.name in ('assets','icons')) else 'square'
+    if 'foreground' in p.name:style='adaptive'
+    elif 'ic_launcher' in p.name:style='round'
+    elif p.name.startswith('pwa-icon'):style='maskable'
+    elif 'desktop' in p.parts and p.parent.name in ('assets','icons'):style='mac'
+    elif 'web' in p.parts or p.name=='favicon.png':style='web'
+    else:style='square'
     png(p,size,style)
 if paseo:
     ios_images=[]
@@ -83,6 +103,8 @@ for ext in ('icns','ico'):
    out.write(struct.pack('<BBBBHHII',size%256,size%256,0,0,1,32,len(data),offset));offset+=len(data)
   for data in frames:out.write(data)
  outputs[base/f'icon.{ext}']=out.getvalue()
+if paseo:
+ outputs[base/'icon-fork.icns']=outputs[base/'icon.icns']
 # Web favicon identity only; marketing logo is outside scope.
 favicon=ROOT/('packages/website/public' if paseo else 'admin-web/public')
 outputs[favicon/'favicon.svg']=SOURCE.read_bytes()
@@ -95,25 +117,94 @@ if paseo:
         if color:svg=svg.replace('</svg>',f'<circle cx="840" cy="180" r="148" fill="{color}" stroke="#fff" stroke-width="28"/></svg>')
         target=ROOT/f'packages/app/assets/images/favicon-{scheme}{state}'
         outputs[target.with_suffix('.svg')]=svg.encode()
-        data=cairosvg.svg2png(bytestring=svg.encode(),output_width=48,output_height=48)
+        data=cairosvg.svg2png(bytestring=raster_source(svg.encode()),output_width=48,output_height=48)
         outputs[target.with_suffix('.png')]=data
 else:
-    tray=master.resize((64,64),Image.Resampling.LANCZOS)
+    tray=png(ROOT/'assets/fork-icon/previews/tray-64.png',(64,64),'tray')
     outputs[ROOT/'desktop/src-tauri/icons/fork-tray.rgba']=tray.tobytes()
-# Native-size before/after on light and dark backgrounds, including full 1024px artwork.
+# Every review sample is a generated output; small badges are applied after padding.
+for style in ('mac','web','square','adaptive','round','maskable'):
+ for size in (16,32,64,128,1024):
+  png(ROOT/f'assets/fork-icon/previews/{style}-{size}.png',(size,size),style)
+# Verify the complete badge against Android's documented66/108 safe-zone diameter.
+svgroot=ET.parse(SOURCE).getroot()
+badge=svgroot.find(".//*[@id='fork-badge']")
+badge_svg=b'<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 1024 1024">'+ET.tostring(badge)+b'</svg>'
+badge_image=Image.open(BytesIO(cairosvg.svg2png(bytestring=badge_svg))).convert('RGBA')
+mask_report={}
+for style,extent,safe_ratio in [('adaptive',1000,66/108),('round',1648,1.0),('maskable',1320,0.8)]:
+ layer=Image.new('RGBA',(2048,2048));layer.alpha_composite(badge_image.resize((extent,extent),Image.Resampling.LANCZOS),((2048-extent)//2,)*2)
+ safe=Image.new('L',(2048,2048));margin=2048*(1-safe_ratio)/2
+ ImageDraw.Draw(safe).ellipse((margin,margin,2048-margin-1,2048-margin-1),fill=255)
+ # Ignore sub-unit Lanczos ringing in transparent pixels; visible badge coverage must be intact.
+ alpha=layer.getchannel('A').point(lambda a:255 if a>8 else 0)
+ outside=ImageChops.subtract(alpha,safe)
+ if outside.getbbox():raise SystemExit(f'{style}: badge leaves safe circle')
+ mask_report[style]={'safeDiameterRatio':safe_ratio,'badgeClipped':False}
+outputs[ROOT/'assets/fork-icon/mask-check.json']=(json.dumps(mask_report,indent=2)+'\n').encode()
+# macOS upstream/fork comparison, with full-size 1024 entries rather than thumbnails.
 sheet=Image.new('RGB',(2304,2920),'#e5e7eb');draw=ImageDraw.Draw(sheet)
 up=Image.open(ROOT/'assets/fork-icon/upstream.png').convert('RGBA')
-for row,(size,y) in enumerate([(16,40),(32,130),(64,230),(128,360),(1024,750)]):
- draw.text((20,y),f'{size}px — upstream / fork',fill='black')
+for size,y in [(16,40),(32,130),(64,230),(128,360),(1024,750)]:
+ draw.text((20,y),f'{size}px — upstream / actual macOS fork export',fill='black')
  for col,bg in enumerate(('#fff','#15171c')):
-  x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+25+size+40),fill=bg)
-  for i,img in enumerate((up,mac)):
-   tile=cache[((size,size),'mac')][0] if i==1 else img.resize((size,size),Image.Resampling.LANCZOS)
-   # At 1024px show upstream then fork vertically to retain true native dimensions.
+  x=30+col*1140
+  for i in (0,1):
+   tile=cache[((size,size),'mac')][0] if i else up.resize((size,size),Image.Resampling.LANCZOS)
    px=x+(i*(size+24) if size<1024 else 20);py=y+45+(i*1080 if size==1024 else 0)
-   if size==1024:draw.rectangle((x,py-10,x+1100,py+1034),fill=bg)
+   if size==1024 or i==0:draw.rectangle((x,py-10,x+1100,py+size+10),fill=bg)
    sheet.paste(tile,(px,py),tile)
 out=BytesIO();sheet.save(out,format='PNG');outputs[ROOT/'assets/fork-icon/contact-sheet.png']=out.getvalue()
+# Per-platform actual generated outputs at native 16/32/64/128/1024, light and dark.
+for style,label in [('web','Web rounded'),('square','iOS opaque'),('adaptive','Android adaptive foreground'),('round','Android legacy round'),('maskable','PWA maskable')]:
+ sheet=Image.new('RGB',(2304,1800),'#e5e7eb');draw=ImageDraw.Draw(sheet)
+ for size,y in [(16,35),(32,120),(64,220),(128,360),(1024,680)]:
+  draw.text((20,y),f'{label}: actual generated {size}px export — light / dark',fill='black')
+  for col,bg in enumerate(('#fff','#15171c')):
+   x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+size+55),fill=bg)
+   tile=cache[((size,size),style)][0];sheet.paste(tile,(x+20,y+40),tile)
+ out=BytesIO();sheet.save(out,format='PNG');outputs[ROOT/f'assets/fork-icon/contact-sheet-{style}.png']=out.getvalue()
+def android_mask_preview(size,shape):
+    # AdaptiveIconDrawable layers are 108 dp; the masked viewport is the central 72 dp.
+    # Use the exact generated foreground, then crop its viewport before masking.
+    side=1024
+    tile=Image.new('RGBA',(side,side),'black')
+    tile.alpha_composite(cache[((side,side),'adaptive')][0])
+    margin=round(side*(1-72/108)/2)
+    tile=tile.crop((margin,margin,side-margin,side-margin)).resize((size,size),Image.Resampling.LANCZOS)
+    factor=4 if size<=128 else 1
+    dimension=size*factor
+    mask=Image.new('L',(dimension,dimension));md=ImageDraw.Draw(mask)
+    if shape=='circle':md.ellipse((0,0,dimension-1,dimension-1),fill=255)
+    else:
+        radius=(dimension-1)/2
+        points=[]
+        for step in range(512):
+            angle=2*math.pi*step/512
+            cosine,sine=math.cos(angle),math.sin(angle)
+            points.append((radius+radius*math.copysign(abs(cosine)**0.5,cosine),radius+radius*math.copysign(abs(sine)**0.5,sine)))
+        md.polygon(points,fill=255)
+    tile.putalpha(mask.resize((size,size),Image.Resampling.LANCZOS))
+    return tile
+# Circle/squircle previews show the Android 72 dp viewport, not the full 108 dp layer.
+
+sheet=Image.new('RGB',(2304,2920),'#e5e7eb');draw=ImageDraw.Draw(sheet)
+for size,y in [(16,35),(32,120),(64,220),(128,360),(1024,650)]:
+ draw.text((20,y),f'Android {size}px circle / squircle masks — badge safe-zone check passed',fill='black')
+ for col,bg in enumerate(('#fff','#15171c')):
+  x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+size+55),fill=bg)
+  for i,shape in enumerate(('circle','squircle')):
+   tile=android_mask_preview(size,shape)
+   # Full-size mask previews are stacked so every exported pixel remains inspectable.
+   px=x+20+(i*(size+24) if size<1024 else 0);py=y+40+(i*1080 if size==1024 else 0)
+   if size==1024:draw.rectangle((x,py-10,x+1100,py+size+10),fill=bg)
+   sheet.paste(tile,(px,py),tile)
+ out=BytesIO()
+ # Native-sized circle and squircle PNGs accompany the sheet at every scale.
+ for shape in ('circle','squircle'):
+  tile=android_mask_preview(size,shape)
+  out=BytesIO();tile.save(out,format='PNG');outputs[ROOT/f'assets/fork-icon/previews/android-{shape}-{size}.png']=out.getvalue()
+out=BytesIO();sheet.save(out,format='PNG');outputs[ROOT/'assets/fork-icon/contact-sheet-masks.png']=out.getvalue()
 manifest={str(p.relative_to(ROOT)):hashlib.sha256(data).hexdigest() for p,data in sorted(outputs.items())}
 outputs[ROOT/'assets/fork-icon/manifest.json']=(json.dumps(manifest,indent=2)+'\n').encode()
 for p,data in outputs.items():

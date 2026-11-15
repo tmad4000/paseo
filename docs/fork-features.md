@@ -28,8 +28,10 @@ branch badge. The provisional Ideaflow accent is `#294ac4`; Jacob can override i
 [The source and generation instructions](../assets/fork-icon/README.md) cover desktop,
 iOS, Android adaptive and web/PWA identity assets. Acceptance: distinguish the fork from
 upstream at 16, 32, 64 and 1024 px on light/dark surfaces; keep the branch readable at 16 px
-and avoid badge clipping under launcher masks. Deterministic asset checks and visual review
-pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.34.
+and avoid badge clipping under launcher masks. The 16/32 px optical variants, smaller large badge,
+per-platform sheets and circle/squircle coverage checks live with the source SVG. Deterministic
+asset checks and visual review
+pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.35.
 
 ## App restart preservation
 

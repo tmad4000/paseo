@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -126,7 +127,7 @@ describe("desktop packaging", () => {
       productName: string;
       executableName: string;
       protocols: { schemes: string[] }[];
-      mac: { extraResources: { to: string }[]; icon: string };
+      mac: { extraResources: { from: string; to: string }[]; icon: string };
       publish: { owner: string };
       extraMetadata: { paseoProductName: string };
     };
@@ -138,6 +139,25 @@ describe("desktop packaging", () => {
     expect(fork.mac.extraResources.map((entry) => entry.to)).not.toContain("bin/paseo");
     expect(fork.mac.icon).toBe("assets/icon-fork.icns");
     expect(fork.publish.owner).toBe("tmad4000");
+
+    const generatedIcons = JSON.parse(
+      readFileSync(join(packageRoot, "..", "..", "assets", "fork-icon", "manifest.json"), "utf8"),
+    ) as Record<string, string>;
+    const iconSources = [
+      fork.mac.icon,
+      ...fork.mac.extraResources
+        .filter((entry) => entry.to === "icon.png")
+        .map((entry) => entry.from),
+    ];
+    expect(iconSources).toContain("assets/icon-fork.png");
+    for (const source of iconSources) {
+      const digest = createHash("sha256")
+        .update(readFileSync(join(packageRoot, source)))
+        .digest("hex");
+      expect(generatedIcons[`packages/desktop/${source}`], `${source} must come from the SVG`).toBe(
+        digest,
+      );
+    }
   });
 
   it("registers Paseo agent links with the operating system", () => {
