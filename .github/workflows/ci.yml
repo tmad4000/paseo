@@ -502,6 +502,19 @@ jobs:
           --workers=1 --repeat-each=3 --retries=0
           --output=test-results/acceptance-repeat
 
+      - name: Repeat empty-project cleanup isolation without retries
+        if: ${{ !cancelled() && env.PLAYWRIGHT_SHARD == '3/4' }}
+        timeout-minutes: 10
+        run: >-
+          npm run test:e2e --workspace=@getpaseo/app --
+          e2e/browser/projects-settings.spec.ts
+          e2e/browser/sidebar-project-filter.spec.ts
+          --grep="freshly-added project with no workspace|hides the filter row when there is only one project"
+          --workers=1 --repeat-each=3 --retries=0 --reporter=line,json
+          --output=test-results/project-cleanup-repeat
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/project-cleanup-repeat/results.json
+
       - name: Clean up Chromium sandbox
         if: always()
         run: node scripts/prepare-browser-sandbox.mjs --cleanup
@@ -509,7 +522,7 @@ jobs:
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         # Keep intentional visual evidence on success as well as failure diagnostics.
-        if: ${{ failure() || env.PLAYWRIGHT_SHARD == '2/4' || hashFiles('packages/app/test-results/*.png') != '' }}
+        if: ${{ failure() || env.PLAYWRIGHT_SHARD == '2/4' || env.PLAYWRIGHT_SHARD == '3/4' || hashFiles('packages/app/test-results/*.png') != '' }}
         with:
           name: playwright-results-${{ env.PLAYWRIGHT_ARTIFACT }}
           path: |

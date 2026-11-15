@@ -56,6 +56,15 @@ test("project.add creates a project without creating a workspace", async () => {
     cleanupClients.add(client);
     await client.connect();
 
+    const retainedRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "paseo-retained-project-")),
+    );
+    cleanupPaths.add(retainedRoot);
+    const retained = await client.addProject(retainedRoot);
+    expect(retained.error).toBeNull();
+    expect(retained.project).toMatchObject({ projectRootPath: retainedRoot });
+    const beforeIds = (await client.listProjects()).projects.map((entry) => entry.projectId).sort();
+
     const added = await client.addProject(repoRoot);
 
     expect(added.error).toBeNull();
@@ -77,6 +86,22 @@ test("project.add creates a project without creating a workspace", async () => {
         projectKind: "git",
       }),
     ]);
+
+    const viewKey = project.projectKey ?? JSON.stringify(["fixture-host", project.projectId]);
+    expect(viewKey).not.toBe(project.projectId);
+    await client.removeProject(viewKey);
+    const afterOpaqueRemoval = (await client.listProjects()).projects.map(
+      (entry) => entry.projectId,
+    );
+    expect(afterOpaqueRemoval).toContain(project.projectId);
+
+    // Workspace-only ownership misses this empty project; catalog ownership must find it.
+    const ownedIds = afterOpaqueRemoval.filter((id) => !beforeIds.includes(id));
+    expect(ownedIds).toEqual([project.projectId]);
+    await client.removeProject(ownedIds[0]!);
+    expect((await client.listProjects()).projects.map((entry) => entry.projectId).sort()).toEqual(
+      beforeIds,
+    );
   } finally {
     restoreEnv("PASEO_SUPERVISED", previousSupervised);
   }

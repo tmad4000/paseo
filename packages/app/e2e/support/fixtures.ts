@@ -82,21 +82,38 @@ const daemonTest = metroTest.extend<
   projectOwnership: [
     async ({ e2eWorkerClient }, provide, testInfo) => {
       const before = new Set(
-        (await e2eWorkerClient.fetchWorkspaces()).entries.map((workspace) => workspace.projectId),
+        (await e2eWorkerClient.listProjects()).projects.map((project) => project.projectId),
       );
 
       await provide();
 
       const leaked = [
         ...new Set(
-          (await e2eWorkerClient.fetchWorkspaces()).entries.map((workspace) => workspace.projectId),
+          (await e2eWorkerClient.listProjects()).projects.map((project) => project.projectId),
         ),
       ].filter((projectId) => !before.has(projectId));
+      const cleanupFailures: unknown[] = [];
       for (const projectId of leaked) {
-        await e2eWorkerClient.removeProject(projectId).catch(() => undefined);
+        try {
+          await e2eWorkerClient.removeProject(projectId);
+        } catch (error) {
+          cleanupFailures.push(error);
+        }
       }
       if (leaked.length > 0) {
         const message = `Test leaked daemon project records: ${leaked.join(", ")}`;
+        try {
+          await expect
+            .poll(async () =>
+              (await e2eWorkerClient.listProjects()).projects
+                .filter((project) => leaked.includes(project.projectId))
+                .map((project) => project.projectId),
+            )
+            .toEqual([]);
+        } catch (error) {
+          cleanupFailures.push(error);
+        }
+        if (cleanupFailures.length > 0) throw new AggregateError(cleanupFailures, message);
         if (testInfo.status === testInfo.expectedStatus) throw new Error(message);
         await testInfo.attach("project-leaks", { body: message, contentType: "text/plain" });
       }
