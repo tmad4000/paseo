@@ -67,7 +67,7 @@ if (process.argv.includes("--cleanup")) {
     try {
       rmSync(directory, { recursive: true, force: true });
     } catch (cleanupError) {
-      throw new AggregateError([error, cleanupError], "Sandbox preparation and cleanup failed");
+      console.error("Sandbox helper cleanup failed:", cleanupError);
     }
     throw error;
   }
