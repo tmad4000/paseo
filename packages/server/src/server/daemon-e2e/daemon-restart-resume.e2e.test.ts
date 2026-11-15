@@ -7,7 +7,7 @@ import { createDaemonTestContext, type DaemonTestContext } from "../test-utils/i
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { withTimeout } from "../../utils/promise-timeout.js";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   startDaemonInstance,
@@ -367,7 +367,7 @@ test.runIf(process.env.PASEO_DAEMON_RESTART_QA === "1" && process.platform === "
         }
       }
       if (captured) await stopDaemonInstance(home, { instance: captured, timeoutMs: 15_000 });
-      rmSync(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   },
   420_000,
@@ -453,7 +453,7 @@ test("graceful restart checkpoint restores resident identities without replaying
   } finally {
     await client.close();
     await daemon.close();
-    rmSync(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 
@@ -512,6 +512,6 @@ test("graceful restart reports a failed provider restore without blocking other 
   } finally {
     await client.close();
     await daemon.close();
-    rmSync(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }, 20_000);
