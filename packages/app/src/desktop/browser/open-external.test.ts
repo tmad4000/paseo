@@ -55,13 +55,16 @@ describe("openBrowserPageExternally", () => {
 
   it("reports a failure when the opener rejects", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await openBrowserPageExternally({
-      url: "https://example.com/",
-      open: async () => {
-        throw new Error("no handler");
-      },
-    });
-    expect(result).toBe("failed");
-    warn.mockRestore();
+    try {
+      const result = await openBrowserPageExternally({
+        url: "https://example.com/",
+        open: async () => {
+          throw new Error("no handler");
+        },
+      });
+      expect(result).toBe("failed");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
