@@ -1,0 +1,14 @@
+{
+  "adaptive": {
+    "safeDiameterRatio": 0.6111111111111112,
+    "badgeClipped": false
+  },
+  "round": {
+    "safeDiameterRatio": 1.0,
+    "badgeClipped": false
+  },
+  "maskable": {
+    "safeDiameterRatio": 0.8,
+    "badgeClipped": false
+  }
+}
