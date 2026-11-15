@@ -19,6 +19,7 @@ export interface DaemonSelfUpdateInput {
   daemonVersion: string | null;
   desktopManaged: boolean;
   onProgress: (phase: DaemonSelfUpdatePhase) => void;
+  beforeInstall?: () => Promise<void>;
   logger: DaemonSelfUpdateLogger;
 }
 
@@ -79,6 +80,7 @@ export class DaemonSelfUpdater {
         return { success: false, error: unsupportedReason, newVersion: null };
       }
 
+      await input.beforeInstall?.();
       input.onProgress("downloading");
       input.onProgress("installing");
 

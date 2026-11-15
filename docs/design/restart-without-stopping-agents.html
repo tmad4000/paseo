@@ -89,11 +89,11 @@
     <tr>
       <td>A: drain and resume</td>
       <td>
-        Gate new turns atomically, wait for running/initializing/permission work, persist resident
-        handles, flush, replace, reload handles without sending a new prompt. Never force restart on
-        timeout. Idle Claude can own background work, and terminals remain vulnerable; must disclose
-        those limits. Recovery from an already interrupted turn needs explicit policy rather than
-        blind replay.
+        Wait for running/initializing/permission work, fence new turns at a quiet boundary, persist
+        resident handles, flush, replace, reload handles without sending a new prompt. Never force
+        restart on timeout. Idle Claude can own background work, and terminals remain vulnerable;
+        must disclose those limits. Recovery from an already interrupted turn needs explicit policy
+        rather than blind replay.
       </td>
       <td>12–24 implementation + 6–12 integration/review</td>
     </tr>
@@ -130,17 +130,24 @@
     Reuse its design where compatible rather than presenting resume as uninterrupted execution. No
     upstream merge or dependency update is part of this investigation.
   </p>
-  <h2>First delivery and verification bar</h2>
+  <h2>Delivery and verification</h2>
   <p>
-    Add a default-off desktop setting, “Keep agents running across app restarts.” Apply it to
-    explicit update preparation, ordinary quit (which may install an update) and startup version
-    handling. Label the tradeoff: app updates immediately; existing daemon keeps its current version
-    until a separate restart. Keep manual stop/restart semantics explicit. Test the lifecycle
-    setting and actual Linux process survival across a simulated app owner restart with a private
-    HOME/PASEO_HOME and live isolated provider. Do not claim a real Electron installer or macOS/iOS
-    result from Linux. Packaged updaters may replace paths used by the old daemon; verify packaging
-    before promising long-lived operation after installation. A safe daemon-drain phase requires
-    atomic admission fencing and separate coverage for queued prompts, permissions, startup failure
-    and background work before shipping.
+    The desktop setting “Keep agents running across app restarts” merged in
+    <a href="https://github.com/tmad4000/paseo/pull/225">PR #225</a>. It retains the existing daemon
+    across app updates; the daemon keeps its old version. The first upgrade from an older app cannot
+    use this setting. Linux process survival was verified with an isolated real Codex turn and a
+    replacement app owner. Apple installer behavior remains unverified.
+  </p>
+  <p>
+    The second slice implements A behind the startup setting
+    <code>daemon.gracefulRestart: true</code> (deployment override
+    <code>PASEO_GRACEFUL_RESTART=1</code>). It waits up to five minutes, fences at a quiet boundary,
+    checkpoints resident handles, then replaces the supervised worker. The replacement restores
+    handles without sending prompts; durable queues resume. Timeout keeps the daemon running. Failed
+    provider restores remain visible and retryable. See the
+    <a href="../agent-lifecycle.md#desktop-app-and-daemon-restarts">lifecycle contract</a> for
+    limits. Regression coverage includes permission responses, initialization, competing operations,
+    install failure, queues and partial provider restoration. The opt-in Linux test uses a private
+    HOME/PASEO_HOME and a real file-gated Codex turn across an actual worker replacement.
   </p>
 </html>

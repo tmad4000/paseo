@@ -10,6 +10,17 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Graceful daemon restart
+
+`graceful-daemon-restart`: Opt-in daemon startup policy waits for a quiet turn boundary, then
+fences admission, replaces the supervised worker and reloads resident provider handles without
+replaying prompts. See the [lifecycle contract](agent-lifecycle.md#desktop-app-and-daemon-restarts).
+Candidate on `sol/graceful-daemon-restart`; isolated Linux Codex worker replacement verified. Regression coverage:
+manager admission, initialization, permission, timeout and concurrent-operation cases; update
+failure release; queue durability; checkpoint recovery and partial provider failure. The existing
+restart integration file has opt-in Linux supervisor/Codex coverage via
+`PASEO_DAEMON_RESTART_QA=1`.
+
 ## Fork icon badge
 
 `fork-icon-badge`: Preserve the upstream butterfly while identifying Paseo Fork with a blue
@@ -23,9 +34,9 @@ pass; Dock/home-screen runtime acceptance belongs to each native build, starting
 ## App restart preservation
 
 `preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
-running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-restarts)
+running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-and-daemon-restarts)
 and [restart design](design/restart-without-stopping-agents.html). Explicit daemon stop/restart
-retains its existing behavior. Candidate on `sol/restart-preserve-fork`; installed-build and
+retains its existing behavior unless graceful daemon restart is enabled. Merged in [PR #225](https://github.com/tmad4000/paseo/pull/225); installed-build and
 Apple installer verification pending. Regressions: desktop `quit-lifecycle.test.ts`,
 `daemon-manager.test.ts`, `desktop-settings.test.ts`, app settings storage and locale parity.
 The existing `daemon-restart-resume.e2e.test.ts` includes opt-in Linux live Codex coverage via
