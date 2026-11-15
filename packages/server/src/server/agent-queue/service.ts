@@ -140,7 +140,9 @@ export interface AgentQueueServiceOptions {
 }
 
 export type AgentQueueAgentController = Pick<AgentManager, "subscribe" | "getAgent"> &
-  Partial<Pick<AgentManager, "getPendingPermissions" | "hasInFlightRun">>;
+  Partial<
+    Pick<AgentManager, "getPendingPermissions" | "hasInFlightRun" | "isRestartAdmissionClosed">
+  >;
 
 /**
  * Owns the per-agent message queue for the whole daemon: one instance, shared by
@@ -858,6 +860,7 @@ export class AgentQueueService {
    * burst of state events cannot send the same item twice.
    */
   private async drain(agentId: string): Promise<void> {
+    if (this.agentManager.isRestartAdmissionClosed?.()) return;
     const agent = this.agentManager.getAgent(agentId);
     if (agent && agent.lifecycle !== "idle" && agent.lifecycle !== "closed") {
       return;

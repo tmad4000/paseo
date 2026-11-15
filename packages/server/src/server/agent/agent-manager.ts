@@ -1,3 +1,4 @@
+import { setTimeout as waitForRestartPoll } from "node:timers/promises";
 import type { WorkspaceRegistry } from "../workspace-registry.js";
 import { getWorkspacePreparationRevision, runWorkspaceMutation } from "../workspace-mutations.js";
 import {
@@ -381,6 +382,10 @@ export interface CreateAgentOptions {
 }
 
 export interface AgentManagerOptions {
+  /** Opt-in restart boundary; persists resident identities after every accepted turn settles. */
+  restartCheckpoint?: (agentIds: string[]) => Promise<void>;
+  restartCheckpointClear?: () => Promise<void>;
+  onRestartAdmissionReopened?: () => void;
   serverId?: string;
   pluginLifecycle?: PluginLifecycle;
   clients?: ProviderClientMap;
@@ -871,9 +876,17 @@ export class AgentManager {
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private acceptingAgentRegistrations = true;
+  private readonly restartCheckpoint: AgentManagerOptions["restartCheckpoint"];
+  private readonly restartCheckpointClear: AgentManagerOptions["restartCheckpointClear"];
+  private readonly onRestartAdmissionReopened: AgentManagerOptions["onRestartAdmissionReopened"];
+  private restartAdmissionClosed = false;
+  private restartPreparation: Promise<void> | null = null;
   private readonly serverId?: string;
 
   constructor(options: AgentManagerOptions) {
+    this.restartCheckpoint = options.restartCheckpoint;
+    this.restartCheckpointClear = options.restartCheckpointClear;
+    this.onRestartAdmissionReopened = options.onRestartAdmissionReopened;
     this.serverId = options.serverId;
     this.pluginLifecycle = options.pluginLifecycle;
     this.idFactory = options?.idFactory ?? (() => randomUUID());
@@ -978,6 +991,111 @@ export class AgentManager {
 
   setPaseoToolCatalogFactory(factory: PaseoToolCatalogFactory | null): void {
     this.paseoToolCatalogFactory = factory;
+  }
+
+  isRestartAdmissionClosed(): boolean {
+    return this.restartAdmissionClosed;
+  }
+
+  prepareForRestart(signal: AbortSignal): Promise<void> {
+    if (!this.restartCheckpoint) return Promise.resolve();
+    if (this.restartPreparation)
+      return Promise.reject(new Error("A daemon restart or update is already pending"));
+    if (signal.aborted) return Promise.reject(signal.reason);
+    // Active turns can still delegate work while we wait. Fence synchronously at
+    // the quiet boundary, before yielding for persistence or supervisor handoff.
+    this.logger.info(
+      { residentAgents: this.agents.size },
+      "Waiting for agent turns before daemon restart",
+    );
+    const preparation = (async () => {
+      try {
+        while (true) {
+          signal.throwIfAborted();
+          while (this.hasPendingRestartWork()) {
+            await waitForRestartPoll(25, undefined, { signal });
+          }
+          this.restartAdmissionClosed = true;
+          await this.flushForShutdown();
+          signal.throwIfAborted();
+          if (this.hasPendingRestartWork()) {
+            this.reopenRestartAdmission();
+            continue;
+          }
+          const ids = [...this.agents.values()]
+            .filter((agent) => !agent.internal && agent.session && agent.persistence)
+            .map((agent) => agent.id);
+          await this.restartCheckpoint!(ids);
+          signal.throwIfAborted();
+          if (!this.hasPendingRestartWork()) return;
+          this.reopenRestartAdmission();
+        }
+      } catch (error) {
+        await this.releasePreparedRestart();
+        if (
+          signal.aborted &&
+          signal.reason instanceof Error &&
+          signal.reason.name === "TimeoutError"
+        ) {
+          throw new Error(
+            "Restart deferred: agent turns did not finish before the deadline; the daemon is still running",
+            { cause: error },
+          );
+        }
+        throw signal.aborted ? signal.reason : error;
+      }
+    })();
+    this.restartPreparation = preparation;
+    return preparation;
+  }
+
+  async releasePreparedRestart(): Promise<void> {
+    if (!this.restartCheckpoint) return;
+    try {
+      await this.restartCheckpointClear?.();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to clear deferred restart checkpoint");
+    } finally {
+      this.restartPreparation = null;
+      this.reopenRestartAdmission();
+    }
+  }
+
+  private reopenRestartAdmission(): void {
+    const wasClosed = this.restartAdmissionClosed;
+    this.restartAdmissionClosed = false;
+    if (!wasClosed) return;
+    try {
+      this.onRestartAdmissionReopened?.();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to reopen queued delivery after deferred restart");
+    }
+  }
+
+  private hasPendingRestartWork(): boolean {
+    return (
+      this.agentRegistrationTasks.size > 0 ||
+      this.foregroundMutationTails.size > 0 ||
+      this.lifecycleMutationTails.size > 0 ||
+      [...this.agents.values()].some(
+        (agent) =>
+          agent.lifecycle === "initializing" ||
+          this.hasInFlightRun(agent.id) ||
+          agent.pendingPermissions.size > 0 ||
+          agent.inFlightPermissionResponses.size > 0 ||
+          agent.pendingReplacement,
+      )
+    );
+  }
+
+  private assertRestartAdmissionOpen(): void {
+    if (this.restartAdmissionClosed) {
+      // A queue drain can already hold a receipt when admission closes. This
+      // rejection precedes provider dispatch, so its receipt is safe to retry.
+      throw Object.assign(new Error("Daemon is restarting; retry after reconnecting"), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      });
+    }
   }
 
   getPaseoToolPolicy(agentId: string): ProviderPaseoToolsPolicy | undefined {
@@ -1464,6 +1582,7 @@ export class AgentManager {
     agentId: string | undefined,
     options: CreateAgentOptions,
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(agentId ?? this.idFactory(), "createAgent");
     if (this.pluginLifecycle && !config.internal) {
@@ -1582,6 +1701,7 @@ export class AgentManager {
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(
       agentId ?? this.idFactory(),
@@ -1661,6 +1781,7 @@ export class AgentManager {
     workspaceId: string;
     labels?: Record<string, string>;
   }): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(this.idFactory(), "importProviderSession");
     this.requireEnabledProvider(input.provider);
@@ -1748,6 +1869,7 @@ export class AgentManager {
     overrides?: Partial<AgentSessionConfig>,
     options?: { rehydrateFromDisk?: boolean },
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     let existing = this.requireSessionAgent(agentId);
     if (this.hasInFlightRun(agentId)) {
@@ -2767,6 +2889,7 @@ export class AgentManager {
    * broadcast like normal timeline events.
    */
   tryRunOutOfBand(agentId: string, prompt: AgentPromptInput, options?: AgentRunOptions): boolean {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const handler = agent.session.tryHandleOutOfBand?.(prompt);
     if (!handler) {
@@ -2890,6 +3013,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): AsyncGenerator<AgentStreamEvent> {
+    this.assertRestartAdmissionOpen();
     const existingAgent = this.requireSessionAgent(agentId);
     this.logger.trace(
       {
@@ -3101,6 +3225,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): Promise<AsyncGenerator<AgentStreamEvent>> {
+    this.assertRestartAdmissionOpen();
     const snapshot = this.requireAgent(agentId);
     if (
       snapshot.lifecycle !== "running" &&
@@ -3133,6 +3258,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentSteerOptions,
   ): Promise<SteerResult> {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
     if (!expectedTurnId || !agent.session.steerActiveTurn) {
@@ -3167,6 +3293,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentSteerOptions,
   ): Promise<ActiveTurnSteerDispatchResult> {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
     if (!expectedTurnId) {

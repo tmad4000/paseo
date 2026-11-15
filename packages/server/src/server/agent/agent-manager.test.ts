@@ -13034,3 +13034,202 @@ test("usage session is a pure read of the live adapter and disappears on close",
   }
   expect(manager.usageSession(agent.id)).toBeNull();
 });
+
+async function createGracefulRestartFixture(onCheckpoint?: () => Promise<void>) {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-graceful-restart-"));
+  const session = new (class extends SteeringTestSession {
+    override async startTurn() {
+      return { turnId: `active-turn-${++this.startCount}` };
+    }
+  })({ provider: "codex", cwd: workdir });
+  const checkpoints: string[][] = [];
+  const manager = new AgentManager({
+    logger,
+    clients: {
+      codex: new (class extends TestAgentClient {
+        override async createSession() {
+          return session;
+        }
+      })(),
+    },
+    restartCheckpoint: async (ids) => {
+      checkpoints.push(ids);
+      await onCheckpoint?.();
+    },
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const run = drainAsyncGenerator(manager.streamAgent(agent.id, "finish before restart"));
+  await manager.waitForAgentRunStart(agent.id);
+  return { workdir, session, checkpoints, manager, agent, run };
+}
+
+test("graceful restart waits for accepted work then fences admission at a quiet boundary", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const f = await createGracefulRestartFixture(async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  try {
+    const restart = f.manager.prepareForRestart(AbortSignal.timeout(5_000));
+    expect(f.manager.isRestartAdmissionClosed()).toBe(false);
+    // Existing work can still delegate before the fleet reaches a quiet boundary.
+    f.manager.registerClient("codex", new TestAgentClient());
+    const child = await f.manager.createAgent({ provider: "codex", cwd: f.workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    await f.manager.closeAgent(child.id);
+    expect(f.checkpoints).toEqual([]);
+    expect(f.session.interruptCount).toBe(0);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-1" });
+    await f.run;
+    await entered.promise;
+    expect(f.manager.isRestartAdmissionClosed()).toBe(true);
+    expect(() => f.manager.streamAgent(f.agent.id, "must wait")).toThrow("Daemon is restarting");
+    await expect(
+      f.manager.createAgent({ provider: "codex", cwd: f.workdir }, undefined, {
+        workspaceId: undefined,
+      }),
+    ).rejects.toThrow("Daemon is restarting");
+    await expect(f.manager.replaceAgentRun(f.agent.id, "must not interrupt")).rejects.toThrow(
+      "Daemon is restarting",
+    );
+    await expect(f.manager.steerOrReplaceActiveTurn(f.agent.id, "must not steer")).rejects.toThrow(
+      "Daemon is restarting",
+    );
+    release.resolve();
+    await restart;
+    expect(f.checkpoints).toEqual([[f.agent.id]]);
+    expect(f.session.interruptCount).toBe(0);
+  } finally {
+    release.resolve();
+    await f.manager.closeAgent(f.agent.id);
+    rmSync(f.workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful restart abort leaves the turn alive and reopens admission", async () => {
+  const f = await createGracefulRestartFixture();
+  try {
+    const controller = new AbortController();
+    const restart = f.manager.prepareForRestart(controller.signal);
+    const rejected = expect(restart).rejects.toThrow("drain canceled");
+    controller.abort(new Error("drain canceled"));
+    await rejected;
+    expect(f.session.interruptCount).toBe(0);
+    expect(f.manager.hasInFlightRun(f.agent.id)).toBe(true);
+    expect(f.checkpoints).toEqual([]);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-1" });
+    await f.run;
+    const next = drainAsyncGenerator(f.manager.streamAgent(f.agent.id, "still available"));
+    await f.manager.waitForAgentRunStart(f.agent.id);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-2" });
+    await next;
+    expect(f.session.startCount).toBe(2);
+  } finally {
+    await f.manager.closeAgent(f.agent.id);
+    rmSync(f.workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful restart waits for provider initialization admitted before the fence", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "graceful-restart-initialization-"));
+  const ready = deferred<AgentSession>();
+  const session = new CloseRecordingTestAgentSession({ provider: "codex", cwd: workdir });
+  const checkpoints: string[][] = [];
+  const manager = new AgentManager({
+    logger,
+    clients: {
+      codex: new (class extends TestAgentClient {
+        override createSession() {
+          return ready.promise;
+        }
+      })(),
+    },
+    restartCheckpoint: async (ids) => {
+      checkpoints.push(ids);
+    },
+  });
+  const creating = manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const restart = manager.prepareForRestart(AbortSignal.timeout(5_000));
+  expect(checkpoints).toEqual([]);
+  ready.resolve(session);
+  const agent = await creating;
+  try {
+    await restart;
+    expect(session.closed).toBe(false);
+    expect(checkpoints).toEqual([[agent.id]]);
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful restart refuses a competing lifecycle operation without replacing the first request", async () => {
+  const f = await createGracefulRestartFixture();
+  try {
+    const restart = f.manager.prepareForRestart(AbortSignal.timeout(5_000));
+    await expect(f.manager.prepareForRestart(AbortSignal.timeout(5_000))).rejects.toThrow(
+      "already pending",
+    );
+    expect(f.manager.isRestartAdmissionClosed()).toBe(false);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-1" });
+    await f.run;
+    await restart;
+    expect(f.checkpoints).toEqual([[f.agent.id]]);
+  } finally {
+    await f.manager.closeAgent(f.agent.id);
+    rmSync(f.workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful restart deadline reports deferral and leaves the live turn running", async () => {
+  const f = await createGracefulRestartFixture();
+  try {
+    const controller = new AbortController();
+    const pending = f.manager.prepareForRestart(controller.signal);
+    const rejected = expect(pending).rejects.toThrow("the daemon is still running");
+    controller.abort(new DOMException("deadline", "TimeoutError"));
+    await rejected;
+    expect(f.manager.isRestartAdmissionClosed()).toBe(false);
+    expect(f.manager.hasInFlightRun(f.agent.id)).toBe(true);
+    expect(f.session.interruptCount).toBe(0);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-1" });
+    await f.run;
+  } finally {
+    await f.manager.closeAgent(f.agent.id);
+    rmSync(f.workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful restart leaves permission responses available while draining", async () => {
+  const f = await createGracefulRestartFixture();
+  try {
+    f.session.pushEvent({
+      type: "permission_requested",
+      provider: "codex",
+      request: {
+        id: "drain-permission",
+        kind: "tool",
+        name: "shell",
+        input: {},
+      },
+    });
+    await vi.waitFor(() => expect(f.manager.getPendingPermissions(f.agent.id).length).toBe(1));
+    const restart = f.manager.prepareForRestart(AbortSignal.timeout(5_000));
+    await f.manager.respondToPermission(f.agent.id, "drain-permission", { behavior: "allow" });
+    expect(f.manager.getPendingPermissions(f.agent.id)).toEqual([]);
+    expect(f.session.interruptCount).toBe(0);
+    f.session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "active-turn-1" });
+    await f.run;
+    await restart;
+    expect(f.checkpoints).toEqual([[f.agent.id]]);
+  } finally {
+    await f.manager.closeAgent(f.agent.id);
+    rmSync(f.workdir, { recursive: true, force: true });
+  }
+});

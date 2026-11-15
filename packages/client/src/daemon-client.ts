@@ -1590,9 +1590,8 @@ export class DaemonClient {
       return;
     }
     this.shouldReconnect = false;
-    this.connectPromise = null;
-    this.connectResolve = null;
-    this.connectReject = null;
+    const closingError = new Error("Daemon client closed");
+    this.rejectConnect(closingError);
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -1600,7 +1599,7 @@ export class DaemonClient {
     this.resetConnectTimeout();
     this.disposeTransport(1000, "Client closed");
     this.providerSnapshotUpdates.clear();
-    this.clearWaiters(new Error("Daemon client closed"));
+    this.clearWaiters(closingError);
     await this.owned.close();
     this.creations.close();
     this.rejectPendingSendQueue(new Error("Daemon client closed"));
@@ -1635,7 +1634,9 @@ export class DaemonClient {
       this.attemptConnect();
       return;
     }
-    void this.connect();
+    void this.connect().catch((error) => {
+      this.logger.debug({ err: error }, "Background connection attempt ended");
+    });
   }
 
   private verifyConnection(): void {
@@ -4332,7 +4333,7 @@ export class DaemonClient {
     return this.sendRequest({
       requestId: resolvedRequestId,
       message,
-      timeout: options?.timeout,
+      timeout: options?.timeout ?? 600_000,
       options: { skipQueue: true },
       select: (msg) => {
         if (msg.type !== "status") {
@@ -4386,7 +4387,7 @@ export class DaemonClient {
     return this.sendRequest({
       requestId: resolvedRequestId,
       message,
-      timeout: 300_000, // 5 minutes — npm update can be slow on remote machines
+      timeout: 600_000, // Allow five minutes to drain turns and five for npm installation.
       options: { skipQueue: true },
       select: (msg) => {
         const parsed = DaemonUpdateResponseSchema.safeParse(msg);

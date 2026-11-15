@@ -1,4 +1,9 @@
 import type { PluginRegistries } from "@getpaseo/protocol/plugin-registry";
+import {
+  restartCheckpointWriter,
+  clearRestartCheckpoint,
+  restoreRestartCheckpoint,
+} from "./agent/restart-checkpoint.js";
 import { promisify } from "node:util";
 import type { SharingPublisherConfig } from "./sharing/share-host.js";
 import { ShareService } from "./sharing/share-service.js";
@@ -397,6 +402,8 @@ export type DaemonLifecycleIntent =
     };
 
 export interface PaseoDaemonConfig {
+  /** Opt-in turn-boundary restart; also selectable with PASEO_GRACEFUL_RESTART=1. */
+  gracefulRestart?: boolean;
   listen: string;
   paseoHome: string;
   daemonVersion?: string;
@@ -960,8 +967,23 @@ export async function createPaseoDaemon(
     if (git) configureGitProcessPolicy(git);
   });
   const initialAgentManagerState = providerSnapshotManager.getAgentManagerProviderState();
+  const restartEnabled = config.gracefulRestart === true;
   const agentManager = new AgentManager({
     serverId,
+    restartCheckpoint: restartCheckpointWriter(config.paseoHome, restartEnabled),
+    restartCheckpointClear: () => clearRestartCheckpoint(config.paseoHome),
+    onRestartAdmissionReopened: () => {
+      for (const agent of agentManager.listAgents()) {
+        void agentQueueService
+          .drainNow(agent.id)
+          .catch((error) =>
+            logger.warn(
+              { err: error, agentId: agent.id },
+              "Failed to resume queued messages after deferred restart",
+            ),
+          );
+      }
+    },
     pluginLifecycle: pluginRuntime,
     clients: initialAgentManagerState.clients,
     providerDefinitions: initialAgentManagerState.providerDefinitions,
@@ -1798,6 +1820,23 @@ export async function createPaseoDaemon(
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
+            if (restartEnabled) {
+              const restored = await restoreRestartCheckpoint(config.paseoHome, {
+                agentManager,
+                agentStorage,
+                logger,
+              }).catch((error) => {
+                logger.error({ err: error }, "Failed to read graceful restart checkpoint");
+                return [];
+              });
+              for (const agentId of restored) {
+                void agentQueueService
+                  .drainNow(agentId)
+                  .catch((error) =>
+                    logger.warn({ err: error, agentId }, "Failed to drain restored agent queue"),
+                  );
+              }
+            }
             wsServer.beginAcceptingConnections();
             relayRuntime = createRelayRuntime({
               config: {

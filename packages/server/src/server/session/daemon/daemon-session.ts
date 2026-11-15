@@ -28,6 +28,8 @@ export interface DaemonRuntimeConfig {
 }
 
 export interface DaemonSessionHost {
+  prepareRestart?(): Promise<void>;
+  releaseRestart?(): Promise<void>;
   emit(msg: SessionOutboundMessage): void;
   emitLifecycleIntent(intent: {
     type: "restart";
@@ -103,6 +105,8 @@ export class DaemonSession {
       emit: (msg) => this.host.emit(msg),
       emitLifecycleIntent: (intent) => this.host.emitLifecycleIntent(intent),
       sessionLogger: this.logger,
+      prepareRestart: options.host.prepareRestart,
+      releaseRestart: options.host.releaseRestart,
     });
   }
 

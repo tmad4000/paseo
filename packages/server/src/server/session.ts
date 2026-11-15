@@ -1135,6 +1135,8 @@ export class Session {
     });
     this.daemonSession = new DaemonSession({
       host: {
+        prepareRestart: () => this.agentManager.prepareForRestart(AbortSignal.timeout(300_000)),
+        releaseRestart: () => this.agentManager.releasePreparedRestart(),
         emit: (msg) => this.emit(msg),
         emitLifecycleIntent: (intent) => this.emitLifecycleIntent(intent),
       },
@@ -3432,6 +3434,7 @@ export class Session {
   }
 
   private async handleRestartServerRequest(requestId: string, reason?: string): Promise<void> {
+    await this.agentManager.prepareForRestart(AbortSignal.timeout(300_000));
     const lifecycleReason = normalizeClientRestartRpcReason(reason);
     const payload: { status: string } & Record<string, unknown> = {
       status: "restart_requested",

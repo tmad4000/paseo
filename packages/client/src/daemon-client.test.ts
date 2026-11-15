@@ -874,9 +874,11 @@ test("keeps relay upgrade credentials out of the socket request", async () => {
     },
   });
   clients.push(client);
-  void client.connect();
+  const connecting = expect(client.connect()).rejects.toThrow("Daemon client closed");
   await vi.waitFor(() => expect(requests).toHaveLength(1));
   expect(requests[0]).toEqual({ url: "ws://relay.test/ws?role=client&serverId=srv_test&v=2" });
+  await client.close();
+  await connecting;
 });
 
 test("refuses relay password auth without an encrypted hello", async () => {
@@ -7480,4 +7482,35 @@ test("usage request timeout detaches its update listener", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("closing a connecting client settles its pending connection instead of stranding teardown", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "close-pending-connect",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connecting = client.connect();
+  const rejected = expect(connecting).rejects.toThrow("Daemon client closed");
+  await client.close();
+  await rejected;
+  expect(client.getConnectionState().status).toBe("disposed");
+});
+
+test("closing a background connection attempt does not leave an unhandled rejection", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "close-background-connect",
+    reconnect: { enabled: false },
+    logger: createMockLogger(),
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  client.ensureConnected();
+  await client.close();
+  expect(client.getConnectionState().status).toBe("disposed");
 });

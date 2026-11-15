@@ -10,6 +10,20 @@ import { loadPersistedConfig } from "./persisted-config.js";
 const roots: string[] = [];
 
 describe("server config", () => {
+  test("graceful restart is opt-in, persisted and overridable by deployment environment", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "paseo-graceful-config-"));
+    roots.push(home);
+    expect(loadConfig(home, { env: {} }).gracefulRestart).toBe(false);
+    await writeFile(
+      path.join(home, "config.json"),
+      JSON.stringify({ version: 1, daemon: { gracefulRestart: true } }),
+    );
+    expect(loadConfig(home, { env: {} }).gracefulRestart).toBe(true);
+    const overridden = loadConfig(home, { env: { PASEO_GRACEFUL_RESTART: "0" } });
+    expect(overridden.gracefulRestart).toBe(false);
+    expect(overridden.configReload?.overrideControlledPaths).toContain("daemon.gracefulRestart");
+  });
+
   test("loads a persisted publisher token at startup, warns for readable files, and honors env overrides", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-publisher-"));
     roots.push(paseoHome);
