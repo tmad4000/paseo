@@ -82,6 +82,7 @@ import {
 import { useViewPaneActions } from "@/views/view-pane-actions";
 import { useOpenInViewMenuEntries } from "@/views/open-in-view-menu";
 import { useAgentTabControlMenuEntries } from "@/screens/workspace/use-agent-tab-control-menu-entries";
+import { useBrowserTabMenuEntries } from "@/screens/workspace/use-browser-tab-menu-entries";
 import { useMarkTabUnreadMenuEntries } from "@/screens/workspace/use-mark-tab-unread-menu-entries";
 import { resolveTabTrailingControls } from "@/screens/workspace/workspace-tab-trailing-controls";
 import {
@@ -1756,6 +1757,10 @@ function ResolvedDesktopTabChip({
     serverId,
     menuTestIDBase: baseResolvedTab.contextMenuTestId,
   });
+  const browserEntries = useBrowserTabMenuEntries({
+    tab: item.tab,
+    menuTestIDBase: baseResolvedTab.contextMenuTestId,
+  });
   const readAction = useAgentReadAction({
     serverId: item.tab.scope?.serverId ?? serverId,
     agentId: item.tab.target.kind === "agent" ? item.tab.target.agentId : null,
@@ -1775,11 +1780,13 @@ function ResolvedDesktopTabChip({
       openInViewEntries.length === 0 &&
       markUnreadEntries.length === 0 &&
       markReadEntries.length === 0 &&
-      agentControlEntries.length === 0
+      agentControlEntries.length === 0 &&
+      browserEntries.length === 0
         ? baseResolvedTab
         : {
             ...baseResolvedTab,
             menuEntries: [
+              ...browserEntries,
               ...agentControlEntries,
               ...markReadEntries,
               ...markUnreadEntries,
@@ -1787,7 +1794,14 @@ function ResolvedDesktopTabChip({
               ...baseResolvedTab.menuEntries,
             ],
           },
-    [agentControlEntries, baseResolvedTab, markReadEntries, markUnreadEntries, openInViewEntries],
+    [
+      agentControlEntries,
+      baseResolvedTab,
+      browserEntries,
+      markReadEntries,
+      markUnreadEntries,
+      openInViewEntries,
+    ],
   );
 
   const rawTooltipLabel =

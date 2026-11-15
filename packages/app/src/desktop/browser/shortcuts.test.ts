@@ -7,6 +7,27 @@ import {
 import { buildEffectiveBindings, resolveKeyboardShortcut } from "../../keyboard/keyboard-shortcuts";
 
 describe("buildBrowserKeyboardPolicy", () => {
+  it.each([true, false])(
+    "lets Open in browser (Mod+Shift+O) cross out of a focused page on Mac=%s",
+    (isMac) => {
+      const policy = buildBrowserKeyboardPolicy({
+        bindings: buildEffectiveBindings({}),
+        isMac,
+        isDesktop: true,
+      });
+
+      expect(policy.prefixes).toContainEqual(
+        expect.objectContaining({
+          code: "KeyO",
+          shift: true,
+          meta: isMac,
+          control: !isMac,
+          alt: false,
+        }),
+      );
+    },
+  );
+
   it("publishes only chord starts while no browser chord is pending", () => {
     const bindings = buildEffectiveBindings({
       "workspace-tab-new-ctrl-t-non-mac": "Ctrl+Y",

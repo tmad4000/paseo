@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Camera,
   ChevronDown,
+  ExternalLink,
   Maximize,
   Monitor,
   MousePointer2,
@@ -38,6 +39,11 @@ import { useRetainedPanelActive } from "@/components/retained-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { useToast } from "@/contexts/toast-context";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { Shortcut } from "@/components/ui/shortcut";
+import type { ShortcutKey } from "@/utils/format-shortcut";
+import { openExternalUrl } from "@/utils/open-external-url";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +85,8 @@ import {
   type BrowserElementSelection,
   type ElementSelectorOutcome,
 } from "./element-selector.electron";
+import { openBrowserPageExternally, resolveExternalBrowserPageUrl } from "../open-external";
+import { shouldAutofocusBrowserUrlBar } from "../url-bar-autofocus";
 
 type ElectronWebview = HTMLElement & {
   canGoBack?: () => boolean;
@@ -437,6 +445,8 @@ function ToolbarButton({
   disabled,
   onPress,
   style,
+  shortcut,
+  testID,
 }: {
   label: string;
   children: ReactNode;
@@ -444,6 +454,8 @@ function ToolbarButton({
   disabled?: boolean;
   onPress: () => void;
   style: (state: { hovered?: boolean; pressed?: boolean }) => StyleProp<ViewStyle>;
+  shortcut?: ShortcutKey[][] | null;
+  testID?: string;
 }) {
   const accessibilityState = useMemo(
     () => ({ disabled: Boolean(disabled), selected: Boolean(active) }),
@@ -459,12 +471,16 @@ function ToolbarButton({
           disabled={disabled}
           onPress={onPress}
           style={style}
+          testID={testID}
         >
           {children}
         </Pressable>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="center" offset={8}>
-        <Text style={styles.toolbarTooltipText}>{label}</Text>
+        <View style={styles.toolbarTooltipRow}>
+          <Text style={styles.toolbarTooltipText}>{label}</Text>
+          {shortcut ? <Shortcut chord={shortcut} /> : null}
+        </View>
       </TooltipContent>
     </Tooltip>
   );
@@ -675,9 +691,28 @@ export function BrowserPane({
   const browserErrorLabelsRef = useRef(browserErrorLabels);
   browserErrorLabelsRef.current = browserErrorLabels;
 
+  // The last page URL written into the address field. While the field is focused, a
+  // different value means the user is typing an address: navigation updates (a new tab's
+  // first load finishing, a redirect) must not overwrite it. A fully selected field stays
+  // fully selected, so a freshly focused new tab still replaces its URL on the first key.
+  const syncedUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const nextUrl = browser?.url ?? "https://example.com";
+    const native = getTextInputNativeElement(urlInputRef.current);
+    const isFocused = native !== null && native === document.activeElement;
+    if (isFocused && syncedUrlRef.current !== null && native.value !== syncedUrlRef.current) {
+      return;
+    }
+    const wasFullySelected =
+      isFocused &&
+      native.value.length > 0 &&
+      native.selectionStart === 0 &&
+      native.selectionEnd === native.value.length;
     urlInputRef.current?.replaceText(nextUrl);
+    syncedUrlRef.current = nextUrl;
+    if (wasFullySelected) {
+      native.select();
+    }
     setDraftUrl((current) => (current === nextUrl ? current : nextUrl));
   }, [browser?.url]);
 
@@ -698,6 +733,33 @@ export function BrowserPane({
     urlInputRef.current?.focus();
     selectUrlBar();
   }, [selectUrlBar]);
+
+  // A browser the user just created (or an empty page) puts the caret in the address
+  // field once its pane is the focused, visible one. Background tabs never take focus.
+  // The timer is not cancelled on cleanup: the request is one-shot, and focusing an
+  // unmounted input is a no-op.
+  // "Activated" means the tab just became visible (mounted or switched to). Focusing an
+  // already visible pane, for example by clicking its toolbar, is not an activation.
+  const wasPresentedRef = useRef(false);
+  useEffect(() => {
+    if (!isElectronRuntime()) {
+      return;
+    }
+    const justActivated = isPresented && !wasPresentedRef.current;
+    wasPresentedRef.current = isPresented;
+    if (
+      !shouldAutofocusBrowserUrlBar({
+        browserId,
+        url: browserRef.current?.url,
+        isInteractive: Boolean(isInteractive),
+        isPresented,
+        justActivated,
+      })
+    ) {
+      return;
+    }
+    window.setTimeout(focusUrlBar, 0);
+  }, [browserId, focusUrlBar, isInteractive, isPresented]);
 
   const syncNavigationState = useCallback((input?: { syncUrl?: boolean }) => {
     const webview = webviewRef.current;
@@ -1052,7 +1114,12 @@ export function BrowserPane({
   }, [focusUrlBar, isInteractive]);
 
   const handleNavigateDraftUrl = useCallback(() => {
-    navigate(draftUrl);
+    // Submit what the field shows. Page navigations update draftUrl even while the user
+    // is editing, so it can differ from the visible text (a paste during the first load).
+    const typed = urlInputRef.current?.getText() ?? draftUrl;
+    // Submitting hands the field back to navigation so it shows the normalized URL.
+    syncedUrlRef.current = null;
+    navigate(typed);
   }, [draftUrl, navigate]);
 
   const addElementAttachment = useCallback(
@@ -1327,6 +1394,34 @@ export function BrowserPane({
       });
   }, []);
 
+  const handleOpenInBrowser = useCallback(() => {
+    void openBrowserPageExternally({
+      url: browserRef.current?.url,
+      open: openExternalUrl,
+    }).then((result) => {
+      if (result === "unsupported") {
+        toastRef.current?.error(t("workspace.browser.controls.openInBrowserUnsupported"));
+      } else if (result === "failed") {
+        toastRef.current?.error(t("workspace.browser.controls.openInBrowserFailed"));
+      }
+      return undefined;
+    });
+  }, [t]);
+
+  useKeyboardActionHandler({
+    handlerId: `browser-open-external:${browserId}`,
+    actions: ["workspace.browser.open-external"],
+    enabled: Boolean(isInteractive) && isElectronRuntime(),
+    priority: 100,
+    handle: () => {
+      handleOpenInBrowser();
+      return true;
+    },
+  });
+
+  const openInBrowserShortcut = useShortcutKeys("browser-open-external");
+  const canOpenInBrowser = resolveExternalBrowserPageUrl(browser?.url) !== null;
+
   const baseIconButtonStyle = useCallback(
     ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
       styles.iconButton,
@@ -1349,6 +1444,14 @@ export function BrowserPane({
       !browser?.canGoForward && styles.iconButtonDisabled,
     ],
     [browser?.canGoForward],
+  );
+  const openInBrowserIconButtonStyle = useCallback(
+    ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+      styles.iconButton,
+      (hovered || pressed) && canOpenInBrowser && styles.iconButtonHovered,
+      !canOpenInBrowser && styles.iconButtonDisabled,
+    ],
+    [canOpenInBrowser],
   );
   const annotateIconButtonStyle = useCallback(
     ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
@@ -1481,6 +1584,16 @@ export function BrowserPane({
           />
         </View>
         <View style={styles.chromeRight}>
+          <ToolbarButton
+            label={t("workspace.browser.controls.openInBrowser")}
+            disabled={!canOpenInBrowser}
+            onPress={handleOpenInBrowser}
+            shortcut={openInBrowserShortcut}
+            style={openInBrowserIconButtonStyle}
+            testID={`browser-open-external-${browserId}`}
+          >
+            <ExternalLink size={16} color={theme.colors.foregroundMuted} />
+          </ToolbarButton>
           <DeviceSizeMenu
             selectedId={selectedDeviceSizeId}
             onSelect={handleSelectDeviceSize}
@@ -1775,6 +1888,11 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
+  },
+  toolbarTooltipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
   },
   toolbarTooltipText: {
     fontSize: theme.fontSize.sm,

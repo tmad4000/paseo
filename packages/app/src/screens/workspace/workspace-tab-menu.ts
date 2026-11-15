@@ -50,6 +50,7 @@ export type WorkspaceTabMenuIcon =
   | "circle-check"
   | "copy"
   | "copy-x"
+  | "external-link"
   | "file-code-2"
   | "layout-panel-left"
   | "list-ordered"
@@ -79,6 +80,37 @@ export type WorkspaceTabMenuEntry =
       kind: "separator";
       key: string;
     };
+
+/**
+ * "Open in browser" for a browser tab: opens the tab's current page in the system
+ * browser. Disabled while the page is not http(s) (about:blank, file:, data:).
+ */
+export function buildBrowserTabMenuEntries(input: {
+  tab: WorkspaceTabDescriptor;
+  canOpen: boolean;
+  label: string;
+  menuTestIDBase: string;
+  onOpen: (browserId: string) => void;
+}): WorkspaceTabMenuEntry[] {
+  if (input.tab.target.kind !== "browser") {
+    return [];
+  }
+  const { browserId } = input.tab.target;
+  return [
+    {
+      kind: "item",
+      key: "open-in-browser",
+      label: input.label,
+      icon: "external-link",
+      disabled: !input.canOpen,
+      testID: `${input.menuTestIDBase}-open-in-browser`,
+      onSelect: () => {
+        input.onOpen(browserId);
+      },
+    },
+    { kind: "separator", key: "open-in-browser-separator" },
+  ];
+}
 
 interface BuildWorkspaceTabMenuEntriesInput {
   surface: WorkspaceTabMenuSurface;

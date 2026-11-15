@@ -10,6 +10,11 @@ const asExternalUrl = (input: unknown): URL | undefined => {
   return EXTERNAL_PROTOCOLS.has(candidate.protocol) ? candidate : undefined;
 };
 
+/** True when the system browser may open `input` (http and https only). */
+export function canOpenExternally(input: unknown): boolean {
+  return asExternalUrl(input) !== undefined;
+}
+
 export function createExternalUrlOpener(owner: ExternalUrlOwner) {
   return async (candidate: unknown): Promise<void> => {
     const url = asExternalUrl(candidate);

@@ -55,6 +55,7 @@ import {
   ensureNotificationCenterRegistration,
 } from "./features/notifications.js";
 import { createExternalUrlOpener } from "./features/opener.js";
+import { buildBrowserPageContextMenuItems } from "./features/browser-page-context-menu.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
@@ -191,12 +192,21 @@ function readActiveBrowserInput(
 const browserKeyboard = new BrowserKeyboard(getPaseoBrowserWebviewRegistry());
 browserKeyboard.registerIpc();
 
+const openBrowserPageExternally = createExternalUrlOpener({ open: shell.openExternal });
+
 function showBrowserWebviewContextMenu(
   win: BrowserWindow,
   contents: Electron.WebContents,
   params: Electron.ContextMenuParams,
 ): void {
   const menu = Menu.buildFromTemplate([
+    ...buildBrowserPageContextMenuItems({
+      pageUrl: contents.getURL(),
+      openExternal: openBrowserPageExternally,
+      onError: (error) => {
+        log.warn("[browser-webview] open page externally failed", { error });
+      },
+    }),
     ...buildStandardContextMenuItems(contents, params),
     ...(app.isPackaged
       ? []

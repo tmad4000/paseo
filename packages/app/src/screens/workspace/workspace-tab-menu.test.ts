@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildBrowserTabMenuEntries,
   buildWorkspaceDesktopTabActions,
   buildWorkspaceTabMenuEntries,
 } from "@/screens/workspace/workspace-tab-menu";
@@ -364,5 +365,60 @@ describe("buildWorkspaceTabMenuEntries", () => {
       .find((entry) => entry.kind === "separator");
     expect(agentSeparator?.key).toBe("rename-separator");
     expect(terminalSeparator?.key).toBe("rename-separator");
+  });
+});
+
+describe("buildBrowserTabMenuEntries", () => {
+  const browserTab: WorkspaceTabDescriptor = {
+    key: "browser_abc",
+    tabId: "browser_abc",
+    kind: "browser",
+    target: { kind: "browser", browserId: "abc" },
+  };
+
+  it("offers Open in browser for the tab's browser", () => {
+    const onOpen = vi.fn();
+    const entries = buildBrowserTabMenuEntries({
+      tab: browserTab,
+      canOpen: true,
+      label: "Open in browser",
+      menuTestIDBase: "workspace-tab-context-browser_abc",
+      onOpen,
+    });
+
+    const [item, separator] = entries;
+    expect(item).toMatchObject({
+      kind: "item",
+      label: "Open in browser",
+      icon: "external-link",
+      disabled: false,
+      testID: "workspace-tab-context-browser_abc-open-in-browser",
+    });
+    expect(separator?.kind).toBe("separator");
+    if (item?.kind === "item") item.onSelect();
+    expect(onOpen).toHaveBeenCalledWith("abc");
+  });
+
+  it("is disabled while the page cannot open externally", () => {
+    const [item] = buildBrowserTabMenuEntries({
+      tab: browserTab,
+      canOpen: false,
+      label: "Open in browser",
+      menuTestIDBase: "base",
+      onOpen: vi.fn(),
+    });
+    expect(item).toMatchObject({ kind: "item", disabled: true });
+  });
+
+  it("adds nothing to other tab kinds", () => {
+    expect(
+      buildBrowserTabMenuEntries({
+        tab: createAgentTab(),
+        canOpen: true,
+        label: "Open in browser",
+        menuTestIDBase: "base",
+        onOpen: vi.fn(),
+      }),
+    ).toEqual([]);
   });
 });
