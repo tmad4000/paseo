@@ -2223,6 +2223,26 @@ export const en = {
         "Automatic installation waits until sessions are idle. A staged build may not be published yet.",
       check: "Check for updates",
     },
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · from {{source}}",
+      update: "Update: {{identity}}",
+      channel: {
+        stable: "stable channel",
+        beta: "beta channel",
+      },
+      whatsNew: "What's new in {{version}}",
+      restart: {
+        agentsStop:
+          "Local agents and terminals stop during the restart. The daemon restarts with the app.",
+        agentsStopKeepRunningOn:
+          "Local agents and terminals stop during the restart, even with Keep daemon running after quit on. The daemon restarts with the app.",
+        agentsKeepRunning:
+          "Agents keep running. This app session didn't start the local daemon, so it stays on its current version.",
+        noDaemon: "No local daemon is running, so no agents stop.",
+        unknown: "Agents in the daemon this app started stop during the restart.",
+      },
+    },
     windowControls: {
       minimize: "Minimize window",
       maximize: "Maximize window",

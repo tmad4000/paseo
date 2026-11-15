@@ -192,6 +192,32 @@ describe("app update service", () => {
     expect(result.publishedVersion).toBe("1.2.3");
   });
 
+  it("reports the feed's release tag so release notes link to the real tag", async () => {
+    const { runtime, service } = createService();
+    runtime.nextCheck({
+      isUpdateAvailable: false,
+      updateInfo: { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" },
+    });
+    const current = await service.checkForAppUpdate({
+      currentVersion: "0.10.0-beta.32",
+      releaseChannel: "beta",
+      intent: "manual",
+    });
+    expect(current.publishedTag).toBe("0.10.0-beta.32");
+
+    runtime.nextCheck({
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.10.0-beta.33", tag: "0.10.0-beta.33" },
+    });
+    const update = await service.checkForAppUpdate({
+      currentVersion: "0.10.0-beta.32",
+      releaseChannel: "beta",
+      intent: "manual",
+    });
+    expect(update.hasUpdate).toBe(true);
+    expect(update.publishedTag).toBe("0.10.0-beta.33");
+  });
+
   it("does not expose automatic stable updates before the user is admitted to rollout", async () => {
     const { runtime, service } = createService();
     runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
@@ -208,6 +234,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: "1.2.4",
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,
@@ -230,6 +257,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
       publishedVersion: "1.2.4",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
@@ -259,6 +287,7 @@ describe("app update service", () => {
       readyToInstall: true,
       latestVersion: "1.2.4",
       publishedVersion: "1.2.4",
+      publishedTag: null,
     });
   });
 
@@ -284,6 +313,7 @@ describe("app update service", () => {
       readyToInstall: false,
       latestVersion: "1.2.4",
       publishedVersion: "1.2.4",
+      publishedTag: null,
     });
   });
 
@@ -361,6 +391,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.5",
       publishedVersion: "1.2.5",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
@@ -392,6 +423,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.5",
       publishedVersion: "1.2.5",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
@@ -601,6 +633,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: "1.2.4",
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,
@@ -623,6 +656,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: null,
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: "network down",
@@ -654,6 +688,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: null,
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,
@@ -684,6 +719,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: null,
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,
@@ -727,6 +763,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: null,
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,
@@ -758,6 +795,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
       publishedVersion: "1.2.4",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: "sha512 checksum mismatch",
@@ -777,6 +815,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.5",
       publishedVersion: "1.2.5",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
@@ -841,6 +880,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.5",
       publishedVersion: "1.2.5",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
@@ -874,6 +914,7 @@ describe("app update service", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
       publishedVersion: "1.2.4",
+      publishedTag: null,
       body: null,
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,

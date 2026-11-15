@@ -89,7 +89,12 @@ import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-sect
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
-import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
+import {
+  formatVersionWithPrefix,
+  type DesktopAppUpdateCheckResult,
+} from "@/desktop/updates/desktop-updates";
+import { useUpdateIdentity, useUpdateRestartLine } from "@/desktop/updates/use-update-identity";
+import { UpdateReleaseNotesRow } from "@/desktop/components/update-release-notes-row";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
@@ -598,6 +603,31 @@ function getUpdateButtonLabel(
   return t("settings.about.updates.update");
 }
 
+/** Names the offered (or installed) build and what Install and restart does to agents. */
+function useDesktopUpdateCopy(
+  availableUpdate: DesktopAppUpdateCheckResult | null,
+  isUpdateReady: boolean,
+) {
+  const { t } = useTranslation();
+  const isUpdate = availableUpdate?.hasUpdate === true;
+  const identityVersion = isUpdate
+    ? availableUpdate?.latestVersion
+    : (availableUpdate?.currentVersion ?? resolveAppVersion());
+  const identity = useUpdateIdentity(
+    isUpdate ? "update" : "installed",
+    identityVersion,
+    availableUpdate,
+  );
+  const restart = useUpdateRestartLine(isUpdateReady);
+  const headline = identity?.line ?? t("settings.about.updates.installMessage");
+  // Ownership can change while Settings stays open, so the dialog re-reads it.
+  const buildInstallMessage = useCallback(
+    async () => `${headline}\n\n${await restart.refresh()}`,
+    [headline, restart],
+  );
+  return { identity, restartLine: restart.line, buildInstallMessage };
+}
+
 function DesktopAppUpdateRow() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
@@ -643,17 +673,27 @@ function DesktopAppUpdateRow() {
     [t],
   );
 
+  const isUpdateReady = availableUpdate?.readyToInstall === true;
+  const readyUpdateVersion = isUpdateReady ? availableUpdate?.latestVersion : null;
+  const { identity, restartLine, buildInstallMessage } = useDesktopUpdateCopy(
+    availableUpdate,
+    isDesktopApp && isUpdateReady,
+  );
+
   const handleInstallUpdate = useCallback(() => {
     if (!isDesktopApp) {
       return;
     }
 
-    void confirmDialog({
-      title: t("settings.about.updates.installTitle"),
-      message: t("settings.about.updates.installMessage"),
-      confirmLabel: t("settings.about.updates.installConfirm"),
-      cancelLabel: t("common.actions.cancel"),
-    })
+    void buildInstallMessage()
+      .then((message) =>
+        confirmDialog({
+          title: t("settings.about.updates.installTitle"),
+          message,
+          confirmLabel: t("settings.about.updates.installConfirm"),
+          cancelLabel: t("common.actions.cancel"),
+        }),
+      )
       .then((confirmed) => {
         if (!confirmed) {
           return;
@@ -668,10 +708,7 @@ function DesktopAppUpdateRow() {
           t("settings.about.updates.alertMessage"),
         );
       });
-  }, [installUpdate, isDesktopApp, t]);
-
-  const isUpdateReady = availableUpdate?.readyToInstall === true;
-  const readyUpdateVersion = isUpdateReady ? availableUpdate?.latestVersion : null;
+  }, [buildInstallMessage, installUpdate, isDesktopApp, t]);
 
   if (!isDesktopApp) {
     return null;
@@ -696,12 +733,22 @@ function DesktopAppUpdateRow() {
       <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.about.updates.label")}</Text>
+          {identity ? (
+            <Text style={settingsStyles.rowHint} testID="settings-update-identity">
+              {identity.line}
+            </Text>
+          ) : null}
           <Text style={settingsStyles.rowHint}>{statusText}</Text>
           {readyUpdateVersion ? (
             <Text style={settingsStyles.rowHint}>
               {t("settings.about.updates.readyToInstall", {
                 version: formatVersionWithPrefix(readyUpdateVersion),
               })}
+            </Text>
+          ) : null}
+          {readyUpdateVersion ? (
+            <Text style={settingsStyles.rowHint} testID="settings-update-restart">
+              {restartLine}
             </Text>
           ) : null}
           {errorMessage ? <Text style={styles.aboutErrorText}>{errorMessage}</Text> : null}
@@ -725,6 +772,7 @@ function DesktopAppUpdateRow() {
           </Button>
         </View>
       </View>
+      {identity ? <UpdateReleaseNotesRow identity={identity} /> : null}
     </>
   );
 }

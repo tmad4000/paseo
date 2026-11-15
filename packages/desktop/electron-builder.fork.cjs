@@ -31,6 +31,9 @@ module.exports = {
   // from a stock Paseo install sitting next to it.
   protocols: [{ name: "Paseo Fork agent link", schemes: ["paseo-fork"] }],
   publish: { ...base.publish, owner: "tmad4000", repo: "paseo" },
+  // main.ts pins app.setName("Paseo") for the shared userData path, so update
+  // surfaces read the product name from the packaged package.json instead.
+  extraMetadata: { ...base.extraMetadata, paseoProductName: "Paseo Fork" },
   mac: {
     ...base.mac,
     artifactName: rename(base.mac.artifactName),
