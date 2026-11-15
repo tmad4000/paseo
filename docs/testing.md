@@ -4,8 +4,8 @@
 
 Keep `chromiumSandbox: true`. On Ubuntu hosts that already provide the root-owned setuid
 helper at `/opt/google/chrome/chrome-sandbox`, set
-`CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox` for the test process. CI uses the
-hosted image's helper. This needs no host setting change or new installation; each test still
+`CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox` for the test process. CI copies its trusted image helper into a private job directory, prepares that copy with root
+ownership and mode4755, then removes it in an always-run cleanup step. It never changes `/opt`. This needs no host setting change or new installation; each test still
 owns a temporary browser profile. If the helper is unavailable, record the sandbox launch gate.
 See the [Chromium environment guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
 

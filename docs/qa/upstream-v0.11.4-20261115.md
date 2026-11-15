@@ -99,7 +99,11 @@ The daemon web bundle builds successfully:28.16MiB raw,5.56MiB gzip,3.94MiB Brot
 For Linux browser processes, the existing root-owned4755 Chrome helper is selected through
 `CHROME_DEVEL_SANDBOX`; Chromium sandboxing stays enabled. The pinned test Chromium probe
 launched, rendered an isolated fixture, and showed a renderer PID namespace, NoNewPrivs1 and
-Seccomp2. No host setting or installation changed. Hosted CI must still validate its own helper.
+Seccomp2. No shared-host setting or software version changed. Hosted CI on `c5b4e6bd` found its image
+helper had unsuitable ownership/mode. CI now validates the fixed root-owned source, prepares a
+copy only in its private temporary directory and always removes it after browser checks. The
+privileged copy is restricted to ephemeral hosted Linux jobs; `/opt` is read-only. The actual
+hosted copy/launch/cleanup result remains pending.
 
 ## Complete feature matrix
 

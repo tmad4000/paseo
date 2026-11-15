@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { relative as relativePath } from "node:path";
@@ -317,5 +319,48 @@ test("desktop packaging smokes main pushes and only the pull requests that touch
   assert.doesNotMatch(source, /dorny\/paths-filter/);
   for (const action of ["actions/checkout", "actions/setup-node", "actions/upload-artifact"]) {
     assert.match(source, new RegExp(`${action}@[0-9a-f]{40} # v\\d+\\.\\d+\\.\\d+`));
+  }
+});
+
+test("browser sandbox setup is restricted to ephemeral hosted jobs", () => {
+  const result = spawnSync(
+    process.execPath,
+    [new URL("scripts/prepare-browser-sandbox.mjs", repoRoot).pathname],
+    {
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: "false",
+        RUNNER_ENVIRONMENT: "github-hosted",
+        RUNNER_OS: "Linux",
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /restricted to ephemeral GitHub-hosted Linux jobs/);
+});
+
+test("Linux browser jobs prepare and always remove their private sandbox helper", () => {
+  const require = createRequire(new URL("packages/server/package.json", repoRoot));
+  const { parse } = require("yaml");
+  const workflow = parse(readFileSync(ciWorkflowPath, "utf8"));
+  for (const name of [
+    "typecheck",
+    "app-tests",
+    "playwright-1",
+    "playwright-2",
+    "playwright-3",
+    "playwright-4",
+  ]) {
+    const steps = workflow.jobs[name].steps;
+    const prepare = steps.findIndex(
+      (step) => step.run === "node scripts/prepare-browser-sandbox.mjs",
+    );
+    const browser = steps.findIndex((step) => /test:e2e|agent-limit-handoff/.test(step.run ?? ""));
+    assert(prepare >= 0 && prepare < browser, `${name} prepares the helper before browser tests`);
+    const cleanup = steps.find(
+      (step) => step.run === "node scripts/prepare-browser-sandbox.mjs --cleanup",
+    );
+    assert.equal(cleanup?.if, "always()");
   }
 });

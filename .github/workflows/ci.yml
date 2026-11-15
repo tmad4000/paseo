@@ -103,8 +103,6 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.quality != 'false') }}
     runs-on: ubuntu-24.04
-    env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
     steps:
       - uses: actions/checkout@v4
 
@@ -136,8 +134,15 @@ jobs:
       - name: Install website test browsers
         run: npx playwright install --with-deps chromium webkit
 
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Verify website mockups
         run: npm run test:e2e --workspace=@getpaseo/website
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
       - name: Verify public package contents
         run: |
@@ -320,8 +325,6 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.app != 'false') }}
     runs-on: ubuntu-24.04
-    env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
     steps:
       - uses: actions/checkout@v4
 
@@ -340,12 +343,19 @@ jobs:
       - name: Build app dependencies
         run: npm run build:app-deps
 
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Verify provider-limit handoff in Chromium
         timeout-minutes: 3
         run: npm run test --workspace=@getpaseo/app -- src/components/agent-limit-handoff.browser.test.tsx --bail=1
 
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
       - name: Upload handoff visual checks
         if: always()
@@ -399,7 +409,6 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
     runs-on: ubuntu-24.04
     env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
       PLAYWRIGHT_SHARD: "1/4"
       PLAYWRIGHT_ARTIFACT: "1"
     steps: &playwright_test_steps
@@ -426,6 +435,9 @@ jobs:
       - name: Install agent CLIs for provider tests
         run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code @openai/codex@0.105.0 opencode-ai
 
+      - name: Prepare Chromium sandbox
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Run Playwright E2E tests
         run: npm run test:e2e --workspace=@getpaseo/app -- --shard=${{ env.PLAYWRIGHT_SHARD }}
         env:
@@ -433,6 +445,10 @@ jobs:
           # Weight file groups by observed duration; raw test counts overload
           # early agent/Changes specs. Required check names remain unchanged.
           PWTEST_SHARD_WEIGHTS: "111:172:137:160"
+
+      - name: Clean up Chromium sandbox
+        if: always()
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
@@ -451,7 +467,6 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
     runs-on: ubuntu-24.04
     env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
       PLAYWRIGHT_SHARD: "2/4"
       PLAYWRIGHT_ARTIFACT: "2"
     steps: *playwright_test_steps
@@ -462,7 +477,6 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
     runs-on: ubuntu-24.04
     env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
       PLAYWRIGHT_SHARD: "3/4"
       PLAYWRIGHT_ARTIFACT: "3"
     steps: *playwright_test_steps
@@ -473,7 +487,6 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
     runs-on: ubuntu-24.04
     env:
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
       PLAYWRIGHT_SHARD: "4/4"
       PLAYWRIGHT_ARTIFACT: "4"
     steps: *playwright_test_steps
