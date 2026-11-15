@@ -100,10 +100,14 @@ For Linux browser processes, the existing root-owned4755 Chrome helper is select
 `CHROME_DEVEL_SANDBOX`; Chromium sandboxing stays enabled. The pinned test Chromium probe
 launched, rendered an isolated fixture, and showed a renderer PID namespace, NoNewPrivs1 and
 Seccomp2. No shared-host setting or software version changed. Hosted CI on `c5b4e6bd` found its image
-helper had unsuitable ownership/mode. CI now validates the fixed root-owned source, prepares a
-copy only in its private temporary directory and always removes it after browser checks. The
-privileged copy is restricted to ephemeral hosted Linux jobs; `/opt` is read-only. The actual
-hosted copy/launch/cleanup result remains pending.
+helper had unsuitable ownership/mode; the subsequent hosted run found `/opt` itself writable
+by a non-root user. CI now snapshots the helper shipped with its existing pinned Playwright
+Chromium into a private temporary directory, installs only that copy with mode4755, emits its
+SHA256 and always removes the directory after browser checks. The privileged copy is restricted
+to ephemeral hosted Linux jobs and does not read or change `/opt`. Same-job code already owns
+passwordless sudo; the cache and ELF screening are not an authentication boundary. The actual
+hosted copy/launch/cleanup result remains pending. Electron development and test launchers no
+longer add inherited `--no-sandbox` flags; desktop Playwright explicitly enables sandboxing.
 
 ## Complete feature matrix
 

@@ -272,6 +272,10 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: npx vitest run packages/cli/src/commands/daemon/lifecycle.e2e.test.ts --bail=1 --maxWorkers=1 -t "Windows unbound|managed two-home"
 
+      - name: Prepare Chromium sandbox
+        if: ${{ runner.os == 'Linux' }}
+        run: node scripts/prepare-browser-sandbox.mjs
+
       - name: Run desktop lifecycle E2E (Linux)
         if: ${{ runner.os == 'Linux' }}
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" npm run test:e2e:lifecycle --workspace=@getpaseo/desktop
@@ -309,6 +313,10 @@ jobs:
           path: ${{ runner.temp }}/desktop-browser-e2e
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Clean up Chromium sandbox
+        if: always() && runner.os == 'Linux'
+        run: node scripts/prepare-browser-sandbox.mjs --cleanup
 
   desktop-tests-windows:
     name: desktop-tests (windows-latest)

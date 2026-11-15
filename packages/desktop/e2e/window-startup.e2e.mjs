@@ -26,7 +26,7 @@ async function launchWindowWithoutHiddenFrames() {
   );
   const displayArgs = process.platform === "linux" ? ["--ozone-platform=x11", "--disable-gpu"] : [];
   return electron.launch({
-    args: ["--no-sandbox", ...displayArgs, main],
+    args: [...displayArgs, main],
     env,
   });
 }

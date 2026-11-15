@@ -346,6 +346,7 @@ test("Linux browser jobs prepare and always remove their private sandbox helper"
   for (const name of [
     "typecheck",
     "app-tests",
+    "desktop-tests-ubuntu",
     "playwright-1",
     "playwright-2",
     "playwright-3",
@@ -367,8 +368,22 @@ test("Linux browser jobs prepare and always remove their private sandbox helper"
     assert(prepare >= 0 && prepare < browser, `${name} prepares the helper before browser tests`);
     assert.match(
       job,
-      /        if: always\(\)\n        run: node scripts\/prepare-browser-sandbox\.mjs --cleanup/,
+      /        if: always\(\)(?: && runner.os == 'Linux')?\n        run: node scripts\/prepare-browser-sandbox\.mjs --cleanup/,
       `${name} always removes its private helper`,
     );
   }
+});
+
+test("desktop test launchers retain Chromium process sandboxing", () => {
+  for (const file of [
+    "packages/desktop/scripts/dev-runner-args.mjs",
+    "packages/desktop/e2e/window-startup.e2e.mjs",
+    "packages/desktop/e2e/daemon-lifecycle.e2e.mjs",
+    "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
+    "packages/desktop/e2e/browser-tabs.e2e.mjs",
+  ]) {
+    assert.doesNotMatch(readFileSync(new URL(file, repoRoot), "utf8"), /--no-sandbox/);
+  }
+  const config = readFileSync(new URL("packages/desktop/playwright.config.ts", repoRoot), "utf8");
+  assert.match(config, /chromiumSandbox: true/);
 });

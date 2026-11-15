@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { resolveDevElectronArgs } from "./dev-runner-args.mjs";
 
 describe("resolveDevElectronArgs", () => {
-  it("disables the Chromium process sandbox for Linux development", () => {
+  it("keeps the Chromium process sandbox enabled for Linux development", () => {
     expect(resolveDevElectronArgs("linux", ["--remote-debugging-port=9223"])).toEqual([
-      "--no-sandbox",
       "--remote-debugging-port=9223",
     ]);
   });

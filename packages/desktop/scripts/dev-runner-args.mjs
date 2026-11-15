@@ -1,7 +1,3 @@
-export function resolveDevElectronArgs(platform, forwardedArgs) {
-  if (platform === "linux") {
-    return ["--no-sandbox", ...forwardedArgs];
-  }
-
+export function resolveDevElectronArgs(_platform, forwardedArgs) {
   return forwardedArgs;
 }

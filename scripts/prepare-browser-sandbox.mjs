@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
   chmodSync,
   lstatSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 
@@ -37,23 +40,27 @@ if (process.argv.includes("--cleanup")) {
     }
   }
 } else {
-  const source = "/opt/google/chrome/chrome-sandbox";
-  for (const entry of ["/opt", "/opt/google", "/opt/google/chrome", source]) {
-    const info = lstatSync(entry);
-    assert(
-      !info.isSymbolicLink() && info.uid === 0 && (info.mode & 0o022) === 0,
-      `Sandbox source must be root-owned and not writable by other users: ${entry}`,
-    );
-  }
-  assert(statSync(source).isFile());
+  // Use the helper shipped with the lockfile-pinned Playwright browser installed
+  // by this job. Hosted images can have a runner-writable /opt, so their helper
+  // path is not a root-owned source boundary. This job already owns passwordless
+  // sudo; its dependency cache is not a boundary against malicious job code.
+  const { chromium } = await import("playwright");
+  const source = path.join(path.dirname(chromium.executablePath()), "chrome_sandbox");
+  const sourceInfo = lstatSync(source);
+  assert(sourceInfo.isFile() && !sourceInfo.isSymbolicLink());
+  assert.equal(sourceInfo.mode & 0o022, 0, "Sandbox helper must not be writable by other users");
+  const bytes = readFileSync(source);
+  assert(bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])));
   assert(process.env.GITHUB_ENV, "GITHUB_ENV is required");
   const directory = mkdtempSync(path.join(temporaryRoot, prefix));
   chmodSync(directory, 0o700);
   const helper = path.join(directory, "chrome-sandbox");
   try {
+    const snapshot = path.join(directory, "source");
+    writeFileSync(snapshot, bytes, { flag: "wx", mode: 0o700 });
     execFileSync(
       "/usr/bin/sudo",
-      ["-n", "/usr/bin/install", "-o", "root", "-g", "root", "-m", "4755", source, helper],
+      ["-n", "/usr/bin/install", "-o", "root", "-g", "root", "-m", "4755", snapshot, helper],
       { stdio: "inherit" },
     );
     const info = statSync(helper);
@@ -62,7 +69,9 @@ if (process.argv.includes("--cleanup")) {
       process.env.GITHUB_ENV,
       `CHROME_DEVEL_SANDBOX=${helper}\nPASEO_TEST_SANDBOX_DIR=${directory}\n`,
     );
-    console.log("Prepared job-private Chromium sandbox helper");
+    console.log(
+      `Prepared job-private Chromium sandbox helper sha256=${createHash("sha256").update(bytes).digest("hex")}`,
+    );
   } catch (error) {
     try {
       rmSync(directory, { recursive: true, force: true });
