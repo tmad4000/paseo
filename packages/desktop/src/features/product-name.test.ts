@@ -29,6 +29,13 @@ describe("readProductName", () => {
     expect(readProductName(path.join(dir, "missing.json"))).toBe("Paseo");
   });
 
+  it("reads as Paseo when the manifest is malformed or unreadable", () => {
+    const malformed = path.join(dir, "malformed.json");
+    writeFileSync(malformed, "{ not json");
+    expect(readProductName(malformed)).toBe("Paseo");
+    expect(readProductName(dir)).toBe("Paseo");
+  });
+
   it("matches what the fork builder config injects", async () => {
     const fork = (await import("../../electron-builder.fork.cjs")).default as {
       extraMetadata: Record<string, unknown>;

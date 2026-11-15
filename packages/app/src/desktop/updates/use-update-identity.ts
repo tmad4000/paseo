@@ -57,7 +57,9 @@ export function useUpdateIdentity(
   });
 }
 
-const RESTART_DAEMON_REFRESH_MS = 30_000;
+// Each read spawns `paseo daemon status`, and a callout can stay up for days.
+// The line also refreshes on mount, and Install re-reads it before acting.
+const RESTART_DAEMON_REFRESH_MS = 120_000;
 
 export interface UpdateRestartLine {
   line: string;
