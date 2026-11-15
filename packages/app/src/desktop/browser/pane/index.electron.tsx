@@ -1346,6 +1346,15 @@ export function BrowserPane({
     setSelectorMode(null);
   }, []);
 
+  // The guest is parked while the rendered document shows: nothing may stay
+  // armed against it or keep keyboard focus inside it.
+  useEffect(() => {
+    if (!showMarkdownDocument) return;
+    cancelElementSelector();
+    cancelAnnotation();
+    webviewRef.current?.blur();
+  }, [showMarkdownDocument, cancelElementSelector, cancelAnnotation]);
+
   const currentPageUrl = browser?.url ?? null;
   const annotationMarkers = useMemo<BrowserAnnotationMarker[]>(() => {
     if (!currentPageUrl) {

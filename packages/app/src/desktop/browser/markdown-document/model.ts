@@ -10,26 +10,38 @@ const PLAIN_TEXT_CONTENT_TYPE = "text/plain";
 // Matches the file tab's editable/preview ceiling; bigger documents stay raw.
 export const MARKDOWN_DOCUMENT_MAX_CHARS = 1024 * 1024;
 
-// Runs inside the guest page. Only Chromium's generated text viewer is read:
-// an HTML page never qualifies, so the pane never re-renders site content.
+// Runs inside the guest page, in the page's own world: every value it reads can
+// be faked by the page, so the app treats the result as hostile content (see
+// parser.ts) and the script only decides whether reading is worth it. It reads
+// nothing unless the response is Chromium's plain-text viewer for Markdown
+// (text/markdown, or text/plain on a .md path), and nothing over the size cap.
 // Static servers (python -m http.server among them) send text/markdown without
 // a charset, and Chromium then decodes UTF-8 bytes as windows-1252 ("–" shows
-// as "â€“"). When the page was not decoded as UTF-8, re-read the same URL and
-// keep the UTF-8 reading only if the bytes are valid UTF-8.
+// as "â€“"). Only in that fallback case is the same URL re-read, keeping the
+// UTF-8 reading if the bytes are valid UTF-8.
 export const MARKDOWN_DOCUMENT_PROBE_SCRIPT = `(async () => {
+  const maxChars = ${MARKDOWN_DOCUMENT_MAX_CHARS};
   const contentType = String(document.contentType || "").toLowerCase();
-  if (!/^text\\/(plain|markdown|x-markdown)$/.test(contentType)) return null;
+  const isMarkdownType = contentType === "text/markdown" || contentType === "text/x-markdown";
+  const isMarkdownPath = /\\.(md|markdown)$/i.test(String(location.pathname || ""));
+  if (!isMarkdownType && !(contentType === "text/plain" && isMarkdownPath)) return null;
   const body = document.body;
   if (!body) return null;
   const pre = body.children.length === 1 && body.firstElementChild && body.firstElementChild.tagName === "PRE"
     ? body.firstElementChild
     : null;
   let text = String((pre || body).textContent || "");
-  if (String(document.characterSet || "").toUpperCase() !== "UTF-8") {
+  if (text.length > maxChars) return null;
+  const charset = String(document.characterSet || "").toLowerCase();
+  if (charset === "windows-1252" || charset === "iso-8859-1") {
     try {
       const response = await fetch(location.href, { cache: "force-cache", credentials: "same-origin" });
-      if (response.ok) {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(await response.arrayBuffer());
+      const declared = Number(response.headers.get("content-length") || "0");
+      if (response.ok && declared <= maxChars * 4) {
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength <= maxChars * 4) {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        }
       }
     } catch {}
   }
@@ -64,7 +76,13 @@ export function resolveMarkdownDocumentLink(href: string, documentUrl: string): 
   if (!trimmed || trimmed.startsWith("#")) return null;
   try {
     const target = new URL(trimmed, documentUrl);
-    return target.protocol === "http:" || target.protocol === "https:" ? target.href : null;
+    if (target.protocol !== "http:" && target.protocol !== "https:") return null;
+    const current = new URL(documentUrl);
+    const sameDocument =
+      target.origin === current.origin &&
+      target.pathname === current.pathname &&
+      target.search === current.search;
+    return sameDocument && target.hash ? null : target.href;
   } catch {
     return null;
   }

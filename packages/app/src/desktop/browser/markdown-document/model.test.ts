@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MARKDOWN_DOCUMENT_MAX_CHARS,
   MARKDOWN_DOCUMENT_PROBE_SCRIPT,
@@ -10,12 +10,19 @@ import {
   resolveMarkdownDocumentLink,
 } from "./model";
 
-function runProbe(input: {
+interface ProbeInput {
   contentType: string;
   bodyHtml: string;
   characterSet?: string;
+  pathname?: string;
   fetchBytes?: Uint8Array | null;
-}): Promise<unknown> {
+  contentLength?: string | null;
+}
+
+function runProbe(input: ProbeInput): {
+  result: Promise<unknown>;
+  fetch: ReturnType<typeof vi.fn>;
+} {
   const page = document.implementation.createHTMLDocument("");
   page.body.innerHTML = input.bodyHtml;
   const guestDocument = {
@@ -23,11 +30,19 @@ function runProbe(input: {
     characterSet: input.characterSet ?? "UTF-8",
     body: page.body,
   };
-  const guestFetch = async () => {
+  const guestFetch = vi.fn(async () => {
     if (!input.fetchBytes) throw new Error("offline");
-    return { ok: true, arrayBuffer: async () => input.fetchBytes!.buffer };
-  };
-  const guestLocation = { href: "http://h/plan.md" };
+    const bytes = input.fetchBytes;
+    return {
+      ok: true,
+      headers: {
+        get: (name: string) => (name === "content-length" ? (input.contentLength ?? null) : null),
+      },
+      arrayBuffer: async () => bytes.buffer,
+    };
+  });
+  const pathname = input.pathname ?? "/plan.md";
+  const guestLocation = { href: `http://h${pathname}`, pathname };
   // The script runs in the guest as a bare expression against its globals.
   // oxlint-disable-next-line typescript/no-implied-eval -- evaluates the exported guest script in a fake guest scope
   const run = new Function(
@@ -36,7 +51,10 @@ function runProbe(input: {
     "location",
     `return ${MARKDOWN_DOCUMENT_PROBE_SCRIPT};`,
   );
-  return run(guestDocument, guestFetch, guestLocation) as Promise<unknown>;
+  return {
+    result: run(guestDocument, guestFetch, guestLocation) as Promise<unknown>,
+    fetch: guestFetch,
+  };
 }
 
 function preHtml(text: string): string {
@@ -60,55 +78,91 @@ describe("isMarkdownDocumentUrl", () => {
 });
 
 describe("MARKDOWN_DOCUMENT_PROBE_SCRIPT", () => {
-  it("returns the exact text of Chromium's plain-text viewer", async () => {
+  it("returns the exact text of Chromium's plain-text viewer on a .md path", async () => {
     const text = "# Title\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
-    await expect(runProbe({ contentType: "text/plain", bodyHtml: preHtml(text) })).resolves.toEqual(
-      { contentType: "text/plain", text },
-    );
+    const probe = runProbe({ contentType: "text/plain", bodyHtml: preHtml(text) });
+    await expect(probe.result).resolves.toEqual({ contentType: "text/plain", text });
+    expect(probe.fetch).not.toHaveBeenCalled();
   });
 
-  it("does not read HTML pages", async () => {
+  it("reads nothing from HTML pages or plain text outside a .md path", async () => {
     await expect(
-      runProbe({ contentType: "text/html", bodyHtml: "<h1>Site</h1><script>x()</script>" }),
+      runProbe({ contentType: "text/html", bodyHtml: "<h1>Site</h1><script>x()</script>" }).result,
     ).resolves.toBeNull();
+    const log = runProbe({
+      contentType: "text/plain",
+      characterSet: "windows-1252",
+      pathname: "/server.log",
+      bodyHtml: preHtml("line"),
+      fetchBytes: new Uint8Array([0x6c]),
+    });
+    await expect(log.result).resolves.toBeNull();
+    expect(log.fetch).not.toHaveBeenCalled();
   });
 
-  it("lowercases the content type it reports", async () => {
+  it("accepts text/markdown on any path and lowercases the content type", async () => {
     await expect(
-      runProbe({ contentType: "Text/Markdown", bodyHtml: "<pre># Hi</pre>" }),
+      runProbe({ contentType: "Text/Markdown", pathname: "/raw", bodyHtml: "<pre># Hi</pre>" })
+        .result,
     ).resolves.toEqual({ contentType: "text/markdown", text: "# Hi" });
   });
 
   it("re-reads UTF-8 bytes that Chromium decoded as windows-1252", async () => {
-    const utf8 = new TextEncoder().encode("Cost: $1\u20133");
-    await expect(
-      runProbe({
-        contentType: "text/markdown",
-        characterSet: "windows-1252",
-        bodyHtml: preHtml("Cost: $1\u00e2\u20ac\u201c3"),
-        fetchBytes: utf8,
-      }),
-    ).resolves.toEqual({ contentType: "text/markdown", text: "Cost: $1\u20133" });
+    const probe = runProbe({
+      contentType: "text/markdown",
+      characterSet: "windows-1252",
+      bodyHtml: preHtml("Cost: $1\u00e2\u20ac\u201c3"),
+      fetchBytes: new TextEncoder().encode("Cost: $1\u20133"),
+    });
+    await expect(probe.result).resolves.toEqual({
+      contentType: "text/markdown",
+      text: "Cost: $1\u20133",
+    });
+    expect(probe.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the browser's decoding when the bytes are not UTF-8 or the re-read fails", async () => {
-    const latin1 = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
+  it("re-reads only after a windows-1252 fallback, never for UTF-8 or other declared charsets", async () => {
+    for (const characterSet of ["UTF-8", "UTF-16LE", "Shift_JIS"]) {
+      const probe = runProbe({
+        contentType: "text/markdown",
+        characterSet,
+        bodyHtml: preHtml("# Hi"),
+        fetchBytes: new TextEncoder().encode("# Other"),
+      });
+      await expect(probe.result).resolves.toEqual({ contentType: "text/markdown", text: "# Hi" });
+      expect(probe.fetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it("keeps the browser's decoding when the bytes are not UTF-8, too large, or the re-read fails", async () => {
+    const base = {
+      contentType: "text/plain",
+      characterSet: "windows-1252",
+      bodyHtml: preHtml("caf\u00e9"),
+    };
+    const expected = { contentType: "text/plain", text: "caf\u00e9" };
+    await expect(
+      runProbe({ ...base, fetchBytes: new Uint8Array([0x63, 0x61, 0x66, 0xe9]) }).result,
+    ).resolves.toEqual(expected);
+    await expect(runProbe({ ...base, fetchBytes: null }).result).resolves.toEqual(expected);
     await expect(
       runProbe({
-        contentType: "text/plain",
-        characterSet: "windows-1252",
-        bodyHtml: preHtml("caf\u00e9"),
-        fetchBytes: latin1,
-      }),
-    ).resolves.toEqual({ contentType: "text/plain", text: "caf\u00e9" });
-    await expect(
-      runProbe({
-        contentType: "text/plain",
-        characterSet: "windows-1252",
-        bodyHtml: preHtml("caf\u00e9"),
-        fetchBytes: null,
-      }),
-    ).resolves.toEqual({ contentType: "text/plain", text: "caf\u00e9" });
+        ...base,
+        fetchBytes: new TextEncoder().encode("caf\u00e9"),
+        contentLength: String(MARKDOWN_DOCUMENT_MAX_CHARS * 4 + 1),
+      }).result,
+    ).resolves.toEqual(expected);
+  });
+
+  it("reads nothing more for a document over the size cap", async () => {
+    const probe = runProbe({
+      contentType: "text/markdown",
+      characterSet: "windows-1252",
+      bodyHtml: preHtml("x".repeat(MARKDOWN_DOCUMENT_MAX_CHARS + 1)),
+      fetchBytes: new TextEncoder().encode("x"),
+    });
+    await expect(probe.result).resolves.toBeNull();
+    expect(probe.fetch).not.toHaveBeenCalled();
   });
 });
 
@@ -161,6 +215,13 @@ describe("resolveMarkdownDocumentLink", () => {
   it("keeps absolute http(s) links", () => {
     expect(resolveMarkdownDocumentLink("https://github.com/tmad4000/paseo", documentUrl)).toBe(
       "https://github.com/tmad4000/paseo",
+    );
+  });
+
+  it("does not reload the document for a link to one of its own sections", () => {
+    expect(resolveMarkdownDocumentLink(`${documentUrl}#next-steps`, documentUrl)).toBeNull();
+    expect(resolveMarkdownDocumentLink("./plan.md?x=1#a", documentUrl)).toBe(
+      "http://jacob-dev-1.example:8064/notes/plan.md?x=1#a",
     );
   });
 

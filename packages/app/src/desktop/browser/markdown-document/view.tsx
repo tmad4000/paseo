@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import { PaneContentToolbar } from "@/components/ui/pane-content-toolbar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { FileMarkdownPreview } from "@/file-pane/markdown-preview";
 import { resolveMarkdownDocumentLink } from "./model";
+import { createBrowserMarkdownParser } from "./parser";
 
 export type BrowserMarkdownMode = "preview" | "source";
 
@@ -62,9 +63,17 @@ export function BrowserMarkdownDocument({
     [documentUrl, onNavigate],
   );
 
+  const markdownit = useMemo(() => createBrowserMarkdownParser(documentUrl), [documentUrl]);
+
+  // enableHtmlish is off: inline HTML (<img>, <details>) from web content stays text.
   return (
     <ScrollView style={styles.document} testID="browser-markdown-document">
-      <FileMarkdownPreview source={source} onLinkPress={handleLinkPress} />
+      <FileMarkdownPreview
+        source={source}
+        onLinkPress={handleLinkPress}
+        markdownit={markdownit}
+        enableHtmlish={false}
+      />
     </ScrollView>
   );
 }
