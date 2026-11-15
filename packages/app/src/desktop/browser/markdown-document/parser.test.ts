@@ -55,6 +55,10 @@ describe("createBrowserMarkdownParser", () => {
     ]);
   });
 
+  it("drops empty and unrenderable data images instead of fetching a bogus host", () => {
+    expect(imageSrcs("![e]() ![w](data:image/webp;base64,AAAA)")).toEqual([]);
+  });
+
   it("drops cross-origin images to their alt text", () => {
     const tokens = inlineTokens(
       "![tracker](https://evil.example/pixel.gif) ![lan](http://10.0.0.1/x.png)",

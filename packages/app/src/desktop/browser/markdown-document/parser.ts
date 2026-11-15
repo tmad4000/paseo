@@ -12,7 +12,9 @@ import { createMarkdownParser } from "@/utils/markdown-parser";
 // - Images load from the app, not the guest, so only same-origin http(s)
 //   images and inline data images are kept; others render as their alt text.
 
-const INLINE_IMAGE_DATA_PATTERN = /^data:image\/(gif|png|jpeg|webp);/i;
+// The renderer only shows data images it has a handler for (png, gif, jpeg);
+// anything else would be fetched as "https://data:…".
+const INLINE_IMAGE_DATA_PATTERN = /^data:image\/(gif|png|jpeg);/i;
 
 function resolveAgainst(url: string, documentUrl: string): URL | null {
   try {
@@ -49,7 +51,10 @@ export function createBrowserMarkdownParser(documentUrl: string): MarkdownIt {
         const src = token.attrGet("src") ?? "";
         if (INLINE_IMAGE_DATA_PATTERN.test(src)) continue;
         const resolved = resolveAgainst(src, documentUrl);
-        if (resolved && isHttpUrl(resolved) && resolved.origin === documentOrigin) continue;
+        const isEmpty = src.trim() === "" || resolved?.href === documentUrl;
+        if (!isEmpty && resolved && isHttpUrl(resolved) && resolved.origin === documentOrigin) {
+          continue;
+        }
         token.type = "text";
         token.tag = "";
         token.attrs = null;
