@@ -12,6 +12,14 @@ initializing → idle → running → idle (or error → closed)
 
 Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idle`, `running`, or `error`. `closed` is the persisted, resumable state for an agent record that has no live provider runtime. State transitions persist to disk and stream to subscribed clients via WebSocket.
 
+## Desktop app restarts
+
+Enable **Keep agents running across app restarts** in desktop daemon settings to retain the
+existing daemon, agent runtimes and terminals on quit and app update. The daemon keeps its
+current version until you restart it separately. Explicit daemon stop/restart still stops its
+runtimes. See the [restart design](design/restart-without-stopping-agents.html) for host-upgrade
+options and the verification boundary.
+
 ## Runtime residency
 
 An unarchived agent may be `closed` without being deleted or archived. Closing releases its provider

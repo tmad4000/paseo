@@ -10,6 +10,18 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## App restart preservation
+
+`preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
+running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-restarts)
+and [restart design](design/restart-without-stopping-agents.html). Explicit daemon stop/restart
+retains its existing behavior. Preserved from canonical [PR225](https://github.com/tmad4000/paseo/pull/225);
+installed-build and Apple installer verification remain pending. Regressions: desktop `quit-lifecycle.test.ts`,
+`daemon-manager.test.ts`, `desktop-settings.test.ts`, app settings storage and locale parity.
+The existing `daemon-restart-resume.e2e.test.ts` includes opt-in Linux live Codex coverage via
+`PASEO_APP_RESTART_QA=1`: a gated foreground tool completes across lifecycle-owner process
+recreation and client reconnection with the same provider session.
+
 ## Stacked-pane composer
 
 `composer-stacked-panes`: short desktop panes reduce empty composer space and bound growing
@@ -334,10 +346,11 @@ Repository issues are disabled, so this stable ID also serves as the follow-up t
 
 The 2026-11-15 age-limited reconciliation targets upstream `v0.11.4`
 (`dc5b02f7d`, published2026-10-15), preserving newer selective fork fixes.
-The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all89 IDs,
+The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all90 IDs,
 including the prose-owned features above, and every behavior in the261-commit release delta.
 Its source adaptations preserve recoverable setup failure with stale-move fencing, bundled API
-compatibility, shared audio ownership, SDK subscription cleanup and full localized turn timestamps.
+compatibility, shared audio ownership, SDK subscription cleanup and full localized turn timestamps. Newer canonical PR225 app-restart
+preservation and PR226 actionable Needs you/build provenance remain in the candidate.
 The receipt and [PR224 checks](https://github.com/tmad4000/paseo/pull/224/checks) separate immutable
 source review, actual full-suite outcomes and later fixture corrections. Existing acceptance gaps
 below remain open; source preservation is not installed-build verification.

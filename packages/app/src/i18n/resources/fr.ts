@@ -2244,6 +2244,10 @@ export const fr: TranslationResources = {
           "La gestion du daemon intégré a été suspendue, mais Paseo n’a pas pu arrêter le daemon.",
         updateFailed: "Impossible de mettre à jour la gestion du daemon intégré.",
       },
+      preserveAgents: {
+        title: "Conserver les agents au redémarrage de l’app",
+        hint: "Le daemon, les agents et les terminaux restent actifs à la fermeture ou à la mise à jour. Le daemon conserve sa version jusqu’à son redémarrage séparé.",
+      },
       keepRunning: {
         title: "Laisser le daemon tourner après la fermeture",
         hint: "Le daemon continue de tourner quand vous quittez Paseo",

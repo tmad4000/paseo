@@ -38,6 +38,7 @@ const DEFAULT_DESKTOP: DesktopSettings = {
   daemon: {
     manageBuiltInDaemon: true,
     keepRunningAfterQuit: false,
+    preserveAgentsOnAppRestart: false,
   },
 };
 

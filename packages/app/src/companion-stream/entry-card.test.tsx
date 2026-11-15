@@ -432,13 +432,37 @@ describe("EntryCard", () => {
     fireEvent.change(view.getByTestId("companion-entry-reply-input"), {
       target: { value: "Use staging" },
     });
-    fireEvent.click(view.getByRole("button", { name: "Send" }));
-    expect(onSendReply).toHaveBeenCalledWith(humanRequest, "Use staging");
+    fireEvent.click(view.getByRole("button", { name: "Queue" }));
+    expect(onSendReply).toHaveBeenCalledWith(humanRequest, "Use staging", "queue");
     await waitFor(() =>
       expect(view.getByText("Queued. The agent gets it when its current turn ends.")).toBeTruthy(),
     );
     expect(onReplyInChat).not.toHaveBeenCalled();
   });
+
+  it.each(["steer", "interrupt", "queue"] as const)(
+    "allows choosing %s for an inline reply",
+    async (mode) => {
+      const onSendReply = vi.fn().mockResolvedValue({ queued: false });
+      const view = render(
+        <EntryCard
+          entry={humanRequest}
+          onReturnToChat={vi.fn()}
+          onReplyInChat={vi.fn()}
+          onUpdateStatus={vi.fn()}
+          onRemovePin={vi.fn()}
+          onSendReply={onSendReply}
+        />,
+      );
+      fireEvent.click(view.getByRole("button", { name: "Reply" }));
+      fireEvent.click(view.getByRole("menuitem", { name: new RegExp(`^${mode}`, "i") }));
+      fireEvent.change(view.getByTestId("companion-entry-reply-input"), {
+        target: { value: "Proceed" },
+      });
+      fireEvent.click(view.getByRole("button", { name: new RegExp(`^${mode}$`, "i") }));
+      await waitFor(() => expect(onSendReply).toHaveBeenCalledWith(humanRequest, "Proceed", mode));
+    },
+  );
 
   it("gives Needs you one triage row: Reply, Later, Details and More", () => {
     const onUpdateStatus = vi.fn();

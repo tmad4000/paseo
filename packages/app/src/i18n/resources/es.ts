@@ -2254,6 +2254,10 @@ export const es: TranslationResources = {
           "La gestión del demonio integrado se pausó, peroPaseono pudo detener el demonio.",
         updateFailed: "No se puede actualizar la gestión de demonios integrada.",
       },
+      preserveAgents: {
+        title: "Mantener los agentes al reiniciar la app",
+        hint: "Mantiene el daemon, los agentes y los terminales al cerrar o actualizar la app. El daemon conserva su versión hasta que lo reinicies por separado.",
+      },
       keepRunning: {
         title: "Mantener el demonio en ejecución después de salir",
         hint: "Daemonsigue ejecutándose cuando sales dePaseo",

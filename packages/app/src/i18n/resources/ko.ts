@@ -2215,6 +2215,10 @@ export const ko: TranslationResources = {
         pausedStopFailed: "내장 데몬 관리가 일시 중지되었지만 Paseo가 데몬을 중지하지 못했습니다.",
         updateFailed: "내장 데몬 관리를 업데이트할 수 없습니다.",
       },
+      preserveAgents: {
+        title: "앱 재시작 시 에이전트 유지",
+        hint: "앱 종료나 업데이트 시 데몬, 에이전트 및 터미널을 계속 실행합니다. 데몬은 별도로 재시작할 때까지 현재 버전을 유지합니다.",
+      },
       keepRunning: {
         title: "종료 후에도 데몬 계속 실행",
         hint: "Paseo를 종료해도 데몬이 계속 실행됩니다",

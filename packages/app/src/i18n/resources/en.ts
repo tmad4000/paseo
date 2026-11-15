@@ -2292,6 +2292,10 @@ export const en = {
           "Built-in daemon management was paused, but Paseo could not stop the daemon.",
         updateFailed: "Unable to update built-in daemon management.",
       },
+      preserveAgents: {
+        title: "Keep agents running across app restarts",
+        hint: "Keep the daemon, agents and terminals running when quitting or updating the app. The daemon keeps its current version until you restart it separately.",
+      },
       keepRunning: {
         title: "Keep daemon running after quit",
         hint: "Daemon keeps running when you quit Paseo",

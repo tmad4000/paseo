@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { router, usePathname, useGlobalSearchParams, type Href } from "expo-router";
 import { LayoutPanelLeft, Plus, ListFilter, CircleHelp } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -9,6 +9,13 @@ import { useViewsStore } from "@/stores/views-store";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildViewRoute } from "@/utils/host-routes";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+
+import { useGlobalStream } from "@/companion-stream/use-global-stream";
+import {
+  needsYouIdentity,
+  needsYouRevision,
+  useNeedsYouSeen,
+} from "@/companion-stream/needs-you-seen";
 
 const ThemedPlus = withUnistyles(Plus);
 const mutedColorMapping = (theme: Theme) => ({
@@ -67,6 +74,22 @@ export function SidebarViewsSection() {
 export function SidebarStreamNavigation({ onBeforeNavigate }: { onBeforeNavigate?: () => void }) {
   const { t } = useTranslation();
   const pathname = usePathname();
+  const attention = useGlobalStream({
+    serverId: null,
+    enabled: true,
+    view: "needs_you",
+    filter: "all",
+    includeArchived: true,
+  });
+  const { hasNextPage, isFetching, fetchNextPage } = attention;
+  useEffect(() => {
+    if (hasNextPage && !isFetching) void fetchNextPage();
+  }, [hasNextPage, isFetching, fetchNextPage]);
+  const hydrated = useNeedsYouSeen((state) => state.hydrated);
+  const seen = useNeedsYouSeen((state) => state.seen);
+  const unread = attention.rows.filter(
+    (row) => seen[needsYouIdentity(row)] !== needsYouRevision(row),
+  ).length;
   const { view: streamView } = useGlobalSearchParams<{ view?: string }>();
   const openNeedsYou = useCallback(() => {
     onBeforeNavigate?.();
@@ -82,6 +105,8 @@ export function SidebarStreamNavigation({ onBeforeNavigate }: { onBeforeNavigate
         variant="compact"
         icon={CircleHelp}
         label={t("globalStream.needsYou")}
+        badge={hydrated && unread ? `${unread}${attention.hasNextPage ? "+" : ""}` : undefined}
+        accessibilityLabel={`${t("globalStream.needsYou")}, ${unread} new`}
         isActive={pathname === "/stream" && streamView === "needs_you"}
         onPress={openNeedsYou}
         testID="sidebar-needs-you"

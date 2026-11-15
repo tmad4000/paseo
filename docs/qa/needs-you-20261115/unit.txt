@@ -1,0 +1,9 @@
+
+ RUN  v4.1.7 /home/dev/agent-worktrees/paseo-needs-you-20261115/packages/app
+
+
+ Test Files  7 passed (7)
+      Tests  290 passed (290)
+   Start at  18:34:35
+   Duration  13.42s (transform 5.48s, setup 152ms, import 8.12s, tests 1.69s, environment 2.28s)
+

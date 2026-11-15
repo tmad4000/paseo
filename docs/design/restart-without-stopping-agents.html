@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><title>
+    Paseo restart without stopping agents</title
+  ><style>
+    body {
+      font: 16px/1.6 system-ui;
+      max-width: 920px;
+      margin: 48px auto;
+      padding: 0 24px;
+      color: #20232b;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    td,
+    th {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    code {
+      font-size: 0.9em;
+    }
+    small {
+      color: #596171;
+    }
+  </style>
+  <h1>Paseo restart/update without stopping agents</h1>
+  <p>
+    <small
+      >Sol · 15 November 2026 · fork baseline 146f6e424 (initial inspection 135a3b4c9) · Linux
+      investigation; Apple behavior requires Apple verification.</small
+    >
+  </p>
+  <h2>Answer</h2>
+  <p>
+    Restarting the desktop UI need not stop agents. Replacing the daemon worker currently does.
+    Recommend a staged hybrid: first allow desktop updates to retain the existing daemon behind an
+    opt-in setting; then add safe daemon draining and session restoration; use an independent agent
+    host when actual uninterrupted daemon replacement is required.
+  </p>
+  <h2>Why processes die today</h2>
+  <p>
+    The supervisor owns a daemon worker, but provider runtimes still belong to that worker.
+    <code>bootstrap.ts: stop()</code> freezes ingress/registration, closes all managed sessions,
+    flushes storage, shuts down providers and calls <code>terminalManager.killAll()</code>. Claude
+    <code>session.close()</code> ends its input, closes/interrupts the SDK query and terminates its
+    entire process tree. Codex transport disposal closes its readline and stdin, rejects pending
+    RPCs, and sends SIGTERM followed by SIGKILL after a deadline through
+    <code>terminateWithTreeKill</code>. That helper enumerates descendants via tree-kill, with
+    direct-child fallback; preservation cannot rely on a new process group alone.
+  </p>
+  <p>
+    These are deliberate cleanup actions, not a Linux rule that every child automatically dies when
+    its parent exits. Simply removing cleanup or calling unref/detached is insufficient: stdio pipes
+    and pending protocol state belong to the old daemon, EOF ends the input channel, output has no
+    durable reader, permissions and turn events lose their owner. PTY masters similarly need a
+    persistent owner. The supervisor also escalates to a process-tree kill if worker shutdown
+    exceeds its deadline.
+  </p>
+  <p>
+    Desktop update IPC currently explicitly stops its captured, app-owned daemon before installing.
+    Ordinary quit has a separate <code>keepRunningAfterQuit</code> rule. Startup also has
+    version-mismatch replacement logic. A preservation option must cover all three paths, and must
+    never take ownership of someone else's daemon.
+  </p>
+  <h2>What survives</h2>
+  <p>
+    Paseo agent identity, workspace, metadata, persisted timeline and provider persistence handles
+    remain on disk. Claude session IDs and Codex thread IDs permit a fresh provider runtime to load
+    saved conversation history. They do not serialize active tool processes, pending promises,
+    in-memory permissions, SDK streams, background shells/watchers or an unfinished response. A
+    resume prompt can repeat an external side effect; it is not continuation of the same running
+    turn.
+  </p>
+  <h2>Options and effort</h2>
+  <table>
+    <tr>
+      <th>Option</th>
+      <th>Behavior and risks</th>
+      <th>Estimated agent-hours</th>
+    </tr>
+    <tr>
+      <td>A: drain and resume</td>
+      <td>
+        Gate new turns atomically, wait for running/initializing/permission work, persist resident
+        handles, flush, replace, reload handles without sending a new prompt. Never force restart on
+        timeout. Idle Claude can own background work, and terminals remain vulnerable; must disclose
+        those limits. Recovery from an already interrupted turn needs explicit policy rather than
+        blind replay.
+      </td>
+      <td>12–24 implementation + 6–12 integration/review</td>
+    </tr>
+    <tr>
+      <td>B: independent agent host</td>
+      <td>
+        Move provider adapters, pipes, permissions and durable event journal into a stable
+        authenticated local process. Daemon reconnects by opaque persisted handles with sequence
+        replay, fencing and version negotiation. Host owns agent process trees; worker shutdown
+        cannot kill them. PTY/tmux can preserve terminal sessions, but cannot alone reattach JSON
+        SDK protocol and in-memory state.
+      </td>
+      <td>50–90 implementation + 20–35 failure/platform tests</td>
+    </tr>
+    <tr>
+      <td>Hybrid, recommended</td>
+      <td>
+        Opt-in desktop-only update preservation now: retain daemon, sessions and terminals
+        unchanged; reconnect UI. Daemon version stays old until separately restarted. Follow with A
+        for safe scheduled host upgrades, B for uninterrupted host upgrades.
+      </td>
+      <td>6–12 first slice + above later phases</td>
+    </tr>
+  </table>
+  <h2>Upstream, checked today</h2>
+  <p>
+    <a
+      href="https://github.com/getpaseo/paseo/tree/685e113358111a9314861be6e1dfae28eb47ecae/packages/server/src/server/agent/restart-recovery"
+      >Upstream main at 685e1133</a
+    >
+    has restart recovery: capture running records before close, repair persisted status at startup
+    and dispatch a configured recovery prompt for eligible sessions. Its bootstrap still closes
+    every agent. This recovers conversations after interruption; it does not retain live turns.
+    Reuse its design where compatible rather than presenting resume as uninterrupted execution. No
+    upstream merge or dependency update is part of this investigation.
+  </p>
+  <h2>First delivery and verification bar</h2>
+  <p>
+    Add a default-off desktop setting, “Keep agents running across app restarts.” Apply it to
+    explicit update preparation, ordinary quit (which may install an update) and startup version
+    handling. Label the tradeoff: app updates immediately; existing daemon keeps its current version
+    until a separate restart. Keep manual stop/restart semantics explicit. Test the lifecycle
+    setting and actual Linux process survival across a simulated app owner restart with a private
+    HOME/PASEO_HOME and live isolated provider. Do not claim a real Electron installer or macOS/iOS
+    result from Linux. Packaged updaters may replace paths used by the old daemon; verify packaging
+    before promising long-lived operation after installation. A safe daemon-drain phase requires
+    atomic admission fencing and separate coverage for queued prompts, permissions, startup failure
+    and background work before shipping.
+  </p>
+</html>

@@ -23,6 +23,7 @@ export type SidebarRowIcon = ComponentType<{ size: number; color: string }>;
 
 interface SidebarHeaderRowProps {
   icon: SidebarRowIcon | null;
+  badge?: string;
   label: string;
   onPress: () => void;
   isActive?: boolean;
@@ -50,6 +51,7 @@ interface SidebarHeaderRowProps {
 
 export function SidebarHeaderRow({
   icon: Icon,
+  badge,
   label,
   onPress,
   isActive = false,
@@ -100,6 +102,7 @@ export function SidebarHeaderRow({
             <View style={variant === "header" ? styles.iconSpacer : styles.iconSpacerCompact} />
           )}
           <Text style={[styles.label, isHighlighted && styles.labelHighlighted]}>{label}</Text>
+          {badge ? <Text style={styles.badge}>{badge}</Text> : null}
         </Pressable>
         {right === null ? null : (
           <Pressable onPress={onPress} accessible={false} focusable={false} style={styles.trailing}>
@@ -114,6 +117,15 @@ export function SidebarHeaderRow({
 const SELECTED_STATE = { selected: true } as const;
 
 const styles = StyleSheet.create((theme) => ({
+  badge: {
+    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surface3,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: theme.spacing[2],
+    fontSize: theme.fontSize.sm,
+    minWidth: 22,
+    textAlign: "center",
+  },
   container: {
     height: {
       xs: HEADER_INNER_HEIGHT_MOBILE,
