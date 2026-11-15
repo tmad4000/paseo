@@ -337,9 +337,10 @@ The 2026-11-15 age-limited reconciliation targets upstream `v0.11.4`
 The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all89 IDs,
 including the prose-owned features above, and every behavior in the261-commit release delta.
 Its source adaptations preserve recoverable setup failure with stale-move fencing, bundled API
-compatibility, shared audio ownership and full localized turn timestamps. Full validation and
-final independent review remain in progress. Existing acceptance gaps below remain open;
-source preservation is not installed-build verification.
+compatibility, shared audio ownership, SDK subscription cleanup and full localized turn timestamps.
+The receipt and [PR224 checks](https://github.com/tmad4000/paseo/pull/224/checks) separate immutable
+source review, actual full-suite outcomes and later fixture corrections. Existing acceptance gaps
+below remain open; source preservation is not installed-build verification.
 
 1. Record the previous shipped fork commit, candidate fork commit, and incoming upstream tag/commit.
    Read this register from the previous fork as well as the candidate: a merge can delete its own
@@ -389,9 +390,9 @@ as separate states, with results for each target machine/platform.
 
 ## Deferred automation
 
-Jacob prioritized this lightweight register on 2026-10-06 and allowed the new footer browser
-regression test to follow later. This change adds no CI job, full-suite run, or installed-app launch.
-Existing checks still apply to code changes.
+Jacob prioritized this lightweight register on 2026-10-06 and deferred the dedicated footer browser
+regression. Integration receipts record subsequent unit, browser and full-suite coverage. The
+unchecked acceptance and installed-build items below remain open.
 
 - [ ] `footer-time` owner: when restoring the footer, add a focused case to an existing browser suite
       that renders a completed reply and asserts both completion time and duration are visible before

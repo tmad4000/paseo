@@ -39,6 +39,8 @@ async function quickDragFirstRowAfterSecond(
 ) {
   await expect(rows).toHaveCount(2);
   const before = await rowTestIds(rows);
+  // Project reorder can move/remount these rows; enter the actual row before pressing.
+  await rows.nth(0).hover();
   const sourceBox = await visibleBoundingBox(rows.nth(0));
   const targetBox = await visibleBoundingBox(rows.nth(1));
 

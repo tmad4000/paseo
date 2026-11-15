@@ -156,6 +156,7 @@ const EXPECTED_CLAUDE_CATALOG_MODELS = [
   ).values(),
 ];
 
+let claudeCodeVersion: [number, number, number] | null = null;
 let claudeModelIdsFromJson: string[] = [];
 let claudeModelsFromJson: ProviderModel[] = [];
 
@@ -185,13 +186,31 @@ async function runProviderModelsJson(provider: string): Promise<ProviderModel[]>
   return attemptRun(1);
 }
 
-function assertClaudeModels(data: ProviderModel[]): void {
+async function assertClaudeModels(data: ProviderModel[]): Promise<void> {
+  if (!claudeCodeVersion) {
+    const result = await ctx.paseo(["provider", "diagnostic", "claude", "--json"]);
+    assert.strictEqual(result.exitCode, 0, "Claude version diagnostic should exit 0");
+    const { diagnostic } = JSON.parse(result.stdout.trim()) as ProviderDiagnostic;
+    const match = diagnostic.match(/Version:\s*(\d+)\.(\d+)\.(\d+)\s+\(Claude Code\)/i);
+    assert(match, "daemon diagnostic should report its actual Claude Code version");
+    claudeCodeVersion = [Number(match[1]), Number(match[2]), Number(match[3])];
+    console.log(`Catalog contract uses Claude Code ${claudeCodeVersion.join(".")}`);
+  }
+  const [major, minor, patch] = claudeCodeVersion;
+  const supportsFable52 =
+    major > 2 || (major === 2 && (minor > 1 || (minor === 1 && patch >= 319)));
+
   const byId = new Map(data.map((model) => [model.id, model]));
 
   assert.strictEqual(byId.size, data.length, "claude model IDs should be unique");
 
   for (const expectedModel of EXPECTED_CLAUDE_CATALOG_MODELS) {
     const actualModel = byId.get(expectedModel.id);
+    // CI pins an older runtime; retain both sides of the newer fork model gate.
+    if (expectedModel.id === "claude-fable-5-2" && !supportsFable52) {
+      assert.strictEqual(actualModel, undefined, "Fable 5.2 requires Claude Code 2.1.319");
+      continue;
+    }
     assert(actualModel, `claude output should include ${expectedModel.id}`);
     assert.strictEqual(
       actualModel.model,
@@ -354,7 +373,7 @@ try {
   {
     console.log("Test 6: provider models claude lists canonical model aliases");
     const data = await runProviderModelsJson("claude");
-    assertClaudeModels(data);
+    await assertClaudeModels(data);
     console.log("✓ provider models claude lists canonical model aliases\n");
   }
 
@@ -419,7 +438,7 @@ try {
       data.every((m) => m.model && m.id),
       "each model should have name and id",
     );
-    assertClaudeModels(data);
+    await assertClaudeModels(data);
     claudeModelIdsFromJson = data.map((m) => m.id);
     claudeModelsFromJson = data;
     console.log("✓ provider models --json outputs valid JSON\n");

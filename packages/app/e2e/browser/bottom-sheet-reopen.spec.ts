@@ -90,7 +90,15 @@ async function dismissStackedModelPickerWithBackdrop(page: Page) {
     .getByRole("button", { name: /Select model/ })
     .click();
   await expect(page.getByTestId("agent-controls-model-browser-sheet")).toBeVisible();
-  await page.mouse.click(MOBILE_VIEWPORT.width / 2, 24);
+  const backdrop = page
+    .getByRole("button", { name: "Bottom sheet backdrop" })
+    .filter({ visible: true })
+    .last();
+  await expect(backdrop).toBeVisible();
+  const box = await backdrop.boundingBox();
+  if (!box) throw new Error("Expected the stacked model picker's backdrop");
+  // Check the actual top backdrop's actionability while the sheet is presenting.
+  await backdrop.click({ position: { x: box.width / 2, y: 24 } });
   await expect(page.getByTestId("agent-controls-model-browser-sheet")).not.toBeVisible();
   await expect(page.getByTestId("agent-controls-model-sheet")).toBeVisible();
   await expect(page.getByTestId("agent-controls-settings-list")).toBeVisible();
