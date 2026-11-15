@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -341,9 +340,9 @@ test("browser sandbox setup is restricted to ephemeral hosted jobs", () => {
 });
 
 test("Linux browser jobs prepare and always remove their private sandbox helper", () => {
-  const require = createRequire(new URL("packages/server/package.json", repoRoot));
-  const { parse } = require("yaml");
-  const workflow = parse(readFileSync(ciWorkflowPath, "utf8"));
+  // The changes job runs this contract before npm ci. Keep it dependency-free,
+  // including the shared steps used by the four browser shards.
+  const jobs = jobBlocks(readFileSync(ciWorkflowPath, "utf8"));
   for (const name of [
     "typecheck",
     "app-tests",
@@ -352,15 +351,24 @@ test("Linux browser jobs prepare and always remove their private sandbox helper"
     "playwright-3",
     "playwright-4",
   ]) {
-    const steps = workflow.jobs[name].steps;
-    const prepare = steps.findIndex(
-      (step) => step.run === "node scripts/prepare-browser-sandbox.mjs",
-    );
-    const browser = steps.findIndex((step) => /test:e2e|agent-limit-handoff/.test(step.run ?? ""));
+    let job = jobs.get(name)?.join("\n");
+    assert.ok(job, `${name} exists`);
+    assert.match(job, /runs-on: ubuntu/);
+    const alias = /^    steps: \*([a-z_]+)$/m.exec(job);
+    if (alias) {
+      const definition = [...jobs.values()]
+        .map((lines) => lines.join("\n"))
+        .find((source) => source.includes(`    steps: &${alias[1]}\n`));
+      assert.ok(definition, `${name} resolves its shared steps`);
+      job = definition;
+    }
+    const prepare = job.indexOf("        run: node scripts/prepare-browser-sandbox.mjs\n");
+    const browser = job.search(/^        run: .*?(?:test:e2e|agent-limit-handoff)/m);
     assert(prepare >= 0 && prepare < browser, `${name} prepares the helper before browser tests`);
-    const cleanup = steps.find(
-      (step) => step.run === "node scripts/prepare-browser-sandbox.mjs --cleanup",
+    assert.match(
+      job,
+      /        if: always\(\)\n        run: node scripts\/prepare-browser-sandbox\.mjs --cleanup/,
+      `${name} always removes its private helper`,
     );
-    assert.equal(cleanup?.if, "always()");
   }
 });
