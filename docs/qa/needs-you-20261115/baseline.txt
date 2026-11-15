@@ -1,0 +1,16 @@
+Warming one-worker Metro
+Metro warm; running UI checks serially
+
+Running 2 tests using 1 worker
+
+(node:3092039) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3092039) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] Worker 0 daemon started on port 37267, home: /tmp/paseo-e2e-worker-0-TEjYdg
+  ✓  1 ../../../../../../tmp/needs-you-before/needs-you-before.spec.ts:6:6 › baseline status at 390px (12.4s)
+  ✓  2 ../../../../../../tmp/needs-you-before/needs-you-before.spec.ts:6:6 › baseline status at 1280px (20.8s)
+[e2e] Worker 0 daemon stopped
+
+  2 passed (45.1s)
+Task Metro stopped

@@ -6,14 +6,14 @@ The screenshots use isolated mock-provider agents and the repository desktop IPC
 
 ## Verification
 
-- Seven focused unit files: 290 passed ([raw output](unit.log)).
-- Changed card/layout suites after consolidation: 37 passed ([raw output](layout-unit.log)).
-- Badge scope and view update regression: five passed ([raw output](badge-unit.log)).
-- Six browser/desktop-renderer cases: all passed, one worker ([raw output](ui.log)).
+- Seven focused unit files: 290 passed ([raw output](unit.txt)).
+- Changed card/layout suites after consolidation: 37 passed ([raw output](layout-unit.txt)).
+- Badge scope and view update regression: five passed ([raw output](badge-unit.txt)).
+- Six browser/desktop-renderer cases: all passed, one worker ([raw output](ui.txt)).
 - Independent codex/gpt-6.1-sol review: no remaining blockers ([receipt](review.txt)).
-- Fresh build metadata at both widths, then another cached startup at 1280 px: three passed ([first startup](freshness-first.log), [second startup](freshness-second.log)). Both show the actual Git HEAD and the exact harness timestamp. [First metadata](metadata-first.json) and [second metadata](metadata-second.json) have the same commit and different creation times.
-- Build-stamp unit suite after the cache fix: four passed ([raw output](stamp-unit.log)).
-- Full workspace [typecheck](typecheck.log), [format](format.log) and [lint](lint.log) passed.
+- Fresh build metadata at both widths, then another cached startup at 1280 px: three passed ([first startup](freshness-first.txt), [second startup](freshness-second.txt)). Both show the actual Git HEAD and the exact harness timestamp. [First metadata](metadata-first.json) and [second metadata](metadata-second.json) have the same commit and different creation times.
+- Build-stamp unit suite after the cache fix: four passed ([raw output](stamp-unit.txt)).
+- Full workspace [typecheck](typecheck.txt), [format](format.txt) and [lint](lint.txt) passed.
 
 Checks ran serially at `nice -n 19`; Vitest and Playwright used one worker. The screenshot runner used one Metro worker, then terminated its own process group and isolated daemons. No shared daemon was restarted.
 
