@@ -104,6 +104,8 @@
   "packages/desktop/assets/32x32.png": "60a4aacee4539e2d0b390eefdbfb687135a17649666de05770a2e91ec83dadf8",
   "packages/desktop/assets/64x64.png": "83074ea0e32bc1772987f28ef1f3ea0b8b7d58e3df73aaf4447c9f440c55759b",
   "packages/desktop/assets/icon-dev.png": "f1b3d2ce338273a0f2e6f7a405e9ad91a30fb16b7b6a1467b8c0576560bc3411",
+  "packages/desktop/assets/icon-fork.icns": "208e32b3fef8d609f396b66ff0fbffc077770124d8ab45230484c2c0c7d2cab2",
+  "packages/desktop/assets/icon-fork.png": "4df8e11ff5e18d69d0ef188746e908e8323e900c05602e8dfe949c28bf199699",
   "packages/desktop/assets/icon.icns": "208e32b3fef8d609f396b66ff0fbffc077770124d8ab45230484c2c0c7d2cab2",
   "packages/desktop/assets/icon.ico": "1382d57ebeb6c2be57906ab0cef5f3b748d10bdaf51e41f690ec6675d9b7ed20",
   "packages/desktop/assets/icon.png": "4df8e11ff5e18d69d0ef188746e908e8323e900c05602e8dfe949c28bf199699",

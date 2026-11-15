@@ -53,7 +53,7 @@ def png(path,size,style='square'):
     return im
 # Regenerate only application identity assets, preserving illustrations and notification/status glyphs.
 if paseo:
-    targets=[ROOT/'packages/desktop/assets'/n for n in ['icon.png','icon-dev.png','32x32.png','64x64.png','128x128.png','128x128@2x.png']]
+    targets=[ROOT/'packages/desktop/assets'/n for n in ['icon.png','icon-fork.png','icon-dev.png','32x32.png','64x64.png','128x128.png','128x128@2x.png']]
     targets += [ROOT/'packages/app/assets/images'/n for n in ['icon.png','android-icon-foreground.png','favicon.png']]
     targets += list((ROOT/'packages/app/public').glob('*icon*.png'))
     targets += [ROOT/'fastlane/metadata/android/en-US/images/icon.png']
@@ -103,6 +103,8 @@ for ext in ('icns','ico'):
    out.write(struct.pack('<BBBBHHII',size%256,size%256,0,0,1,32,len(data),offset));offset+=len(data)
   for data in frames:out.write(data)
  outputs[base/f'icon.{ext}']=out.getvalue()
+if paseo:
+ outputs[base/'icon-fork.icns']=outputs[base/'icon.icns']
 # Web favicon identity only; marketing logo is outside scope.
 favicon=ROOT/('packages/website/public' if paseo else 'admin-web/public')
 outputs[favicon/'favicon.svg']=SOURCE.read_bytes()
