@@ -45,7 +45,7 @@ test("commit history shows dates and shares diff layout preferences", async ({
   });
   await expect(commitRow).toContainText(COMMIT_SUBJECT, { timeout: 30_000 });
   await expect(page.locator('[data-testid^="commit-row-"]')).toHaveCount(1);
-  await expect(commitRow).toContainText("Jan 15");
+  await expect(commitRow).toContainText("Jan '20");
   await commitRow.click();
 
   const panel = page.getByTestId("commit-diff-panel").filter({ visible: true });

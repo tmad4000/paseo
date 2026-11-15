@@ -234,6 +234,7 @@ const FOOTER_ICON_TEST_IDS = [
   "sidebar-add-project",
   "sidebar-usage-icon",
   "sidebar-hosts-trigger",
+  "sidebar-import-session",
   "sidebar-help",
   "sidebar-settings",
 ];
@@ -241,12 +242,8 @@ const FOOTER_ICON_TEST_IDS = [
 // Browser layout boxes include floating-point rounding, even for whole-pixel styles.
 const FOOTER_GEOMETRY_TOLERANCE = 0.01;
 
-/**
- * One line of same-size icons: Add project, Usage and Hosts together on the left, Help and
- * Settings together at the end.
- */
+/** The fork keeps a labeled Add project followed by fixed-size Usage/Hosts/Import/Help/Settings. */
 export async function expectFooterIconRow(page: Page): Promise<void> {
-  // Read one browser-frame snapshot: the compact drawer can translate between separate RPCs.
   const boxes = await page
     .locator(FOOTER_ICON_TEST_IDS.map((testID) => `[data-testid="${testID}"]:visible`).join(","))
     .evaluateAll((elements) =>
@@ -256,16 +253,17 @@ export async function expectFooterIconRow(page: Page): Promise<void> {
       }),
     );
   expect(boxes.map((box) => box.testID)).toEqual(FOOTER_ICON_TEST_IDS);
-  const [first] = boxes;
+  const [addProject, ...icons] = boxes;
+  const firstIcon = icons[0]!;
+  expect(addProject!.width).toBeGreaterThanOrEqual(firstIcon.width);
   for (const box of boxes) {
-    expect(Math.abs(box.y + box.height / 2 - first!.y - first!.height / 2)).toBeLessThan(2);
-    expect(Math.abs(box.width - first!.width)).toBeLessThan(FOOTER_GEOMETRY_TOLERANCE);
+    expect(Math.abs(box.y + box.height / 2 - firstIcon.y - firstIcon.height / 2)).toBeLessThan(2);
+  }
+  for (const icon of icons) {
+    expect(Math.abs(icon.width - firstIcon.width)).toBeLessThan(FOOTER_GEOMETRY_TOLERANCE);
   }
   const gaps = boxes.slice(1).map((box, index) => box.x - (boxes[index]!.x + boxes[index]!.width));
-  for (const index of [0, 1, 3]) {
-    expect(Math.abs(gaps[index]!)).toBeLessThan(FOOTER_GEOMETRY_TOLERANCE);
-  }
-  expect(gaps[2]).toBeGreaterThan(first!.width);
+  for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(FOOTER_GEOMETRY_TOLERANCE);
 }
 
 export async function expectFooterSeparator(page: Page, shown: boolean): Promise<void> {

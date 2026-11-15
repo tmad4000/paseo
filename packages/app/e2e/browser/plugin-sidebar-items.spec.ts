@@ -89,7 +89,9 @@ async function expectBotScreen(page: Page, botId: string) {
 
 /** The popover opens to the right of `row`, level with it, and away from `elsewhere`. */
 async function expectPopoverBeside(page: Page, text: string, row: Locator, elsewhere: Locator) {
-  const popover = await popoverBox(page, text);
+  await expect(page.getByText(text, { exact: true })).toBeInViewport();
+  // Anchor geometry belongs to the surface; the text is inset by content padding.
+  const popover = await boxOf(page.getByTestId(/-popover$/).filter({ hasText: text }));
   const rowBox = await boxOf(row);
   const otherBox = await boxOf(elsewhere);
   expect(popover.x).toBeGreaterThanOrEqual(rowBox.x + rowBox.width);

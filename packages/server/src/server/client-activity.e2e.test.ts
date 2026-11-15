@@ -34,11 +34,12 @@ class RecordingPushNotificationSender implements PushNotificationSender {
 describe("client activity tracking", () => {
   const TEST_PROVIDER = "claude";
   const TEST_MODEL = "haiku";
-  const TEST_CWD = "/tmp";
   let daemon: TestPaseoDaemon;
   let client1: DaemonClient;
   let client2: DaemonClient;
   let pushNotifications: RecordingPushNotificationSender;
+  const clients = new Set<DaemonClient>();
+  const attentionFeeds = new Map<DaemonClient, ReturnType<DaemonClient["observeEvents"]>>();
 
   beforeEach(async () => {
     pushNotifications = new RecordingPushNotificationSender();
@@ -46,9 +47,17 @@ describe("client activity tracking", () => {
   });
 
   afterEach(async () => {
-    if (client1) await client1.close().catch(() => {});
-    if (client2) await client2.close().catch(() => {});
-    await daemon.close();
+    const cleanup = await Promise.allSettled(
+      [...attentionFeeds.values()].map((feed) => feed.release()),
+    );
+    attentionFeeds.clear();
+    cleanup.push(...(await Promise.allSettled([...clients].map((client) => client.close()))));
+    clients.clear();
+    cleanup.push(...(await Promise.allSettled([daemon.close()])));
+    const errors = cleanup
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    if (errors.length) throw new AggregateError(errors, "Activity fixture cleanup failed");
   }, 30000);
 
   async function createClient(): Promise<DaemonClient> {
@@ -56,7 +65,12 @@ describe("client activity tracking", () => {
       url: `ws://127.0.0.1:${daemon.port}/ws`,
       messageQueueLimit: null,
     });
+    clients.add(client);
     await client.connect();
+    // A local listener does not request an owned attention feed from the daemon.
+    const feed = client.observeEvents(["agent_attention_required"], { notifications: true });
+    attentionFeeds.set(client, feed);
+    await feed.ready;
     return client;
   }
 
@@ -67,7 +81,7 @@ describe("client activity tracking", () => {
     return params.client.createAgent({
       provider: TEST_PROVIDER,
       model: TEST_MODEL,
-      cwd: TEST_CWD,
+      cwd: daemon.staticDir,
       title: params.title,
       labels: { surface: "activity-test" },
     });
@@ -84,11 +98,21 @@ describe("client activity tracking", () => {
         reject(new Error(`Timeout waiting for attention_required (${timeout}ms)`));
       }, timeout);
 
-      const cleanup = client.onAgentAttentionRequired((notification) => {
-        if (notification.agentId !== agentId) return;
+      const feed = attentionFeeds.get(client);
+      if (!feed) {
         clearTimeout(timer);
-        cleanup();
-        resolve({ type: "attention_required", ...notification });
+        reject(new Error("Client has no attention observation"));
+        return;
+      }
+      const cleanup = feed.subscribe({
+        snapshot: () => {},
+        update: (message) => {
+          if (message.type !== "agent_attention_required" || message.payload.agentId !== agentId)
+            return;
+          clearTimeout(timer);
+          cleanup();
+          resolve({ type: "attention_required", ...message.payload });
+        },
       });
     });
   }

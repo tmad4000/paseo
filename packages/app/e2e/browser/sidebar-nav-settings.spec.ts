@@ -31,7 +31,9 @@ import {
   setSidebarNavItemVisible,
 } from "../support/helpers/sidebar-nav-settings";
 
-test("fixed footer line keeps its five icons, Help and Settings at the end", async ({ page }) => {
+test("fixed footer keeps Add project, Usage, Hosts, Import, Help and Settings", async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
   await seedSidebarFooterPreferences(page, [

@@ -536,7 +536,7 @@ function SidebarFooter({
   const newAgentKeys = useShortcutKeys("new-agent");
   const settingsKeys = useShortcutKeys("toggle-settings");
 
-  // One line of icons: Add project, Usage, Hosts, then Help and Settings at the end.
+  // Keep the fork's labeled Add project and Import alongside the Usage entry.
   return (
     <UsageSidebarRoot>
       <View style={styles.footerContainer} testID="sidebar-footer">

@@ -229,7 +229,7 @@ test("notification timeline items are sent only to clients that advertise suppor
   });
   const agent = await capable.client.createAgent({
     provider: "mock",
-    cwd: "/tmp",
+    cwd: daemon.staticDir,
     title: "Notification compatibility",
     model: "ten-second-stream",
   });
@@ -306,7 +306,7 @@ test("plugin timeline items are sent only to clients that advertise support", as
   });
   const agent = await capable.client.createAgent({
     provider: "mock",
-    cwd: "/tmp",
+    cwd: daemon.staticDir,
     title: "Plugin compatibility",
     model: "ten-second-stream",
   });
@@ -400,7 +400,7 @@ test("rewind routes replacement completion by source capability and subscription
   const legacy = await connect({ clientId: "rewind-legacy", selective: false });
   const agent = await initiating.client.createAgent({
     provider: "mock",
-    cwd: "/tmp",
+    cwd: daemon.staticDir,
     title: "Rewind routing",
     model: "ten-second-stream",
   });
@@ -411,22 +411,19 @@ test("rewind routes replacement completion by source capability and subscription
     unrelated.setLegacyTimelineMembership([]),
   ]);
   await initiating.client.sendMessage(agent.id, "Rewind this synthetic prompt");
-  await initiating.client.cancelAgent(agent.id);
-  const timeline = await initiating.client.fetchAgentTimeline(agent.id, {
-    direction: "tail",
-    limit: 0,
-    projection: "canonical",
-  });
-  const target = timeline.entries.find(
-    (entry) =>
-      entry.item.type === "user_message" && entry.item.text === "Rewind this synthetic prompt",
+  const targetMessageId = await waitForRewindMessageId(
+    initiating.client,
+    agent.id,
+    "Rewind this synthetic prompt",
   );
-  if (!target || target.item.type !== "user_message" || !target.item.messageId) {
-    throw new Error("Expected rewindable canonical user message");
-  }
+  await initiating.client.cancelAgent(agent.id);
+  // Cancel acknowledges its caller before the other sockets drain their final turn events.
+  await Promise.all(
+    [initiating, passive, unrelated, legacy].map((connected) => connected.barrier("before-rewind")),
+  );
 
   for (const connected of [initiating, passive, unrelated, legacy]) connected.clear();
-  await initiating.client.rewindAgent(agent.id, target.item.messageId, "conversation");
+  await initiating.client.rewindAgent(agent.id, targetMessageId, "conversation");
   await Promise.all([
     initiating.barrier("rewind-initiator"),
     passive.barrier("rewind-passive"),
@@ -443,7 +440,7 @@ test("rewind routes replacement completion by source capability and subscription
   expect(
     passive.messages.filter((message) => message.type === "agent.timeline.replacement"),
   ).toHaveLength(1);
-  expect(passive.hasTimeline(agent.id)).toBe(false);
+  expect(passive.messages.filter(isAgentStream(agent.id))).toEqual([]);
   expect(legacy.messages.filter(isAgentStream(agent.id)).length).toBeGreaterThan(0);
   expect(
     unrelated.messages.filter((message) => message.type === "agent.timeline.replacement"),
@@ -694,7 +691,7 @@ test("plugin items are gated in provider child streams, child fetches, and rewin
   });
   const agent = await capable.client.createAgent({
     provider: "mock",
-    cwd: "/tmp",
+    cwd: daemon.staticDir,
     model: "ten-second-stream",
   });
   const plugin = {
@@ -754,12 +751,8 @@ test("plugin items are gated in provider child streams, child fetches, and rewin
   expect(oldChild.window).toEqual(newChild.window);
 
   await capable.client.sendMessage(agent.id, "Rewind target");
+  const targetMessageId = await waitForRewindMessageId(capable.client, agent.id, "Rewind target");
   await capable.client.cancelAgent(agent.id);
-  const timeline = await capable.client.fetchAgentTimeline(agent.id, {
-    direction: "tail",
-    projection: "canonical",
-  });
-  const targetMessageId = rewindMessageId(timeline);
   capable.clear();
   legacy.clear();
   await capable.client.rewindAgent(agent.id, targetMessageId, "conversation");
@@ -784,11 +777,25 @@ async function createAttentionWorkspace(client: DaemonClient): Promise<string> {
   return result.workspace.id;
 }
 
-function rewindMessageId(
-  timeline: Awaited<ReturnType<DaemonClient["fetchAgentTimeline"]>>,
-): string {
-  const target = timeline.entries.find((entry) => entry.item.type === "user_message");
-  if (target?.item.type !== "user_message" || !target.item.messageId)
-    throw new Error("Expected rewind target");
-  return target.item.messageId;
+async function waitForRewindMessageId(
+  client: DaemonClient,
+  agentId: string,
+  prompt: string,
+): Promise<string> {
+  const readMessageId = async () => {
+    const timeline = await client.fetchAgentTimeline(agentId, {
+      direction: "tail",
+      limit: 0,
+      projection: "canonical",
+    });
+    const target = timeline.entries.find(
+      (entry) => entry.item.type === "user_message" && entry.item.text === prompt,
+    );
+    return target?.item.type === "user_message" ? target.item.messageId : undefined;
+  };
+  // Send acknowledgement precedes the provider's native user-message history.
+  await expect.poll(readMessageId).toBeTruthy();
+  const messageId = await readMessageId();
+  if (!messageId) throw new Error("Provider rewind target disappeared before cancellation");
+  return messageId;
 }

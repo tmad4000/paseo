@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Page, TestInfo } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { enableReadOnOpen } from "../support/helpers/read-on-open";
@@ -24,6 +24,10 @@ import { projectEquivalenceViewKey } from "../support/helpers/project-view-key";
 import { escapeRegex } from "../support/helpers/regex";
 import { openFilesPanel } from "../support/helpers/workspace-tabs";
 import { seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+
+function containsFocus(row: Locator): Promise<boolean> {
+  return row.evaluate((element) => element.contains(document.activeElement));
+}
 
 const GITHUB_REMOTE_URL = "https://github.com/test-owner/test-repo.git";
 
@@ -429,7 +433,16 @@ test.describe("Sidebar workspace list", () => {
 
       await focusWorkspaceRowWithKeyboard(page, workspace.workspaceId);
       await expectWorkspaceHoverCardOpen(page);
-      await page.keyboard.press("Tab");
+      // Fork trailing controls are also keyboard reachable inside this row.
+      const row = page.getByTestId(
+        `sidebar-workspace-row-${getServerId()}:${workspace.workspaceId}`,
+      );
+      for (let step = 0; step < 6; step++) {
+        await page.keyboard.press("Tab");
+        if (!(await containsFocus(row))) break;
+        await expectWorkspaceHoverCardStaysOpen(page);
+      }
+      await expect.poll(() => containsFocus(row)).toBe(false);
       await expectWorkspaceHoverCardClosed(page);
     } finally {
       await workspace.cleanup();

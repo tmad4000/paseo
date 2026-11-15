@@ -203,6 +203,8 @@ test.describe("usage modal", () => {
     await group.getByTestId("usage-refresh").nth(1).hover();
     await expect(page.getByTestId("usage-freshness-tooltip")).toHaveText("Updated 2h ago");
     await alphaRefresh.hover();
+    // The preceding tooltip fades out while the new one enters.
+    await expect(page.getByTestId("usage-freshness-tooltip")).toHaveCount(1);
     await expect(page.getByTestId("usage-freshness-tooltip")).toHaveText("Updated just now");
   });
 

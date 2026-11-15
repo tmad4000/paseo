@@ -56,58 +56,74 @@ records exact publication/eligibility times, provider release notes, diffs, over
 
 ## Validation status
 
-All suites use disposable task-owned homes/services, one worker, two CPUs and a3GiB Node heap.
-The default5s attempt exposed infrastructure timing limits; the bounded full run uses30s tests
-and60s hooks. Logs retain failed attempts; no empty-suite or platform pass is inferred.
+Local suites run serially with one worker, two CPUs, task-owned homes/services and captured logs.
+Server/unit heaps are bounded at3GiB; app unit/browser/Metro need4–8GiB. Tests use30s deadlines
+and60s hooks where the constrained host requires them. The first combined app attempt exhausted
+its3GiB heap; splitting unit/browser execution passed without removing cases. Default daemon
+fixtures use fake providers. Live-provider prompts and shared sessions are outside this run.
 
-| Check                                                   | Verified result so far                                                                                          |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Builtin plugin unit                                     | 336passed,3skipped                                                                                              |
-| Protocol full                                           | 871passed                                                                                                       |
-| Client full                                             | 240passed                                                                                                       |
-| SDK/highlight                                           | Full commands pass                                                                                              |
-| Server first full                                       | 470files:7266passed,16failed,55skipped; failures are Claude marker1, stale setup moves2, file-observer EMFILE13 |
-| Server affected rerun                                   | 4files,180passed, including corrected contracts and file-observer resource recovery                             |
-| App affected rerun                                      | 4files,65passed; final microphone cue extension enters the full app suite                                       |
-| Expo audio package                                      | Existing test command exits1 because no tests are found; not a green native result                              |
-| Daemon/CLI/owning workspace builds, root lint/typecheck | Pass on integration840708f3                                                                                     |
-| Remaining full suites and browser                       | In progress; actual final conclusions belong to the final PR receipt                                            |
+Durable raw logs, JSON reports, source bindings, dependency publication/SHA receipts and independent
+review are under `/home/dev/code/paseo-maintenance/upstream-go-20261115/`.
 
-Independent Sol `ed43fd6e-e39d-4ad7-b6d7-fecc424381b9` read back codex/gpt-6.1-sol,
-full-access and this exact source cwd, with no pending permissions. Review is read-only and
-source fixes remain with the integration owner. Immutable runtime tree `d9bdf1940d42720ffa1f23e2c04a79850ec07d48` has no further demonstrated runtime defect in Sol review. Full-suite acceptance remains pending; the reviewer required the generated audit to match all completed source adapters.
-Linux does not establish physical macOS/iOS/Android acceptance. No live-provider smoke prompt,
-shared daemon/provider restart, installation, release, merge or deployment is performed.
+| Check                               | Actual evidence                                                                                                                                                                                                                                                 |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Builtin plugins / protocol / client | 336passed/3skipped; protocol77files/871passed; client8files/240passed                                                                                                                                                                                           |
+| SDK / highlight / share worker      | Full SDK/highlight commands pass; share worker18passed                                                                                                                                                                                                          |
+| Server unit full                    | 467passed files/3skipped;7288passed/55skipped/0failed, `server-unit-final-full.*`                                                                                                                                                                               |
+| App unit and browser full           | Current893 hosted default app756files/6983passed/0failed; local browser27files/272passed. `ci-893-132860207049-green.log`, `app-browser-unit-reconciled-full.*`                                                                                                 |
+| CLI units / local integration       | Units366passed/1skipped. Local integration raw full command42/43files passed, exit1; only15-provider lacked OpenCode. Age-verified task-local1.14.46 setup followed by that file's exit0 rerun closes its failure. All three current893 hosted CLI shards pass. |
+| Relay / desktop units               | Relay51passed/1skipped; desktop58files/423passed/4skipped, repeated after main preservation merge                                                                                                                                                               |
+| Website                             | Current893 CI11unit files/482passed; browser59passed/1skipped out of60scheduled, including actual WebKit execution. `ci-893-132860206942-green.log`                                                                                                             |
+| Desktop browser / lifecycle         | Hosted920 source-equivalent Electron launch/lifecycle pass,34renderer browser cases pass, browser-tab WebContents identity/focus/selectors pass; helper cleanup succeeds. `ci-desktop-920-green.log`                                                            |
+| Linux packages                      | Current893 package build and disposable deb/tar/rpm smoke pass; no shared-host installation. `ci-893-desktop-packages-green.log`                                                                                                                                |
+| App Playwright full                 | Current893 four shards complete:826passed,9failed,18skipped,1flaky. Exact failures retained; focused fixture/hover-focus corrections are in validation. These are not green aggregate results.                                                                  |
+| Daemon E2E                          | First full attempt explicitly interrupted, exit-2; no completed aggregate JSON. Corrected terminal31, selective timeline7, relay4 and activity17 all pass in focused full-file reruns. Full corrected E2E rerun pending.                                        |
+| Build / lint / typecheck            | Owning server/CLI stack, root lint/typecheck and packaged12builtin load pass; current893 CI root types/package validation pass. Working browser/daemon fixture batch awaits its final checks.                                                                   |
+| Expo audio                          | Existing package test command exits1 because it finds no tests. No native pass is inferred.                                                                                                                                                                     |
+| Remaining checks                    | Corrected app Playwright, full daemon E2E, versioned local OpenCode bridge and repository script checks remain pending.                                                                                                                                         |
+
+Failed attempts remain in the receipts. The initial server run had16failures (Claude marker1,
+stale setup moves2, file-observer EMFILE13); source/resource corrections pass the final full unit
+run. Earlier public-icon/React-act browser fixture failures pass all27browser-unit files now.
+The current app Playwright failures are separate: retained fork footer/keyboard behavior, date
+and cache-age fixtures, popover geometry/tooltip animation, plus hover-card focus admission.
+
+Independent read-only Sol `ed43fd6e-e39d-4ad7-b6d7-fecc424381b9` verified
+codex/gpt-6.1-sol, full-access, exact source cwd and no pending permissions. Its immutable source
+approval is bound to893b017e/treefc89d9c7; it independently read the green full app/website and
+sandboxed desktop results. Working fixture/UI changes are reviewed but require successful
+checks and a new immutable source binding. Source approval does not establish full GO acceptance.
+
+The main preservation merge098a39a7 retains canonical main146f6e42's PR222update identity and
+PR223Markdown preview. The only import conflict retained the new Markdown link/parser props,
+`markdown-preview-frame` and eligible theme content width. Browser pane/parser/model/hook/view,
+fork badge, update feeds/product names and daemon manager remain main-equivalent. The register
+now has89feature IDs; the nine inherited acceptance follow-ups remain below.
+
+Linux does not establish physical macOS/iOS/Android acceptance. Hosted Windows and macOS
+file-observation jobs provide their stated test scope only. No shared daemon/provider restart,
+release, main merge or deployment is performed.
 
 ## Rollback and ownership
 
-Revert this branch's integration commits through a separate reviewed source PR to restore the
-original fork source. No running artifact or session state changed, so no live rollback was needed.
-A future deployment needs separate authorization, built-artifact identity and session-safe rollback.
+Original fork base:5280b0ddc13d1c4e0942d0b04a29e3fa3b612167. Preserved newer canonical
+main:146f6e4245f21db41c3f99f4d4b9479f512af2f0. Future rollback must preserve PR222andPR223:
+revert PR224's eventual merge relative to mainline1 (or revert its squash commit) through a
+reviewed source PR. Do not reset main to5280or revert the branch's merge of newer main.
+No running artifact/session state changed. Deployment needs separate authorization, artifact
+identity and a session-safe rollback plan.
+
 Integration owner:47b46bea; coordination ask:8be9969e/upstream-merge; reporting root:d3caa262.
-Durable identity/API/review/test receipts live in
-`/home/dev/code/paseo-maintenance/upstream-go-20261115/` on the task host.
 
-The first hosted CI run on `ea9c96e7` also exposed a legacy builtin fixture range,
-a Windows path assertion, a copied workspace-only tsconfig, and Chromium's Ubuntu sandbox launch
-gate. The fixture now declares its supported API range, the path expectation uses native joining,
-and packaged runtime sources exclude the invalid workspace config. Rebuilt output loads all12
-bundled plugins; the focused provider-status4cases and desktop-path7cases pass, as do CI script
-checks, lint, and owning server/desktop typechecks. The full corrected pipeline remains pending.
-
-The daemon web bundle builds successfully:28.16MiB raw,5.56MiB gzip,3.94MiB Brotli.
-For Linux browser processes, the existing root-owned4755 Chrome helper is selected through
-`CHROME_DEVEL_SANDBOX`; Chromium sandboxing stays enabled. The pinned test Chromium probe
-launched, rendered an isolated fixture, and showed a renderer PID namespace, NoNewPrivs1 and
-Seccomp2. No shared-host setting or software version changed. Hosted CI on `c5b4e6bd` found its image
-helper had unsuitable ownership/mode; the subsequent hosted run found `/opt` itself writable
-by a non-root user. CI now snapshots the helper shipped with its existing pinned Playwright
-Chromium into a private temporary directory, installs only that copy with mode4755, emits its
-SHA256 and always removes the directory after browser checks. The privileged copy is restricted
-to ephemeral hosted Linux jobs and does not read or change `/opt`. Same-job code already owns
-passwordless sudo; the cache and ELF screening are not an authentication boundary. The actual
-hosted copy/launch/cleanup result remains pending. Electron development and test launchers no
-longer add inherited `--no-sandbox` flags; desktop Playwright explicitly enables sandboxing.
+Linux browser tests keep Chromium sandboxing enabled. Hosted CI snapshots the helper from its
+existing pinned Playwright browser into a private temporary directory, installs only that copy
+root-owned4755and always cleans it up. It never edits `/opt`. The guard restricts privileged
+setup to ephemeral hosted Linux jobs; same-job code already has passwordless sudo, so the cache
+checks are not an authentication boundary. Adjacent Electron helpers are restored before the
+private directory is removed. Actual hosted copy/launch/cleanup passed for desktop/app/website.
+Task-local Electron helper restoration on this host remains an explicit final cleanup step.
+The existing packaged Linux wrapper's sandbox policy is unchanged; package smoke success is
+not a claim that every packaged launch mode uses the new development/test helper.
 
 ## Complete feature matrix
 
