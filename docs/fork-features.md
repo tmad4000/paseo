@@ -10,6 +10,17 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Graceful daemon restart
+
+`graceful-daemon-restart`: Opt-in daemon startup policy waits for a quiet turn boundary, then
+fences admission, replaces the supervised worker and reloads resident provider handles without
+replaying prompts. See the [lifecycle contract](agent-lifecycle.md#desktop-app-and-daemon-restarts).
+Preserved from canonical [PR228](https://github.com/tmad4000/paseo/pull/228); its owner reports isolated Linux Codex worker replacement. This integration keeps live QA off and verifies combined source separately. Regression coverage:
+manager admission, initialization, permission, timeout and concurrent-operation cases; update
+failure release; queue durability; checkpoint recovery and partial provider failure. The existing
+restart integration file has opt-in Linux supervisor/Codex coverage via
+`PASEO_DAEMON_RESTART_QA=1`.
+
 ## Fork icon badge
 
 `fork-icon-badge`: Preserve the upstream butterfly while identifying Paseo Fork with a blue
@@ -20,14 +31,14 @@ upstream at 16, 32, 64 and 1024 px on light/dark surfaces; keep the branch reada
 and avoid badge clipping under launcher masks. The 16/32 px optical variants, smaller large badge,
 per-platform sheets and circle/squircle coverage checks live with the source SVG. Deterministic
 asset checks and visual review
-pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.34.
+pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.35.
 
 ## App restart preservation
 
 `preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents
-running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-restarts)
+running across app restarts** switch. See the [lifecycle contract](agent-lifecycle.md#desktop-app-and-daemon-restarts)
 and [restart design](design/restart-without-stopping-agents.html). Explicit daemon stop/restart
-retains its existing behavior. Candidate on `sol/restart-preserve-fork`; installed-build and
+retains its existing behavior unless graceful daemon restart is enabled. Merged in [PR #225](https://github.com/tmad4000/paseo/pull/225); installed-build and
 Apple installer verification pending. Regressions: desktop `quit-lifecycle.test.ts`,
 `daemon-manager.test.ts`, `desktop-settings.test.ts`, app settings storage and locale parity.
 The existing `daemon-restart-resume.e2e.test.ts` includes opt-in Linux live Codex coverage via
@@ -356,6 +367,17 @@ Repository issues are disabled, so this stable ID also serves as the follow-up t
 
 ## Reviewing an upstream update or reconciliation
 
+The 2026-11-15 age-limited reconciliation targets upstream `v0.11.4`
+(`dc5b02f7d`, published2026-10-15), preserving newer selective fork fixes.
+The [integration receipt](qa/upstream-v0.11.4-20261115.md) accounts for all92 IDs,
+including the prose-owned features above, and every behavior in the261-commit release delta.
+Its source adaptations preserve recoverable setup failure with stale-move fencing, bundled API
+compatibility, shared audio ownership, SDK subscription cleanup and full localized turn timestamps. Newer canonical PR225 app-restart
+preservation, PR226 actionable Needs you/build provenance, PR227 fork icon assets and PR228 graceful daemon restart remain in the candidate.
+The receipt and [PR224 checks](https://github.com/tmad4000/paseo/pull/224/checks) separate immutable
+source review, actual full-suite outcomes and later fixture corrections. Existing acceptance gaps
+below remain open; source preservation is not installed-build verification.
+
 1. Record the previous shipped fork commit, candidate fork commit, and incoming upstream tag/commit.
    Read this register from the previous fork as well as the candidate: a merge can delete its own
    checklist or tests. Preserve this register and the links to it during conflict resolution.
@@ -404,9 +426,9 @@ as separate states, with results for each target machine/platform.
 
 ## Deferred automation
 
-Jacob prioritized this lightweight register on 2026-10-06 and allowed the new footer browser
-regression test to follow later. This change adds no CI job, full-suite run, or installed-app launch.
-Existing checks still apply to code changes.
+Jacob prioritized this lightweight register on 2026-10-06 and deferred the dedicated footer browser
+regression. Integration receipts record subsequent unit, browser and full-suite coverage. The
+unchecked acceptance and installed-build items below remain open.
 
 - [ ] `footer-time` owner: when restoring the footer, add a focused case to an existing browser suite
       that renders a completed reply and asserts both completion time and duration are visible before

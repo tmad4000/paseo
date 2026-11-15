@@ -12,13 +12,32 @@ initializing → idle → running → idle (or error → closed)
 
 Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idle`, `running`, or `error`. `closed` is the persisted, resumable state for an agent record that has no live provider runtime. State transitions persist to disk and stream to subscribed clients via WebSocket.
 
-## Desktop app restarts
+## Desktop app and daemon restarts
 
 Enable **Keep agents running across app restarts** in desktop daemon settings to retain the
 existing daemon, agent runtimes and terminals on quit and app update. The daemon keeps its
-current version until you restart it separately. Explicit daemon stop/restart still stops its
-runtimes. See the [restart design](design/restart-without-stopping-agents.html) for host-upgrade
-options and the verification boundary.
+current version until you restart it separately. An older installed app cannot honor the new
+setting during its first upgrade; do not use its **Install & restart** action against live turns.
+
+For daemon replacement, opt in at startup with `daemon.gracefulRestart: true` in the daemon's
+`config.json`. Deployment launches can override it with `PASEO_GRACEFUL_RESTART=1`; managed
+launches use persistent configuration. Restart and self-update wait up to five minutes for
+accepted turns, permissions and provider initialization to settle. Active agents can still
+delegate while waiting. At a quiet boundary, new admissions pause, resident identities are
+checkpointed, and the existing supervisor replaces its worker. The new worker reloads those
+provider handles without replaying a prompt. Queued messages remain durable and resume after
+restoration. A deadline or install failure leaves the existing daemon running; a failed provider
+restore appears as an error on that chat and retains its checkpoint for retry.
+
+Issue the restart from the app or an external CLI. A tool running inside a drained agent would
+wait for its own turn. This startup setting does not retrofit an older running daemon or change
+explicit shutdown semantics.
+
+This mode protects accepted foreground turns and saved conversation identity. It still closes
+provider processes at a boundary: terminals, idle background tools and watches do not survive.
+Use the app-preservation setting when those processes must remain alive. An independent agent
+host is required for uninterrupted worker replacement; see the
+[restart design](design/restart-without-stopping-agents.html).
 
 ## Runtime residency
 
@@ -42,8 +61,8 @@ workflows all live in the CLI process, and the completion notification that woul
 agent never arrives. A runtime that dies mid-turn is reported by whatever is draining its stream, but
 between turns nothing is watching, so the agent sits at `idle` looking healthy while its background
 work is gone. Report that exit as a turn failure so the agent lands in `error` with a timeline entry.
-Only the Claude provider does this today; the others still report a death only when a turn happens to
-be in flight.
+Claude and OMP report exits between turns. OMP relaunches from its session file on the next prompt;
+the unfinished turn is lost.
 
 ### Cancellation
 
@@ -443,10 +462,11 @@ Claude Code announces subagent lifecycle on the SDK stream (`task_started` / `ta
 
 - **Not every announced task belongs in the track.** Task subagents announce as `local_agent` and workflows as `local_workflow`; a backgrounded shell announces as `local_bash` with the same `tool_use_id` shape, and ambient housekeeping sets `skip_transcript`. The Claude provider normalizes a workflow to a generic provider-subagent descriptor titled `Workflow`, using Claude's summary as its description and timeline opener. Shared storage, protocol, and UI do not distinguish it from another provider subagent.
 - **A task that was never declared gets no descriptor, by any route.** Filtered tasks still emit `task_notification`s carrying a `tool_use_id`, and still emit frames carrying `parent_tool_use_id`. Attributing either produces a descriptor with no identity and a defaulted `running` status — a nameless row that never finishes. Status, presentation updates, and sidechain frames all route through the declaration table.
-- **Task ids are session-scoped, not turn-scoped.** Cancelling a turn must not clear the routing table: a backgrounded child settles after the interrupt and needs its descriptor to still exist. Cancellation instead terminalizes the declared children that were running in the foreground, and a later `task_notification` is free to correct that guess. Backgrounded children are identified by `task_updated.patch.is_backgrounded`.
+- **Task ids are session-scoped, not turn-scoped.** Cancelling a turn must not clear the routing table: a backgrounded child settles after the interrupt and needs its descriptor to still exist. Cancellation instead terminalizes the declared children that were running in the foreground, and a later `task_notification` is free to correct that guess. Backgrounded children are identified by `is_backgrounded` on `task_started` (set at spawn; a resumed subagent is always background) or, when moved there later, on `task_updated.patch`.
 - **A resumed task can be announced again with a new `tool_use_id`.** The first Task tool id remains the canonical descriptor and later ids are routing aliases for the same session-scoped task. The resumed prompt is added to that child timeline.
 - **Effort is only reachable through hooks.** It appears nowhere on the message stream at any depth, and the level Paseo requests is not necessarily the level that runs — a model that does not support it is silently downgraded. A hook firing inside a subagent reports the active post-downgrade level next to its `agent_id`, which is the same id `task_started` calls `task_id`.
 - **Backgrounded subagents emit no frames carrying `parent_tool_use_id` at all.** Everything keyed off that field sees nothing for one; they are visible only because the task protocol announces them.
+- **Only `system/init` and `result` bracket a main-session turn.** Background subagents emit neither on the main stream, while their task frames, their own background jobs' `task_notification`, and `rate_limit_event` arrive with no `parent_tool_use_id`, the same shape as main-session work. `session_state_changed` stays `running` for as long as any background subagent lives (Claude Code 2.1.280), so it cannot open a turn; its `idle` can close one.
 - **Nested ownership comes from the launching sidechain, not `spawn_depth` alone.** A sidechain's Agent or Bash tool call records the direct owner of that `tool_use_id`; the following `task_started` inherits it. This routes a grandchild descriptor and child-owned background notifications without relying on labels or flattening them into the managed parent.
 - **On replay, `<session>/subagents/` holds every descendant beside the root.** Resolve the tree one proven generation at a time: the root transcript admits direct children, then each admitted sidechain transcript admits its children by `toolUseId`. `spawnDepth` orders candidates but does not establish ownership. Unresolved sidecars remain excluded as ambient or unrelated work.
 - **Replay `totalTokens` is a context-size reading, not cumulative spend.** Claude Code finalizes a subagent by summing the _last_ assistant message's usage block and shipping that as `usage.total_tokens`. Summing per-entry usage instead multiplies the cached prefix by the turn count and reports a number several times larger than the live path.

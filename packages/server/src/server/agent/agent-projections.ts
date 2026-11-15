@@ -213,6 +213,14 @@ function buildStoredPersistenceHandle(
   return toAgentPersistenceHandle(validProviders, record.persistence);
 }
 
+function storedAgentAttention(record: StoredAgentRecord) {
+  return {
+    requiresAttention: record.requiresAttention ?? false,
+    attentionReason: record.attentionReason ?? null,
+    attentionTimestamp: record.attentionTimestamp ?? null,
+  };
+}
+
 export function buildStoredAgentPayload(
   record: StoredAgentRecord,
   validProviders: Iterable<AgentProvider>,
@@ -263,15 +271,14 @@ export function buildStoredAgentPayload(
       : {}),
     createdBy,
     status: record.lastStatus,
+    lastError: record.lastError ?? undefined,
     capabilities: defaultCapabilities,
     currentModeId: record.lastModeId ?? null,
     availableModes: [],
     pendingPermissions: [],
     persistence,
     title: record.title ?? null,
-    requiresAttention: record.requiresAttention ?? false,
-    attentionReason: record.attentionReason ?? null,
-    attentionTimestamp: record.attentionTimestamp ?? null,
+    ...storedAgentAttention(record),
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
     artifacts: record.artifacts ?? [],

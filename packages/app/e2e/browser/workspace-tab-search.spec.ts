@@ -74,6 +74,12 @@ for (const compact of [false, true]) {
       await trigger.click();
       await search.fill("session");
       await expect(page.getByRole("option")).toHaveCount(2);
+      const firstResult = page.getByRole("option").first();
+      await expect(firstResult).toContainText("Implementation session");
+      const firstResultId = await firstResult.getAttribute("id");
+      expect(firstResultId).toBeTruthy();
+      // Results render before the new query's highlight effect has synchronized.
+      await expect(search).toHaveAttribute("aria-activedescendant", firstResultId!);
       const beforeRepeat = await search.getAttribute("aria-activedescendant");
       await search.press("Alt+Shift+k");
       await expect(search).toHaveValue("session");

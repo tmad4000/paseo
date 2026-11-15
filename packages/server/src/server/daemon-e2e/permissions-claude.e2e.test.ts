@@ -10,6 +10,21 @@ function tmpCwd(): string {
   return mkdtempSync(path.join(tmpdir(), "daemon-e2e-"));
 }
 
+function hasPermissionResolution(
+  collector: MessageCollector,
+  agentId: string,
+  requestId: string,
+  behavior: "allow" | "deny",
+): boolean {
+  return collector.messages.some(
+    (message) =>
+      message.type === "agent_permission_resolved" &&
+      message.payload.agentId === agentId &&
+      message.payload.requestId === requestId &&
+      message.payload.resolution.behavior === behavior,
+  );
+}
+
 describe("daemon E2E - permission flow: Claude", () => {
   let ctx: DaemonTestContext;
   let collector: MessageCollector;
@@ -17,11 +32,15 @@ describe("daemon E2E - permission flow: Claude", () => {
   beforeEach(async () => {
     ctx = await createDaemonTestContext();
     collector = createMessageCollector(ctx.client);
+    await collector.observeEvents(["agent_permission_request", "agent_permission_resolved"]);
   });
 
   afterEach(async () => {
-    collector.unsubscribe();
-    await ctx.cleanup();
+    try {
+      await collector.unsubscribe();
+    } finally {
+      await ctx.cleanup();
+    }
   }, 60_000);
 
   test("approves permission and executes command", async () => {
@@ -54,16 +73,9 @@ describe("daemon E2E - permission flow: Claude", () => {
       expect(finalState.status).toBe("idle");
       expect(existsSync(filePath)).toBe(false);
 
-      const hasPermissionResolved = collector.messages.some((m) => {
-        if (m.type !== "agent_stream") return false;
-        if (m.payload.agentId !== agent.id) return false;
-        return (
-          m.payload.event.type === "permission_resolved" &&
-          m.payload.event.requestId === permission.id &&
-          m.payload.event.resolution.behavior === "allow"
-        );
-      });
-      expect(hasPermissionResolved).toBe(true);
+      await expect
+        .poll(() => hasPermissionResolution(collector, agent.id, permission.id, "allow"))
+        .toBe(true);
 
       await ctx.client.deleteAgent(agent.id);
     } finally {
@@ -104,16 +116,9 @@ describe("daemon E2E - permission flow: Claude", () => {
       expect(finalState.status).toBe("idle");
       expect(existsSync(filePath)).toBe(true);
 
-      const hasPermissionResolved = collector.messages.some((m) => {
-        if (m.type !== "agent_stream") return false;
-        if (m.payload.agentId !== agent.id) return false;
-        return (
-          m.payload.event.type === "permission_resolved" &&
-          m.payload.event.requestId === permission.id &&
-          m.payload.event.resolution.behavior === "deny"
-        );
-      });
-      expect(hasPermissionResolved).toBe(true);
+      await expect
+        .poll(() => hasPermissionResolution(collector, agent.id, permission.id, "deny"))
+        .toBe(true);
 
       await ctx.client.deleteAgent(agent.id);
     } finally {

@@ -1,3 +1,4 @@
+import { resolveBuiltinPluginsRoot } from "./builtin/index.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { fork } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -2031,3 +2032,94 @@ export default function contribute(plugin: any) {
     }
   });
 });
+
+it("rejects a usage source without discovery at registration", async () => {
+  const directory = await createPlugin(
+    "missing-discovery",
+    `
+export default function contribute(server) {
+  server.registerUsageSource({
+    id: "missing-discovery",
+    label: "Missing discovery",
+    input: { parseAsync: async (value) => value },
+    fetch: async () => ({ status: "available", windows: [] }),
+  });
+  return () => {};
+}
+`,
+  );
+  const runtime = createTestRuntime();
+  try {
+    await expect(runtime.startPlugin("missing-discovery", directory)).rejects.toThrow(
+      "Invalid usage source: missing-discovery",
+    );
+  } finally {
+    await runtime.stopAll();
+  }
+});
+
+it("starts the reviewed bundled APIs at the actual fork product version", async () => {
+  const { version } = JSON.parse(
+    await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+  );
+  const runtime = createTestRuntime({}, pino({ level: "silent" }), version);
+  try {
+    for (const id of ["codex-usage-source", "muse-provider", "hoplite-provider"]) {
+      await runtime.startBuiltinPlugin({
+        id,
+        directory: path.join(resolveBuiltinPluginsRoot(), id),
+      });
+      expect(runtime.catalog().find((entry) => entry.id === id)?.requirements?.paseo).toBe(
+        ">=0.11.0",
+      );
+    }
+  } finally {
+    await runtime.stopAll();
+  }
+});
+
+it("keeps external compatibility checks on the real fork version", async () => {
+  const directory = await createPlugin(
+    "external-version",
+    "export default function () { return () => {}; }",
+  );
+  await writeFile(
+    path.join(directory, "paseo-plugin.json"),
+    JSON.stringify({ id: "external-version", requirements: { paseo: ">=0.11.0" } }),
+  );
+  const runtime = createTestRuntime({}, pino({ level: "silent" }), "0.10.0-beta.30");
+  try {
+    await expect(runtime.validatePlugin(directory)).rejects.toThrow(
+      "Your daemon is 0.10.0-beta.30",
+    );
+    await expect(runtime.startPlugin("external-version", directory)).rejects.toThrow(
+      "Your daemon is 0.10.0-beta.30",
+    );
+  } finally {
+    await runtime.stopAll();
+  }
+});
+
+it.each([">=0.11.5", "not a semver range"])(
+  "rejects bundled requirements beyond the reviewed API: %s",
+  async (range) => {
+    const directory = await createPlugin(
+      "bundled-version",
+      "export default function () { return () => {}; }",
+    );
+    await writeFile(
+      path.join(directory, "paseo-plugin.json"),
+      JSON.stringify({ id: "bundled-version", requirements: { paseo: range } }),
+    );
+    const runtime = createTestRuntime();
+    try {
+      await expect(
+        runtime.startBuiltinPlugin({ id: "bundled-version", directory }),
+      ).rejects.toThrow();
+      await expect(runtime.startBuiltinPlugin({ id: "wrong-id", directory })).rejects.toThrow();
+      expect(runtime.catalog()).toEqual([]);
+    } finally {
+      await runtime.stopAll();
+    }
+  },
+);

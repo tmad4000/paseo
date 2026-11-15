@@ -530,6 +530,13 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
   };
 }
 
+function resolveGracefulRestartSetting(
+  env: NodeJS.ProcessEnv,
+  persisted: PersistedConfig,
+): boolean {
+  return parseBooleanEnv(env.PASEO_GRACEFUL_RESTART) ?? persisted.daemon?.gracefulRestart ?? false;
+}
+
 function resolveStaticLoadConfigSettings(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
@@ -541,6 +548,7 @@ function resolveStaticLoadConfigSettings(
       cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
+    gracefulRestart: resolveGracefulRestartSetting(env, persisted),
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
@@ -576,6 +584,7 @@ export function resolveConfigFromPersisted(
     mcpInjectIntoAgents,
     browserToolsEnabled,
     autoArchiveAfterMerge,
+    gracefulRestart,
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,
@@ -620,6 +629,7 @@ export function resolveConfigFromPersisted(
     browserToolsEnabled,
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
+    gracefulRestart,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
     terminalProfiles,
@@ -627,6 +637,8 @@ export function resolveConfigFromPersisted(
     skillSelection: persisted.agents?.skills?.selection,
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins,
+    pluginRegistries: persisted.pluginRegistries,
+    pluginRegistryUrl: env.PASEO_PLUGIN_REGISTRY,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",
     agentStoragePath: path.join(paseoHome, "agents"),
@@ -725,9 +737,16 @@ function resolveCoreDaemonOverridePaths(
   ) {
     paths.push("daemon.git.maxProcessConcurrency");
   }
+  paths.push(...gracefulRestartOverridePaths(env));
   if (env.PASEO_APP_BASE_URL !== undefined) paths.push("app.baseUrl");
   if (env.PASEO_PASSWORD?.trim()) paths.push("daemon.auth.password");
   return paths;
+}
+
+function gracefulRestartOverridePaths(env: NodeJS.ProcessEnv): string[] {
+  return parseBooleanEnv(env.PASEO_GRACEFUL_RESTART) === undefined
+    ? []
+    : ["daemon.gracefulRestart"];
 }
 
 function resolveRelayOverridePaths(

@@ -5,7 +5,7 @@ import { Clock } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { AgentStatusDot } from "@/components/agent-status-dot";
 import { getCommandCenterIcon } from "@/command-center/icon";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +55,7 @@ function openRecentSessionsInCommandCenter(restoreFocusTo: HTMLElement | null): 
 function RecentSessionItem({ row }: { row: RecentSessionRow }) {
   const { t } = useTranslation();
   // Cached per provider, themed to the muted foreground.
-  const ProviderIcon = getCommandCenterIcon(getProviderIcon(row.provider, row.serverId));
+  const ProviderIcon = getCommandCenterIcon(useProviderIcon(row.provider, row.serverId));
   const leading = useMemo(() => <ProviderIcon size={16} />, [ProviderIcon]);
   const trailing = useMemo(
     () => (

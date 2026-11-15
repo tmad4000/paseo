@@ -326,7 +326,7 @@ describe("daemon E2E (real opencode) - send while working and interrupt", () => 
       expect(assistantTexts.some((text) => text.includes("[System Error]"))).toBe(false);
       expect(assistantTexts.some((text) => text.includes(SYSTEM_ERROR_SNIPPET))).toBe(false);
     } finally {
-      collector.unsubscribe();
+      await collector.unsubscribe();
       await client.close().catch(() => undefined);
       await daemon.close();
       rmSync(cwd, { recursive: true, force: true });
@@ -397,7 +397,7 @@ describe("daemon E2E (real opencode) - send while working and interrupt", () => 
       expect(assistantTexts.some((text) => text.includes("[System Error]"))).toBe(false);
       expect(assistantTexts.some((text) => text.includes(SYSTEM_ERROR_SNIPPET))).toBe(false);
     } finally {
-      collector.unsubscribe();
+      await collector.unsubscribe();
       await client.close().catch(() => undefined);
       await daemon.close();
       rmSync(cwd, { recursive: true, force: true });

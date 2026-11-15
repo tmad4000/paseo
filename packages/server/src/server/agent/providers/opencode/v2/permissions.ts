@@ -38,6 +38,13 @@ export class SessionPermissions {
   list() {
     return [...this.pending.values()];
   }
+  isOwnedBy(requestId: string, sessionID: string) {
+    return (
+      this.forms.get(requestId)?.sessionID === sessionID ||
+      this.permissionOwners.get(requestId) === sessionID
+    );
+  }
+
   async expireAll() {
     for (const request of this.list()) {
       this.expiring.add(request.id);

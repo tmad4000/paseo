@@ -697,6 +697,11 @@ process.stdin.on("data", (chunk) => {
     modeId: "auto",
   });
 
+  expect(session.usageSession?.()).toMatchObject({
+    provider: "codex",
+    env: { CODEX_HOME: providerCodexHome },
+  });
+  expect(session.usageSession?.()?.sessionKey).toBe(session.usageSession?.()?.sessionKey);
   try {
     return await run({
       session,
@@ -708,6 +713,7 @@ process.stdin.on("data", (chunk) => {
     });
   } finally {
     await session.close();
+    expect(session.usageSession?.()).toBeNull();
     vi.unstubAllEnvs();
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -767,6 +773,7 @@ let buffer = "";
 function resultFor(method, params) {
   if (method === "initialize") return {};
   if (method === "collaborationMode/list") return { data: [] };
+  if (method === "model/list") return { data: [] };
   if (method === "skills/list") {
     const cwds = params && params.cwds;
     const projectCwd = ${JSON.stringify(projectCwd)};
@@ -1811,6 +1818,28 @@ describe("Codex app-server provider", () => {
     await session.close();
   });
 
+  test("resumed session exposes usage before connecting and not after close", async () => {
+    let spawns = 0;
+    const session = new CodexAppServerAgentSession(
+      createConfig({ cwd: "/workspace/project" }),
+      { sessionId: "saved-thread" },
+      createTestLogger(),
+      async () => {
+        spawns++;
+        throw new Error("unexpected spawn");
+      },
+      { environment: { HOME: "/fixture/codex", CODEX_HOME: "/fixture/profile" } },
+    );
+    expect(session.usageSession()).toMatchObject({
+      provider: "codex",
+      env: { CODEX_HOME: "/fixture/profile" },
+      sessionKey: expect.any(String),
+    });
+    expect(spawns).toBe(0);
+    await session.close();
+    expect(session.usageSession()).toBeNull();
+  });
+
   test("loads archived Codex history without resuming the native thread", async () => {
     const threadRequests: string[] = [];
     const appServer = createFakeCodexAppServer({
@@ -2403,7 +2432,12 @@ describe("Codex app-server provider", () => {
       throw new Error(`resumeSession timed out; thread requests: ${threadRequests.join(", ")}`);
     }
 
-    expect(threadRequests).toEqual(["config/read", "thread/loaded/list", "thread/resume"]);
+    expect(threadRequests).toEqual([
+      "model/list",
+      "config/read",
+      "thread/loaded/list",
+      "thread/resume",
+    ]);
     expect(outcome).toBe("rejected");
     appServer.assertNoErrors();
   });
@@ -6729,6 +6763,23 @@ describe("Codex app-server provider", () => {
         }),
       }),
     );
+  });
+
+  test("provider persistence leaves options owned by the stored agent config", async () => {
+    const appServer = createFakeCodexAppServer();
+    const provider = createProviderWithFakeAppServer(appServer);
+    const session = await provider.createSession(
+      createConfig({ providerOptions: { sandbox_mode: "read-only", approval_policy: "never" } }),
+    );
+    try {
+      await session.startTurn("persist the configured session");
+      await appServer.waitForTurnStart();
+      const handle = session.describePersistence()!;
+      expect(handle.metadata).not.toHaveProperty("providerOptions");
+      appServer.assertNoErrors();
+    } finally {
+      await session.close();
+    }
   });
 });
 

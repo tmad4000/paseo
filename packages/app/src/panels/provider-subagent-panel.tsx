@@ -7,7 +7,7 @@ import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view
 import { useStreamChatLinks } from "@/chat-links/host";
 import type { ChatLink } from "@/chat-links/model";
 import { ChatLinksTrack, type ChatLinkActions, type ChatLinksHistory } from "@/chat-links/track";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import {
   resolveComposerTrackControlClearance,
   resolveComposerTrackTailClearance,
@@ -110,7 +110,7 @@ function useProviderSubagentDescriptor(
       subagentType && subagentType !== label ? `${subagentType} · ${providerLabel}` : providerLabel,
     tooltip: label,
     titleState: descriptor ? "ready" : "loading",
-    icon: getProviderIcon(provider, context.serverId),
+    icon: useProviderIcon(provider, context.serverId),
     statusBucket: descriptor
       ? deriveSidebarStateBucket({
           status: providerSubagentLifecycleStatus(descriptor.status),

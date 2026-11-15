@@ -32,6 +32,7 @@ export interface WorkspaceTabPresentation {
   subtitle: string;
   tooltip: string;
   modified: boolean;
+  showCloseButton: boolean;
   titleState: "ready" | "loading";
   icon: React.ComponentType<PanelIconProps>;
   statusBucket: SidebarStateBucket | null;
@@ -100,6 +101,7 @@ function WorkspaceTabPresentationResolverInner({
       subtitle: descriptor.subtitle,
       tooltip: descriptor.tooltip,
       modified: attributes.modified,
+      showCloseButton: registration.showCloseButton,
       titleState: descriptor.titleState,
       icon: descriptor.icon,
       statusBucket: descriptor.statusBucket,
@@ -116,6 +118,7 @@ function WorkspaceTabPresentationResolverInner({
       tab.key,
       tab.kind,
       attributes.modified,
+      registration.showCloseButton,
     ],
   );
 

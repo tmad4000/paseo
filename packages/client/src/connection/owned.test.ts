@@ -7,13 +7,14 @@ interface Snapshot {
   requestId: string;
 }
 
-function connection() {
+function connection(release?: (id: string) => Promise<void>) {
   const released: string[] = [];
   const failures: unknown[] = [];
   const requests: Array<(id: string) => void> = [];
   const subscriptions = new OwnedSubscriptions({
     release: async (id) => {
       released.push(id);
+      await release?.(id);
     },
     failed: (error) => {
       failures.push(error);
@@ -126,4 +127,74 @@ test("a late listener after bounded replay overflow gets a fresh snapshot", asyn
   expect(first).toEqual(["old", "fresh"]);
   expect(late).toEqual(["fresh", "update"]);
   await handle.release();
+});
+
+test("closing settles an in-flight release rejected by transport shutdown", async () => {
+  let rejectRelease!: (error: Error) => void;
+  const remoteRelease = new Promise<void>((_resolve, reject) => {
+    rejectRelease = reject;
+  });
+  let releaseStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    releaseStarted = resolve;
+  });
+  const c = connection(async () => {
+    releaseStarted();
+    await remoteRelease;
+  });
+  const handle = c.observe();
+  c.requests[0]!("terminal-owner");
+  await handle.ready;
+  const releasing = handle.release();
+  const rejectedRelease = expect(releasing).rejects.toThrow("transport closed");
+  await started;
+  c.subscriptions.disconnected();
+  const closing = c.subscriptions.close();
+  rejectRelease(new Error("transport closed"));
+  await rejectedRelease;
+  await expect(closing).resolves.toBeUndefined();
+  c.subscriptions.restore();
+  expect(c.requests).toHaveLength(1);
+  expect(c.released).toEqual(["terminal-owner"]);
+});
+
+test("a connected release still rejects without retaining a disposed registration", async () => {
+  const c = connection(async () => {
+    throw new Error("release refused");
+  });
+  const handle = c.observe();
+  c.requests[0]!("failed-release");
+  await handle.ready;
+  await expect(handle.release()).rejects.toThrow("release refused");
+  await expect(c.subscriptions.close()).resolves.toBeUndefined();
+  c.subscriptions.restore();
+  expect(c.requests).toHaveLength(1);
+  expect(c.released).toEqual(["failed-release"]);
+});
+
+test("closing a connected owner preserves its remote release failure", async () => {
+  let rejectRelease!: (error: Error) => void;
+  let releaseStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    releaseStarted = resolve;
+  });
+  const pending = new Promise<void>((_resolve, reject) => {
+    rejectRelease = reject;
+  });
+  const c = connection(async () => {
+    releaseStarted();
+    await pending;
+  });
+  const handle = c.observe();
+  c.requests[0]!("connected-close");
+  await handle.ready;
+  const closing = c.subscriptions.close();
+  const rejected = expect(closing).rejects.toThrow("release refused");
+  await started;
+  rejectRelease(new Error("release refused"));
+  await rejected;
+  c.subscriptions.disconnected();
+  c.subscriptions.restore();
+  expect(c.requests).toHaveLength(1);
+  expect(c.released).toEqual(["connected-close"]);
 });

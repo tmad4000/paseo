@@ -2,7 +2,7 @@
 
 Paseo is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
 
-**Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, and Pi.
+**Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, and Muse Code.
 
 ## Repository map
 
@@ -75,6 +75,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/android.md](docs/android.md)                                   | App variants, local/cloud builds, EAS workflows, version codes, F-Droid source builds and store metadata                       |
 | [docs/docker.md](docs/docker.md)                                     | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
 | [docs/fork-features.md](docs/fork-features.md) | Fork behavior register, reconciliation matrix, installed-build smoke receipts, and deferred regression coverage |
+| [docs/qa/upstream-v0.11.4-20261115.md](docs/qa/upstream-v0.11.4-20261115.md) | Age-eligible release reconciliation, complete feature matrix, conflict adapters and validation receipt |
 | [docs/wiki/README.md](docs/wiki/README.md) | Project wiki: discussion memory — past asks, research, options weighed, decisions (check before re-researching a question) |
 | [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
 | [docs/terminal-activity.md](docs/terminal-activity.md)               | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |

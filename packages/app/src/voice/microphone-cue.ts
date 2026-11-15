@@ -1,4 +1,4 @@
-import type { AudioPlaybackSource } from "./audio-engine-types";
+import type { AudioPlaybackSource } from "../audio/audio-engine-types";
 
 /** Two descending notes mean muted; ascending notes mean listening again. */
 export function createMicrophoneCue(muted: boolean): AudioPlaybackSource {

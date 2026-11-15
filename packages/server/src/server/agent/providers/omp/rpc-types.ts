@@ -8,6 +8,7 @@ export const OmpThinkingLevelSchema = z.enum([
   "high",
   "xhigh",
   "max",
+  "auto",
 ]);
 
 export const OmpImageContentSchema = z
@@ -152,6 +153,8 @@ export const OmpSessionStateSchema = z
     isStreaming: z.boolean(),
     isCompacting: z.boolean(),
     autoCompactionEnabled: z.boolean().optional(),
+    fastModeEnabled: z.boolean().optional(),
+    fastModeActive: z.boolean().optional(),
     sessionFile: z.string().optional(),
     sessionId: z.string(),
     sessionName: z.string().optional(),
@@ -357,7 +360,8 @@ export const OmpAgentSessionEventSchema = z.discriminatedUnion("type", [
 export const OmpTodoItemSchema = z
   .object({
     content: z.string(),
-    status: z.enum(["pending", "in_progress", "completed", "abandoned"]),
+    status: z.enum(["pending", "in_progress", "completed", "abandoned", "blocked"]),
+    blocker: z.string().optional(),
   })
   .passthrough();
 export const OmpTodoPhaseSchema = z
@@ -500,6 +504,8 @@ export const OmpRuntimeEventSchema = z.discriminatedUnion("type", [
       type: z.literal("prompt_result"),
       id: z.string().optional(),
       agentInvoked: z.boolean().optional(),
+      status: z.string().optional(),
+      error: z.object({ message: z.string() }).passthrough().optional(),
     })
     .passthrough(),
   z.object({ type: z.literal("process_exit"), error: z.string() }).passthrough(),
@@ -519,6 +525,7 @@ export const OmpRuntimeEventSchema = z.discriminatedUnion("type", [
   OmpRpcHostToolCallRequestSchema,
   OmpRpcHostToolCancelRequestSchema,
   OmpRpcHostToolUpdateSchema,
+  z.object({ type: z.literal("model_changed") }).passthrough(),
 ]);
 
 const OmpCommandBase = { id: z.string().optional() };
@@ -537,6 +544,13 @@ export const OmpRpcCommandSchema = z.discriminatedUnion("type", [
   z.object({ ...OmpCommandBase, type: z.literal("set_auto_compaction"), enabled: z.boolean() }),
   z.object({ ...OmpCommandBase, type: z.literal("abort") }),
   z.object({ ...OmpCommandBase, type: z.literal("get_state") }),
+  z.object({
+    ...OmpCommandBase,
+    type: z.literal("steer"),
+    message: z.string(),
+    images: z.array(OmpImageContentSchema).optional(),
+  }),
+  z.object({ ...OmpCommandBase, type: z.literal("set_fast_mode"), enabled: z.boolean() }),
   z.object({ ...OmpCommandBase, type: z.literal("get_messages") }),
   z.object({ ...OmpCommandBase, type: z.literal("get_available_models") }),
   z.object({
@@ -621,6 +635,36 @@ export type OmpSubagentEventPayload = z.infer<typeof OmpSubagentEventPayloadSche
 export type OmpAssistantMessageEvent = z.infer<typeof OmpAssistantMessageEventSchema>;
 export type OmpAgentSessionEvent = z.infer<typeof OmpAgentSessionEventSchema>;
 export type OmpRuntimeEvent = z.infer<typeof OmpRuntimeEventSchema>;
+
+/**
+ * COMPAT(ompLatePromptRejection): added in v0.11.0, remove after 2027-04-05 once the
+ * minimum supported OMP version emits prompt_result errors.
+ * OMP 18.3 reports a prompt it rejects after acknowledging it, such as one whose model has
+ * no API key, only as a second failed `response` frame for the prompt id. Later releases
+ * report the same outcome as a `prompt_result` with `status: "error"`.
+ */
+const OmpLatePromptRejectionSchema = z.object({
+  type: z.literal("response"),
+  command: z.literal("prompt"),
+  id: z.string(),
+  success: z.literal(false),
+  error: z.string(),
+});
+
+export function parseOmpRuntimeEvent(message: unknown): OmpRuntimeEvent | null {
+  const rejection = OmpLatePromptRejectionSchema.safeParse(message);
+  if (rejection.success) {
+    return {
+      type: "prompt_result",
+      id: rejection.data.id,
+      agentInvoked: false,
+      status: "error",
+      error: { message: rejection.data.error },
+    };
+  }
+  const event = OmpRuntimeEventSchema.safeParse(message);
+  return event.success ? event.data : null;
+}
 export type OmpTodoItem = z.infer<typeof OmpTodoItemSchema>;
 export type OmpTodoPhase = z.infer<typeof OmpTodoPhaseSchema>;
 export type OmpTodoReminderEvent = z.infer<typeof OmpTodoReminderEventSchema>;

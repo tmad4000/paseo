@@ -4,7 +4,7 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { CircleCheck, MoreVertical } from "lucide-react-native";
 import { AgentStatusMenuTrigger, useAgentStatusMenuPages } from "@/agent-status/menu";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import {
   ContextMenu,
@@ -34,7 +34,7 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useAgentReadAction } from "@/workspace/use-agent-read-action";
 import { SessionStatusIndicator } from "./project-leading-visual";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
-import { STATUS_BUCKET_LABELS } from "@/hooks/sidebar-status-view-model";
+import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
 import { useAgentSeenNotRead } from "@/workspace/use-agent-seen";
 import { getSidebarRowBackdrop } from "./sidebar-row-backdrop";
 import { sidebarSessionMeta, type SidebarSessionRow } from "./sidebar-sessions";
@@ -54,7 +54,7 @@ function ProviderGlyph({
   serverId: string;
   color?: string;
 }) {
-  const Icon = getProviderIcon(provider, serverId);
+  const Icon = useProviderIcon(provider, serverId);
   return <Icon size={14} color={color ?? "currentColor"} />;
 }
 const ThemedProviderGlyph = withUnistyles(ProviderGlyph);
@@ -224,7 +224,7 @@ const SessionRow = memo(function SessionRow({
         >
           <IconTooltip
             // Done draws no badge, so there is no status mark to explain.
-            label={row.statusBucket === "done" ? null : STATUS_BUCKET_LABELS[row.statusBucket]}
+            label={row.statusBucket === "done" ? null : getStatusBucketLabel(row.statusBucket, t)}
             side="right"
           >
             <SessionStatusIndicator

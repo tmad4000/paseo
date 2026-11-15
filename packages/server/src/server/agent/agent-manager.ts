@@ -1,5 +1,6 @@
+import { setTimeout as waitForRestartPoll } from "node:timers/promises";
 import type { WorkspaceRegistry } from "../workspace-registry.js";
-import { runWorkspaceMutation } from "../workspace-mutations.js";
+import { getWorkspacePreparationRevision, runWorkspaceMutation } from "../workspace-mutations.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -57,7 +58,7 @@ import {
 } from "@getpaseo/protocol/agent-labels";
 import type { AgentArtifact } from "@getpaseo/protocol/agent-types";
 import type { Logger } from "pino";
-import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
@@ -357,11 +358,6 @@ interface AgentManagerRescueTimeouts {
 interface ProviderEnabledFlag {
   enabled: boolean;
   derivedFromProviderId?: string | null;
-  validateOptions?: (options: ProviderOptions | undefined) => ProviderOptions | undefined;
-  applyOptions?: (
-    config: AgentSessionConfig,
-    options: ProviderOptions | undefined,
-  ) => AgentSessionConfig;
   applyToolPolicy?: (
     config: AgentSessionConfig,
     toolPolicy: ToolPolicy | undefined,
@@ -386,6 +382,10 @@ export interface CreateAgentOptions {
 }
 
 export interface AgentManagerOptions {
+  /** Opt-in restart boundary; persists resident identities after every accepted turn settles. */
+  restartCheckpoint?: (agentIds: string[]) => Promise<void>;
+  restartCheckpointClear?: () => Promise<void>;
+  onRestartAdmissionReopened?: () => void;
   serverId?: string;
   pluginLifecycle?: PluginLifecycle;
   clients?: ProviderClientMap;
@@ -655,6 +655,7 @@ interface AgentWorkspaceMoveInput {
   workspaceId: string;
   expectedWorkspaceId: string;
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
+  expectedPreparation?: { source: number; destination: number };
 }
 
 interface AgentMetadataPatch {
@@ -875,9 +876,17 @@ export class AgentManager {
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private acceptingAgentRegistrations = true;
+  private readonly restartCheckpoint: AgentManagerOptions["restartCheckpoint"];
+  private readonly restartCheckpointClear: AgentManagerOptions["restartCheckpointClear"];
+  private readonly onRestartAdmissionReopened: AgentManagerOptions["onRestartAdmissionReopened"];
+  private restartAdmissionClosed = false;
+  private restartPreparation: Promise<void> | null = null;
   private readonly serverId?: string;
 
   constructor(options: AgentManagerOptions) {
+    this.restartCheckpoint = options.restartCheckpoint;
+    this.restartCheckpointClear = options.restartCheckpointClear;
+    this.onRestartAdmissionReopened = options.onRestartAdmissionReopened;
     this.serverId = options.serverId;
     this.pluginLifecycle = options.pluginLifecycle;
     this.idFactory = options?.idFactory ?? (() => randomUUID());
@@ -982,6 +991,111 @@ export class AgentManager {
 
   setPaseoToolCatalogFactory(factory: PaseoToolCatalogFactory | null): void {
     this.paseoToolCatalogFactory = factory;
+  }
+
+  isRestartAdmissionClosed(): boolean {
+    return this.restartAdmissionClosed;
+  }
+
+  prepareForRestart(signal: AbortSignal): Promise<void> {
+    if (!this.restartCheckpoint) return Promise.resolve();
+    if (this.restartPreparation)
+      return Promise.reject(new Error("A daemon restart or update is already pending"));
+    if (signal.aborted) return Promise.reject(signal.reason);
+    // Active turns can still delegate work while we wait. Fence synchronously at
+    // the quiet boundary, before yielding for persistence or supervisor handoff.
+    this.logger.info(
+      { residentAgents: this.agents.size },
+      "Waiting for agent turns before daemon restart",
+    );
+    const preparation = (async () => {
+      try {
+        while (true) {
+          signal.throwIfAborted();
+          while (this.hasPendingRestartWork()) {
+            await waitForRestartPoll(25, undefined, { signal });
+          }
+          this.restartAdmissionClosed = true;
+          await this.flushForShutdown();
+          signal.throwIfAborted();
+          if (this.hasPendingRestartWork()) {
+            this.reopenRestartAdmission();
+            continue;
+          }
+          const ids = [...this.agents.values()]
+            .filter((agent) => !agent.internal && agent.session && agent.persistence)
+            .map((agent) => agent.id);
+          await this.restartCheckpoint!(ids);
+          signal.throwIfAborted();
+          if (!this.hasPendingRestartWork()) return;
+          this.reopenRestartAdmission();
+        }
+      } catch (error) {
+        await this.releasePreparedRestart();
+        if (
+          signal.aborted &&
+          signal.reason instanceof Error &&
+          signal.reason.name === "TimeoutError"
+        ) {
+          throw new Error(
+            "Restart deferred: agent turns did not finish before the deadline; the daemon is still running",
+            { cause: error },
+          );
+        }
+        throw signal.aborted ? signal.reason : error;
+      }
+    })();
+    this.restartPreparation = preparation;
+    return preparation;
+  }
+
+  async releasePreparedRestart(): Promise<void> {
+    if (!this.restartCheckpoint) return;
+    try {
+      await this.restartCheckpointClear?.();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to clear deferred restart checkpoint");
+    } finally {
+      this.restartPreparation = null;
+      this.reopenRestartAdmission();
+    }
+  }
+
+  private reopenRestartAdmission(): void {
+    const wasClosed = this.restartAdmissionClosed;
+    this.restartAdmissionClosed = false;
+    if (!wasClosed) return;
+    try {
+      this.onRestartAdmissionReopened?.();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to reopen queued delivery after deferred restart");
+    }
+  }
+
+  private hasPendingRestartWork(): boolean {
+    return (
+      this.agentRegistrationTasks.size > 0 ||
+      this.foregroundMutationTails.size > 0 ||
+      this.lifecycleMutationTails.size > 0 ||
+      [...this.agents.values()].some(
+        (agent) =>
+          agent.lifecycle === "initializing" ||
+          this.hasInFlightRun(agent.id) ||
+          agent.pendingPermissions.size > 0 ||
+          agent.inFlightPermissionResponses.size > 0 ||
+          agent.pendingReplacement,
+      )
+    );
+  }
+
+  private assertRestartAdmissionOpen(): void {
+    if (this.restartAdmissionClosed) {
+      // A queue drain can already hold a receipt when admission closes. This
+      // rejection precedes provider dispatch, so its receipt is safe to retry.
+      throw Object.assign(new Error("Daemon is restarting; retry after reconnecting"), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      });
+    }
   }
 
   getPaseoToolPolicy(agentId: string): ProviderPaseoToolsPolicy | undefined {
@@ -1284,6 +1398,11 @@ export class AgentManager {
     }
   }
 
+  usageSession(id: string) {
+    const agent = this.agents.get(id);
+    return agent?.session?.usageSession?.() ?? null;
+  }
+
   getAgent(id: string): ManagedAgent | null {
     const agent = this.agents.get(id);
     return agent ? { ...agent } : null;
@@ -1463,6 +1582,7 @@ export class AgentManager {
     agentId: string | undefined,
     options: CreateAgentOptions,
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(agentId ?? this.idFactory(), "createAgent");
     if (this.pluginLifecycle && !config.internal) {
@@ -1581,6 +1701,7 @@ export class AgentManager {
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(
       agentId ?? this.idFactory(),
@@ -1660,6 +1781,7 @@ export class AgentManager {
     workspaceId: string;
     labels?: Record<string, string>;
   }): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     const resolvedAgentId = validateAgentId(this.idFactory(), "importProviderSession");
     this.requireEnabledProvider(input.provider);
@@ -1747,6 +1869,7 @@ export class AgentManager {
     overrides?: Partial<AgentSessionConfig>,
     options?: { rehydrateFromDisk?: boolean },
   ): Promise<ManagedAgent> {
+    this.assertRestartAdmissionOpen();
     this.assertAcceptingAgentRegistrations();
     let existing = this.requireSessionAgent(agentId);
     if (this.hasInFlightRun(agentId)) {
@@ -2193,6 +2316,7 @@ export class AgentManager {
     if (agent.runtimeInfo) {
       agent.runtimeInfo = { ...agent.runtimeInfo, model: normalizedModelId };
     }
+    this.refreshSessionPersistence(agent);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
@@ -2556,6 +2680,18 @@ export class AgentManager {
         const destination = await input.workspaceRegistry.get(input.workspaceId);
         if (!destination || destination.archivedAt)
           throw new Error("Destination workspace is unavailable or archived");
+        if (!isCommittedRetry && input.expectedPreparation) {
+          if (
+            getWorkspacePreparationRevision(input.workspaceRegistry, source.workspaceId) !==
+            input.expectedPreparation.source
+          )
+            throw new Error("Source workspace setup changed. Try the move again.");
+          if (
+            getWorkspacePreparationRevision(input.workspaceRegistry, destination.workspaceId) !==
+            input.expectedPreparation.destination
+          )
+            throw new Error("Destination workspace setup changed. Try the move again.");
+        }
         if (!isCommittedRetry)
           await this.updateAgentMetadataUnlocked(agentId, { workspaceId: input.workspaceId });
       }),
@@ -2753,6 +2889,7 @@ export class AgentManager {
    * broadcast like normal timeline events.
    */
   tryRunOutOfBand(agentId: string, prompt: AgentPromptInput, options?: AgentRunOptions): boolean {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const handler = agent.session.tryHandleOutOfBand?.(prompt);
     if (!handler) {
@@ -2876,6 +3013,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): AsyncGenerator<AgentStreamEvent> {
+    this.assertRestartAdmissionOpen();
     const existingAgent = this.requireSessionAgent(agentId);
     this.logger.trace(
       {
@@ -3087,6 +3225,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): Promise<AsyncGenerator<AgentStreamEvent>> {
+    this.assertRestartAdmissionOpen();
     const snapshot = this.requireAgent(agentId);
     if (
       snapshot.lifecycle !== "running" &&
@@ -3119,6 +3258,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentSteerOptions,
   ): Promise<SteerResult> {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
     if (!expectedTurnId || !agent.session.steerActiveTurn) {
@@ -3153,6 +3293,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentSteerOptions,
   ): Promise<ActiveTurnSteerDispatchResult> {
+    this.assertRestartAdmissionOpen();
     const agent = this.requireSessionAgent(agentId);
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
     if (!expectedTurnId) {
@@ -5751,22 +5892,15 @@ export class AgentManager {
 
   private applyProviderConfiguration(config: AgentSessionConfig): AgentSessionConfig {
     const definition = this.providerDefinitions.get(config.provider);
-    if (config.providerOptions !== undefined && !definition?.validateOptions) {
-      throw new Error(`Provider '${config.provider}' does not accept providerOptions`);
-    }
-    const validatedOptions = definition?.validateOptions?.(config.providerOptions);
-    const withOptions = definition?.applyOptions
-      ? definition.applyOptions(config, validatedOptions)
-      : config;
-    this.validateToolPolicyServers(withOptions);
-    if (withOptions.toolPolicy && !definition?.applyToolPolicy) {
+    this.validateToolPolicyServers(config);
+    if (config.toolPolicy && !definition?.applyToolPolicy) {
       throw new Error(
         `Provider '${config.provider}' cannot preapprove exact MCP tools for unattended execution`,
       );
     }
     return definition?.applyToolPolicy
-      ? definition.applyToolPolicy(withOptions, withOptions.toolPolicy)
-      : withOptions;
+      ? definition.applyToolPolicy(config, config.toolPolicy)
+      : config;
   }
 
   private validateToolPolicyServers(config: AgentSessionConfig): void {

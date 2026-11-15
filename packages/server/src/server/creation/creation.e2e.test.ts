@@ -29,6 +29,27 @@ test("creation progresses before agent readiness and continues after the disconn
   const directory = await mkdtemp(join(tmpdir(), "creation-wire-"));
   let agents = 0;
   let prompts = 0;
+  const agentClients = createTestAgentClients({
+    onStartTurn: (prompt) => {
+      const text =
+        typeof prompt === "string"
+          ? prompt
+          : prompt
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n");
+      if (text === "Create once") prompts++;
+    },
+  });
+  const codex = agentClients.codex!;
+  const createSession = codex.createSession.bind(codex);
+  codex.createSession = async (...args) => {
+    if (!args[0].internal) {
+      agents++;
+      await provider.promise;
+    }
+    return createSession(...args);
+  };
   const daemon = await createTestPaseoDaemon({
     logger: pino(
       { level: "trace" },
@@ -40,15 +61,7 @@ test("creation progresses before agent readiness and continues after the disconn
         },
       },
     ),
-    agentClients: createTestAgentClients({
-      beforeCreateSession: async () => {
-        agents++;
-        await provider.promise;
-      },
-      onStartTurn: () => {
-        prompts++;
-      },
-    }),
+    agentClients,
   });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
