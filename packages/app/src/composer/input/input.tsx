@@ -57,6 +57,8 @@ import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useComposerHeight } from "./height";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
+import type { ComposerOverflowItem } from "./overflow";
+import { ComposerOverflowMenu, useComposerToolbarOverflowItems } from "./overflow-menu";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
 import {
   EditingTextInput,
@@ -173,6 +175,13 @@ export interface MessageInputProps {
   textReplacement: TextReplacement;
   /** Replaces the submit icon with this label, still inside the composer's own toolbar row. */
   submitLabel?: string;
+  /**
+   * The toolbar is too narrow for a button per action. Actions without a button of their own
+   * (the alternate send while the agent runs) and `overflowItems` collect in a "More actions" menu.
+   */
+  collapseToOverflow?: boolean;
+  /** Host actions that only fit in the "More actions" menu. Ignored unless `collapseToOverflow`. */
+  overflowItems?: readonly ComposerOverflowItem[];
 }
 
 export interface MessageInputRef {
@@ -188,6 +197,8 @@ export interface MessageInputRef {
    */
   getNativeElement?: () => HTMLElement | null;
 }
+
+const EMPTY_OVERFLOW_ITEMS: readonly ComposerOverflowItem[] = [];
 
 const MIN_INPUT_HEIGHT_MOBILE = 30;
 const MIN_INPUT_HEIGHT_DESKTOP = 46;
@@ -1083,6 +1094,8 @@ interface ResolvedMessageInputProps {
   readOnly: boolean;
   textReplacement: TextReplacement;
   submitLabel: string | undefined;
+  collapseToOverflow: boolean;
+  overflowItems: readonly ComposerOverflowItem[];
 }
 
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
@@ -1130,6 +1143,8 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     readOnly: props.readOnly ?? false,
     textReplacement: props.textReplacement,
     submitLabel: props.submitLabel,
+    collapseToOverflow: props.collapseToOverflow ?? false,
+    overflowItems: props.overflowItems ?? EMPTY_OVERFLOW_ITEMS,
   };
 }
 
@@ -1185,6 +1200,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       readOnly,
       textReplacement,
       submitLabel,
+      collapseToOverflow,
+      overflowItems,
     } = resolveMessageInputProps(props);
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
@@ -1667,6 +1684,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       t,
     });
 
+    const toolbarOverflowItems = useComposerToolbarOverflowItems({
+      collapseToOverflow,
+      isAgentRunning,
+      canQueue: Boolean(onQueue),
+      defaultSendBehavior,
+      hasText: hasLiveText,
+      attachmentCount: attachments.length,
+      isSendDisabled: isSendButtonDisabled,
+      onAlternateSend: handleAlternateSendAction,
+      overflowItems,
+    });
+
     const handleInputChange = useCallback(
       (nextValue: string) => {
         updateComposerHeightForText?.(valueRef.current, nextValue);
@@ -1859,6 +1888,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 dictationToggleKeys={dictationToggleKeys}
               />
               {rightContent}
+              <ComposerOverflowMenu
+                items={toolbarOverflowItems}
+                label={t("composer.input.moreActions")}
+                disabled={disabled}
+                buttonIconSize={buttonIconSize}
+              />
               <PrimaryAction
                 kind={primaryActionKind}
                 activeActionContent={activeActionContent}

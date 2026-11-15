@@ -127,6 +127,7 @@ export const zhCN: TranslationResources = {
       addAttachment: "添加附件",
       interruptAgent: "中断 Agent",
       queueMessage: "消息排队",
+      moreActions: "更多操作",
       sendAndInterrupt: "发送并中断",
       sendAndSteer: "发送并引导",
       sendMessage: "发送消息",

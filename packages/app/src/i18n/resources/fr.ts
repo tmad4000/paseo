@@ -130,6 +130,7 @@ export const fr: TranslationResources = {
       addAttachment: "Ajouter une pièce jointe",
       interruptAgent: "Agent d'interruption",
       queueMessage: "Message de file d'attente",
+      moreActions: "Plus d'actions",
       sendAndInterrupt: "Envoyer et interrompre",
       sendAndSteer: "Envoyer et guider",
       sendMessage: "Envoyer un message",

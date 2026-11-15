@@ -42,6 +42,8 @@ import {
 
 const SCROLL_CONTENT_STYLE = { flexGrow: 1 } as const;
 const CONTENT_ENTERING_DURATION_MS = 150;
+// About half a second at 60fps; covers the entering animation with room for a slow frame.
+const MAX_PLACED_FOCUS_ATTEMPTS = 30;
 
 const contentEntering = new Keyframe({
   0: { opacity: 0, transform: [{ scale: 0.97 }] },
@@ -300,14 +302,26 @@ export function AnchoredSurface({
   // animation from the final position.
   const placed = position !== null;
 
+  // Placement remounts the surface, so an item focused while measuring (the overlay focuses one
+  // as soon as it registers, which is what happens when the menu opens from the keyboard) is gone
+  // and focus drops to <body>. The placed copy cannot take focus until Reanimated's web entering
+  // animation reveals it, a frame or more later, so keep trying until focus lands inside.
   useEffect(() => {
     if (!isWeb || !open || !placed || typeof document === "undefined") return undefined;
-    const frame = requestAnimationFrame(() => {
-      document
-        .getElementById(surfaceNativeID)
+    let frame = 0;
+    let attempts = 0;
+    const focusFirstItem = () => {
+      const surface = document.getElementById(surfaceNativeID);
+      if (surface?.contains(document.activeElement)) return;
+      surface
         ?.querySelector<HTMLElement>('[data-menu-item="true"]:not([data-menu-disabled="true"])')
         ?.focus();
-    });
+      attempts += 1;
+      if (!surface?.contains(document.activeElement) && attempts < MAX_PLACED_FOCUS_ATTEMPTS) {
+        frame = requestAnimationFrame(focusFirstItem);
+      }
+    };
+    frame = requestAnimationFrame(focusFirstItem);
     return () => cancelAnimationFrame(frame);
   }, [open, placed, surfaceNativeID]);
 

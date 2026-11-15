@@ -150,6 +150,7 @@ import { ForgeBrandIcon } from "@/git/forge-icon";
 import { useComposerForgeAutoAttach } from "./forge-auto-attach";
 import { readClipboardImage } from "./clipboard-image";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
+import { resolveVoiceModeButtonPlacement, type ComposerOverflowItem } from "./input/overflow";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
 import {
@@ -178,6 +179,7 @@ type AttachmentListUpdater =
   | ((prev: UserComposerAttachment[]) => UserComposerAttachment[]);
 
 const EMPTY_ATTACHMENT_SCOPE_KEYS: readonly string[] = [];
+const EMPTY_OVERFLOW_ITEMS: readonly ComposerOverflowItem[] = [];
 
 function noop() {}
 const noopCallback = () => {};
@@ -1172,10 +1174,15 @@ function ComposerRightControlsSlot({
   showVoice,
   ...voiceProps
 }: ComposerRightControlsSlotProps) {
-  const hideVoiceForCompactInput = isCompact && hasSendableContent;
-  const showVoiceModeButton =
-    showVoice && !isVoiceModeForAgent && hasAgent && !isAgentRunning && !hideVoiceForCompactInput;
-  if (!showVoiceModeButton) return null;
+  const placement = resolveVoiceModeButtonPlacement({
+    showVoice,
+    isVoiceModeForAgent,
+    hasAgent,
+    isAgentRunning,
+    isCompact,
+    hasSendableContent,
+  });
+  if (placement !== "toolbar") return null;
   return (
     <View style={styles.rightControls}>
       <ComposerVoiceModeButton {...voiceProps} />
@@ -2070,6 +2077,37 @@ function ComposerContentImpl({
     ],
   );
 
+  const isVoiceModeOverflowed =
+    resolveVoiceModeButtonPlacement({
+      showVoice: mode.showVoice,
+      isVoiceModeForAgent,
+      hasAgent,
+      isAgentRunning,
+      isCompact: isCompactLayout,
+      hasSendableContent,
+    }) === "overflow";
+  const voiceModeOverflowLabel = t("composer.voice.enableVoiceMode");
+  const overflowItems = useMemo<readonly ComposerOverflowItem[]>(
+    () =>
+      isVoiceModeOverflowed
+        ? [
+            {
+              id: "voice-mode",
+              label: voiceModeOverflowLabel,
+              disabled: !isConnected || isVoiceSwitching,
+              onSelect: handleToggleRealtimeVoice,
+            },
+          ]
+        : EMPTY_OVERFLOW_ITEMS,
+    [
+      handleToggleRealtimeVoice,
+      isConnected,
+      isVoiceModeOverflowed,
+      isVoiceSwitching,
+      voiceModeOverflowLabel,
+    ],
+  );
+
   const { contextWindowMaxTokens, contextWindowUsedTokens } = resolveContextWindowValues(
     agentState.contextWindowMaxTokens,
     agentState.contextWindowUsedTokens,
@@ -2483,6 +2521,8 @@ function ComposerContentImpl({
                   readOnly={readOnly}
                   textReplacement={textReplacement}
                   submitLabel={submitLabel}
+                  collapseToOverflow={isCompactLayout}
+                  overflowItems={overflowItems}
                 />
               </RenderProfile>
               <Combobox
