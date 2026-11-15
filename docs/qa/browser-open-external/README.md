@@ -32,6 +32,21 @@ Screenshots: [toolbar tooltip with shortcut](01-toolbar-button-tooltip.png),
 [tab context menu](02-tab-context-menu.png), [page context menu](03-page-context-menu.png),
 [non-http page disabled state and toast](04-non-http-disabled-toast.png).
 
+## New browser tab focuses the URL bar
+
+Same environment, after `url-bar-autofocus`. Focus and selection were read from `document.activeElement` over CDP.
+
+| Step                                                                | Result                                                                        |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Ctrl+Shift+B (New browser) with focus on the page body              | Focus moves to **Browser URL**; whole URL selected (`0–20` of 20)             |
+| Type `paseo.sh` straight away                                       | Field reads `paseo.sh`: the first load finishing did not overwrite the typing |
+| Enter                                                               | Navigates; field shows normalized `https://paseo.sh/`                         |
+| Focus in an existing URL bar, then `ui open-tab --url … --no-focus` | Focus and caret unchanged                                                     |
+| Same, with `ui open-tab --url … --side`                             | Side pane opens; focus and caret unchanged                                    |
+
+Screenshot: [typing into a new browser tab](05-new-browser-url-focused.png). The New tab picker's
+Browser choice uses the same request as Ctrl+Shift+B and was not driven separately.
+
 ## Not covered here
 
 macOS and Windows Electron, plain web and iOS/Android were not run. On those surfaces the

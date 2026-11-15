@@ -86,6 +86,7 @@ import {
   type ElementSelectorOutcome,
 } from "./element-selector.electron";
 import { openBrowserPageExternally, resolveExternalBrowserPageUrl } from "../open-external";
+import { shouldAutofocusBrowserUrlBar } from "../url-bar-autofocus";
 
 type ElectronWebview = HTMLElement & {
   canGoBack?: () => boolean;
@@ -690,9 +691,28 @@ export function BrowserPane({
   const browserErrorLabelsRef = useRef(browserErrorLabels);
   browserErrorLabelsRef.current = browserErrorLabels;
 
+  // The last page URL written into the address field. While the field is focused, a
+  // different value means the user is typing an address: navigation updates (a new tab's
+  // first load finishing, a redirect) must not overwrite it. A fully selected field stays
+  // fully selected, so a freshly focused new tab still replaces its URL on the first key.
+  const syncedUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const nextUrl = browser?.url ?? "https://example.com";
+    const native = getTextInputNativeElement(urlInputRef.current);
+    const isFocused = native !== null && native === document.activeElement;
+    if (isFocused && syncedUrlRef.current !== null && native.value !== syncedUrlRef.current) {
+      return;
+    }
+    const wasFullySelected =
+      isFocused &&
+      native.value.length > 0 &&
+      native.selectionStart === 0 &&
+      native.selectionEnd === native.value.length;
     urlInputRef.current?.replaceText(nextUrl);
+    syncedUrlRef.current = nextUrl;
+    if (wasFullySelected) {
+      native.select();
+    }
     setDraftUrl((current) => (current === nextUrl ? current : nextUrl));
   }, [browser?.url]);
 
@@ -713,6 +733,27 @@ export function BrowserPane({
     urlInputRef.current?.focus();
     selectUrlBar();
   }, [selectUrlBar]);
+
+  // A browser the user just created (or an empty page) puts the caret in the address
+  // field once its pane is the focused, visible one. Background tabs never take focus.
+  // The timer is not cancelled on cleanup: the request is one-shot, and focusing an
+  // unmounted input is a no-op.
+  useEffect(() => {
+    if (!isElectronRuntime()) {
+      return;
+    }
+    if (
+      !shouldAutofocusBrowserUrlBar({
+        browserId,
+        url: browserRef.current?.url,
+        isInteractive: Boolean(isInteractive),
+        isPresented,
+      })
+    ) {
+      return;
+    }
+    window.setTimeout(focusUrlBar, 0);
+  }, [browserId, focusUrlBar, isInteractive, isPresented]);
 
   const syncNavigationState = useCallback((input?: { syncUrl?: boolean }) => {
     const webview = webviewRef.current;
@@ -1067,6 +1108,8 @@ export function BrowserPane({
   }, [focusUrlBar, isInteractive]);
 
   const handleNavigateDraftUrl = useCallback(() => {
+    // Submitting hands the field back to navigation so it shows the normalized URL.
+    syncedUrlRef.current = null;
     navigate(draftUrl);
   }, [draftUrl, navigate]);
 

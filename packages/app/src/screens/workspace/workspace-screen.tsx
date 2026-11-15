@@ -132,6 +132,7 @@ import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
 import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store";
+import { requestBrowserUrlBarFocus } from "@/desktop/browser/url-bar-autofocus";
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -2468,6 +2469,7 @@ function WorkspaceScreenContent({
         return;
       }
       const { browserId } = createWorkspaceBrowser();
+      requestBrowserUrlBarFocus(browserId);
       openWorkspaceTabFocused(
         persistenceKey,
         { kind: "browser", browserId },
@@ -2518,6 +2520,7 @@ function WorkspaceScreenContent({
         return;
       }
       const { browserId } = createWorkspaceBrowser();
+      requestBrowserUrlBarFocus(browserId);
       openTarget({ kind: "browser", browserId });
     },
     [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget],
