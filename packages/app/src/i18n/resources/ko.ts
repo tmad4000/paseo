@@ -2094,6 +2094,7 @@ export const ko: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: en.desktop.updateIdentity,
     windowControls: {
       minimize: "창 최소화",
       maximize: "창 최대화",

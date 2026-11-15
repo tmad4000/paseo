@@ -53,6 +53,7 @@ import {
   readLegacySkillSelection,
 } from "../integrations/legacy-skill-selection.js";
 import { tailFile } from "../diagnostics/tail-file.js";
+import { readUpdateSource } from "../features/update-source.js";
 
 const DAEMON_LOG_FILENAME = "daemon.log";
 let ownedLaunch: { home: string; instance: DaemonInstance } | null = null;
@@ -404,6 +405,10 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     desktop_get_runtime_info: () => ({
       appVersion: resolveDesktopAppVersion(),
       runningUnderARM64Translation: isRunningUnderARM64Translation(),
+      productName: app.getName(),
+      updateSource: app.isPackaged
+        ? readUpdateSource(path.join(process.resourcesPath, "app-update.yml"))
+        : null,
     }),
     desktop_daemon_status: () => resolveDesktopDaemonStatus(),
     desktop_local_credential: async (args) => {

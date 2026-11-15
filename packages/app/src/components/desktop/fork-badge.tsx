@@ -16,8 +16,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
-import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
+import {
+  formatVersionWithPrefix,
+  type DesktopAppUpdateCheckResult,
+} from "@/desktop/updates/desktop-updates";
 import { useForkUpdateCheck } from "@/desktop/updates/use-fork-update-check";
+import { useUpdateIdentity } from "@/desktop/updates/use-update-identity";
+import { formatUpdateWhatsNew } from "@/desktop/updates/update-identity";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { resolveVersionStatus, type ReleaseVersionCheck } from "@/desktop/updates/version-status";
 import { getDesktopWindowControlsWidth } from "@/desktop/window-chrome-presentation";
 import { useCustomDesktopWindowControls } from "@/utils/desktop-window";
@@ -95,6 +101,18 @@ function ForkTrigger({
   );
 }
 
+function useForkReleaseNotes(
+  version: string | null | undefined,
+  result: DesktopAppUpdateCheckResult | null,
+) {
+  const identity = useUpdateIdentity(version, result);
+  const releaseNotesUrl = identity?.releaseNotesUrl ?? null;
+  const openReleaseNotes = useCallback(() => {
+    if (releaseNotesUrl) void openExternalUrl(releaseNotesUrl);
+  }, [releaseNotesUrl]);
+  return { identity, releaseNotesUrl, openReleaseNotes };
+}
+
 export function ForkVersionIndicator() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -111,6 +129,11 @@ export function ForkVersionIndicator() {
       ? t("desktop.fork.ready")
       : t(`sidebar.help.versionStatus.${status}`);
   const label = `${t("desktop.fork.app")} ${formatVersionWithPrefix(version)} · ${statusText}`;
+
+  const { identity, releaseNotesUrl, openReleaseNotes } = useForkReleaseNotes(
+    status === "update" ? result?.publishedVersion : version,
+    result,
+  );
 
   const checkNow = useCallback(() => {
     void refresh();
@@ -147,6 +170,11 @@ export function ForkVersionIndicator() {
             <Text style={styles.detail} testID="fork-app-status">
               {statusText}
             </Text>
+            {identity ? (
+              <Text style={styles.detail} testID="fork-update-identity">
+                {identity.line}
+              </Text>
+            ) : null}
             <DropdownMenuHint trailing={settings.releaseChannel}>
               {t("desktop.fork.channel")}
             </DropdownMenuHint>
@@ -163,9 +191,15 @@ export function ForkVersionIndicator() {
             >
               {t("desktop.fork.check")}
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={openChangelog}>
-              {t("sidebar.help.whatsNew")}
-            </DropdownMenuItem>
+            {identity && releaseNotesUrl ? (
+              <DropdownMenuItem testID="fork-release-notes" onSelect={openReleaseNotes}>
+                {formatUpdateWhatsNew(identity)}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={openChangelog}>
+                {t("sidebar.help.whatsNew")}
+              </DropdownMenuItem>
+            )}
             {hosts.length ? (
               <>
                 <DropdownMenuSeparator />

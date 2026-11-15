@@ -2120,6 +2120,7 @@ export const ptBR: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: en.desktop.updateIdentity,
     windowControls: {
       minimize: "Minimizar janela",
       maximize: "Maximizar janela",

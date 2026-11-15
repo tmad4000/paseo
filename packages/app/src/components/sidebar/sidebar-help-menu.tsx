@@ -33,6 +33,12 @@ import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater"
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { resolveVersionStatus, type ReleaseVersionCheck } from "@/desktop/updates/version-status";
 import { useHelpUpdateCheck } from "@/desktop/updates/use-help-update-check";
+import {
+  useDesktopRuntimeInfo,
+  useUpdateIdentity,
+  useUpdateRestartLine,
+} from "@/desktop/updates/use-update-identity";
+import { formatUpdateWhatsNew } from "@/desktop/updates/update-identity";
 
 const DISCORD_URL = "https://discord.gg/jz8T2uahpH";
 const GITHUB_ISSUE_URL = "https://github.com/getpaseo/paseo/issues/new";
@@ -118,12 +124,20 @@ export function SidebarHelpMenu() {
   const hosts = useHosts();
   const { settings } = useDesktopSettings();
   const { isDesktopApp, isInstalling, checkForUpdates, installUpdate } = useDesktopAppUpdater();
-  const { releaseCheck, canInstall } = useHelpUpdateCheck({
+  const { releaseCheck, result, canInstall } = useHelpUpdateCheck({
     open,
     isDesktopApp,
     releaseChannel: settings.releaseChannel,
     checkForUpdates,
   });
+  const showInstall = isDesktopApp && (canInstall || isInstalling);
+  const productName = useDesktopRuntimeInfo()?.productName ?? t("sidebar.help.appName");
+  const identity = useUpdateIdentity(result?.latestVersion, result);
+  const restartLine = useUpdateRestartLine(showInstall);
+  const releaseNotesUrl = identity?.releaseNotesUrl ?? null;
+  const openReleaseNotes = useCallback(() => {
+    if (releaseNotesUrl) void openExternalUrl(releaseNotesUrl);
+  }, [releaseNotesUrl]);
 
   const handleInstallUpdate = useCallback(() => {
     void installUpdate();
@@ -216,16 +230,33 @@ export function SidebarHelpMenu() {
           <VersionHint
             version={version}
             check={releaseCheck}
-            label={t("sidebar.help.appName")}
+            label={productName}
             testID="sidebar-help-version"
           />
           {hosts.map((host) => (
             <HostVersionHint key={host.serverId} host={host} check={releaseCheck} />
           ))}
         </View>
-        {isDesktopApp && (canInstall || isInstalling) ? (
+        {showInstall ? (
           <>
-            <Text style={styles.restartWarning}>{t("desktop.updates.callout.restartWarning")}</Text>
+            <DropdownMenuSeparator />
+            {identity ? (
+              <Text style={styles.updateIdentity} testID="sidebar-help-update-identity">
+                {identity.line}
+              </Text>
+            ) : null}
+            {identity && releaseNotesUrl ? (
+              <DropdownMenuItem
+                testID="sidebar-help-update-release-notes"
+                leading={changelogLeadingIcon}
+                onSelect={openReleaseNotes}
+              >
+                {formatUpdateWhatsNew(identity)}
+              </DropdownMenuItem>
+            ) : null}
+            <Text style={styles.restartWarning} testID="sidebar-help-update-restart">
+              {restartLine}
+            </Text>
             <DropdownMenuItem
               testID="sidebar-help-install-update"
               disabled={isInstalling}
@@ -272,6 +303,12 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     textAlign: "right",
     paddingHorizontal: theme.spacing[3],
+  },
+  updateIdentity: {
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[2],
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
   },
   restartWarning: {
     paddingHorizontal: theme.spacing[3],

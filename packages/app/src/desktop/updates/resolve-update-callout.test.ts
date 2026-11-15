@@ -5,6 +5,14 @@ import {
   type ResolveUpdateCalloutInput,
 } from "./resolve-update-callout";
 
+const RESTART_LINE =
+  "Local agents and terminals stop during the restart. The daemon restarts with the app.";
+const FORK_IDENTITY = {
+  line: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+  version: "0.10.0-beta.33",
+  releaseNotesUrl: "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.33",
+};
+
 function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdateCalloutInput {
   return {
     isDesktopApp: true,
@@ -12,6 +20,8 @@ function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdat
     isInstalling: false,
     availableUpdate: { latestVersion: "1.2.3" },
     errorMessage: null,
+    identity: null,
+    restartLine: RESTART_LINE,
     ...overrides,
   };
 }
@@ -37,7 +47,13 @@ describe("resolveUpdateCalloutDescriptor", () => {
     expect(descriptor?.title).toBe("Update available");
     expect(descriptor?.variant).toBe("default");
     expect(descriptor?.showGiftIcon).toBe(true);
-    expect(descriptor?.body).toEqual({ kind: "available", versionLabel: "v1.2.3" });
+    expect(descriptor?.body).toEqual({
+      kind: "available",
+      versionLabel: "v1.2.3",
+      identityLine: null,
+      restartLine: RESTART_LINE,
+    });
+    expect(descriptor?.releaseNotesUrl).toBeNull();
     expect(descriptor?.actions).toEqual([
       { role: "changelog", label: "What's new" },
       { role: "install", label: "Install & restart", variant: "primary", disabled: false },
@@ -49,15 +65,42 @@ describe("resolveUpdateCalloutDescriptor", () => {
     const descriptor = resolveUpdateCalloutDescriptor(
       input({ availableUpdate: { latestVersion: "v2.0.0" } }),
     );
-    expect(descriptor?.body).toEqual({ kind: "available", versionLabel: "v2.0.0" });
+    expect(descriptor?.body).toMatchObject({ kind: "available", versionLabel: "v2.0.0" });
   });
 
   it("omits the version label when no latest version is known", () => {
     const descriptor = resolveUpdateCalloutDescriptor(
       input({ availableUpdate: { latestVersion: null } }),
     );
-    expect(descriptor?.body).toEqual({ kind: "available", versionLabel: null });
+    expect(descriptor?.body).toMatchObject({ kind: "available", versionLabel: null });
     expect(descriptor?.dismissalKey).toBe("desktop-update:available:unknown");
+  });
+
+  it("names the product, channel and feed, and links its release notes", () => {
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({ availableUpdate: { latestVersion: "0.10.0-beta.33" }, identity: FORK_IDENTITY }),
+    );
+
+    expect(descriptor?.body).toEqual({
+      kind: "available",
+      versionLabel: "v0.10.0-beta.33",
+      identityLine: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+      restartLine: RESTART_LINE,
+    });
+    expect(descriptor?.releaseNotesUrl).toBe(
+      "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.33",
+    );
+    expect(descriptor?.actions[0]).toEqual({ role: "releaseNotes", label: "What's new" });
+  });
+
+  it("keeps naming the update while it installs and restarts", () => {
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({ status: "installing", isInstalling: true, identity: FORK_IDENTITY }),
+    );
+    expect(descriptor?.body).toEqual({
+      kind: "installing",
+      identityLine: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+    });
   });
 
   it("disables the install action and labels it Installing... while installing", () => {
@@ -66,7 +109,7 @@ describe("resolveUpdateCalloutDescriptor", () => {
     );
 
     expect(descriptor?.title).toBe("Installing update");
-    expect(descriptor?.body).toEqual({ kind: "installing" });
+    expect(descriptor?.body).toEqual({ kind: "installing", identityLine: null });
     expect(descriptor?.showGiftIcon).toBe(false);
     expect(descriptor?.variant).toBe("default");
     expect(descriptor?.actions).toEqual([

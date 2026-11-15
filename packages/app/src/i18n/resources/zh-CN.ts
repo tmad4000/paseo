@@ -2062,6 +2062,7 @@ export const zhCN: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: en.desktop.updateIdentity,
     windowControls: {
       minimize: "最小化窗口",
       maximize: "最大化窗口",

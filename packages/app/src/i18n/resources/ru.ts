@@ -2107,6 +2107,7 @@ export const ru: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: en.desktop.updateIdentity,
     windowControls: {
       minimize: "Свернуть окно",
       maximize: "Развернуть окно",

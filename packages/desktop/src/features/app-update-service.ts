@@ -11,6 +11,8 @@ export interface AppUpdateCheckResult {
   currentVersion: string;
   latestVersion: string;
   publishedVersion?: string | null;
+  /** The feed's tag for publishedVersion; fork tags carry no `v` prefix, upstream's do. */
+  publishedTag?: string | null;
   body: string | null;
   date: string | null;
   errorMessage: string | null;
@@ -24,6 +26,7 @@ export interface AppUpdateInstallResult {
 
 export interface RuntimeUpdateInfo {
   version: string;
+  tag?: unknown;
   releaseNotes?: unknown;
   releaseDate?: unknown;
   rolloutHours?: unknown;
@@ -91,16 +94,18 @@ function buildCheckResult(input: {
   readyToInstall: boolean;
   info?: RuntimeUpdateInfo | null;
   errorMessage?: string | null;
-  publishedVersion?: string | null;
+  published?: RuntimeUpdateInfo | null;
 }): AppUpdateCheckResult {
   const { currentVersion, hasUpdate, readyToInstall, info, errorMessage = null } = input;
+  const published = input.published ?? info ?? null;
 
   return {
     hasUpdate,
     readyToInstall,
     currentVersion,
     latestVersion: info?.version ?? currentVersion,
-    publishedVersion: input.publishedVersion ?? info?.version ?? null,
+    publishedVersion: published?.version ?? null,
+    publishedTag: typeof published?.tag === "string" ? published.tag : null,
     body: typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
     date: typeof info?.releaseDate === "string" ? info.releaseDate : null,
     errorMessage,
@@ -285,7 +290,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
             currentVersion,
             hasUpdate: false,
             readyToInstall: false,
-            publishedVersion: result.updateInfo.version,
+            published: result.updateInfo,
           });
         }
 
@@ -314,7 +319,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
           currentVersion,
           hasUpdate: false,
           readyToInstall: false,
-          publishedVersion: info.version,
+          published: info,
         });
       } catch (error) {
         deps.reportCheckError?.(error);

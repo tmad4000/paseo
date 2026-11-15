@@ -9,6 +9,7 @@ export interface DesktopAppUpdateCheckResult {
   currentVersion: string | null;
   latestVersion: string | null;
   publishedVersion?: string | null;
+  publishedTag?: string | null;
   body: string | null;
   date: string | null;
   errorMessage: string | null;
@@ -20,9 +21,16 @@ export interface DesktopAppUpdateInstallResult {
   message: string;
 }
 
+export interface DesktopUpdateSource {
+  owner: string;
+  repo: string;
+}
+
 export interface DesktopRuntimeInfo {
   appVersion: string | null;
   runningUnderARM64Translation: boolean;
+  productName: string | null;
+  updateSource: DesktopUpdateSource | null;
 }
 
 export type DesktopReleaseChannel = "stable" | "beta";
@@ -82,17 +90,28 @@ export async function getLocalDaemonVersion(): Promise<LocalDaemonVersionResult>
   return parseLocalDaemonVersionResult(result);
 }
 
+function parseUpdateSource(raw: unknown): DesktopUpdateSource | null {
+  if (!isRecord(raw)) return null;
+  const owner = toStringOrNull(raw.owner);
+  const repo = toStringOrNull(raw.repo);
+  return owner && repo ? { owner, repo } : null;
+}
+
 export function parseDesktopRuntimeInfo(raw: unknown): DesktopRuntimeInfo {
   if (!isRecord(raw)) {
     return {
       appVersion: null,
       runningUnderARM64Translation: false,
+      productName: null,
+      updateSource: null,
     };
   }
 
   return {
     appVersion: toStringOrNull(raw.appVersion),
     runningUnderARM64Translation: raw.runningUnderARM64Translation === true,
+    productName: toStringOrNull(raw.productName),
+    updateSource: parseUpdateSource(raw.updateSource),
   };
 }
 
@@ -122,6 +141,7 @@ export async function checkDesktopAppUpdate({
     currentVersion: toStringOrNull(result.currentVersion),
     latestVersion: toStringOrNull(result.latestVersion),
     publishedVersion: toStringOrNull(result.publishedVersion),
+    publishedTag: toStringOrNull(result.publishedTag),
     body: toStringOrNull(result.body),
     date: toStringOrNull(result.date),
     errorMessage: toStringOrNull(result.errorMessage),
