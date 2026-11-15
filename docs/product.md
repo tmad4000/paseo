@@ -43,7 +43,7 @@ Paseo's flexibility depends on keeping control with the user:
 - **Self-hosted:** Run agents on your own machines, with your own environment, files, and credentials.
 - **Provider choice:** Use supported agent harnesses and extend provider support through plugins. Your workflow should be able to evolve as your choice of provider changes.
 - **Cross-device:** Use desktop, mobile, web, and CLI clients according to the situation.
-- **Privacy:** No Paseo telemetry, tracking, or forced account. The relay is optional and end-to-end encrypted.
+- **Privacy:** Follow the [privacy and diagnostics contract](client-error-diagnostics.md#privacy). The relay is optional and end-to-end encrypted.
 - **Open source:** Paseo is Apache-2.0 licensed. You can inspect it, modify it, and build on it.
 
 Convenience and ownership should work together. Offering a straightforward way to connect should preserve the option to operate your own setup.

@@ -1,4 +1,4 @@
-import { collectRetainedAttachmentIds } from "@/attachments/gc-retention";
+import { collectRetainedAttachmentIds, isAttachmentRetained } from "@/attachments/gc-retention";
 import { getAttachmentStore } from "@/attachments/store";
 import type { AttachmentMetadata, SaveAttachmentInput } from "@/attachments/types";
 
@@ -150,6 +150,7 @@ export async function deleteAttachments(
   await Promise.all(
     attachments.map(async (attachment) => {
       try {
+        if (isAttachmentRetained(attachment.id)) return;
         await store.delete({ attachment });
       } catch (error) {
         console.warn("[attachments] Failed to delete attachment", {

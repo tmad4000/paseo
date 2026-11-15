@@ -63,7 +63,11 @@ test("session create forwards clientMessageId to the initial prompt run options"
     cwd: "/tmp/paseo-create-test",
     runtimeInfo: null,
   } as ManagedAgent;
-  const streamAgent = vi.fn(() => (async function* noop() {})());
+  const streamAgent = vi.fn(() =>
+    (async function* accepted() {
+      yield { type: "turn_started" as const, provider: "codex" as const };
+    })(),
+  );
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
       createAgent: vi.fn(async () => snapshot),

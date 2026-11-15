@@ -1,3 +1,4 @@
+import { responsivenessMetrics } from "@/performance/responsiveness";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import { selectAgentTimelineState, useSessionStore } from "@/stores/session-store";
@@ -18,6 +19,8 @@ import {
 // Ceiling for a pending commit. A frame callback normally gets there first; this
 // is the fallback for when nothing is painting.
 const AGENT_STREAM_REDUCER_FLUSH_DELAY_MS = 16 * 3;
+const STREAM_BATCH_EVENTS = 16;
+const STREAM_FRAME_BUDGET_MS = 8;
 
 // ---------------------------------------------------------------------------
 // Shared cursor type
@@ -1727,27 +1730,34 @@ export function createAgentStreamReducerQueue(
     scheduledFlushId = null;
   };
 
-  const flushAgent = (agentId: string) => {
-    const events = pendingByAgentId.get(agentId);
-    if (!events || events.length === 0) {
+  const flushBatch = (agentId: string, limit = Infinity) => {
+    const pending = pendingByAgentId.get(agentId);
+    if (!pending || pending.length === 0) {
       return;
     }
+    const events = pending.slice(0, limit);
+    // Move a busy chat to the back so other visible chats get a turn as well.
     pendingByAgentId.delete(agentId);
+    if (events.length < pending.length) pendingByAgentId.set(agentId, pending.slice(events.length));
     if (pendingByAgentId.size === 0) {
       cancelScheduledFlush();
     }
 
+    const started = performance.now();
     const result = processAgentStreamEvents({
       events,
       ...input.getSnapshot(agentId),
     });
 
     input.commit(agentId, result, events);
+    responsivenessMetrics.record("stream.batch", performance.now() - started);
     if (result.sideEffects.length > 0) {
       input.handleSideEffects(agentId, result.sideEffects);
     }
   };
 
+  // Canonical history must see every preceding delta, including queued turn boundaries.
+  const flushAgent = (agentId: string) => flushBatch(agentId);
   const flush = () => {
     const agentIds = Array.from(pendingByAgentId.keys());
     for (const agentId of agentIds) {
@@ -1761,7 +1771,12 @@ export function createAgentStreamReducerQueue(
     }
     scheduledFlushId = input.scheduleFlush(() => {
       scheduledFlushId = null;
-      flush();
+      const started = performance.now();
+      for (const agentId of Array.from(pendingByAgentId.keys())) {
+        flushBatch(agentId, STREAM_BATCH_EVENTS);
+        if (performance.now() - started >= STREAM_FRAME_BUDGET_MS) break;
+      }
+      if (pendingByAgentId.size > 0) scheduleFlush();
     });
   };
 

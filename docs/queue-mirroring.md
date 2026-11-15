@@ -180,6 +180,13 @@ uploaded-file handles, workspace file paths, and forge items, never a local stor
 
 The inline editor changes only text; both attachment lists and image bytes stay on the daemon.
 
+Composer cleanup consumes the submitted workspace attachment snapshot. For reviews, only unchanged
+comments actually included in that snapshot are removed; added or edited comments remain available
+for another message. Discarding a comment while submission is pending must never recreate it.
+Suppression follows the underlying comment versions across diff-context rebuilds, so an unchanged
+review the user removed stays hidden. New or edited comments under the same review key stay visible
+while encoding or storage finishes.
+
 ## Composer controls
 
 Expand the queue, then tap a message to expand or collapse its full text. Scroll the queue to read
@@ -254,6 +261,11 @@ iOS suspension, or app restart cannot lose the item before the daemon knows abou
 The outbox (`packages/app/src/stores/queue-outbox-store/`) persists the full wire
 payload — image bytes included — before clearing the draft or attempting delivery.
 Encoding or storage failure keeps the draft and attachments and displays an error.
+Queue acceptance clears only the submitted edit revision. This applies to default Send while running,
+explicit Queue and auto-queued dictation, including legacy local queues. A text or attachment edit
+that returns to identical content still belongs to the newer draft. The composer and input widget
+must share that rule because either can finish an asynchronous queue callback. Queue as new message
+keeps the composer untouched.
 A failed send keeps its durable entry and visible row for retry; after repeated
 failures the client shows one attention message and continues retrying.
 
@@ -307,26 +319,68 @@ The send outbox (`packages/app/src/stores/send-outbox-store/`) closes it. When t
 dedupes retried sends, `dispatchComposerAgentMessage` stores the full request under its
 client message id before sending. That requires both `agentRequestReceipts` (steer and interrupt
 receipts) and `agentMessageQueue` (queue item ids for ordinary input). It then sends through the same
-per-agent ordered flush that reconnects use:
+per-agent delivery worker that queued composer messages, reconnects and manual Retry use. Once local storage accepts the request, the
+composer finishes its submission and becomes available for the next draft. It does not wait for
+the host acknowledgement. Settlement only clears or restores the draft if no text or attachment edit
+has occurred since submission, including re-entering identical content. Scoped workspace and review
+owner revisions participate in that decision, including edits that return to the original content. Storage/attachment preparation
+failures restore an unchanged draft with an error. If newer edits prevent restoration, the original
+text and attachment snapshot stays in **Unsent draft copies** above the composer. Explicit Queue
+uses the same recovery owner. These copies are memory-only and do not survive closing the app;
+they are never treated as saved deliveries or automatically sent. Image references remain protected
+from garbage collection and explicit pill deletion until Restore draft or Discard copy succeeds. Restore draft requires the
+current composer to be empty and restores immutable context/review snapshots without changing newer
+review comments. It does not require the failed device write to start working.
+
+Both durable and one-shot delivery require every
+selected image to encode before saving or sending. Pending delivery remains visible on the saved bubble.
 
 - Accepted: the entry is removed and the optimistic bubble proceeds as before.
 - Anything that is not a definitive answer (connection loss, timeouts, a client closed or replaced
   mid-request): the entry stays, the bubble
   stays with its pending mark, and the composer does not take the text back. Every reconnect and
-  cold start resends the **identical** request. The daemon's receipt (or queue item id) makes a
+  cold start resends the **identical** retryable request. The daemon's receipt (or queue item id) makes a
   retry of a request that did arrive a no-op. Changing the active-turn behavior would change the
   receipt fingerprint, so retries never rewrite it, even when an interrupt arrives late.
 - A definitive answer (`AgentMessageRejectedError` from `accepted: false`, a `DaemonRpcError`,
-  or a request that cannot be built): while the author is sending, the entry is removed and the
-  text returns to the composer with the error, as before. A refusal during a background flush
-  parks the entry with `rejectedError`; it is not retried until the user taps Retry. Classify
+  or a request that cannot be built): after local save, park the entry with `rejectedError` and
+  expose it through the existing attention mark and Unsent messages recovery. Do not restore it
+  over the next draft. It is not retried until the user taps Retry. Classify
   refusals positively. Any unrecognized error means "unknown", never "refused", because handing an
   arrived message back to the composer turns the user's resend into a duplicate.
 - `agent_request_outcome_unknown` arrives as a refusal, but the host may have delivered the message.
-  It stays parked with its own explanation and never returns to the composer. Edit is offered only
-  for definitive refusals of plain-text messages, since the outbox does not keep composer attachments.
+  The receipt owner returns this classification on the first ambiguous provider failure and on a
+  failed completion-receipt write, preserving the original error detail. Known-not-submitted failures
+  keep their original classification. Clients also recognize older hosts' `Provider submission
+outcome unknown` wording. These responses stay parked and never return to the composer. Edit is
+  offered only for definitive refusals of plain-text messages, since the outbox does not keep
+  composer attachments.
 
-A send failure stops that agent's later entries so they cannot overtake it. A refusal does not.
+The device merges both saved outboxes by creation order at the shared delivery boundary
+(`stores/delivery-outboxes.ts`). Saving Queue B while direct Send A waits for receipt preparation
+keeps B on the device until A settles; admitting B to an idle daemon earlier could deliver it first.
+A transport failure or an ambiguous host response blocks later direct sends and queue admission
+for that agent even after a flush returns or the app reloads. A definitive refusal permits later work.
+Retry uses A's identical ID and payload; definitive settlement or explicit Discard wakes the worker.
+Other agents continue independently. Queue removal intents can reach the host while delivery is
+blocked, without admitting the canceled payload. Local saving and typing never wait on this worker.
+Storage transitions keep their place in delivery order until they settle. A failed initial save
+releases its provisional place and resumes later saved work automatically. Discard or release of an
+unresolved send permits later delivery only after durable removal succeeds; a failed removal keeps
+ownership even while optimistic UI state temporarily omits the entry.
+Find/Send's active routed admissions join that worker with their existing draft escrow and destination
+checks. Completing routed preparation must rescan later saved work even when rejection or
+cancellation occurs before an admission is registered. Terminal removal permits that work only
+after persistence succeeds, and the routing draft remains available. A held routed item remains
+recoverable after restart; an in-memory admission does not grant reconnect permission to an
+undispatched item. Send Back stores its full quoted answer in the queue
+outbox before returning. Stream replies, broadcast and legacy composer/direct-routing admissions
+also wait behind older unresolved device sends. Explicit Send now for a host-owned queue item keeps
+its steering behavior.
+
+New creation times are allocated only after both outboxes hydrate, using the greatest saved creation
+time as the counter floor. Restarting with a clock that moved backward cannot put a new item before
+an unresolved saved request.
 The outbox remembers per host that it supports durable sends (`durableHosts`). A cold start with the
 host unreachable, before its features are known, can still store a send first. The reconnect flush
 itself checks the live features, so a downgraded daemon is never sent retries it cannot dedupe.
@@ -335,6 +389,19 @@ Entries with no live chat bubble appear in the composer's **Unsent messages** tr
 relaunch, or for another chat's sends. Each row offers Retry, Discard, and, for refused messages, Edit,
 which moves the text back into the message box. Only a refused message may be edited. One that is
 still retrying could already be on the host.
+
+### One-shot direct admissions
+
+Routed Steer/Interrupt, Stream replies and direct sends to hosts without safe replay support use
+the same send outbox as an ordering hold. Save the stable message ID and full payload before any
+wire dispatch. The live admission alone may issue that one request; the persisted hold never
+replays on reconnect or through Retry. A timeout or connection loss after dispatch retains the
+hold across restart. A known failure before dispatch may release it.
+
+The destination chat's Unsent track identifies the held request and offers **Release delivery hold**.
+Check the conversation before confirming: the original request may still arrive. Confirmation
+releases later work without resending the held request or overwriting a draft. An in-flight client
+promise cannot prevent this explicit recovery. A retained hold continues to block only its own chat.
 
 ## Delivery marks
 
@@ -349,8 +416,9 @@ The user's own messages carry a messaging-app style tick
 | Alert        | Outbox entry refused or at `SEND_OUTBOX_MAX_ATTEMPTS`        | Outbox entry at `QUEUE_OUTBOX_MAX_ATTEMPTS`      |
 
 Clock, check and alert stay visible on every platform. The double check joins the timestamp row,
-which desktop reveals on hover. The alert never stops retries; it only tells the user. Tapping a
-bubble's alert explains it and offers Retry now.
+which desktop reveals on hover. The attempt-limit alert does not stop retryable delivery. Refusals,
+unknown outcomes and one-shot holds follow [Direct sends](#direct-sends). Tapping a bubble's alert
+explains it and offers the applicable recovery action.
 
 ## Delivery inspection
 
@@ -384,9 +452,6 @@ after sending lost the entry, while a kill 15 s after it was delivered exactly o
 Never `set()` a persisted outbox store before it has rehydrated. Persist writes the in-memory
 state, so an early write replaces the saved entries with the empty initial state. Every mutation
 awaits hydration first (`send-outbox-store/index.test.ts` covers the connect-time case).
-
-`agent.queue.reorder.request` has a schema and a handler but no UI. Today's composer has no reorder
-affordance; adding one is a separate change.
 
 A message claimed for delivery just before its editor's hold arrives is still sent with its old
 text. The edit survives as a detached draft (see

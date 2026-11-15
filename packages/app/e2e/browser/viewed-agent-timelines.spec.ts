@@ -128,6 +128,9 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
   await expect(
     page.getByRole("alert").filter({ hasText: "Can't reach your host right now" }),
   ).toBeVisible();
+  // Bottom status placement can be under the pointer after the Fork menu closes.
+  // Leave the toast so its intentional hover-to-pause behavior does not hold it open.
+  await page.mouse.move(0, 0);
   await expectReconnectingToastGone(page, { timeout: 100 });
   await expectReconnectingToastVisible(page);
   await expectContinuousToast();

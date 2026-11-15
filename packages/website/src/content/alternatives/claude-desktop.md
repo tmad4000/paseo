@@ -1,6 +1,6 @@
 ---
 title: Open Source Claude Desktop Alternative With Native Mobile and Multi-Provider Support
-description: Paseo is an open source Claude Desktop alternative that runs on your machines without a required Paseo account, telemetry, or cloud service.
+description: Paseo is an open source Claude Desktop alternative that runs on your machines without a required Paseo account or cloud service.
 nav: Claude Desktop
 order: 55
 ---
@@ -17,7 +17,7 @@ Paseo is an app for orchestrating coding agents, with native clients on desktop,
 
 Claude Desktop is Anthropic's first-party interface for Claude and requires a Claude account. It can run Claude Code locally, over SSH, or on Anthropic's infrastructure.
 
-Paseo is an open source control plane that runs on machines you control. It does not require a Paseo account, collect telemetry, or depend on a Paseo cloud service. Connect directly from desktop, mobile, web, or the CLI, or use the optional end-to-end encrypted relay when the daemon is behind a firewall.
+Paseo is an open source control plane that runs on machines you control. It does not require a Paseo account or depend on a Paseo cloud service. Connect directly from desktop, mobile, web, or the CLI, or use the optional end-to-end encrypted relay when the daemon is behind a firewall. See the [privacy policy](/privacy) for data handling.
 
 Paseo does not upload or store your code. The relay cannot read your code, messages, or agent output. You can also self-host the daemon, web client, and relay.
 

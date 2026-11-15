@@ -1,3 +1,4 @@
+import { sendStreamReply } from "./send-reply";
 import type { CompanionEntry } from "@getpaseo/protocol/companion-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,7 +31,6 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useSessionStore } from "@/stores/session-store";
 import { useAgentViewStore } from "@/stores/agent-view-store";
 import type { ChatJumpTarget } from "@/agent-stream/use-timeline-anchor-jump";
-import { buildReplyQuote } from "@/components/reply/composer-quote";
 import { EntryCard } from "./entry-card";
 import { TagCloud } from "./tag-cloud";
 import { useGlobalStream, type GlobalStreamRow } from "./use-global-stream";
@@ -631,15 +631,15 @@ export function GlobalStreamCard({
   const sendReply = useCallback(
     async (replyTo: CompanionEntry, text: string) => {
       if (!client || connection !== "online") throw new Error(t("globalStream.saveFailed"));
-      const quoted = buildReplyQuote(replyTo.text);
-      const result = await client.sendAgentMessage(
-        row.agentId,
-        quoted ? `${quoted}\n\n${text}` : text,
-        { messageId: globalThis.crypto.randomUUID() },
-      );
-      return { queued: result.queued };
+      return sendStreamReply({
+        serverId: row.serverId,
+        agentId: row.agentId,
+        replyTo: replyTo.text,
+        text,
+        client,
+      });
     },
-    [client, connection, row.agentId, t],
+    [client, connection, row.serverId, row.agentId, t],
   );
   const update = useCallback(
     async (entryId: string, status?: "open" | "reviewed" | "done") => {

@@ -16,7 +16,9 @@ beside it. Slack-style, the reply then shows **N replies**, which reopens the th
   main chat, and **Send this thread's latest answer to …** ("Send to main"). That puts the
   thread's latest answer in the main chat as a quoted message with the thread's title and session
   id, through the message queue: delivered at once when the main chat is idle, after its current
-  turn when it is busy, never interrupting. Answers longer than 2,000 characters are clipped with
+  turn when it is busy, never interrupting. It saves the quoted answer in the device queue outbox
+  first, so an earlier unresolved direct send holds it locally without losing the answer. Retry or
+  discard of that older send resumes delivery through the shared worker. Answers longer than 2,000 characters are clipped with
   "…". It needs a host with the message queue, a finished answer in the thread, and a main chat
   that still exists; a disabled item says which is missing.
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyDictationTranscript,
   computeCanStartDictation,
+  queueInputMessage,
   resolveActiveSendBehavior,
   resolveDirectActiveTurnBehavior,
   resolveComposerSurfacePresentation,
@@ -180,6 +181,7 @@ describe("dictation transcript behavior", () => {
       attachments: [],
       cwd: "/repo",
       autoSend: true,
+      getDraftRevision: () => 0,
     });
 
     expect(actions).toEqual([
@@ -302,21 +304,21 @@ describe("stopRealtimeVoice", () => {
 });
 
 it("awaits the widget queue callback without clearing newer input", async () => {
-  const { queueInputMessage } = await import("./state");
   let resolve!: () => void;
   let current = "submitted";
+  let revision = 0;
   const write = new Promise<void>((accept) => {
     resolve = accept;
   });
-  const queued = queueInputMessage(
-    { text: current, attachments: [], cwd: "/repo" },
-    async (payload) => {
-      await write;
-      if (current === payload.text) current = "";
+  const queued = queueInputMessage({ text: current, attachments: [], cwd: "/repo" }, () => write, {
+    getDraftRevision: () => revision,
+    clearDraft: () => {
+      current = "";
     },
-  );
+  });
   expect(current).toBe("submitted");
   current = "newer edit";
+  revision += 1;
   resolve();
   await queued;
   expect(current).toBe("newer edit");
@@ -338,7 +340,138 @@ it("retains auto-queued dictation after local acceptance fails", async () => {
     attachments: [],
     cwd: "/repo",
     autoSend: true,
+    getDraftRevision: () => 0,
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(current).toBe("draft spoken");
+});
+
+function createQueuedField() {
+  let text = "A";
+  let revision = 0;
+  return {
+    getText: () => text,
+    getDraftRevision: () => revision,
+    edit: (next: string) => {
+      text = next;
+      revision += 1;
+    },
+    editAttachments: () => {
+      revision += 1;
+    },
+    clearDraft: () => {
+      text = "";
+      revision += 1;
+    },
+  };
+}
+
+function pendingQueueWrite() {
+  let resolve!: (result?: boolean) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void | boolean>((accept, refuse) => {
+    resolve = accept;
+    reject = refuse;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("widget Queue settlement", () => {
+  it("clears only after an unchanged draft is accepted", async () => {
+    const field = createQueuedField();
+    const write = pendingQueueWrite();
+    const queued = queueInputMessage(
+      { text: "A", attachments: [], cwd: "/repo" },
+      () => write.promise,
+      field,
+    );
+    expect(field.getText()).toBe("A");
+    write.resolve();
+    expect(await queued).toBe(true);
+    expect(field.getText()).toBe("");
+  });
+
+  it("keeps A after A to B to A edits before acceptance", async () => {
+    const field = createQueuedField();
+    const write = pendingQueueWrite();
+    const queued = queueInputMessage(
+      { text: "A", attachments: [], cwd: "/repo" },
+      () => write.promise,
+      field,
+    );
+    field.edit("B");
+    field.edit("A");
+    write.resolve();
+    expect(await queued).toBe(true);
+    expect(field.getText()).toBe("A");
+  });
+
+  it("keeps text when only attachments change before acceptance", async () => {
+    const field = createQueuedField();
+    const write = pendingQueueWrite();
+    const queued = queueInputMessage(
+      { text: "A", attachments: [], cwd: "/repo" },
+      () => write.promise,
+      field,
+    );
+    field.editAttachments();
+    write.resolve();
+    expect(await queued).toBe(true);
+    expect(field.getText()).toBe("A");
+  });
+
+  it("keeps an unchanged draft when the queue callback declines it", async () => {
+    const field = createQueuedField();
+    expect(
+      await queueInputMessage({ text: "A", attachments: [], cwd: "/repo" }, () => false, field),
+    ).toBe(false);
+    expect(field.getText()).toBe("A");
+  });
+
+  it("keeps an unchanged draft when acceptance fails", async () => {
+    const field = createQueuedField();
+    const write = pendingQueueWrite();
+    const queued = queueInputMessage(
+      { text: "A", attachments: [], cwd: "/repo" },
+      () => write.promise,
+      field,
+    );
+    write.reject(new Error("device save failed"));
+    await expect(queued).rejects.toThrow("device save failed");
+    expect(field.getText()).toBe("A");
+  });
+
+  it("keeps an unchanged draft when keepComposer is requested", async () => {
+    const field = createQueuedField();
+    expect(
+      await queueInputMessage({ text: "A", attachments: [], cwd: "/repo" }, () => true, {
+        ...field,
+        keepComposer: true,
+      }),
+    ).toBe(true);
+    expect(field.getText()).toBe("A");
+  });
+});
+
+it("keeps edits that re-enter an auto-queued transcript before acceptance", async () => {
+  const field = createQueuedField();
+  const write = pendingQueueWrite();
+  applyDictationTranscript("spoken", {
+    value: field.getText(),
+    defaultSendBehavior: "queue",
+    isAgentRunning: true,
+    onQueue: () => write.promise.then(() => undefined),
+    onSubmit: () => {},
+    replaceText: field.edit,
+    getDraftRevision: field.getDraftRevision,
+    attachments: [],
+    cwd: "/repo",
+    autoSend: true,
+  });
+  expect(field.getText()).toBe("A spoken");
+  field.edit("B");
+  field.edit("A spoken");
+  write.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(field.getText()).toBe("A spoken");
 });

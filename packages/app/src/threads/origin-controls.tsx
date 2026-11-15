@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { CornerUpLeft, MessageSquareReply, SendHorizontal } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { v4 as uuid } from "uuid";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import {
   DropdownMenu,
@@ -20,7 +19,8 @@ import { useHostFeature } from "@/runtime/host-features";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
-import { buildSendBackText, latestAssistantReply, threadOriginOf } from "./model";
+import { queueThreadAnswer } from "./send-back";
+import { latestAssistantReply, threadOriginOf } from "./model";
 
 /**
  * Shown in a thread's own chat, beside Pin: back to the main chat, and "Send to main", which
@@ -86,10 +86,13 @@ export function ThreadOriginControls({
       if (!reply) throw new Error(t("threads.noReplyYet"));
       const client = getHostRuntimeStore().getClient(serverId);
       if (!client) throw new Error(t("sidebar.workspace.toasts.hostDisconnected"));
-      await client.enqueueAgentMessage({
-        agentId: origin.parentAgentId,
-        itemId: uuid(),
-        text: buildSendBackText({ threadTitle, threadAgentId: agentId, reply }),
+      await queueThreadAnswer({
+        serverId,
+        parentAgentId: origin.parentAgentId,
+        threadAgentId: agentId,
+        threadTitle,
+        reply,
+        client,
       });
     },
     onSuccess: () => toast.show(t("threads.sentToMain", { title: parentTitle })),

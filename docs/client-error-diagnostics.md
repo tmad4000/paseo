@@ -36,13 +36,13 @@ History-refresh failures are recorded as `agent.timeline.sync` with phase `histo
 
 ## What is captured
 
-| Source       | Where                                                                                                                                                                                                  | Fields                                                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toast`      | Every error or warning toast with a text message (`toast-host.tsx`). This is the one place all user-visible error toasts pass through.                                                                 | message                                                                                                                                                  |
-| `voice`      | Voice failure cues (`reportFailure`), host input errors, and each distinct GPT Realtime error the overlay shows (`voice-runtime.ts`).                                                                  | code (failure kind or `realtime_state_error` / `host_input_error`), operation, phase, agent, host                                                        |
-| `rpc`        | Host requests that come back as an error or time out (`DaemonClient` `onRequestError`, wired in `host-runtime.ts`). Recorded as `warning`, because a failed request is not always shown to the person. | code, operation (request type), host                                                                                                                     |
-| `global`     | Uncaught JavaScript errors (React Native global handler) and, on web/desktop, window errors and unhandled rejections.                                                                                  | error name, fatal or non-fatal                                                                                                                           |
-| `host-voice` | Every `OpenAiRealtime.fail()` on the host, recorded before the user-facing message is forwarded.                                                                                                       | OpenAI `code`, `param`, `event_id`, last non-audio client event (`operation`), close code/reason, phase (`connection/responding/mode`), agent, client id |
+| Source       | Where                                                                                                                                                                                                       | Fields                                                                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toast`      | Every error or warning toast with a text message (`toast-host.tsx`). This is the one place all user-visible error toasts pass through.                                                                      | message                                                                                                                                                  |
+| `voice`      | Voice failure cues (`reportFailure`), host input errors, and each distinct GPT Realtime error the overlay shows (`voice-runtime.ts`).                                                                       | code (failure kind or `realtime_state_error` / `host_input_error`), operation, phase, agent, host                                                        |
+| `rpc`        | Host requests that come back as an error or time out (`DaemonClient` `onRequestError`, wired in `host-runtime.ts`). Recorded as `warning`, because a failed request is not always shown to the person.      | code, operation (request type), host                                                                                                                     |
+| `global`     | Uncaught JavaScript errors (React Native global handler) and, on web/desktop, window errors and unhandled rejections. Also [responsiveness warnings](agent-stream-performance.md#responsiveness-telemetry). | error name, fatal or non-fatal; fixed responsiveness metric and sampling window                                                                          |
+| `host-voice` | Every `OpenAiRealtime.fail()` on the host, recorded before the user-facing message is forwarded.                                                                                                            | OpenAI `code`, `param`, `event_id`, last non-audio client event (`operation`), close code/reason, phase (`connection/responding/mode`), agent, client id |
 
 ## Delivery
 
@@ -69,7 +69,9 @@ History-refresh failures are recorded as `agent.timeline.sync` with phase `histo
 
 ## Privacy
 
-Diagnostics are metadata about errors, never content.
+Diagnostics are error and responsiveness metadata, never content.
+
+Content-free responsiveness measurements follow the [telemetry contract](agent-stream-performance.md#responsiveness-telemetry).
 
 - No request bodies, prompts, transcripts, audio or attachments are recorded.
 - Realtime causes carry the OpenAI error `param` (the field name), never its value.

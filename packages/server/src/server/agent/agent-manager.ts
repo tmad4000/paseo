@@ -2851,7 +2851,7 @@ export class AgentManager {
         throw error;
       }
       if (isStaleProviderSessionError(error)) {
-        pendingRun.start = { status: "failed", error: error.message };
+        pendingRun.start = { status: "failed", error };
         agent.pendingReplacement = false;
         if (!agent.activeForegroundTurnId) agent.lifecycle = "idle";
         this.runs.settleForegroundRun(agentId, pendingRun.token);
@@ -2859,7 +2859,7 @@ export class AgentManager {
       }
       agent.pendingReplacement = false;
       const errorMsg = error instanceof Error ? error.message : "Failed to start turn";
-      pendingRun.start = { status: "failed", error: errorMsg };
+      pendingRun.start = { status: "failed", error };
       await this.handleStreamEvent(agent, {
         type: "turn_failed",
         provider: agent.provider,
@@ -3291,6 +3291,7 @@ export class AgentManager {
     }
 
     const pendingRun = this.runs.getPendingRun(agentId);
+    if (pendingRun?.start.status === "failed") throw pendingRun.start.error;
     if (
       (snapshot.lifecycle === "running" || pendingRun?.start.status === "started") &&
       !snapshot.pendingReplacement
@@ -3312,6 +3313,7 @@ export class AgentManager {
         return;
       }
 
+      let finished = false;
       let unsubscribe: (() => void) | null = null;
       let abortHandler: (() => void) | null = null;
 
@@ -3335,11 +3337,13 @@ export class AgentManager {
       };
 
       const finishOk = () => {
+        finished = true;
         cleanup();
         resolvePromise();
       };
 
       const finishErr = (error: unknown) => {
+        finished = true;
         cleanup();
         reject(error);
       };
@@ -3351,32 +3355,41 @@ export class AgentManager {
       }
 
       const checkCurrentState = () => {
+        if (finished) return true;
         const current = this.getAgent(agentId);
         if (!current) {
           finishErr(new Error(`Agent ${agentId} not found`));
           return true;
         }
 
-        const currentPendingRun = this.runs.getPendingRun(agentId);
-        if (
-          (current.lifecycle === "running" || currentPendingRun?.start.status === "started") &&
-          !current.pendingReplacement
-        ) {
+        const currentPendingRun = pendingRun ?? this.runs.getPendingRun(agentId);
+        if (currentPendingRun) {
+          const start = currentPendingRun.start;
+          if (start.status === "failed") {
+            finishErr(start.error);
+            return true;
+          }
+          if (start.status === "started") {
+            finishOk();
+            return true;
+          }
+          if (currentPendingRun.settled) {
+            finishErr(new Error(`Agent ${agentId} run finished before starting`));
+            return true;
+          }
+          return false;
+        }
+        if (current.lifecycle === "running" && !current.pendingReplacement) {
           finishOk();
           return true;
         }
 
-        if (currentPendingRun?.start.status === "failed") {
-          finishErr(new Error(currentPendingRun.start.error));
-          return true;
-        }
-
-        if (current.lifecycle === "error" && !currentPendingRun) {
+        if (current.lifecycle === "error") {
           finishErr(new Error(current.lastError ?? `Agent ${agentId} failed to start`));
           return true;
         }
 
-        if (!currentPendingRun && !current.activeForegroundTurnId && !current.pendingReplacement) {
+        if (!current.activeForegroundTurnId && !current.pendingReplacement) {
           finishErr(new Error(`Agent ${agentId} run finished before starting`));
           return true;
         }
@@ -3394,6 +3407,7 @@ export class AgentManager {
         { agentId, replayState: false },
       );
 
+      void pendingRun?.settledPromise.then(checkCurrentState);
       checkCurrentState();
     });
   }

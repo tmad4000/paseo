@@ -14,6 +14,7 @@ import {
   setupFinishNotification,
   waitForAgentRunStartWithTimeout,
   startAgentRun,
+  type AgentRunController,
 } from "./agent-prompt.js";
 import type { AgentManagerEvent, ManagedAgent } from "./agent-manager.js";
 import type {
@@ -22,6 +23,7 @@ import type {
   AgentSession,
   AgentStreamEvent,
 } from "./agent-sdk-types.js";
+import { StaleProviderSessionError } from "./stale-provider-session-error.js";
 import { isPromptNotSubmittedError } from "./prompt-not-submitted.js";
 
 interface CapturedLogger {
@@ -894,5 +896,149 @@ test("waiting for a run start still gives up at the run start budget", async () 
   } finally {
     vi.useRealTimers();
     await scenario.cleanup();
+  }
+});
+
+interface ScriptedRunInput {
+  startError?: Error;
+  afterStartError?: Error;
+  gate?: Promise<void>;
+  entered?: () => void;
+}
+async function* scriptedRun(input: ScriptedRunInput): AsyncGenerator<AgentStreamEvent> {
+  input.entered?.();
+  await input.gate;
+  if (input.startError) throw input.startError;
+  yield { type: "turn_started", provider: "codex", turnId: "owned-turn" };
+  if (input.afterStartError) throw input.afterStartError;
+}
+function scriptedRunController(iterators: AsyncGenerator<AgentStreamEvent>[]) {
+  let reservations = 0;
+  let reloads = 0;
+  const manager: AgentRunController = {
+    getAgent: () => null,
+    tryRunOutOfBand: () => false,
+    hasInFlightRun: () => false,
+    streamAgent: () => {
+      const iterator = iterators[reservations++];
+      if (!iterator) throw new Error("Unexpected automatic replay");
+      return iterator;
+    },
+    reloadAgentSession: async () => {
+      reloads += 1;
+    },
+    replaceAgentRun: async () => {
+      throw new Error("Unexpected replacement");
+    },
+    steerAgentRun: async () => {
+      throw new Error("Unexpected steer");
+    },
+    steerOrReplaceActiveTurn: async () => {
+      throw new Error("Unexpected steer/replacement");
+    },
+  };
+  return { manager, reservations: () => reservations, reloads: () => reloads };
+}
+function controlledRunGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+test("owned acceptance resolves when a pre-acceptance stale session retry starts", async () => {
+  const scenario = scriptedRunController([
+    scriptedRun({ startError: new StaleProviderSessionError("retired") }),
+    scriptedRun({}),
+  ]);
+  await expect(
+    startAgentRun(scenario.manager, "agent", "one request", createTestLogger(), {
+      awaitRunStart: true,
+    }),
+  ).resolves.toEqual({ disposition: "turn_started" });
+  expect(scenario.reservations()).toBe(2);
+  expect(scenario.reloads()).toBe(1);
+});
+
+test("a stale error after acceptance never replays the accepted run", async () => {
+  const log = createCapturedLogger();
+  const scenario = scriptedRunController([
+    scriptedRun({ afterStartError: new StaleProviderSessionError("accepted") }),
+    scriptedRun({}),
+  ]);
+  await expect(
+    startAgentRun(scenario.manager, "agent", "one request", log.logger, {
+      awaitRunStart: true,
+    }),
+  ).resolves.toEqual({ disposition: "turn_started" });
+  await log.nextRecord;
+  expect(scenario.reservations()).toBe(1);
+  expect(scenario.reloads()).toBe(0);
+});
+
+test("canceling owned acceptance stays unknown even if its reason claims non-submission", async () => {
+  const log = createCapturedLogger();
+  const gate = controlledRunGate();
+  const entered = controlledRunGate();
+  const scenario = scriptedRunController([
+    scriptedRun({
+      gate: gate.promise,
+      entered: entered.resolve,
+      startError: new StaleProviderSessionError("late"),
+    }),
+    scriptedRun({}),
+  ]);
+  const abort = new AbortController();
+  const pending = startAgentRun(scenario.manager, "agent", "one request", log.logger, {
+    awaitRunStart: true,
+    signal: abort.signal,
+  }).catch((error: unknown) => error);
+  await entered.promise;
+  abort.abort(
+    Object.assign(new Error("caller stopped waiting"), { code: "AGENT_PROMPT_NOT_SUBMITTED" }),
+  );
+  const error = await pending;
+  expect(error).toMatchObject({
+    message: "Provider submission outcome unknown: run start canceled",
+  });
+  expect(isPromptNotSubmittedError(error)).toBe(false);
+  gate.resolve();
+  await log.nextRecord;
+  expect(scenario.reservations()).toBe(1);
+  expect(scenario.reloads()).toBe(0);
+});
+
+test("owned acceptance timeout keeps late stale failures from automatically retrying", async () => {
+  const log = createCapturedLogger();
+  const gate = controlledRunGate();
+  const entered = controlledRunGate();
+  const scenario = scriptedRunController([
+    scriptedRun({
+      gate: gate.promise,
+      entered: entered.resolve,
+      startError: new StaleProviderSessionError("late"),
+    }),
+    scriptedRun({}),
+  ]);
+  vi.useFakeTimers();
+  try {
+    const pending = startAgentRun(scenario.manager, "agent", "one request", log.logger, {
+      awaitRunStart: true,
+    }).catch((error: unknown) => error);
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(EXPECTED_RUN_START_BUDGET_MS);
+    const error = await pending;
+    expect(error).toMatchObject({
+      message: "Provider submission outcome unknown: run start timed out",
+    });
+    expect(isPromptNotSubmittedError(error)).toBe(false);
+    gate.resolve();
+    await log.nextRecord;
+    expect(scenario.reservations()).toBe(1);
+    expect(scenario.reloads()).toBe(0);
+  } finally {
+    gate.resolve();
+    vi.useRealTimers();
   }
 });

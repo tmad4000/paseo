@@ -48,13 +48,18 @@ export function ViewBroadcastModal({
     try {
       // Re-plan at send time: agents may have started or finished a turn meanwhile.
       const result = await runBroadcast(text, planBroadcastForCurrentState(targets));
+      let variant: "error" | "info" | "success" = "success";
+      if (result.pending > 0) variant = "info";
+      if (result.failed > 0) variant = "error";
       toast.show(
         t("views.broadcast.result", {
           sent: result.sent,
           queued: result.queued,
-          skipped: result.skipped + result.failed,
+          pending: result.pending,
+          skipped: result.skipped,
+          failed: result.failed,
         }),
-        { variant: result.failed > 0 ? "error" : "success" },
+        { variant },
       );
       setText("");
       onClose();

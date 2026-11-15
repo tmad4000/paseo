@@ -38,12 +38,9 @@ import {
   type SessionState,
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
-import { flushQueueOutboxForServer, useQueueOutboxStore } from "@/stores/queue-outbox-store";
-import {
-  flushSendOutboxForServer,
-  supportsDurableDirectSend,
-  useSendOutboxStore,
-} from "@/stores/send-outbox-store";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
+import { useQueueOutboxStore } from "@/stores/queue-outbox-store";
+import { supportsDurableDirectSend, useSendOutboxStore } from "@/stores/send-outbox-store";
 import { createDirectSendAcceptanceHandler } from "@/composer/submission/direct-send-outbox";
 import { startOutboxReconnectFlush } from "@/contexts/session-outbox-flush";
 import { buildOutboxReportAgents, describeThisDevice } from "@/contexts/outbox-report";
@@ -599,31 +596,37 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         // Diagnostics saved while offline go out on every reconnect.
         if (hostRecordsDiagnostics) diagnosticsScheduler.flushNow();
         const flushes: Promise<void>[] = [];
-        if (features?.agentMessageQueue === true) {
-          flushes.push(
-            flushQueueOutboxForServer({
-              serverId,
-              client,
-              applySnapshot: (snapshot) =>
-                useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
-              onRetryLimit: () => toast.error(t("composer.attachments.queueSyncNeedsAttention")),
-            }).catch((error) => console.warn("[Session] Failed to flush queue outbox", error)),
-          );
-        }
         const durableDirectSend = supportsDurableDirectSend(features);
         void useSendOutboxStore
           .getState()
           .rememberHostSupport(serverId, durableDirectSend)
           .catch((error) => console.warn("[Session] Failed to remember host support", error));
-        if (durableDirectSend) {
+        if (features?.agentMessageQueue === true || durableDirectSend) {
           flushes.push(
-            flushSendOutboxForServer({
+            flushDeliveryOutboxes({
               serverId,
               client,
-              onAccepted: createDirectSendAcceptanceHandler(serverId),
-              onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
-              onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
-            }).catch((error) => console.warn("[Session] Failed to flush send outbox", error)),
+              queue:
+                features?.agentMessageQueue === true
+                  ? {
+                      serverId,
+                      client,
+                      applySnapshot: (snapshot) =>
+                        useSessionStore.getState().applyAgentQueueSnapshot(serverId, snapshot),
+                      onRetryLimit: () =>
+                        toast.error(t("composer.attachments.queueSyncNeedsAttention")),
+                    }
+                  : undefined,
+              direct: durableDirectSend
+                ? {
+                    serverId,
+                    client,
+                    onAccepted: createDirectSendAcceptanceHandler(serverId),
+                    onRejected: () => toast.error(t("composer.delivery.rejectedToast")),
+                    onRetryLimit: () => toast.error(t("composer.delivery.retryLimitToast")),
+                  }
+                : undefined,
+            }).catch((error) => console.warn("[Session] Failed to flush delivery outboxes", error)),
           );
         }
         // COMPAT(deliveryInspect): fork feature, added in fork v0.10.0-beta.15, remove gate after 2027-04-22.

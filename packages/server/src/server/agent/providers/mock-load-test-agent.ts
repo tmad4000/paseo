@@ -818,7 +818,9 @@ export class MockLoadTestAgentSession implements AgentSession {
     }
     if (this.remainingPromptRejections > 0) {
       this.remainingPromptRejections -= 1;
-      throw new Error("Requested mock prompt rejection");
+      throw Object.assign(new Error("Requested mock prompt rejection"), {
+        code: "AGENT_PROMPT_NOT_SUBMITTED",
+      });
     }
 
     const profile = resolveModelProfile(this.modelId);

@@ -1,3 +1,4 @@
+import { FailedPreparationRecovery } from "@/composer/submission/preparation-recovery";
 import { describe, expect, it, vi } from "vitest";
 import { submitAgentInput } from "./submit";
 
@@ -35,6 +36,8 @@ describe("submitAgentInput", () => {
       canSubmit: true,
       queueMessage,
       submitMessage,
+      getDraftRevision: () => 0,
+      recovery: new FailedPreparationRecovery().forScope("test"),
       clearDraft,
       setUserInput,
       setAttachments,
@@ -80,6 +83,8 @@ describe("submitAgentInput", () => {
       canSubmit: true,
       queueMessage,
       submitMessage,
+      getDraftRevision: () => 0,
+      recovery: new FailedPreparationRecovery().forScope("test"),
       clearDraft,
       setUserInput,
       setAttachments,
@@ -121,6 +126,8 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
+        recovery: new FailedPreparationRecovery().forScope("test"),
         clearDraft,
         setUserInput,
         setAttachments,
@@ -163,6 +170,8 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
+        recovery: new FailedPreparationRecovery().forScope("test"),
         clearDraft,
         setUserInput,
         setAttachments,
@@ -202,6 +211,8 @@ describe("submitAgentInput", () => {
         submitMessage: async () => {
           throw error;
         },
+        getDraftRevision: () => 0,
+        recovery: new FailedPreparationRecovery().forScope("test"),
         clearDraft: vi.fn(),
         setUserInput,
         setAttachments,
@@ -235,6 +246,8 @@ describe("submitAgentInput", () => {
         canSubmit: true,
         queueMessage,
         submitMessage,
+        getDraftRevision: () => 0,
+        recovery: new FailedPreparationRecovery().forScope("test"),
         clearDraft,
         setUserInput,
         setAttachments,
@@ -267,6 +280,8 @@ it("preserves draft and attachments until durable queue acceptance and on storag
     canSubmit: true,
     queueMessage: () => pending,
     submitMessage: async () => {},
+    getDraftRevision: () => 0,
+    recovery: new FailedPreparationRecovery().forScope("test"),
     clearDraft: vi.fn(),
     setUserInput,
     setAttachments,
@@ -280,4 +295,176 @@ it("preserves draft and attachments until durable queue acceptance and on storag
   expect(setUserInput).not.toHaveBeenCalled();
   expect(setAttachments).not.toHaveBeenCalled();
   expect(setSendError).toHaveBeenCalledWith("storage full");
+});
+
+it("keeps a preserve-and-lock draft untouched when preparation fails", async () => {
+  const pending = createDeferredPromise<void>();
+  const clearDraft = vi.fn();
+  const setUserInput = vi.fn();
+  const setAttachments = vi.fn();
+  const result = submitAgentInput({
+    message: "original",
+    attachments: [{ id: "original" }],
+    submitBehavior: "preserve-and-lock",
+    isAgentRunning: false,
+    canSubmit: true,
+    getDraftRevision: () => 0,
+    recovery: new FailedPreparationRecovery().forScope("test"),
+    queueMessage: vi.fn(),
+    submitMessage: () => pending.promise,
+    clearDraft,
+    setUserInput,
+    setAttachments,
+    setSendError: vi.fn(),
+    setIsProcessing: vi.fn(),
+  });
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
+  pending.reject(new Error("save failed"));
+  expect(await result).toBe("failed");
+  expect(clearDraft).not.toHaveBeenCalled();
+  expect(setUserInput).not.toHaveBeenCalled();
+  expect(setAttachments).not.toHaveBeenCalled();
+});
+
+describe("failed preparation recovery ownership", () => {
+  it("keeps the exact submitted snapshot when a newer draft survives a failed preparation", async () => {
+    let retained = 0;
+    const recovery = new FailedPreparationRecovery<{ id: string }>(() => {
+      retained += 1;
+      return () => {
+        retained -= 1;
+      };
+    });
+    const pending = createDeferredPromise<void>();
+    let text = "  original A\n";
+    let attachments = [{ id: "A-image" }];
+    let revision = 0;
+    const originalAttachments = attachments;
+    const result = submitAgentInput({
+      message: text,
+      attachments,
+      isAgentRunning: false,
+      canSubmit: true,
+      getDraftRevision: () => revision,
+      recovery: recovery.forScope("agent"),
+      submitMessage: () => pending.promise,
+      queueMessage: () => {},
+      clearDraft: () => {
+        text = "";
+        attachments = [];
+        revision += 1;
+      },
+      setUserInput: (value) => {
+        text = value;
+        revision += 1;
+      },
+      setAttachments: (value) => {
+        attachments = value;
+        revision += 1;
+      },
+      setSendError: () => {},
+      setIsProcessing: () => {},
+    });
+    expect(retained).toBe(1);
+    text = "B";
+    attachments = [{ id: "B-image" }];
+    revision += 1;
+    pending.reject(new Error("device full"));
+    expect(await result).toBe("failed");
+    expect(text).toBe("B");
+    expect(attachments).toEqual([{ id: "B-image" }]);
+    const [copy] = recovery.getSnapshot();
+    expect(copy.message).toBe("  original A\n");
+    expect(copy.attachments).toEqual(originalAttachments);
+    expect(copy.attachments[0]).toBe(originalAttachments[0]);
+    expect(retained).toBe(1);
+    await expect(
+      recovery.restore(copy.id, () => {
+        throw new Error("destination unavailable");
+      }),
+    ).rejects.toThrow("destination unavailable");
+    expect(recovery.getSnapshot()).toHaveLength(1);
+    expect(retained).toBe(1);
+    const restored = createDeferredPromise<void>();
+    const applied: string[] = [];
+    const restoring = recovery.restore(copy.id, async (snapshot) => {
+      await restored.promise;
+      applied.push(snapshot.message);
+    });
+    recovery.discard(copy.id);
+    expect(recovery.getSnapshot()).toHaveLength(1);
+    expect(retained).toBe(1);
+    restored.resolve();
+    await restoring;
+    expect(applied).toEqual(["  original A\n"]);
+    expect(recovery.getSnapshot()).toEqual([]);
+    expect(retained).toBe(0);
+    expect(text).toBe("B");
+    expect(attachments).toEqual([{ id: "B-image" }]);
+  });
+
+  it("does not keep successful or restored unchanged submissions as failed copies", async () => {
+    const recovery = new FailedPreparationRecovery<string>();
+    let revision = 0;
+    const run = (submitMessage: () => Promise<void>) =>
+      submitAgentInput({
+        message: "original",
+        attachments: ["image"],
+        isAgentRunning: false,
+        canSubmit: true,
+        getDraftRevision: () => revision,
+        recovery: recovery.forScope("agent"),
+        queueMessage: () => {},
+        submitMessage,
+        clearDraft: () => {
+          revision += 1;
+        },
+        setUserInput: () => {
+          revision += 1;
+        },
+        setAttachments: () => {
+          revision += 1;
+        },
+        setSendError: () => {},
+        setIsProcessing: () => {},
+      });
+    expect(await run(async () => {})).toBe("submitted");
+    expect(recovery.getSnapshot()).toEqual([]);
+    expect(
+      await run(async () => {
+        throw new Error("encode failed");
+      }),
+    ).toBe("failed");
+    expect(recovery.getSnapshot()).toEqual([]);
+  });
+
+  it("keeps submitted queue content when a newer draft replaces it before a failed save", async () => {
+    const recovery = new FailedPreparationRecovery<string>();
+    const pending = createDeferredPromise<void>();
+    let revision = 0;
+    const queued = submitAgentInput({
+      message: "A",
+      attachments: ["A-image"],
+      isAgentRunning: true,
+      canSubmit: true,
+      getDraftRevision: () => revision,
+      recovery: recovery.forScope("agent"),
+      queueMessage: () => pending.promise,
+      submitMessage: async () => {},
+      clearDraft: () => {},
+      setUserInput: () => {},
+      setAttachments: () => {},
+      setSendError: () => {},
+      setIsProcessing: () => {},
+    });
+    revision += 1;
+    pending.reject(new Error("queue save failed"));
+    expect(await queued).toBe("failed");
+    expect(recovery.getSnapshot()).toEqual([
+      expect.objectContaining({ message: "A", attachments: ["A-image"] }),
+    ]);
+    recovery.discard(recovery.getSnapshot()[0].id);
+    expect(recovery.getSnapshot()).toEqual([]);
+  });
 });

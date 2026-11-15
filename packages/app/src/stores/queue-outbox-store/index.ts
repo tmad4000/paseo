@@ -4,7 +4,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
 
+import { createOutboxWriteTracker } from "@/stores/outbox-write";
+import { flushDeliveryOutboxes } from "@/stores/delivery-outboxes";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import { awaitDeliveryOrderHydration, nextDeliveryCreatedAt } from "@/stores/delivery-order";
+import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
 import { SESSION_ROUTING_DRAFT_KEY } from "@/stores/draft-keys";
 import {
   flushQueueOutbox,
@@ -33,6 +37,7 @@ interface QueueOutboxActions {
   rejections: Record<string, string>;
   reject: (itemId: string, message: string) => void;
   acknowledgements: Record<string, { queued: boolean }>;
+  getAcknowledgement: (itemId: string) => { queued: boolean } | undefined;
   acknowledge: (itemId: string, snapshot: AgentQueueSnapshot) => Promise<boolean>;
   add: (entry: Omit<PendingQueueEnqueue, "createdAt" | "attempts">) => Promise<void>;
   remove: (itemId: string) => void;
@@ -50,7 +55,16 @@ function sortByCreation(entries: PendingQueueEnqueue[]): PendingQueueEnqueue[] {
   return entries.sort((a, b) => a.createdAt - b.createdAt);
 }
 
-const writesInFlight = new Set<string>();
+const writesInFlight = createOutboxWriteTracker<PendingQueueEnqueue>();
+
+export function pendingQueueOutboxWrite(itemId: string): Promise<void> | undefined {
+  return writesInFlight.pending(itemId);
+}
+
+export function queueOutboxDeliveryEntries(): PendingQueueEnqueue[] {
+  return writesInFlight.entries(useQueueOutboxStore.getState().entries);
+}
+
 const cancellationRequested = new Map<string, number>();
 let pendingWrite: Promise<void> = Promise.resolve();
 const persistedStorage = createValidatedPersistStorage(AsyncStorage, PersistedQueueOutboxSchema);
@@ -177,7 +191,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           const entry = get().entries[itemId];
           if (!entry?.routingDispatchHeld) return;
           const dispatched = { ...entry, routingDispatchHeld: false };
-          writesInFlight.add(itemId);
+          const finishWrite = writesInFlight.retain(itemId, entry);
           set((state) => ({ entries: { ...state.entries, [itemId]: dispatched } }));
           try {
             await pendingWrite;
@@ -187,7 +201,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
             await pendingWrite.catch(() => {});
             throw error;
           } finally {
-            writesInFlight.delete(itemId);
+            finishWrite();
           }
         }),
       rejections: {},
@@ -199,6 +213,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           },
         })),
       acknowledgements: {},
+      getAcknowledgement: (itemId) => get().acknowledgements[itemId],
       acknowledge: (itemId, snapshot) =>
         serializeQueueOperation(JSON.stringify(["routing-ack", itemId]), async () => {
           await awaitOutboxHydration();
@@ -259,6 +274,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
       add: async (entry) =>
         serializeQueueOperation("queue-outbox-mutation", async () => {
           await awaitOutboxHydration();
+          await awaitDeliveryOrderHydration();
           if (entry.routingOrigin && !get().entries[entry.itemId]) {
             const { useDraftStore, awaitDraftHydration, flushDraftPersistStorageDurably } =
               await import("@/stores/draft-store");
@@ -275,12 +291,10 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
             if (useDraftStore.getState().drafts[SESSION_ROUTING_DRAFT_KEY] !== draft)
               throw new Error("The submitted draft changed. Send it again.");
           }
-          writesInFlight.add(entry.itemId);
+          const saved = { ...entry, createdAt: nextDeliveryCreatedAt(), attempts: 0 };
+          const finishWrite = writesInFlight.retain(entry.itemId, saved);
           set((state) => ({
-            entries: {
-              ...state.entries,
-              [entry.itemId]: { ...entry, createdAt: Date.now(), attempts: 0 },
-            },
+            entries: { ...state.entries, [entry.itemId]: saved },
           }));
           try {
             await pendingWrite;
@@ -288,7 +302,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
             get().remove(entry.itemId);
             throw error;
           } finally {
-            writesInFlight.delete(entry.itemId);
+            finishWrite();
           }
         }),
 
@@ -308,7 +322,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
         const persistRemovalIntent = async () => {
           await awaitOutboxHydration();
           const previous = get().entries[entry.itemId];
-          writesInFlight.add(entry.itemId);
+          const finishWrite = writesInFlight.retain(entry.itemId, previous ?? entry);
           set({
             entries: {
               ...get().entries,
@@ -325,7 +339,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
             await pendingWrite.catch(() => {});
             throw error;
           } finally {
-            writesInFlight.delete(entry.itemId);
+            finishWrite();
           }
         };
         return serializeQueueOperation(JSON.stringify(["routing-ack", entry.itemId]), () =>
@@ -347,6 +361,7 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
           }
           if (entry.removalRequested && !get().acknowledgements[itemId])
             await checkpointCanceledRoutingDraft(entry);
+          const finishWrite = writesInFlight.retain(itemId, entry);
           get().remove(itemId);
           try {
             await pendingWrite;
@@ -354,6 +369,8 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
             set({ entries: { ...get().entries, [itemId]: entry } });
             await pendingWrite.catch(() => {});
             throw error;
+          } finally {
+            finishWrite();
           }
           if (entry.routingOrigin && entry.removalRequested) {
             const acknowledgements = { ...get().acknowledgements };
@@ -419,12 +436,20 @@ export const useQueueOutboxStore = create<QueueOutboxStore>()(
   ),
 );
 
-export async function flushQueueOutboxForServer(input: {
+export interface QueueOutboxServerInput {
   serverId: string;
-  client: QueueOutboxFlushClient;
+  client: QueueOutboxFlushClient & Partial<SendOutboxFlushClient>;
   applySnapshot: (snapshot: AgentQueueSnapshot) => void;
   onRetryLimit?: (entry: PendingQueueEnqueue) => void;
-}): Promise<void> {
+}
+
+export async function flushQueueOutboxForServer(input: QueueOutboxServerInput): Promise<void> {
+  await flushDeliveryOutboxes({ ...input, queue: input });
+}
+
+export async function flushQueueOutboxEntriesForServer(
+  input: QueueOutboxServerInput & { itemId?: string },
+): Promise<void> {
   await awaitOutboxHydration();
   const store = useQueueOutboxStore.getState();
   await flushQueueOutbox({

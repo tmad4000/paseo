@@ -1115,10 +1115,6 @@ function ChatAgentContent({
   invariant(effectiveAgent, "effectiveAgent is defined when the non-ready view is absent");
   const agentCwd = agentState.cwd;
   invariant(agentCwd, "agent cwd is defined when agent content is ready");
-  const showHistorySyncOverlay =
-    viewState.tag === "ready" &&
-    viewState.sync.status === "catching_up" &&
-    viewState.sync.ui === "overlay";
   const showHistorySyncError = viewState.tag === "ready" && viewState.sync.status === "sync_error";
   const isRetryingHistorySync =
     viewState.tag === "ready" &&
@@ -1144,7 +1140,6 @@ function ChatAgentContent({
       handleMessageSent={handleMessageSent}
       handleRewindComplete={handleRewindComplete}
       timelineSync={isPaneVisible && viewState.tag === "ready" ? viewState.sync : null}
-      showHistorySyncOverlay={showHistorySyncOverlay}
       showHistorySyncError={showHistorySyncError}
       isRetryingHistorySync={isRetryingHistorySync}
       cwd={agentCwd}
@@ -1176,7 +1171,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   handleMessageSent,
   handleRewindComplete,
   timelineSync,
-  showHistorySyncOverlay,
   showHistorySyncError,
   isRetryingHistorySync,
   retryTimelineSync,
@@ -1202,7 +1196,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   handleMessageSent: () => void;
   handleRewindComplete: () => void;
   timelineSync: AgentScreenReadySyncState | null;
-  showHistorySyncOverlay: boolean;
   showHistorySyncError: boolean;
   isRetryingHistorySync: boolean;
   retryTimelineSync: () => void;
@@ -1394,7 +1387,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   );
 
   const dockContent = (
-    <View style={styles.contentContainer}>
+    <View style={styles.contentContainer} testID="agent-history-content">
       {streamContent}
       {hasActiveComposer ? (
         <AgentLimitHandoff
@@ -1410,19 +1403,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       {showHistorySyncError ? (
         <TimelineSyncErrorCallout isRetrying={isRetryingHistorySync} onRetry={retryTimelineSync} />
       ) : null}
-    </View>
-  );
-
-  const dockOverlay = (
-    <>
-      {showHistorySyncOverlay ? (
-        <View style={styles.historySyncOverlay} testID="agent-history-overlay">
-          <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
-        </View>
-      ) : null}
-
       <TimelineSyncStatus sync={timelineSync} toast={toast} onDismiss={dismiss} />
-    </>
+    </View>
   );
 
   // The chat stays mounted behind the Stream so the draft, scroll position and
@@ -1432,7 +1414,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     <ChatSurface disabled={isArchivingCurrentAgent} active={isChatVisible}>
       {dockContent}
       {composerSection}
-      {dockOverlay}
     </ChatSurface>
   );
   const artifacts = agentState.artifacts ?? [];
@@ -1547,7 +1528,7 @@ function ChatSurface({
   disabled,
   active,
 }: {
-  children: [ReactNode, ReactNode, ReactNode];
+  children: [ReactNode, ReactNode, ReactNode?];
   disabled: boolean;
   /** Inactive keeps the chat mounted but hidden and inert, e.g. behind the Stream. */
   active: boolean;
@@ -2028,17 +2009,6 @@ const styles = StyleSheet.create((theme) => ({
     mobileSegmentedControl: {
       flex: 1,
     },
-  },
-  historySyncOverlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: theme.colors.surface0,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 40,
   },
   archivingOverlay: {
     position: "absolute",

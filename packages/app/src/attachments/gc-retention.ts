@@ -20,3 +20,7 @@ export function retainAttachmentForGarbageCollection(attachmentId: string): () =
 export function collectRetainedAttachmentIds(): ReadonlySet<string> {
   return new Set(retentionCounts.keys());
 }
+
+export function isAttachmentRetained(attachmentId: string): boolean {
+  return retentionCounts.has(attachmentId);
+}

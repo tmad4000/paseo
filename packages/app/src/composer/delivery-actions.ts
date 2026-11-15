@@ -11,14 +11,17 @@ import {
   type PendingDirectSend,
 } from "@/stores/send-outbox-store";
 import type { SendOutboxFlushClient } from "@/stores/send-outbox-store/model";
+import { flushDeliveryOutboxes, releaseOrderedAdmission } from "@/stores/delivery-outboxes";
+import type { QueueOutboxFlushClient } from "@/stores/queue-outbox-store/model";
 import { confirmDialog } from "@/utils/confirm-dialog";
 
 /** Sends one saved message again now, with the same id so the host can dedupe it. */
 export async function retryDirectSend(input: {
   entry: PendingDirectSend;
-  client: SendOutboxFlushClient;
+  client: SendOutboxFlushClient & Partial<QueueOutboxFlushClient>;
 }): Promise<void> {
   const { entry, client } = input;
+  if (entry.oneShot) throw new Error(i18n.t("composer.delivery.oneShot.retryUnsupported"));
   // Same guard as the reconnect flush: never resend to a host that cannot dedupe.
   const serverInfo = useSessionStore.getState().sessions[entry.serverId]?.serverInfo;
   if (serverInfo && !supportsDurableDirectSend(serverInfo.features)) {
@@ -36,7 +39,25 @@ export async function retryDirectSend(input: {
 /** Drops a saved message the user no longer wants delivered. */
 export async function discardDirectSend(entry: PendingDirectSend): Promise<void> {
   await useSendOutboxStore.getState().removeDurably(entry.clientMessageId);
+  if (entry.oneShot) releaseOrderedAdmission(entry.serverId, entry.clientMessageId);
   createMessageSubmissionWriter(entry.serverId).reject(entry.agentId, entry.clientMessageId);
+  const client = useSessionStore.getState().sessions[entry.serverId]?.client;
+  if (client) {
+    void flushDeliveryOutboxes({ serverId: entry.serverId, agentId: entry.agentId, client }).catch(
+      () => {},
+    );
+  }
+}
+
+export async function releaseOneShotDelivery(entry: PendingDirectSend): Promise<void> {
+  if (!entry.oneShot) return;
+  const confirmed = await confirmDialog({
+    title: i18n.t("composer.delivery.oneShot.title"),
+    message: i18n.t("composer.delivery.oneShot.detail", { messageId: entry.clientMessageId }),
+    confirmLabel: i18n.t("composer.delivery.oneShot.release"),
+    cancelLabel: i18n.t("composer.delivery.keepWaiting"),
+  });
+  if (confirmed) await discardDirectSend(entry);
 }
 
 /**
@@ -55,6 +76,8 @@ export async function editDirectSend(input: {
 }
 
 export function describeDirectSendAttention(entry: PendingDirectSend): string {
+  if (entry.oneShot)
+    return i18n.t("composer.delivery.oneShot.detail", { messageId: entry.clientMessageId });
   if (isUncertainSendOutcome(entry.rejectedError)) {
     return i18n.t("composer.delivery.uncertainDetail");
   }
@@ -71,6 +94,7 @@ export async function promptDirectSendAttention(input: {
   entry: PendingDirectSend;
   client: SendOutboxFlushClient | null;
 }): Promise<void> {
+  if (input.entry.oneShot) return releaseOneShotDelivery(input.entry);
   const confirmed = await confirmDialog({
     title: i18n.t("composer.delivery.attentionTitle"),
     message: describeDirectSendAttention(input.entry),

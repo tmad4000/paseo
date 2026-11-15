@@ -111,6 +111,15 @@ test("definitive destination rejection releases pending submission without claim
   expect(input.outbox.acknowledge).not.toHaveBeenCalled();
 });
 
+test("a retry racing completed background acknowledgement reports the receipt without another enqueue", async () => {
+  const { input } = fixture();
+  input.requireExisting = true;
+  input.outbox.getAcknowledgement = () => ({ queued: false });
+  expect(await deliverRoutedPrompt(input)).toEqual({ queued: false });
+  expect(input.client.enqueueAgentMessage).not.toHaveBeenCalled();
+  expect(input.outbox.add).not.toHaveBeenCalled();
+});
+
 function directFixture() {
   const agent = AgentSnapshotPayloadSchema.parse({
     id: "chat",

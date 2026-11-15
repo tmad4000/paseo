@@ -219,11 +219,42 @@ async function promptRowBox(
   return requireBoundingBox(chatOutlinePrompt(page, position));
 }
 
+type OutlineLayoutBox = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+
 async function requireBoundingBox(
   locator: Locator,
 ): Promise<{ x: number; y: number; width: number; height: number }> {
   await expect(locator).toBeVisible();
-  const box = await locator.boundingBox();
+  let box: OutlineLayoutBox | null = null;
+  let previous: OutlineLayoutBox | null = null;
+  await expect
+    .poll(
+      async () => {
+        const current = await locator.boundingBox();
+        if (
+          !current ||
+          !Object.values(current).every(Number.isFinite) ||
+          current.width <= 0 ||
+          current.height <= 0
+        ) {
+          previous = null;
+          box = null;
+          return false;
+        }
+        const prior = previous;
+        const stable =
+          prior !== null &&
+          Math.abs(current.x - prior.x) < 0.5 &&
+          Math.abs(current.y - prior.y) < 0.5 &&
+          Math.abs(current.width - prior.width) < 0.5 &&
+          Math.abs(current.height - prior.height) < 0.5;
+        box = stable ? current : null;
+        previous = current;
+        return box !== null;
+      },
+      { message: "Expected a stable chat outline layout box", intervals: [16, 32, 64, 100] },
+    )
+    .toBe(true);
   if (!box) {
     throw new Error("Expected the chat outline element to have a layout box");
   }

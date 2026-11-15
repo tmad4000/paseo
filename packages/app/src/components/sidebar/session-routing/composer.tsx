@@ -1936,6 +1936,8 @@ async function sendDirectFromComposer({
   try {
     const client = getHostRuntimeStore().getClient(recipient.serverId);
     if (!client) throw new Error("The host is offline. Your message is preserved.");
+    await awaitDraftHydration();
+    await flushDraftPersistStorageDurably();
     await deliverDirectRoutedPrompt({
       recipient,
       text,

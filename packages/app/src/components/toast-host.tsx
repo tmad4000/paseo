@@ -61,7 +61,7 @@ export interface ToastApi {
   error: (message: string) => void;
 }
 
-type ToastViewportPlacement = "app-shell" | "panel";
+type ToastViewportPlacement = "app-shell" | "panel" | "panel-bottom";
 
 const DEFAULT_DURATION_MS = 2200;
 // Long enough to read the message and reach the button.
@@ -180,10 +180,12 @@ export function ToastViewport({
   toast,
   onDismiss,
   placement = "app-shell",
+  passive = false,
 }: {
   toast: ToastState | null;
   onDismiss: () => void;
   placement?: ToastViewportPlacement;
+  passive?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const isMobile = useIsCompactFormFactor();
@@ -245,10 +247,14 @@ export function ToastViewport({
   const content = (
     <View
       style={styles.container(placement, topOffset)}
-      pointerEvents="box-none"
+      pointerEvents={passive ? "none" : "box-none"}
       collapsable={false}
     >
-      <View style={styles.widthBoundary} pointerEvents="box-none" collapsable={false}>
+      <View
+        style={styles.widthBoundary}
+        pointerEvents={passive ? "none" : "box-none"}
+        collapsable={false}
+      >
         {toast ? (
           <Animated.View
             entering={toastEntering}
@@ -256,6 +262,7 @@ export function ToastViewport({
             style={animatedStyles.surface}
             testID={toast.testID ?? "app-toast"}
             accessibilityRole="alert"
+            pointerEvents={passive ? "none" : "auto"}
           >
             <ToastCard
               toast={toast}
@@ -358,7 +365,9 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     left: theme.spacing[4],
     right: theme.spacing[4],
-    top: topOffset + (placement === "app-shell" ? theme.spacing[2] : theme.spacing[3]),
+    ...(placement === "panel-bottom"
+      ? { bottom: theme.spacing[2] }
+      : { top: topOffset + (placement === "app-shell" ? theme.spacing[2] : theme.spacing[3]) }),
     zIndex: OVERLAY_Z.toast,
     alignItems: "center",
   }),

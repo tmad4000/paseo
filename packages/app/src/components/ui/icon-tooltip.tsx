@@ -1,4 +1,5 @@
-import type { ReactElement, ReactNode } from "react";
+import { cloneElement, useMemo, type ReactElement, type ReactNode } from "react";
+import { measurePress } from "@/performance/response-monitor";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,11 +36,20 @@ export function IconTooltip({
   wrap?: boolean;
   testID?: string;
 }): ReactNode {
-  if (!label) return children;
+  // The hover/ref wrapper is a View; instrument the action it contains, not that View.
+  const action = useMemo(() => {
+    const child = children as ReactElement<{ onPress?: (...args: unknown[]) => unknown }>;
+    const onPress = child.props.onPress;
+    if (typeof onPress !== "function") return children;
+    return cloneElement(child, {
+      onPress: (...args: unknown[]) => measurePress("tooltip", () => onPress(...args)),
+    });
+  }, [children]);
+  if (!label) return action;
   return (
     <Tooltip delayDuration={300} enabledOnDesktop={!disabled}>
       <TooltipTrigger asChild>
-        {wrap ? <View collapsable={false}>{children}</View> : children}
+        {wrap ? <View collapsable={false}>{action}</View> : action}
       </TooltipTrigger>
       <TooltipContent side={side} align={align} offset={offset} testID={testID}>
         <Text style={styles.text}>{label}</Text>

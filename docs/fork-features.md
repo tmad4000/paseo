@@ -18,6 +18,73 @@ actions must survive. Compact phone layouts and native keyboard sizing retain th
 Source candidate against `accd8743ae6cc34e4d9ce7133fd3b18288e307eb`; not installed.
 Coverage: `composer/dock/pane-geometry.test.ts` and `e2e/browser/composer-stacked-panes.spec.ts`.
 
+## Mobile responsiveness — pspin-bvs
+
+`responsive-message-updates`: known chats keep their composer and controls available during
+first history sync, reconnect and sync failure; status/retry UI stays visible. Scheduled stream
+bursts yield in bounded batches and rotate busy chats, while explicit canonical-history flushes
+preserve complete ordering. A direct send unlocks after its device save; host acknowledgement
+continues in the ordered durable outbox, with pending/refused recovery and no overwrite of a new
+draft. Content-free handler/frame/stall diagnostics are bounded and use the existing paired-host
+reporter. See [agent stream performance](agent-stream-performance.md) for measurement limits.
+Acceptance: hold first history response and a send acknowledgement, type/send and start a second
+draft, release them and retain the second draft. Repeat with encoding and device save held, for both
+success and failure; preserve text and attachment edits, including identical-text re-entry and edits
+that return to the cleared state. Repeat Queue/default Send while running and explicit Queue with
+A→B→A edits and attachment changes before acceptance, including legacy local queues. Both the composer
+and input widget must retain those edits; unchanged Queue clears and Queue as new message preserves
+the composer. Hold Send/Queue encoding and device save with a review snapshot, then add or edit a
+comment under the same review key. Only unchanged submitted comments clear; newer comments stay
+visible/retryable, and discarded comments stay discarded. Updated context snapshots with the same
+key must survive cleanup too. Removing a review pill must remain effective after unrelated diff
+updates reconstruct its attachment; actual added, edited and ABA-edited comments must become visible.
+Repeat held encoding/save success and failure with the review pill's remove action and remove/reveal
+ABA before render: retain the edited composer and exact failed payload, and keep user suppression
+after submission cleanup. An unchanged draft still settles or restores on failure, and
+preserve-and-lock retains its pending input. Incomplete image encoding must save/send nothing in
+either delivery path and leave the original images recoverable. Fail held encoding/device storage
+after newer text/image/review edits: B stays in the composer and exact A remains in the memory-only
+recovery track with its images retained. Repeat Send, default Queue and explicit Queue with only
+review/context changes, including ABA edits and no text/image edits. Removing an image pill during
+a held Queue save must preserve its stored bytes for explicit recovery after failure; verify encoding
+those bytes after restore and cleanup after the final owner releases them. Restore must refuse an occupied composer, preserve the
+copy on a failed restore, and restore A into an empty composer without sending it or changing newer
+review comments. Discard releases only the chosen copy; successful submissions leave no duplicate
+recovery copy. Verify refusal and storage failure recovery, including a reconnect or manual retry refusal after
+transport loss. Hold direct Send A before host dispatch, save Queue B locally, keep typing,
+then release A and verify host delivery order A then B. Transport loss and unknown outcomes must
+retain the barrier across rehydration; retry/discard must wake delivery, while cancellation and other
+agents remain available. Repeat the admission check through Find/Send and thread Send Back; routed
+draft escrow and expected destination checks must survive the wait. If routed B is terminally removed
+after unknown A is discarded, ordinary queued C must proceed without another send or reconnect;
+a retained unresolved B must keep C pending. Repeat with routed B rejected during preparation,
+before admission registration: direct C must proceed after durable B removal without another send;
+failed removal must retain B and C and the routing draft. Routed direct sends and Stream replies must retain a
+stable-ID delivery hold across timeout and restart, without replay; explicit review/release resumes
+later work. The first ambiguous provider response and a failed completion-receipt write must retain
+that barrier for ordinary and one-shot sends, including older hosts' provider ambiguity wording;
+known-not-submitted refusals allow later work. Direct RPC and queue receipts must observe their own reserved iterator, so a later run's definite
+refusal cannot release an earlier ambiguous request. A stale-session retry resolves that same
+acceptance promise; accepted, timed-out or canceled runs must never automatically replay. Definite
+mock refusal remains retryable with its image payload; generic failures and ambiguous steering
+retain the receipt across reconstruction. Failed initial saves in either outbox must wake later
+saved work without another user action. Hold and fail recovery storage while B saves and flushes:
+ordinary unknown and one-shot A must retain ownership until a later explicit recovery succeeds.
+Broadcast receipts distinguish saved/pending work from confirmed host delivery.
+Restart with a backward device
+clock and delayed hydration of either outbox: new entries must still follow saved ones. User-error toasts temporarily replace passive sync status in the same alert above
+the composer. Tooltip press timing includes an `asChild` action; disabled controls stay unsampled.
+Source tests: `agent-timeline-sync-retry.spec.ts`, `use-agent-screen-state-machine.test.ts`,
+`session-stream-reducers.test.ts`, `composer/actions.test.ts`, `composer/submit.test.ts`,
+`composer/draft/input-draft.live.test.tsx`, `composer/input/state.test.ts`,
+`composer/attachments/workspace.test.ts`, `review/store.test.ts`, `agent/agent-manager.test.ts`,
+server `agent/agent-prompt.test.ts` and `session.test.ts`, `stores/send-outbox-store/index.test.ts`,
+`stores/send-outbox-store/model.test.ts`, `agent-message-submission.spec.ts`,
+`components/ui/tooltip.test.tsx`, `timeline/sync-status.test.tsx`, `viewed-agent-timelines.spec.ts`,
+`sidebar-workspace-mark-unread.spec.ts`, `chat-outline.spec.ts`, `performance/*.test.ts`.
+Source validation: [responsiveness QA receipt](qa/mobile-responsiveness.md). Native installed
+performance not yet verified.
+
 ## Move chats to workspaces — pspin-5qh
 
 `move-chat-workspace`: [Move to workspace](move-chat-workspace.md) preserves chat identity and

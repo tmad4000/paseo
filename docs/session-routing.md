@@ -149,8 +149,13 @@ an active turn. Both recheck host, chat/workspace identity, project, and scope i
 sending. The direct-send protocol has no atomic expected-workspace guard, so this is a preflight
 check rather than Queue's atomic admission guarantee.
 
-Direct sends are never replayed by the queue outbox. An uncertain response preserves the draft
-and tells the user to inspect the destination before resending. A successful send remains
+Direct routed sends remain one-shot. Before dispatch, the source draft is checkpointed and the
+shared send outbox saves an ordering hold with the request's stable message ID. A known failure
+before dispatch releases the hold. An ambiguous response preserves both the draft and the hold,
+including after app suspension or restart, so later messages cannot overtake the request. Neither
+reconnect nor Retry replays it. Inspect the destination, then use **Release delivery hold** in its
+Unsent messages track to allow later work. The confirmation warns that the original request may
+still arrive. Releasing the hold preserves the routing draft. A successful send remains
 acknowledged even if saved-draft cleanup fails; the receipt warns about the restored draft
 without offering a delivery retry. Later edits are protected by draft revision and timestamp.
 
@@ -212,7 +217,12 @@ Workspace moves cannot interleave with destination validation and durable new-it
 checks accepted item IDs and durable receipts before that guard, so retries after an accepted send
 remain idempotent even if the destination subsequently moves or is deleted. Pending receipts retain
 uncertain ownership. Fresh device items stay held out of reconnect delivery through draft/outbox
-checkpoints; the current host selection is checked again before direct delivery. Every routed enqueue,
+checkpoints; the current host selection is checked again before direct delivery. Active queue
+admissions share the device's per-agent delivery worker with ordinary Send. They retain their held
+item and original draft while an earlier direct send is unresolved, then recheck current host
+eligibility and supply the original expected destination IDs at dispatch. Retry or discard of the
+older send wakes an active admission; restarting the app still requires the existing recovery flow
+for an undispatched held routed item. Every routed enqueue,
 including reconnect retries, requires `sessionSearch` and `agentMessageQueue` from the current
 connection at the serialized dispatch boundary, after any awaited durable writes. A saved routed
 item stays pending after a host rollback until that host can validate its expected destination again;

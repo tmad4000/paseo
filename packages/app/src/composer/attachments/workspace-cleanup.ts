@@ -1,5 +1,6 @@
 import type { ComposerAttachment, WorkspaceComposerAttachment } from "@/attachments/types";
 import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachments-store";
+import { clearSubmittedReviewAttachment, sameReviewAttachmentSnapshot } from "@/review/store";
 import { isPullRequestContextAttachment } from "@/attachments/workspace-attachment-utils";
 
 export function getAttachmentKey(attachment: WorkspaceComposerAttachment): string {
@@ -57,6 +58,7 @@ function isSentContextAttachment(
   attachment: ComposerAttachment,
 ): attachment is WorkspaceComposerAttachment {
   return (
+    attachment.kind === "review" ||
     attachment.kind === "browser_element" ||
     attachment.kind === "chat_history" ||
     isPullRequestContextAttachment(attachment)
@@ -64,8 +66,44 @@ function isSentContextAttachment(
 }
 
 export function removeSentContextAttachments(attachments: readonly ComposerAttachment[]): void {
-  const sentContextKeys = attachments.filter(isSentContextAttachment).map(getAttachmentKey);
-  for (const key of sentContextKeys) {
-    removeWorkspaceAttachmentsMatching(key);
+  const submitted = new Set(attachments.filter(isSentContextAttachment));
+  const store = useWorkspaceAttachmentsStore.getState();
+  for (const [scopeKey, current] of Object.entries(store.attachmentsByScope)) {
+    const remaining = current.filter((attachment) => !submitted.has(attachment));
+    if (remaining.length !== current.length) {
+      store.setWorkspaceAttachments({ scopeKey, attachments: remaining });
+    }
   }
+}
+
+export function clearSubmittedWorkspaceAttachments(
+  attachments: readonly ComposerAttachment[],
+): void {
+  for (const attachment of attachments) {
+    if (attachment.kind === "review") clearSubmittedReviewAttachment(attachment);
+  }
+  removeSentContextAttachments(attachments);
+}
+
+export function hasWorkspaceAttachmentSnapshot(
+  attachments: readonly WorkspaceComposerAttachment[],
+  target: WorkspaceComposerAttachment,
+): boolean {
+  return attachments.some((attachment) => {
+    if (attachment === target) return true;
+    return (
+      attachment.kind === "review" &&
+      target.kind === "review" &&
+      sameReviewAttachmentSnapshot(attachment, target)
+    );
+  });
+}
+
+export function activeWorkspaceAttachments(
+  attachments: readonly WorkspaceComposerAttachment[],
+  suppressed: readonly WorkspaceComposerAttachment[],
+): WorkspaceComposerAttachment[] {
+  return attachments.filter(
+    (attachment) => !hasWorkspaceAttachmentSnapshot(suppressed, attachment),
+  );
 }

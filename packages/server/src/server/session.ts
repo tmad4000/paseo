@@ -73,11 +73,7 @@ import {
   toAgentPersistenceHandle,
 } from "./persistence-hooks.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent/agent-loading.js";
-import {
-  sendPromptToAgent,
-  waitForAgentRunStartWithTimeout,
-  unarchiveAgentState,
-} from "./agent/agent-prompt.js";
+import { sendPromptToAgent, unarchiveAgentState } from "./agent/agent-prompt.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -9332,7 +9328,7 @@ export class Session {
       const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
 
       const send = async () => {
-        const result = await sendPromptToAgent({
+        await sendPromptToAgent({
           agentManager: this.agentManager,
           agentStorage: this.agentStorage,
           agentId,
@@ -9342,14 +9338,9 @@ export class Session {
           clearPendingPermissions: true,
           runOptions: { sender },
           logger: this.sessionLogger,
+          awaitRunStart: true,
+          signal: this.delivery.requestSignal,
         });
-        if (result.disposition === "turn_started") {
-          await waitForAgentRunStartWithTimeout(
-            this.agentManager,
-            agentId,
-            this.delivery.requestSignal,
-          );
-        }
       };
       if (msg.messageId) {
         await this.messageReceipts.send({
