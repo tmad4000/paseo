@@ -5,6 +5,7 @@ Run nice -n 19 python3 scripts/generate-fork-icons.py [--check].
 from pathlib import Path
 from io import BytesIO
 import argparse, json, hashlib, struct
+import xml.etree.ElementTree as ET
 import cairosvg
 from PIL import Image, ImageDraw
 ROOT=Path(__file__).resolve().parent.parent
@@ -29,6 +30,10 @@ def png(path,size,style='square'):
     im=art.resize(size,Image.Resampling.LANCZOS)
     if style=='square':
         opaque=Image.new('RGBA',size,'black');opaque.alpha_composite(im);im=opaque
+    if size==(16,16):
+        symbol=ET.parse(SOURCE).getroot().find(".//*[@id='small-badge']")
+        svg=b'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'+ET.tostring(symbol)+b'</svg>'
+        overlay=Image.open(BytesIO(cairosvg.svg2png(bytestring=svg))).convert('RGBA');im.alpha_composite(overlay)
     out=BytesIO();im.save(out,format='PNG');outputs[path]=out.getvalue();cache[key]=(im,out.getvalue())
     return im
 # Regenerate only application identity assets, preserving illustrations and notification/status glyphs.
@@ -69,15 +74,20 @@ for ext in ('icns','ico'):
  if ext=='icns':
   chunks=[]
   for tag,size in [('icp4',16),('ic11',32),('icp5',32),('ic12',64),('ic07',128),('ic13',256),('ic08',256),('ic14',512),('ic09',512),('ic10',1024)]:
-   data=BytesIO();mac.resize((size,size),Image.Resampling.LANCZOS).save(data,format='PNG');data=data.getvalue();chunks.append(tag.encode()+struct.pack('>I',len(data)+8)+data)
+   data=cache[((size,size),'mac')][1];chunks.append(tag.encode()+struct.pack('>I',len(data)+8)+data)
   body=b''.join(chunks);out.write(b'icns'+struct.pack('>I',len(body)+8)+body)
- else:mac.save(out,format='ICO',sizes=[(s,s) for s in (16,32,48,64,128,256)])
+ else:
+  sizes=(16,32,64,128,256);frames=[cache[((size,size),'mac')][1] for size in sizes]
+  out.write(struct.pack('<HHH',0,1,len(sizes)));offset=6+16*len(sizes)
+  for size,data in zip(sizes,frames):
+   out.write(struct.pack('<BBBBHHII',size%256,size%256,0,0,1,32,len(data),offset));offset+=len(data)
+  for data in frames:out.write(data)
  outputs[base/f'icon.{ext}']=out.getvalue()
 # Web favicon identity only; marketing logo is outside scope.
 favicon=ROOT/('packages/website/public' if paseo else 'admin-web/public')
 outputs[favicon/'favicon.svg']=SOURCE.read_bytes()
 if paseo:
- out=BytesIO();master.resize((256,256),Image.Resampling.LANCZOS).save(out,format='ICO',sizes=[(s,s) for s in (16,32,48,64,128,256)]);outputs[favicon/'favicon.ico']=out.getvalue()
+ outputs[favicon/'favicon.ico']=outputs[base/'icon.ico']
 if paseo:
     for scheme in ('light','dark'):
       for state,color in [('',None),('-running','#3b82f6'),('-attention','#22c55e')]:
@@ -98,7 +108,7 @@ for row,(size,y) in enumerate([(16,40),(32,130),(64,230),(128,360),(1024,750)]):
  for col,bg in enumerate(('#fff','#15171c')):
   x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+25+size+40),fill=bg)
   for i,img in enumerate((up,mac)):
-   tile=img.resize((size,size),Image.Resampling.LANCZOS)
+   tile=cache[((size,size),'mac')][0] if i==1 else img.resize((size,size),Image.Resampling.LANCZOS)
    # At 1024px show upstream then fork vertically to retain true native dimensions.
    px=x+(i*(size+24) if size<1024 else 20);py=y+45+(i*1080 if size==1024 else 0)
    if size==1024:draw.rectangle((x,py-10,x+1100,py+1034),fill=bg)
