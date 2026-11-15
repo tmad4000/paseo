@@ -12,8 +12,11 @@ const state = vi.hoisted(() => ({
   result: { currentVersion: "0.10.0-beta.19", readyToInstall: true } as {
     currentVersion: string;
     readyToInstall: boolean;
+    publishedVersion?: string;
+    publishedTag?: string;
   } | null,
   refresh: vi.fn(),
+  openExternalUrl: vi.fn(),
 }));
 vi.mock("@/desktop/updates/use-fork-update-check", () => ({ useForkUpdateCheck: () => state }));
 vi.mock("@/desktop/settings/desktop-settings", () => ({
@@ -31,6 +34,30 @@ vi.mock("@/utils/desktop-window", () => ({
 }));
 vi.mock("@/utils/app-version", () => ({ resolveAppVersion: () => "0.10.0-beta.19" }));
 vi.mock("@/changelog", () => ({ openChangelog: vi.fn() }));
+vi.mock("@/utils/open-external-url", () => ({ openExternalUrl: state.openExternalUrl }));
+// The runtime query needs Electron IPC; feed the real identity resolver the fork's runtime facts.
+vi.mock("@/desktop/updates/use-update-identity", async () => {
+  const identity = await import("@/desktop/updates/update-identity");
+  return {
+    useUpdateIdentity: (
+      role: "update" | "installed",
+      version: string | null | undefined,
+      result: { publishedVersion?: string | null; publishedTag?: string | null } | null,
+    ) =>
+      version
+        ? identity.resolveUpdateIdentity({
+            runtime: {
+              productName: "Paseo Fork",
+              updateSource: { owner: "tmad4000", repo: "paseo" },
+            },
+            role,
+            version,
+            channel: "beta",
+            published: identity.resolvePublishedRelease(result),
+          })
+        : null,
+  };
+});
 vi.mock("@/constants/layout", () => ({
   getIsElectronRuntime: () => true,
   HEADER_INNER_HEIGHT: 44,
@@ -45,6 +72,7 @@ beforeEach(async () => {
   state.check = { state: "checked", latestVersion: "0.10.0-beta.20" };
   state.result = { currentVersion: "0.10.0-beta.19", readyToInstall: true };
   state.refresh.mockClear();
+  state.openExternalUrl.mockClear();
 });
 afterEach(cleanup);
 
@@ -62,6 +90,23 @@ describe("Fork version control", () => {
     expect(screen.getByText("v0.10.0-beta.18").textContent).toBe("v0.10.0-beta.18");
     fireEvent.click(screen.getByText("Check for updates"));
     expect(state.refresh).toHaveBeenCalledTimes(1);
+  });
+  it("names the offered update's product, channel and feed, and opens its release page", async () => {
+    state.result = {
+      currentVersion: "0.10.0-beta.19",
+      readyToInstall: true,
+      publishedVersion: "0.10.0-beta.20",
+      publishedTag: "0.10.0-beta.20",
+    };
+    render(<ForkVersionIndicator />);
+    fireEvent.click(screen.getByTestId("fork-version-trigger"));
+    expect((await screen.findByTestId("fork-update-identity")).textContent).toBe(
+      "Update: Paseo Fork v0.10.0-beta.20 · beta channel · from tmad4000/paseo",
+    );
+    fireEvent.click(screen.getByText("What's new in v0.10.0-beta.20"));
+    expect(state.openExternalUrl).toHaveBeenCalledWith(
+      "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.20",
+    );
   });
   it("shows failure as Unknown, and a build ahead of the feed as Newer", () => {
     state.check = { state: "unknown" };

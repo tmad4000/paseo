@@ -2062,6 +2062,25 @@ export const zhCN: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · 来自 {{source}}",
+      update: "更新：{{identity}}",
+      channel: {
+        stable: "stable 通道",
+        beta: "beta 通道",
+      },
+      whatsNew: "{{version}} 更新内容",
+      restart: {
+        agentsStop: "重启期间本地 agents 和 terminals 会停止。daemon 会随 app 一起重启。",
+        agentsStopKeepRunningOn:
+          "即使开启了“退出后保持 daemon 运行”，重启期间本地 agents 和 terminals 也会停止。daemon 会随 app 一起重启。",
+        agentsKeepRunning:
+          "agents 会继续运行。本地 daemon 不是由本次 app 会话启动的，因此会保持当前版本。",
+        noDaemon: "没有正在运行的本地 daemon，因此不会停止任何 agents。",
+        unknown: "由此 app 启动的 daemon 中的 agents 会在重启期间停止。",
+      },
+    },
     windowControls: {
       minimize: "最小化窗口",
       maximize: "最大化窗口",

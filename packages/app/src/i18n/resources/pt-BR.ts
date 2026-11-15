@@ -2120,6 +2120,26 @@ export const ptBR: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · de {{source}}",
+      update: "Atualização: {{identity}}",
+      channel: {
+        stable: "canal stable",
+        beta: "canal beta",
+      },
+      whatsNew: "Novidades da {{version}}",
+      restart: {
+        agentsStop:
+          "Agentes e terminais locais param durante a reinicialização. O daemon reinicia com o app.",
+        agentsStopKeepRunningOn:
+          "Agentes e terminais locais param durante a reinicialização, mesmo com “Manter daemon em execução ao sair” ativado. O daemon reinicia com o app.",
+        agentsKeepRunning:
+          "Os agentes continuam em execução. Esta sessão do app não iniciou o daemon local, então ele continua na versão atual.",
+        noDaemon: "Nenhum daemon local está em execução, então nenhum agente para.",
+        unknown: "Os agentes do daemon iniciado por este app param durante a reinicialização.",
+      },
+    },
     windowControls: {
       minimize: "Minimizar janela",
       maximize: "Maximizar janela",

@@ -2129,6 +2129,27 @@ export const fr: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · depuis {{source}}",
+      update: "Mise à jour : {{identity}}",
+      channel: {
+        stable: "canal stable",
+        beta: "canal bêta",
+      },
+      whatsNew: "Quoi de neuf dans {{version}}",
+      restart: {
+        agentsStop:
+          "Les agents et terminaux locaux s'arrêtent pendant le redémarrage. Le démon redémarre avec l'application.",
+        agentsStopKeepRunningOn:
+          "Les agents et terminaux locaux s'arrêtent pendant le redémarrage, même avec « Laisser le démon fonctionner après avoir quitté » activé. Le démon redémarre avec l'application.",
+        agentsKeepRunning:
+          "Les agents continuent de fonctionner. Cette session de l'application n'a pas démarré le démon local, il reste donc sur sa version actuelle.",
+        noDaemon: "Aucun démon local n'est en cours d'exécution, donc aucun agent ne s'arrête.",
+        unknown:
+          "Les agents du démon démarré par cette application s'arrêtent pendant le redémarrage.",
+      },
+    },
     windowControls: {
       minimize: "Réduire la fenêtre",
       maximize: "Agrandir la fenêtre",

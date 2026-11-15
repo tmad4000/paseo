@@ -13,20 +13,33 @@ import {
   type UpdateCalloutBody,
 } from "@/desktop/updates/resolve-update-callout";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
+import { useUpdateIdentity, useUpdateRestartLine } from "@/desktop/updates/use-update-identity";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openChangelog } from "@/changelog";
+import { openExternalUrl } from "@/utils/open-external-url";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 function renderBody(body: UpdateCalloutBody, t: ReturnType<typeof useTranslation>["t"]): ReactNode {
-  if (body.kind === "installing") return t("desktop.updates.callout.installingDescription");
   if (body.kind === "error") return body.message;
-  return <UpdateAvailableDescription versionLabel={body.versionLabel ?? undefined} t={t} />;
+  if (body.kind === "installing") {
+    return (
+      <>
+        {body.identityLine ? (
+          <SidebarCalloutDescriptionText>{body.identityLine}</SidebarCalloutDescriptionText>
+        ) : null}
+        <SidebarCalloutDescriptionText>
+          {t("desktop.updates.callout.installingDescription")}
+        </SidebarCalloutDescriptionText>
+      </>
+    );
+  }
+  return <UpdateAvailableDescription body={body} t={t} />;
 }
 
 function materializeActions(
   actions: readonly UpdateCalloutActionDescriptor[],
-  handlers: { changelog: () => void; install: () => void; retry: () => void },
+  handlers: Record<UpdateCalloutActionDescriptor["role"], () => void>,
 ): SidebarCalloutAction[] {
   return actions.map((action) => ({
     label: action.label,
@@ -50,6 +63,9 @@ export function UpdateCalloutSource() {
     isInstalling,
   } = useDesktopAppUpdater();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isShown = status === "available" || status === "installing" || status === "error";
+  const identity = useUpdateIdentity("update", availableUpdate?.latestVersion, availableUpdate);
+  const restartLine = useUpdateRestartLine(isDesktopApp && isShown).line;
 
   const install = useStableEvent(() => {
     void installUpdate();
@@ -80,8 +96,11 @@ export function UpdateCalloutSource() {
       isInstalling,
       availableUpdate,
       errorMessage,
+      identity,
+      restartLine,
     });
     if (!descriptor) return;
+    const { releaseNotesUrl } = descriptor;
 
     return callouts.show({
       id: descriptor.id,
@@ -95,6 +114,9 @@ export function UpdateCalloutSource() {
       variant: descriptor.variant,
       actions: materializeActions(descriptor.actions, {
         changelog: openChangelog,
+        releaseNotes: () => {
+          if (releaseNotesUrl) void openExternalUrl(releaseNotesUrl);
+        },
         install,
         retry,
       }),
@@ -104,9 +126,11 @@ export function UpdateCalloutSource() {
     availableUpdate,
     callouts,
     errorMessage,
+    identity,
     install,
     isDesktopApp,
     isInstalling,
+    restartLine,
     retry,
     status,
     theme.colors.foregroundMuted,
@@ -118,22 +142,21 @@ export function UpdateCalloutSource() {
 }
 
 function UpdateAvailableDescription({
-  versionLabel,
+  body,
   t,
 }: {
-  versionLabel?: string;
+  body: Extract<UpdateCalloutBody, { kind: "available" }>;
   t: ReturnType<typeof useTranslation>["t"];
 }) {
+  let readyLine = t("desktop.updates.callout.newVersionReady");
+  if (body.identityLine) readyLine = body.identityLine;
+  else if (body.versionLabel) {
+    readyLine = t("desktop.updates.callout.versionReady", { version: body.versionLabel });
+  }
   return (
     <>
-      <SidebarCalloutDescriptionText>
-        {versionLabel
-          ? t("desktop.updates.callout.versionReady", { version: versionLabel })
-          : t("desktop.updates.callout.newVersionReady")}
-      </SidebarCalloutDescriptionText>
-      <SidebarCalloutDescriptionText>
-        {t("desktop.updates.callout.restartWarning")}
-      </SidebarCalloutDescriptionText>
+      <SidebarCalloutDescriptionText>{readyLine}</SidebarCalloutDescriptionText>
+      <SidebarCalloutDescriptionText>{body.restartLine}</SidebarCalloutDescriptionText>
     </>
   );
 }

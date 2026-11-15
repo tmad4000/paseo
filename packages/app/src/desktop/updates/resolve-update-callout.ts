@@ -1,12 +1,18 @@
 import type { DesktopAppUpdateStatus } from "@/desktop/updates/use-desktop-app-updater";
+import type { UpdateIdentity } from "@/desktop/updates/update-identity";
 import { i18n } from "@/i18n/i18next";
 
 export type UpdateCalloutBody =
-  | { kind: "available"; versionLabel: string | null }
-  | { kind: "installing" }
+  | {
+      kind: "available";
+      versionLabel: string | null;
+      identityLine: string | null;
+      restartLine: string;
+    }
+  | { kind: "installing"; identityLine: string | null }
   | { kind: "error"; message: string };
 
-export type UpdateCalloutActionRole = "changelog" | "install" | "retry";
+export type UpdateCalloutActionRole = "changelog" | "releaseNotes" | "install" | "retry";
 
 export interface UpdateCalloutActionDescriptor {
   role: UpdateCalloutActionRole;
@@ -21,6 +27,7 @@ export interface UpdateCalloutDescriptor {
   priority: number;
   title: string;
   body: UpdateCalloutBody;
+  releaseNotesUrl: string | null;
   showGiftIcon: boolean;
   variant: "default" | "error";
   actions: UpdateCalloutActionDescriptor[];
@@ -33,11 +40,40 @@ export interface ResolveUpdateCalloutInput {
   isInstalling: boolean;
   availableUpdate: { latestVersion?: string | null } | null;
   errorMessage: string | null;
+  /** Product, version, channel and feed of the offered update; null until known. */
+  identity: UpdateIdentity | null;
+  restartLine: string;
 }
 
 function formatVersionLabel(latestVersion: string | null | undefined): string | null {
   if (!latestVersion) return null;
   return `v${latestVersion.replace(/^v/i, "")}`;
+}
+
+function resolveActions(input: {
+  isError: boolean;
+  isInstalling: boolean;
+  releaseNotesUrl: string | null;
+}): UpdateCalloutActionDescriptor[] {
+  const actions: UpdateCalloutActionDescriptor[] = [
+    {
+      role: input.releaseNotesUrl ? "releaseNotes" : "changelog",
+      label: i18n.t("desktop.updates.callout.whatsNew"),
+    },
+  ];
+  if (input.isError) {
+    actions.push({ role: "retry", label: i18n.t("common.actions.retry"), variant: "primary" });
+    return actions;
+  }
+  actions.push({
+    role: "install",
+    label: input.isInstalling
+      ? i18n.t("desktop.updates.callout.installingAction")
+      : i18n.t("desktop.updates.callout.installAndRestart"),
+    variant: "primary",
+    disabled: input.isInstalling,
+  });
+  return actions;
 }
 
 export function resolveUpdateCalloutDescriptor(
@@ -54,12 +90,14 @@ export function resolveUpdateCalloutDescriptor(
 
   const latestVersion = input.availableUpdate?.latestVersion ?? null;
   const dismissalKey = `desktop-update:${input.status}:${latestVersion ?? "unknown"}`;
+  const identityLine = input.identity?.line ?? null;
+  const releaseNotesUrl = input.identity?.releaseNotesUrl ?? null;
 
   let title: string;
   let body: UpdateCalloutBody;
   if (isInstalling) {
     title = i18n.t("desktop.updates.callout.installingTitle");
-    body = { kind: "installing" };
+    body = { kind: "installing", identityLine };
   } else if (isError) {
     title = i18n.t("desktop.updates.callout.failedTitle");
     body = {
@@ -68,24 +106,15 @@ export function resolveUpdateCalloutDescriptor(
     };
   } else {
     title = i18n.t("desktop.updates.callout.availableTitle");
-    body = { kind: "available", versionLabel: formatVersionLabel(latestVersion) };
+    body = {
+      kind: "available",
+      versionLabel: formatVersionLabel(latestVersion),
+      identityLine,
+      restartLine: input.restartLine,
+    };
   }
 
-  const actions: UpdateCalloutActionDescriptor[] = [
-    { role: "changelog", label: i18n.t("desktop.updates.callout.whatsNew") },
-  ];
-  if (isError) {
-    actions.push({ role: "retry", label: i18n.t("common.actions.retry"), variant: "primary" });
-  } else {
-    actions.push({
-      role: "install",
-      label: isInstalling
-        ? i18n.t("desktop.updates.callout.installingAction")
-        : i18n.t("desktop.updates.callout.installAndRestart"),
-      variant: "primary",
-      disabled: isInstalling,
-    });
-  }
+  const actions = resolveActions({ isError, isInstalling, releaseNotesUrl });
 
   return {
     id: "desktop-update",
@@ -93,6 +122,7 @@ export function resolveUpdateCalloutDescriptor(
     priority: 200,
     title,
     body,
+    releaseNotesUrl,
     showGiftIcon: isAvailable,
     variant: isError ? "error" : "default",
     actions,

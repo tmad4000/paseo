@@ -61,6 +61,7 @@ export function useHelpUpdateCheck({
       : { state: current?.state ?? "checking" };
   return {
     releaseCheck,
+    result: current?.state === "checked" ? current.result : null,
     canInstall:
       open && isDesktopApp && current?.state === "checked" && current.result.readyToInstall,
   };

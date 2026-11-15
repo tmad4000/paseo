@@ -70,6 +70,7 @@ describe("checkForAppUpdate", () => {
       currentVersion: "1.2.3",
       latestVersion: "1.2.3",
       publishedVersion: null,
+      publishedTag: null,
       body: null,
       date: null,
       errorMessage: null,

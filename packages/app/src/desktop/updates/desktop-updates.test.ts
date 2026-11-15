@@ -131,14 +131,28 @@ describe("desktop-updates helpers", () => {
       parseDesktopRuntimeInfo({
         appVersion: " 0.1.64 ",
         runningUnderARM64Translation: true,
+        productName: "Paseo Fork",
+        updateSource: { owner: "tmad4000", repo: "paseo" },
       }),
     ).toEqual({
       appVersion: "0.1.64",
       runningUnderARM64Translation: true,
+      productName: "Paseo Fork",
+      updateSource: { owner: "tmad4000", repo: "paseo" },
     });
+    expect(parseDesktopRuntimeInfo({ appVersion: "0.1.64", updateSource: { owner: "x" } })).toEqual(
+      {
+        appVersion: "0.1.64",
+        runningUnderARM64Translation: false,
+        productName: null,
+        updateSource: null,
+      },
+    );
     expect(parseDesktopRuntimeInfo(null)).toEqual({
       appVersion: null,
       runningUnderARM64Translation: false,
+      productName: null,
+      updateSource: null,
     });
   });
 

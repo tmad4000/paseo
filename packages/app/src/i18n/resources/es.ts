@@ -2131,6 +2131,27 @@ export const es: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · de {{source}}",
+      update: "Actualización: {{identity}}",
+      channel: {
+        stable: "canal stable",
+        beta: "canal beta",
+      },
+      whatsNew: "Qué hay de nuevo en {{version}}",
+      restart: {
+        agentsStop:
+          "Los agentes y terminales locales se detienen durante el reinicio. El demonio se reinicia con la aplicación.",
+        agentsStopKeepRunningOn:
+          "Los agentes y terminales locales se detienen durante el reinicio, aunque «Mantener el demonio en ejecución después de salir» esté activado. El demonio se reinicia con la aplicación.",
+        agentsKeepRunning:
+          "Los agentes siguen en ejecución. Esta sesión de la aplicación no inició el demonio local, así que se queda en su versión actual.",
+        noDaemon: "No hay ningún demonio local en ejecución, así que no se detiene ningún agente.",
+        unknown:
+          "Los agentes del demonio que inició esta aplicación se detienen durante el reinicio.",
+      },
+    },
     windowControls: {
       minimize: "Minimizar ventana",
       maximize: "Maximizar ventana",

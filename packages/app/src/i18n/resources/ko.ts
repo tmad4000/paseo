@@ -2094,6 +2094,26 @@ export const ko: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · {{source}}에서 배포",
+      update: "업데이트: {{identity}}",
+      channel: {
+        stable: "안정 채널",
+        beta: "베타 채널",
+      },
+      whatsNew: "{{version}}의 새로운 기능",
+      restart: {
+        agentsStop:
+          "재시작하는 동안 로컬 에이전트와 터미널이 중지됩니다. 데몬은 앱과 함께 다시 시작됩니다.",
+        agentsStopKeepRunningOn:
+          "'종료 후에도 데몬 계속 실행'이 켜져 있어도 재시작하는 동안 로컬 에이전트와 터미널이 중지됩니다. 데몬은 앱과 함께 다시 시작됩니다.",
+        agentsKeepRunning:
+          "에이전트는 계속 실행됩니다. 로컬 데몬은 이 앱 세션에서 시작되지 않았으므로 현재 버전으로 유지됩니다.",
+        noDaemon: "실행 중인 로컬 데몬이 없으므로 중지되는 에이전트가 없습니다.",
+        unknown: "이 앱이 시작한 데몬의 에이전트는 재시작하는 동안 중지됩니다.",
+      },
+    },
     windowControls: {
       minimize: "창 최소화",
       maximize: "창 최대화",
