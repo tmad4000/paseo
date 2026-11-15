@@ -2,6 +2,18 @@
 
 Newest first. Each entry records the ask, its source, and the outcome, and links to its topic page.
 
+## 2026-11-14: Track the fork in beads and World Issue Tracker
+
+- **Ask:** Jacob asked for the agent-peek / registry / collapsible-panes work to be tracked as a bead first, mirrored on the existing WIT Paseo board, and mirrored on a new WIT board for the fork itself, so WIT can serve as a Linear-like tracker cross-linked to beads and PRs. He also asked which WIT features are missing for that use.
+- **Outcome:** Bead epic `pspin-sgu` with children `.1`–`.3` pushed to `refs/dolt/data` and read back from a fresh clone. WIT mirroring is **blocked**: the agent's Ideaflow connection does not have WIT permission granted, and there was no signed-in WIT session to use. The fork board does not exist yet. See [fork-tracking.md](fork-tracking.md).
+
+## 2026-11-14: Subagent side peek, a spawned-agent registry, and collapsible panes
+
+- **Ask:** Jacob asked to see a chat's subagents and open one in a side peek, with provider subagents kept apart from agents spawned through Paseo; for a collapsible registry of spawned agents beside the chat, possibly as a section of the questions and asks pane, in the style of Claude's redesigned Projects; and for workspace panes that collapse to their header strip. He asked whether Paseo-spawned agents are registered as subagents or separately.
+- **Source:** Branch `design/agent-peek-registry-20261114`. Bead `pspin-sgu`.
+- **Work:** Fable read the subagents track, drawer, asks pane and split layout code and wrote the design ([spec](agent-peek-registry-design-2026-11-14.md)). Opus implements Phase 1.
+- **Outcome:** The question is answered: stored separately, shown together. Spawned agents are managed agents with a parent label; provider subagents are read-only descriptors in a separate store; one client selector merges them into a single list. The drawer from 2026-10-10 already is the side peek. The design recommends no new surface: two groups, cards with model and last activity, peek-first opening, a collapsible **Spawned agents** section in the asks pane, and collapsible stacked panes in a sidecar store. A recommendation, not a decision. See [agent-peek-registry.md](agent-peek-registry.md).
+
 ## 2026-11-14: Should Paseo offer an iTerm2-style layout, splitting the current tab?
 
 - **Ask:** Jacob asked whether the fork should offer a layout more like iTerm2 than cmux, where you split the current tab instead of a dragged pane becoming a separate tab or workspace pane. Should it coexist with the current mode, replace it, or be a setting with defaults? He remembered asking for an investigation before.
