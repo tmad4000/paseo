@@ -14,6 +14,7 @@ export interface DesktopSettings {
   daemon: {
     manageBuiltInDaemon: boolean;
     keepRunningAfterQuit: boolean;
+    preserveAgentsOnAppRestart: boolean;
   };
 }
 
@@ -37,6 +38,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   daemon: {
     manageBuiltInDaemon: true,
     keepRunningAfterQuit: false,
+    preserveAgentsOnAppRestart: false,
   },
 };
 
@@ -53,6 +55,7 @@ const NotificationsSchema = z
 const DaemonSchema = z
   .looseObject({
     manageBuiltInDaemon: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.daemon.manageBuiltInDaemon),
+    preserveAgentsOnAppRestart: z.boolean().catch(false),
     keepRunningAfterQuit: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.daemon.keepRunningAfterQuit),
   })
   .catch(() => ({ ...DEFAULT_DESKTOP_SETTINGS.daemon }));
@@ -129,6 +132,7 @@ function toDesktopSettings(stored: StoredDesktopSettings): DesktopSettings {
     daemon: {
       manageBuiltInDaemon: stored.daemon.manageBuiltInDaemon,
       keepRunningAfterQuit: stored.daemon.keepRunningAfterQuit,
+      preserveAgentsOnAppRestart: stored.daemon.preserveAgentsOnAppRestart,
     },
   };
 }
@@ -156,6 +160,10 @@ function coerceDesktopSettingsPatch(input: unknown): DesktopSettingsPatch {
     const manageBuiltInDaemon = coerceBoolean(input.daemon.manageBuiltInDaemon);
     if (manageBuiltInDaemon !== null) {
       daemonPatch.manageBuiltInDaemon = manageBuiltInDaemon;
+    }
+    const preserveAgentsOnAppRestart = coerceBoolean(input.daemon.preserveAgentsOnAppRestart);
+    if (preserveAgentsOnAppRestart !== null) {
+      daemonPatch.preserveAgentsOnAppRestart = preserveAgentsOnAppRestart;
     }
     const keepRunningAfterQuit = coerceBoolean(input.daemon.keepRunningAfterQuit);
     if (keepRunningAfterQuit !== null) {

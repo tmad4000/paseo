@@ -2173,6 +2173,10 @@ export const ptBR: TranslationResources = {
           "O gerenciamento do daemon integrado foi pausado, mas o Paseo não conseguiu parar o daemon.",
         updateFailed: "Não foi possível atualizar o gerenciamento do daemon integrado.",
       },
+      preserveAgents: {
+        title: "Manter agentes ao reiniciar o app",
+        hint: "Mantém o daemon, os agentes e os terminais ao sair ou atualizar o app. O daemon mantém a versão atual até ser reiniciado separadamente.",
+      },
       keepRunning: {
         title: "Manter daemon em execução ao sair",
         hint: "O daemon continua em execução quando você sai do Paseo",

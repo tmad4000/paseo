@@ -9,9 +9,10 @@ How it relates to the rest of `docs/`:
 
 ## Pages
 
-| Page                                 | Topic                                                                               | Status                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [split-layouts.md](split-layouts.md) | iTerm2-style "split this tab" compared with the current cmux-style workspace splits | Coexist recommended; Phase 1 in progress (2026-11-14) |
+| Page                                                                              | Topic                                                                               | Status                                                   |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [Restart without stopping agents](../design/restart-without-stopping-agents.html) | App restart versus daemon replacement; provider process ownership and recovery      | Hybrid recommended; first slice in progress (2026-11-15) |
+| [split-layouts.md](split-layouts.md)                                              | iTerm2-style "split this tab" compared with the current cmux-style workspace splits | Coexist recommended; Phase 1 in progress (2026-11-14)    |
 
 The [log](log.md) lists every recorded discussion and query, newest first.
 

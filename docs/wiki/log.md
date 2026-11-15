@@ -2,6 +2,12 @@
 
 Newest first. Each entry records the ask, its source, and the outcome, and links to its topic page.
 
+## 2026-11-15: Can Paseo restart or update without stopping agents?
+
+- **Ask:** Jacob asked why restarting Paseo stops Claude Code and Codex and whether updates can keep them alive. Source: branch `sol/restart-preserve-fork` at `146f6e424`, following the desktop update finding in PR #222.
+- **Work:** Sol inspected desktop update/quit, supervisor shutdown, SDK pipes and provider process-tree cleanup. Compared upstream restart recovery at `685e1133`.
+- **Outcome:** [Hybrid recommended](../design/restart-without-stopping-agents.html): retain the daemon across app updates behind a setting first. Daemon upgrades remain separate; safe draining and an independent agent host are later phases. Provider session resume restores saved context but cannot preserve an already interrupted tool process. First slice in progress; Linux verification does not establish Apple installer behavior.
+
 ## 2026-11-14: Should Paseo offer an iTerm2-style layout, splitting the current tab?
 
 - **Ask:** Jacob asked whether the fork should offer a layout more like iTerm2 than cmux, where you split the current tab instead of a dragged pane becoming a separate tab or workspace pane. Should it coexist with the current mode, replace it, or be a setting with defaults? He remembered asking for an investigation before.
