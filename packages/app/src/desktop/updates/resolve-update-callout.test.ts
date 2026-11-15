@@ -8,8 +8,8 @@ import {
 const RESTART_LINE =
   "Local agents and terminals stop during the restart. The daemon restarts with the app.";
 const FORK_IDENTITY = {
-  line: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
-  version: "0.10.0-beta.33",
+  line: "Update: Paseo Fork v0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+  version: "v0.10.0-beta.33",
   releaseNotesUrl: "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.33",
 };
 
@@ -84,7 +84,7 @@ describe("resolveUpdateCalloutDescriptor", () => {
     expect(descriptor?.body).toEqual({
       kind: "available",
       versionLabel: "v0.10.0-beta.33",
-      identityLine: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+      identityLine: "Update: Paseo Fork v0.10.0-beta.33 · beta channel · from tmad4000/paseo",
       restartLine: RESTART_LINE,
     });
     expect(descriptor?.releaseNotesUrl).toBe(
@@ -99,7 +99,7 @@ describe("resolveUpdateCalloutDescriptor", () => {
     );
     expect(descriptor?.body).toEqual({
       kind: "installing",
-      identityLine: "Paseo Fork 0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+      identityLine: "Update: Paseo Fork v0.10.0-beta.33 · beta channel · from tmad4000/paseo",
     });
   });
 

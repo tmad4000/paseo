@@ -2157,6 +2157,7 @@ export const en = {
     updateIdentity: {
       line: "{{product}} {{version}} · {{channel}}",
       lineWithSource: "{{product}} {{version}} · {{channel}} · from {{source}}",
+      update: "Update: {{identity}}",
       channel: {
         stable: "stable channel",
         beta: "beta channel",
@@ -2168,7 +2169,7 @@ export const en = {
         agentsStopKeepRunningOn:
           "Local agents and terminals stop during the restart, even with Keep daemon running after quit on. The daemon restarts with the app.",
         agentsKeepRunning:
-          "Agents keep running. This app didn't start the local daemon, so the restart leaves it on its current version.",
+          "Agents keep running. This app session didn't start the local daemon, so it stays on its current version.",
         noDaemon: "No local daemon is running, so no agents stop.",
         unknown: "Agents in the daemon this app started stop during the restart.",
       },

@@ -2101,7 +2101,26 @@ export const ja: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
-    updateIdentity: en.desktop.updateIdentity,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · {{source}} から",
+      update: "アップデート: {{identity}}",
+      channel: {
+        stable: "安定版チャンネル",
+        beta: "ベータチャンネル",
+      },
+      whatsNew: "{{version}} の新機能",
+      restart: {
+        agentsStop:
+          "再起動中はローカルのエージェントとターミナルが停止します。デーモンはアプリと一緒に再起動します。",
+        agentsStopKeepRunningOn:
+          "「終了後もデーモンを実行し続ける」がオンでも、再起動中はローカルのエージェントとターミナルが停止します。デーモンはアプリと一緒に再起動します。",
+        agentsKeepRunning:
+          "エージェントは実行され続けます。ローカルデーモンはこのアプリのセッションで起動されたものではないため、現在のバージョンのまま残ります。",
+        noDaemon: "ローカルデーモンが実行されていないため、停止するエージェントはありません。",
+        unknown: "このアプリが起動したデーモンのエージェントは、再起動中に停止します。",
+      },
+    },
     windowControls: {
       minimize: "ウィンドウを最小化",
       maximize: "ウィンドウを最大化",

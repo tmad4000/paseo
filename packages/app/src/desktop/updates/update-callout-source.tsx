@@ -64,8 +64,8 @@ export function UpdateCalloutSource() {
   } = useDesktopAppUpdater();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isShown = status === "available" || status === "installing" || status === "error";
-  const identity = useUpdateIdentity(availableUpdate?.latestVersion, availableUpdate);
-  const restartLine = useUpdateRestartLine(isDesktopApp && isShown);
+  const identity = useUpdateIdentity("update", availableUpdate?.latestVersion, availableUpdate);
+  const restartLine = useUpdateRestartLine(isDesktopApp && isShown).line;
 
   const install = useStableEvent(() => {
     void installUpdate();

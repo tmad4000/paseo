@@ -128,8 +128,10 @@ describe("desktop packaging", () => {
       protocols: { schemes: string[] }[];
       mac: { extraResources: { to: string }[]; icon: string };
       publish: { owner: string };
+      extraMetadata: { paseoProductName: string };
     };
     expect(fork.productName).toBe("Paseo Fork");
+    expect(fork.extraMetadata.paseoProductName).toBe("Paseo Fork");
     expect(fork.executableName).toBe("Paseo Fork");
     expect(fork.protocols.flatMap((entry) => entry.schemes)).toEqual(["paseo-fork"]);
     expect(fork.mac.extraResources.map((entry) => entry.to)).toContain("bin/paseo-fork");

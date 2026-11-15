@@ -609,13 +609,23 @@ function useDesktopUpdateCopy(
   isUpdateReady: boolean,
 ) {
   const { t } = useTranslation();
-  const identityVersion = availableUpdate?.hasUpdate
-    ? availableUpdate.latestVersion
+  const isUpdate = availableUpdate?.hasUpdate === true;
+  const identityVersion = isUpdate
+    ? availableUpdate?.latestVersion
     : (availableUpdate?.currentVersion ?? resolveAppVersion());
-  const identity = useUpdateIdentity(identityVersion, availableUpdate);
-  const restartLine = useUpdateRestartLine(isUpdateReady);
+  const identity = useUpdateIdentity(
+    isUpdate ? "update" : "installed",
+    identityVersion,
+    availableUpdate,
+  );
+  const restart = useUpdateRestartLine(isUpdateReady);
   const headline = identity?.line ?? t("settings.about.updates.installMessage");
-  return { identity, restartLine, installMessage: `${headline}\n\n${restartLine}` };
+  // Ownership can change while Settings stays open, so the dialog re-reads it.
+  const buildInstallMessage = useCallback(
+    async () => `${headline}\n\n${await restart.refresh()}`,
+    [headline, restart],
+  );
+  return { identity, restartLine: restart.line, buildInstallMessage };
 }
 
 function DesktopAppUpdateRow() {
@@ -665,7 +675,7 @@ function DesktopAppUpdateRow() {
 
   const isUpdateReady = availableUpdate?.readyToInstall === true;
   const readyUpdateVersion = isUpdateReady ? availableUpdate?.latestVersion : null;
-  const { identity, restartLine, installMessage } = useDesktopUpdateCopy(
+  const { identity, restartLine, buildInstallMessage } = useDesktopUpdateCopy(
     availableUpdate,
     isDesktopApp && isUpdateReady,
   );
@@ -675,12 +685,15 @@ function DesktopAppUpdateRow() {
       return;
     }
 
-    void confirmDialog({
-      title: t("settings.about.updates.installTitle"),
-      message: installMessage,
-      confirmLabel: t("settings.about.updates.installConfirm"),
-      cancelLabel: t("common.actions.cancel"),
-    })
+    void buildInstallMessage()
+      .then((message) =>
+        confirmDialog({
+          title: t("settings.about.updates.installTitle"),
+          message,
+          confirmLabel: t("settings.about.updates.installConfirm"),
+          cancelLabel: t("common.actions.cancel"),
+        }),
+      )
       .then((confirmed) => {
         if (!confirmed) {
           return;
@@ -695,7 +708,7 @@ function DesktopAppUpdateRow() {
           t("settings.about.updates.alertMessage"),
         );
       });
-  }, [installMessage, installUpdate, isDesktopApp, t]);
+  }, [buildInstallMessage, installUpdate, isDesktopApp, t]);
 
   if (!isDesktopApp) {
     return null;

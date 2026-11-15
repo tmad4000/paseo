@@ -23,29 +23,74 @@ beforeAll(async () => {
 });
 
 describe("resolveUpdateIdentity", () => {
-  it("names the fork product, channel and feed, linking the fork's release tag", () => {
+  it("names an offered fork update by product, channel and feed, linking its release tag", () => {
     const identity = resolveUpdateIdentity({
       runtime: FORK_RUNTIME,
+      role: "update",
+      version: "0.10.0-beta.33",
+      channel: "beta",
+      published: { version: "0.10.0-beta.33", tag: "0.10.0-beta.33" },
+    });
+    expect(identity).toEqual({
+      line: "Update: Paseo Fork v0.10.0-beta.33 · beta channel · from tmad4000/paseo",
+      version: "v0.10.0-beta.33",
+      releaseNotesUrl: "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.33",
+    });
+    expect(formatUpdateWhatsNew(identity!)).toBe("What's new in v0.10.0-beta.33");
+  });
+
+  it("names the installed build without the Update prefix", () => {
+    const identity = resolveUpdateIdentity({
+      runtime: FORK_RUNTIME,
+      role: "installed",
       version: "0.10.0-beta.32",
       channel: "beta",
       published: { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" },
     });
-    expect(identity).toEqual({
-      line: "Paseo Fork 0.10.0-beta.32 · beta channel · from tmad4000/paseo",
-      version: "0.10.0-beta.32",
-      releaseNotesUrl: "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.32",
+    expect(identity?.line).toBe("Paseo Fork v0.10.0-beta.32 · beta channel · from tmad4000/paseo");
+    expect(identity?.releaseNotesUrl).toBe(
+      "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.32",
+    );
+  });
+
+  it("links the releases list for a version the feed did not return", () => {
+    const identity = resolveUpdateIdentity({
+      runtime: FORK_RUNTIME,
+      role: "installed",
+      version: "0.10.0-beta.30",
+      channel: "beta",
+      published: { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" },
     });
-    expect(formatUpdateWhatsNew(identity!)).toBe("What's new in 0.10.0-beta.32");
+    expect(identity?.releaseNotesUrl).toBe("https://github.com/tmad4000/paseo/releases");
+  });
+
+  it("translates the line with the active language", async () => {
+    await i18n.changeLanguage("es");
+    try {
+      const identity = resolveUpdateIdentity({
+        runtime: FORK_RUNTIME,
+        role: "update",
+        version: "0.10.0-beta.33",
+        channel: "beta",
+        published: null,
+      });
+      expect(identity?.line).toBe(
+        "Actualización: Paseo Fork v0.10.0-beta.33 · canal beta · de tmad4000/paseo",
+      );
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 
   it("keeps an upstream build on its own name and feed, never the fork's", () => {
     const identity = resolveUpdateIdentity({
       runtime: UPSTREAM_RUNTIME,
+      role: "update",
       version: "v0.16.0",
       channel: "stable",
       published: { version: "0.16.0", tag: "v0.16.0" },
     });
-    expect(identity?.line).toBe("Paseo 0.16.0 · stable channel · from getpaseo/paseo");
+    expect(identity?.line).toBe("Update: Paseo v0.16.0 · stable channel · from getpaseo/paseo");
     expect(identity?.releaseNotesUrl).toBe(
       "https://github.com/getpaseo/paseo/releases/tag/v0.16.0",
     );
@@ -55,6 +100,7 @@ describe("resolveUpdateIdentity", () => {
   it("links the releases list when the feed has not named a tag", () => {
     const identity = resolveUpdateIdentity({
       runtime: FORK_RUNTIME,
+      role: "update",
       version: "0.10.0-beta.33",
       channel: "beta",
       published: null,
@@ -65,13 +111,14 @@ describe("resolveUpdateIdentity", () => {
   it("omits the source and link for a build without an update feed", () => {
     const identity = resolveUpdateIdentity({
       runtime: { productName: "Paseo Fork", updateSource: null },
+      role: "installed",
       version: "0.10.0-beta.32",
       channel: "beta",
       published: null,
     });
     expect(identity).toEqual({
-      line: "Paseo Fork 0.10.0-beta.32 · beta channel",
-      version: "0.10.0-beta.32",
+      line: "Paseo Fork v0.10.0-beta.32 · beta channel",
+      version: "v0.10.0-beta.32",
       releaseNotesUrl: null,
     });
   });
@@ -80,6 +127,7 @@ describe("resolveUpdateIdentity", () => {
     expect(
       resolveUpdateIdentity({
         runtime: { productName: null, updateSource: FORK_RUNTIME.updateSource },
+        role: "update",
         version: "0.10.0-beta.32",
         channel: "beta",
         published: null,
@@ -89,21 +137,15 @@ describe("resolveUpdateIdentity", () => {
 });
 
 describe("resolveReleaseTag", () => {
-  it("uses the published tag for the published version", () => {
-    expect(
-      resolveReleaseTag("0.10.0-beta.32", { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" }),
-    ).toBe("0.10.0-beta.32");
+  it("uses the feed's tag only for the release the feed returned", () => {
+    const published = { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" };
+    expect(resolveReleaseTag("v0.10.0-beta.32", published)).toBe("0.10.0-beta.32");
+    expect(resolveReleaseTag("0.16.0", { version: "0.16.0", tag: "v0.16.0" })).toBe("v0.16.0");
   });
 
-  it("follows the feed's prefix convention for another version", () => {
-    expect(
-      resolveReleaseTag("0.10.0-beta.31", { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" }),
-    ).toBe("0.10.0-beta.31");
-    expect(resolveReleaseTag("0.15.4", { version: "0.16.0", tag: "v0.16.0" })).toBe("v0.15.4");
-  });
-
-  it("refuses to guess an unrecognized tag shape", () => {
-    expect(resolveReleaseTag("0.15.4", { version: "0.16.0", tag: "release-0.16.0" })).toBeNull();
+  it("never guesses a tag for another version, since fork tags skip versions", () => {
+    const published = { version: "0.10.0-beta.32", tag: "0.10.0-beta.32" };
+    expect(resolveReleaseTag("0.10.0-beta.30", published)).toBeNull();
   });
 });
 
@@ -148,7 +190,7 @@ describe("resolveUpdateRestartEffect", () => {
     });
     expect(effect).toBe("agentsKeepRunning");
     expect(formatUpdateRestartEffect(effect)).toBe(
-      "Agents keep running. This app didn't start the local daemon, so the restart leaves it on its current version.",
+      "Agents keep running. This app session didn't start the local daemon, so it stays on its current version.",
     );
   });
 
@@ -161,6 +203,17 @@ describe("resolveUpdateRestartEffect", () => {
     ).toBe("noDaemon");
     expect(resolveUpdateRestartEffect({ daemon: null, keepRunningAfterQuit: false })).toBe(
       "unknown",
+    );
+  });
+
+  it("does not promise survival when the status probe errored, since the daemon may be alive", () => {
+    const effect = resolveUpdateRestartEffect({
+      daemon: { status: "errored", ownedByDesktop: false },
+      keepRunningAfterQuit: false,
+    });
+    expect(effect).toBe("unknown");
+    expect(formatUpdateRestartEffect(effect)).toBe(
+      "Agents in the daemon this app started stop during the restart.",
     );
   });
 });

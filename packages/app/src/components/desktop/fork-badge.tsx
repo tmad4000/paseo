@@ -102,10 +102,15 @@ function ForkTrigger({
 }
 
 function useForkReleaseNotes(
-  version: string | null | undefined,
+  isUpdate: boolean,
+  installedVersion: string | null,
   result: DesktopAppUpdateCheckResult | null,
 ) {
-  const identity = useUpdateIdentity(version, result);
+  const identity = useUpdateIdentity(
+    isUpdate ? "update" : "installed",
+    isUpdate ? result?.publishedVersion : installedVersion,
+    result,
+  );
   const releaseNotesUrl = identity?.releaseNotesUrl ?? null;
   const openReleaseNotes = useCallback(() => {
     if (releaseNotesUrl) void openExternalUrl(releaseNotesUrl);
@@ -131,7 +136,8 @@ export function ForkVersionIndicator() {
   const label = `${t("desktop.fork.app")} ${formatVersionWithPrefix(version)} · ${statusText}`;
 
   const { identity, releaseNotesUrl, openReleaseNotes } = useForkReleaseNotes(
-    status === "update" ? result?.publishedVersion : version,
+    status === "update",
+    version,
     result,
   );
 

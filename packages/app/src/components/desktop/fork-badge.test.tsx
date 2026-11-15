@@ -40,6 +40,7 @@ vi.mock("@/desktop/updates/use-update-identity", async () => {
   const identity = await import("@/desktop/updates/update-identity");
   return {
     useUpdateIdentity: (
+      role: "update" | "installed",
       version: string | null | undefined,
       result: { publishedVersion?: string | null; publishedTag?: string | null } | null,
     ) =>
@@ -49,6 +50,7 @@ vi.mock("@/desktop/updates/use-update-identity", async () => {
               productName: "Paseo Fork",
               updateSource: { owner: "tmad4000", repo: "paseo" },
             },
+            role,
             version,
             channel: "beta",
             published: identity.resolvePublishedRelease(result),
@@ -99,9 +101,9 @@ describe("Fork version control", () => {
     render(<ForkVersionIndicator />);
     fireEvent.click(screen.getByTestId("fork-version-trigger"));
     expect((await screen.findByTestId("fork-update-identity")).textContent).toBe(
-      "Paseo Fork 0.10.0-beta.20 · beta channel · from tmad4000/paseo",
+      "Update: Paseo Fork v0.10.0-beta.20 · beta channel · from tmad4000/paseo",
     );
-    fireEvent.click(screen.getByText("What's new in 0.10.0-beta.20"));
+    fireEvent.click(screen.getByText("What's new in v0.10.0-beta.20"));
     expect(state.openExternalUrl).toHaveBeenCalledWith(
       "https://github.com/tmad4000/paseo/releases/tag/0.10.0-beta.20",
     );

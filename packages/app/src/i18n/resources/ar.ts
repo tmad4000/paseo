@@ -2082,7 +2082,26 @@ export const ar: TranslationResources = {
   },
   desktop: {
     fork: en.desktop.fork,
-    updateIdentity: en.desktop.updateIdentity,
+    updateIdentity: {
+      line: "{{product}} {{version}} · {{channel}}",
+      lineWithSource: "{{product}} {{version}} · {{channel}} · من {{source}}",
+      update: "التحديث: {{identity}}",
+      channel: {
+        stable: "القناة المستقرة",
+        beta: "قناة بيتا",
+      },
+      whatsNew: "ما الجديد في {{version}}",
+      restart: {
+        agentsStop:
+          "يتوقف الوكلاء والمحطات الطرفية المحلية أثناء إعادة التشغيل. يُعاد تشغيل البرنامج الخفي مع التطبيق.",
+        agentsStopKeepRunningOn:
+          "يتوقف الوكلاء والمحطات الطرفية المحلية أثناء إعادة التشغيل، حتى مع تفعيل إبقاء البرنامج الخفي قيد التشغيل بعد الخروج. يُعاد تشغيل البرنامج الخفي مع التطبيق.",
+        agentsKeepRunning:
+          "يواصل الوكلاء العمل. لم تبدأ جلسة التطبيق هذه البرنامج الخفي المحلي، لذا يبقى على إصداره الحالي.",
+        noDaemon: "لا يوجد برنامج خفي محلي قيد التشغيل، لذا لن يتوقف أي وكيل.",
+        unknown: "يتوقف الوكلاء في البرنامج الخفي الذي بدأه هذا التطبيق أثناء إعادة التشغيل.",
+      },
+    },
     windowControls: {
       minimize: "تصغير النافذة",
       maximize: "تكبير النافذة",

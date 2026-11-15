@@ -132,8 +132,8 @@ export function SidebarHelpMenu() {
   });
   const showInstall = isDesktopApp && (canInstall || isInstalling);
   const productName = useDesktopRuntimeInfo()?.productName ?? t("sidebar.help.appName");
-  const identity = useUpdateIdentity(result?.latestVersion, result);
-  const restartLine = useUpdateRestartLine(showInstall);
+  const identity = useUpdateIdentity("update", result?.latestVersion, result);
+  const restartLine = useUpdateRestartLine(showInstall).line;
   const releaseNotesUrl = identity?.releaseNotesUrl ?? null;
   const openReleaseNotes = useCallback(() => {
     if (releaseNotesUrl) void openExternalUrl(releaseNotesUrl);
