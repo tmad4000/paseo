@@ -15,26 +15,30 @@ export function consumeBrowserUrlBarFocus(browserId: string): boolean {
   return pendingUrlBarFocus.delete(browserId);
 }
 
-/** An empty page: the user has nothing to read yet, so the address field gets focus. */
+/**
+ * An empty page: the user has nothing to read yet, so the address field gets focus.
+ * A missing record (before the store hydrates) is not empty: the pane shows a default page.
+ */
 export function isEmptyBrowserPage(url: string | null | undefined): boolean {
-  const trimmed = typeof url === "string" ? url.trim() : "";
-  return trimmed.length === 0 || trimmed === "about:blank";
+  return typeof url === "string" && url.trim() === "about:blank";
 }
 
 /**
  * Whether the pane should move focus to its URL bar now. Only the focused, visible
  * pane may take focus; a background pane keeps any pending request until the user
- * brings it forward.
+ * brings it forward. An empty page takes focus only when its tab has just become visible
+ * while focused, so clicking its toolbar controls keeps focus on those controls.
  */
 export function shouldAutofocusBrowserUrlBar(input: {
   browserId: string;
   url: string | null | undefined;
   isInteractive: boolean;
   isPresented: boolean;
+  justActivated: boolean;
 }): boolean {
   if (!input.isInteractive || !input.isPresented) {
     return false;
   }
   const requested = consumeBrowserUrlBarFocus(input.browserId);
-  return requested || isEmptyBrowserPage(input.url);
+  return requested || (input.justActivated && isEmptyBrowserPage(input.url));
 }

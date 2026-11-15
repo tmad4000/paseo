@@ -44,6 +44,12 @@ Same environment, after `url-bar-autofocus`. Focus and selection were read from 
 | Focus in an existing URL bar, then `ui open-tab --url … --no-focus` | Focus and caret unchanged                                                     |
 | Same, with `ui open-tab --url … --side`                             | Side pane opens; focus and caret unchanged                                    |
 
+After review, Enter submits the text the field shows. Page navigations keep updating the pane's
+draft URL even while you edit, so a paste that landed during a navigation could otherwise go to
+the page URL. Re-run: Ctrl+Shift+B, paste `paseo.sh/docs`, wait 4 s, Enter → `https://paseo.sh/docs`.
+An empty `about:blank` tab takes focus only when the tab becomes visible, not when you click
+its toolbar.
+
 Screenshot: [typing into a new browser tab](05-new-browser-url-focused.png). The New tab picker's
 Browser choice uses the same request as Ctrl+Shift+B and was not driven separately.
 

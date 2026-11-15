@@ -738,16 +738,22 @@ export function BrowserPane({
   // field once its pane is the focused, visible one. Background tabs never take focus.
   // The timer is not cancelled on cleanup: the request is one-shot, and focusing an
   // unmounted input is a no-op.
+  // "Activated" means the tab just became visible (mounted or switched to). Focusing an
+  // already visible pane, for example by clicking its toolbar, is not an activation.
+  const wasPresentedRef = useRef(false);
   useEffect(() => {
     if (!isElectronRuntime()) {
       return;
     }
+    const justActivated = isPresented && !wasPresentedRef.current;
+    wasPresentedRef.current = isPresented;
     if (
       !shouldAutofocusBrowserUrlBar({
         browserId,
         url: browserRef.current?.url,
         isInteractive: Boolean(isInteractive),
         isPresented,
+        justActivated,
       })
     ) {
       return;
@@ -1108,9 +1114,12 @@ export function BrowserPane({
   }, [focusUrlBar, isInteractive]);
 
   const handleNavigateDraftUrl = useCallback(() => {
+    // Submit what the field shows. Page navigations update draftUrl even while the user
+    // is editing, so it can differ from the visible text (a paste during the first load).
+    const typed = urlInputRef.current?.getText() ?? draftUrl;
     // Submitting hands the field back to navigation so it shows the normalized URL.
     syncedUrlRef.current = null;
-    navigate(draftUrl);
+    navigate(typed);
   }, [draftUrl, navigate]);
 
   const addElementAttachment = useCallback(
