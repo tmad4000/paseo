@@ -1366,6 +1366,53 @@ describe("direct new-tab target shortcuts", () => {
   });
 });
 
+describe("Open in browser shortcut", () => {
+  it.each([
+    { isMac: true, focusScope: "browser" as const },
+    { isMac: true, focusScope: "editable" as const },
+    { isMac: false, focusScope: "browser" as const },
+    { isMac: false, focusScope: "other" as const },
+  ])("routes Mod+Shift+O on Mac=$isMac in $focusScope", ({ isMac, focusScope }) => {
+    expectShortcutResolution({
+      event: { key: "O", code: "KeyO", shiftKey: true, metaKey: isMac, ctrlKey: !isMac },
+      context: { isMac, isDesktop: true, focusScope },
+      action: "workspace.browser.open-external",
+    });
+  });
+
+  it("is desktop-only because the in-app browser exists only in Electron", () => {
+    expectNoShortcutResolution({
+      event: { key: "O", code: "KeyO", shiftKey: true, metaKey: true },
+      context: { isMac: true, isDesktop: false, focusScope: "other" },
+    });
+  });
+
+  it("does not consume terminal input", () => {
+    expectNoShortcutResolution({
+      event: { key: "O", code: "KeyO", shiftKey: true, ctrlKey: true },
+      context: { isMac: false, isDesktop: true, focusScope: "terminal" },
+    });
+  });
+
+  it("leaves Mod+O to Open project", () => {
+    expectShortcutResolution({
+      event: { key: "o", code: "KeyO", metaKey: true },
+      context: { isMac: true, isDesktop: true, focusScope: "other" },
+      action: "agent.new",
+    });
+  });
+
+  it("shows its keys in the Tabs and panes help section", () => {
+    expect(
+      resolveShortcutKeysForAction("browser-open-external", {}, { isMac: true, isDesktop: true }),
+    ).toEqual([["mod", "shift", "O"]]);
+    const section = buildKeyboardShortcutHelpSections({ isMac: true, isDesktop: true }).find(
+      (candidate) => candidate.id === "tabs-panes",
+    );
+    expect(section?.rows.map((row) => row.id)).toContain("browser-open-external");
+  });
+});
+
 describe("Needs you shortcut", () => {
   it.each([true, false])("opens the queue on Mac=%s", (isMac) => {
     expectShortcutResolution({

@@ -57,6 +57,7 @@ import { RetainedPanel } from "@/components/retained-panel";
 import { WorkspaceActions } from "@/git/workspace-actions";
 import { WorkspaceOpenInEditorButton } from "@/workspace/open-in-editor/button";
 import { useAgentTabControlMenuEntries } from "@/screens/workspace/use-agent-tab-control-menu-entries";
+import { useBrowserTabMenuEntries } from "@/screens/workspace/use-browser-tab-menu-entries";
 import { WorkspaceScriptsButton } from "@/screens/workspace/workspace-scripts-button";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useNavigateToImportedAgent } from "@/hooks/use-import-session";
@@ -545,6 +546,7 @@ function MobileWorkspaceTabOption({
     serverId: normalizedServerId,
     menuTestIDBase,
   });
+  const browserEntries = useBrowserTabMenuEntries({ tab, menuTestIDBase });
   const closeAbove = useCallback(
     (id: string) => onCloseTabsAbove(id, paneTabs),
     [onCloseTabsAbove, paneTabs],
@@ -579,10 +581,10 @@ function MobileWorkspaceTabOption({
   });
   const menuEntries = useMemo(
     () =>
-      agentControlEntries.length === 0
+      agentControlEntries.length === 0 && browserEntries.length === 0
         ? baseMenuEntries
-        : [...agentControlEntries, ...baseMenuEntries],
-    [agentControlEntries, baseMenuEntries],
+        : [...browserEntries, ...agentControlEntries, ...baseMenuEntries],
+    [agentControlEntries, baseMenuEntries, browserEntries],
   );
 
   const fallbackLabel = resolvedPresentation.label;

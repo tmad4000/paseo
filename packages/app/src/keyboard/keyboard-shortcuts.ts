@@ -183,6 +183,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "workspace-tab-target-agent",
     "workspace-terminal-new",
     "workspace-tab-target-browser",
+    "browser-open-external",
     "workspace-tab-target-changes",
     "workspace-tab-target-files",
     "workspace-tab-close-current",
@@ -224,6 +225,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "workspace-tab-new": "settings.shortcuts.help.newTab",
   "workspace-tab-target-agent": "workspace.tabs.actions.newAgent",
   "workspace-tab-target-browser": "workspace.tabs.actions.newBrowser",
+  "browser-open-external": "workspace.browser.controls.openInBrowser",
   "workspace-tab-target-changes": "workspace.tabs.actions.changes",
   "workspace-tab-target-files": "workspace.tabs.actions.files",
   "workspace-tab-close-current": "settings.shortcuts.help.closeCurrentTab",
@@ -558,6 +560,30 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-tab-target-browser",
       section: "tabs-panes",
       label: "New browser",
+    },
+  },
+  // Opens the focused browser tab's page in the system browser. Desktop only: the
+  // in-app browser exists only in Electron. Not gated on editable so it works from the URL bar.
+  {
+    id: "browser-open-external-cmd-shift-o-mac",
+    action: "workspace.browser.open-external",
+    combo: "Cmd+Shift+O",
+    when: { mac: true, desktop: true, commandCenter: false },
+    help: {
+      id: "browser-open-external",
+      section: "tabs-panes",
+      label: "Open in browser",
+    },
+  },
+  {
+    id: "browser-open-external-ctrl-shift-o-non-mac",
+    action: "workspace.browser.open-external",
+    combo: "Ctrl+Shift+O",
+    when: { mac: false, desktop: true, commandCenter: false, terminal: false },
+    help: {
+      id: "browser-open-external",
+      section: "tabs-panes",
+      label: "Open in browser",
     },
   },
   {

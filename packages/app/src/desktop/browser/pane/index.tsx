@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { OpenInBrowserButton } from "./open-in-browser-button";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,6 +29,7 @@ export function BrowserPane({ browserId }: BrowserPaneProps) {
     <View style={styles.container}>
       <Text style={titleStyle}>{t("workspace.browser.unavailable.title")}</Text>
       <Text style={subtitleStyle}>{t("workspace.browser.session", { browserId })}</Text>
+      <OpenInBrowserButton browserId={browserId} />
     </View>
   );
 }

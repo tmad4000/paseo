@@ -1177,6 +1177,10 @@ export const fr: TranslationResources = {
         browserUrl: "NavigateurURL",
         enterUrl: "EntrezURL",
         openDevTools: "Outils de développement du navigateur ouvert",
+        openInBrowser: "Ouvrir dans le navigateur",
+        openInBrowserUnsupported:
+          "Seules les pages http et https peuvent s’ouvrir dans le navigateur",
+        openInBrowserFailed: "Impossible d’ouvrir la page dans le navigateur",
         cancelSelector: "Annuler le sélecteur d'élément",
         annotateElement: "Annoter l'élément",
         screenshotElement: "Capturer l'élément",
