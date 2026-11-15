@@ -164,6 +164,7 @@ export default async function globalSetup() {
   }
   const repoRoot = path.resolve(__dirname, "../../../..");
   await loadHarnessEnvironment(repoRoot);
+  process.env.PASEO_BUILD_TIME ??= new Date().toISOString();
 
   const metroPort = await getAvailableE2EPort();
   const metroOutput = createLineBuffer();

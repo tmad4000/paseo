@@ -21,6 +21,16 @@ failure release; queue durability; checkpoint recovery and partial provider fail
 restart integration file has opt-in Linux supervisor/Codex coverage via
 `PASEO_DAEMON_RESTART_QA=1`.
 
+## Fork icon badge
+
+`fork-icon-badge`: Preserve the upstream butterfly while identifying Paseo Fork with a blue
+branch badge. The provisional Ideaflow accent is `#294ac4`; Jacob can override it.
+[The source and generation instructions](../assets/fork-icon/README.md) cover desktop,
+iOS, Android adaptive and web/PWA identity assets. Acceptance: distinguish the fork from
+upstream at 16, 32, 64 and 1024 px on light/dark surfaces; keep the branch readable at 16 px
+and avoid badge clipping under launcher masks. Deterministic asset checks and visual review
+pass; Dock/home-screen runtime acceptance belongs to each native build, starting beta.34.
+
 ## App restart preservation
 
 `preserve-agents-on-app-restart`: Desktop daemon settings offer a default-off **Keep agents

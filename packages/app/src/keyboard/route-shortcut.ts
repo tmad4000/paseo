@@ -35,6 +35,7 @@ export type ShortcutAction =
   | { kind: "router-replace"; route: string }
   | { kind: "router-back" }
   | { kind: "router-push"; route: string }
+  | { kind: "questions-pane-open" }
   | { kind: "open-project-picker" }
   | { kind: "callback"; name: ShortcutCallbackName }
   | { kind: "command-center-toggle"; nextOpen: boolean; scope?: "files" | "recent" }
@@ -235,8 +236,6 @@ export function routeKeyboardShortcut(
       return routeSettingsToggle(ctx);
     case "command-center.toggle":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen };
-    case "stream.needs-you.open":
-      return { kind: "router-push", route: "/stream?view=needs_you" };
     case "recent-sessions.open":
       return { kind: "command-center-toggle", nextOpen: !ctx.commandCenterOpen, scope: "recent" };
     case "command-center.files":
@@ -244,6 +243,13 @@ export function routeKeyboardShortcut(
     case "shortcuts.dialog.toggle":
       return { kind: "shortcuts-dialog-toggle", nextOpen: !ctx.shortcutsDialogOpen };
     default:
-      return NONE;
+      return routeStreamShortcut(input.action);
   }
+}
+
+function routeStreamShortcut(action: string): ShortcutAction {
+  if (action === "stream.questions.open") return { kind: "questions-pane-open" };
+  if (action === "stream.needs-you.open")
+    return { kind: "router-push", route: "/stream?view=needs_you" };
+  return NONE;
 }

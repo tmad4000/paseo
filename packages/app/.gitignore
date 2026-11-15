@@ -45,3 +45,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Bundle-owned provenance generated per Metro process
+/src/generated/build-stamps/

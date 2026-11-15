@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -36,6 +36,8 @@ import type { HostProfile } from "@/types/host-connection";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 
+import { formatBuildStamp, resolveBuildStamp } from "@/utils/build-stamp";
+
 const CHECKING: ReleaseVersionCheck = { state: "checking" };
 
 export function ForkBadge() {
@@ -70,6 +72,13 @@ function ForkTrigger({
   compactLabel: string;
   update: boolean;
 }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const leading = useMemo(() => <Text style={styles.version}>{update ? "↑" : "●"}</Text>, [update]);
+  const stamp = formatBuildStamp(resolveBuildStamp(), now);
   const triggerStyle = useCallback(
     ({ hovered, pressed }: { hovered: boolean; pressed: boolean }) => [
       styles.trigger,
@@ -90,12 +99,19 @@ function ForkTrigger({
             <Text style={styles.version} numberOfLines={1}>
               {formatVersionWithPrefix(version)}
             </Text>
-            <StatusBadge label={compactLabel} variant={update ? "warning" : "muted"} />
+            <StatusBadge
+              leading={leading}
+              label={`Fork · ${compactLabel}`}
+              variant={update ? "warning" : "muted"}
+            />
           </DropdownMenuTrigger>
         </View>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end">
-        <Text style={styles.tooltip}>{label}</Text>
+        <Text style={styles.tooltip}>
+          {label}
+          {stamp ? `\n${stamp}` : "\nBuild time unavailable"}
+        </Text>
       </TooltipContent>
     </Tooltip>
   );
@@ -151,9 +167,6 @@ export function ForkVersionIndicator() {
   return (
     <View style={[styles.container, { marginRight: rightInset }]} pointerEvents="box-none">
       <View style={styles.row}>
-        <View style={styles.pill}>
-          <Text style={styles.label}>FORK</Text>
-        </View>
         <DropdownMenu open={open} onOpenChange={setOpen}>
           <ForkTrigger
             open={open}
@@ -189,6 +202,9 @@ export function ForkVersionIndicator() {
                 {t("desktop.fork.published")}
               </DropdownMenuHint>
             ) : null}
+            <Text style={styles.detail} testID="fork-build-stamp">
+              {formatBuildStamp(resolveBuildStamp()) ?? "Build time unavailable"}
+            </Text>
             <Text style={styles.note}>{t("desktop.fork.idlePolicy")}</Text>
             <DropdownMenuItem
               testID="fork-check-updates"

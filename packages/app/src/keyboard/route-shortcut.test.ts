@@ -463,3 +463,9 @@ it("opens the global Needs you queue without targeting or changing an agent", ()
     route: "/stream?view=needs_you",
   });
 });
+
+it("reopens the Questions and asks widget independently of global Needs you", () => {
+  expect(
+    routeKeyboardShortcut({ action: "stream.questions.open", payload: null }, makeCtx()),
+  ).toEqual({ kind: "questions-pane-open" });
+});

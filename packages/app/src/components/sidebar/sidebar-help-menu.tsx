@@ -1,3 +1,5 @@
+import { useAnswersPaneStore } from "@/companion-stream/answers-pane-store";
+import { router, type Href } from "expo-router";
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import { Activity, CircleHelp, Gift, Keyboard } from "lucide-react-native";
@@ -114,6 +116,9 @@ function HostVersionHint({ host, check }: { host: HostProfile; check: ReleaseVer
   );
 }
 
+const openQuestions = () => useAnswersPaneStore.getState().setMinimized(false);
+const openNeedsYou = () => router.navigate("/stream?view=needs_you" as Href);
+
 export function SidebarHelpMenu() {
   const { t } = useTranslation();
   const shortcutsAvailable = useKeyboardShortcutsAvailable();
@@ -190,6 +195,12 @@ export function SidebarHelpMenu() {
             {t("sidebar.help.shortcuts")}
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem testID="sidebar-help-questions" onSelect={openQuestions}>
+          Show questions and asks
+        </DropdownMenuItem>
+        <DropdownMenuItem testID="sidebar-help-needs-you" onSelect={openNeedsYou}>
+          {t("globalStream.needsYou")}
+        </DropdownMenuItem>
         <DropdownMenuItem
           testID="sidebar-help-changelog"
           leading={changelogLeadingIcon}

@@ -1,0 +1,26 @@
+Warming one-worker Metro
+Metro warm; running UI checks serially
+
+Running 6 tests using 1 worker
+
+(node:3070627) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3070627) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] Worker 0 daemon started on port 40993, home: /tmp/paseo-e2e-worker-0-0wVL4N
+  ✓  1 [web] › e2e/browser/global-stream.spec.ts:512:7 › Needs you reply modes, seen persistence and back at 390px (57.5s)
+  ✓  2 [web] › e2e/browser/global-stream.spec.ts:512:7 › Needs you reply modes, seen persistence and back at 1280px (1.5m)
+  ✓  3 [web] › e2e/browser/global-stream.spec.ts:571:7 › Needs you inline permission implement at 390px (37.9s)
+  ✓  4 [web] › e2e/browser/global-stream.spec.ts:571:7 › Needs you inline permission dismiss at 1280px (27.8s)
+[e2e] Worker 0 daemon stopped
+(node:3080676) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3080676) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] Worker 1 daemon started on port 38001, home: /tmp/paseo-e2e-worker-1-iwjaLe
+  ✓  5 [desktop-renderer] › ../desktop/e2e/updates.spec.ts:183:7 › version stamp and compact status at 390px (11.5s)
+  ✓  6 [desktop-renderer] › ../desktop/e2e/updates.spec.ts:183:7 › version stamp and compact status at 1280px (12.0s)
+[e2e] Worker 1 daemon stopped
+
+  6 passed (4.3m)
+Task Metro stopped
