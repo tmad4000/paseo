@@ -491,6 +491,17 @@ jobs:
           # early agent/Changes specs. Required check names remain unchanged.
           PWTEST_SHARD_WEIGHTS: "111:172:137:160"
 
+      - name: Repeat streamed usage and creation failure checks without retries
+        if: ${{ !cancelled() && env.PLAYWRIGHT_SHARD == '2/4' }}
+        timeout-minutes: 15
+        run: >-
+          npm run test:e2e --workspace=@getpaseo/app --
+          e2e/browser/context-window-meter.spec.ts
+          e2e/browser/new-workspace-codex-mode-preferences.spec.ts
+          --grep="the context window hover card shows|keeps Full Access as the global Codex mode"
+          --workers=1 --repeat-each=3 --retries=0
+          --output=test-results/acceptance-repeat
+
       - name: Clean up Chromium sandbox
         if: always()
         run: node scripts/prepare-browser-sandbox.mjs --cleanup
@@ -498,7 +509,7 @@ jobs:
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         # Keep intentional visual evidence on success as well as failure diagnostics.
-        if: ${{ failure() || hashFiles('packages/app/test-results/*.png') != '' }}
+        if: ${{ failure() || env.PLAYWRIGHT_SHARD == '2/4' || hashFiles('packages/app/test-results/*.png') != '' }}
         with:
           name: playwright-results-${{ env.PLAYWRIGHT_ARTIFACT }}
           path: |

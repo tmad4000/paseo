@@ -29,6 +29,8 @@ interface UsageReportsFixtureOptions {
   providerUsageListOnly?: boolean;
   /** The host daemon's port; defaults to the E2E daemon. */
   port?: number;
+  /** Record actual request identity for lifecycle-race diagnostics, without changing replies. */
+  traceRequests?: boolean;
 }
 
 /**
@@ -146,6 +148,12 @@ export async function installUsageReportsFixture(
           reportIds: Array.isArray(request.reportIds) ? (request.reportIds as string[]) : undefined,
           agentId: typeof request.agentId === "string" ? request.agentId : undefined,
         };
+        if (options.traceRequests) {
+          console.log(
+            "[context usage request]",
+            JSON.stringify({ at: Date.now(), requestId, ...listRequest }),
+          );
+        }
         listRequests.push(listRequest);
         const scripted = pick(options.lists ?? [[]], listRequests.length - 1);
         const response = typeof scripted === "function" ? scripted(listRequest) : scripted;

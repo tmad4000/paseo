@@ -16,6 +16,8 @@ import { escapeRegex } from "../support/helpers/regex";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 
+test.use({ trace: "retain-on-failure" });
+
 const CREATE_AGENT_PREFERENCES_KEY = "@paseo:create-agent-preferences";
 
 async function seedCodexDefaultPermissionPreferences(page: Page, cwd: string): Promise<string> {

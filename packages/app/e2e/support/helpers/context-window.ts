@@ -1,5 +1,11 @@
 import path from "node:path";
-import { expect, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  type ConsoleMessage,
+  type Locator,
+  type Page,
+  type WebSocket,
+} from "@playwright/test";
 import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import { expectComposerVisible } from "./composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "./mock-agent";
@@ -138,14 +144,120 @@ export interface AgentUsageScript {
   refreshedAgents(): string[];
 }
 
+const usageDiagnostics = new WeakMap<Page, () => Promise<void>>();
+
+export async function stopAgentUsageDiagnostics(page: Page): Promise<void> {
+  const stop = usageDiagnostics.get(page);
+  usageDiagnostics.delete(page);
+  await stop?.();
+}
+
 /**
  * Scripts the host's usage: the host's own list is Claude and Codex on its default login; each
  * agent request and each Refresh takes the next scripted answer.
  */
 export async function scriptAgentUsage(page: Page): Promise<AgentUsageScript> {
+  const socketCleanup: Array<() => void> = [];
+  let socketLogCapped = false;
+  const onSocket = (socket: WebSocket) => {
+    if (socketCleanup.length >= 128) {
+      if (!socketLogCapped) console.log("[context usage socket]", JSON.stringify({ capped: true }));
+      socketLogCapped = true;
+      return;
+    }
+    const port = new URL(socket.url()).port;
+    console.log("[context usage socket]", JSON.stringify({ at: Date.now(), port, event: "open" }));
+    const onClose = () => {
+      console.log(
+        "[context usage socket]",
+        JSON.stringify({ at: Date.now(), port, event: "close" }),
+      );
+    };
+    socket.on("close", onClose);
+    socketCleanup.push(() => socket.off("close", onClose));
+  };
+  const onConsole = (message: ConsoleMessage) => {
+    if (message.text().startsWith("[context usage surface]")) console.log(message.text());
+  };
+  page.on("websocket", onSocket);
+  page.on("console", onConsole);
+  usageDiagnostics.set(page, async () => {
+    page.off("websocket", onSocket);
+    page.off("console", onConsole);
+    for (const cleanup of socketCleanup) cleanup();
+    if (!page.isClosed())
+      await page.evaluate(() => {
+        (
+          window as Window & { __paseoStopUsageDiagnostics?: () => void }
+        ).__paseoStopUsageDiagnostics?.();
+      });
+  });
+  await page.addInitScript(() => {
+    let pointer = { x: 0, y: 0 };
+    let previous = "";
+    let nextId = 0;
+    let emitted = 0;
+    let frame: number | null = null;
+    const identities = new WeakMap<Element, number>();
+    const rect = (element: Element | null) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    };
+    const observe = () => {
+      const dialog = document.querySelector('[role="dialog"][aria-label="Context window"]');
+      const trigger = document.querySelector('[role="button"][aria-label^="Context window"]');
+      if (dialog && !identities.has(dialog)) identities.set(dialog, ++nextId);
+      const surface = {
+        pointer,
+        dialogId: dialog ? identities.get(dialog) : null,
+        dialog: rect(dialog),
+        trigger: rect(trigger),
+        text: dialog?.textContent?.slice(0, 300) ?? null,
+      };
+      const key = JSON.stringify(surface);
+      if (key === previous) return;
+      previous = key;
+      if (++emitted >= 400) {
+        console.debug("[context usage surface]", JSON.stringify({ at: Date.now(), capped: true }));
+        stop();
+        return;
+      }
+      console.debug("[context usage surface]", JSON.stringify({ at: Date.now(), ...surface }));
+    };
+    const schedule = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        observe();
+      });
+    };
+    const observer = new MutationObserver(schedule);
+    const pointerMoved = (event: PointerEvent) => {
+      pointer = { x: event.clientX, y: event.clientY };
+      schedule();
+    };
+    const scope = window as Window & { __paseoStopUsageDiagnostics?: () => void };
+    const stop = () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+      document.removeEventListener("pointermove", pointerMoved, true);
+      document.removeEventListener("scroll", schedule, true);
+      delete scope.__paseoStopUsageDiagnostics;
+    };
+    scope.__paseoStopUsageDiagnostics = stop;
+    observer.observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+    document.addEventListener("pointermove", pointerMoved, true);
+    document.addEventListener("scroll", schedule, true);
+  });
   let supported = true;
   const answers: UsageListResponse[] = [];
   const usage = await installUsageReportsFixture(page, {
+    traceRequests: true,
     usageSupported: () => supported,
     lists: [
       (request) => {

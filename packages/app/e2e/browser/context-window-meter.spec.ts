@@ -25,6 +25,7 @@ import {
   reloadAgent,
   scriptAgentUsage,
   seedAgentWithContextWindow,
+  stopAgentUsageDiagnostics,
   usageCard,
 } from "../support/helpers/context-window";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
@@ -41,6 +42,10 @@ const test = base.extend<{ agent: MockAgentSession }>({
     }
   },
 });
+
+// Keep the original failed attempt; a successful retry cannot diagnose a remount.
+test.use({ trace: "retain-on-failure" });
+test.afterEach(async ({ page }) => stopAgentUsageDiagnostics(page));
 
 // Where the progress arc is painted, as its centroid relative to the ring's centre in pixels.
 // Reads the rendered pixels, so any rotation that does not reach the screen counts as none.
