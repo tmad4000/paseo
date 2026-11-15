@@ -1,6 +1,37 @@
+import { MessageSaveAttempt } from "./message-pin-operations";
 import { describe, expect, it } from "vitest";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { MessagePinOperations, messagePinErrorMessage } from "./message-pin-operations";
+
+describe("whole-message retry", () => {
+  it("keeps one durable snapshot after a lost acknowledgement even if source text changes", async () => {
+    const attempt = new MessageSaveAttempt();
+    const operations = new MessagePinOperations();
+    const stored = new Map<string, string>();
+    const ids: string[] = [];
+    let fail = true;
+    const write = async (input: { entryId: string; text: string }) => {
+      stored.set(input.entryId, input.text);
+      ids.push(input.entryId);
+      if (fail) {
+        fail = false;
+        throw new Error("Acknowledgement lost");
+      }
+    };
+    let source = { text: "Original completed message.\n\nSecond paragraph.", streaming: false };
+    const first = attempt.resolve(() => source);
+    await expect(operations.save("host", "agent", first.text, "msg:reply", write)).rejects.toThrow(
+      "Acknowledgement lost",
+    );
+    source = { text: "Canonical replacement after the first write.", streaming: false };
+    const retry = attempt.resolve(() => source);
+    await operations.save("host", "agent", retry.text, "msg:reply", write);
+    expect(ids[0]).toBe(ids[1]);
+    expect([...stored.values()]).toEqual(["Original completed message.\n\nSecond paragraph."]);
+    attempt.clear();
+    expect(attempt.resolve(() => source).text).toBe(source.text);
+  });
+});
 
 describe("message pin operations", () => {
   it("shows the actionable server error without request diagnostics", () => {

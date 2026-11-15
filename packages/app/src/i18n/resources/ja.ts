@@ -654,11 +654,14 @@ export const ja: TranslationResources = {
       possibleAnswerLabel: "回答の候補：",
       unpin: "ピン留めを解除",
       pinToStream: "ストリームにピン留め",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
-      pinExcerpt: "Save excerpt…",
+      pinSelection: "選択したテキストをストリームに保存",
+      pinMessage: "メッセージをストリームに保存",
+      pinResponse: "応答全体をストリームに保存",
+      pinExcerpt: "抜粋を保存…",
+      pinFinalMessage: "最後のメッセージをストリームに保存",
+      pinStreamingHint: "応答はまだ届いています。この時点の内容を確認してから保存してください。",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "保存されるのは以下のテキストだけです。必要なメッセージや文章を残すよう編集してください。元の会話へのリンクは別に付きます。上限：4,000文字。",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

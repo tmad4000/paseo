@@ -1,5 +1,9 @@
+import { createMessageSaveContentIndex } from "@/companion-stream/message-pin-operations";
 import { MessagePinItem } from "@/companion-stream/message-pin-control";
-import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
+import type {
+  MessagePinHandler,
+  MessageSaveResolver,
+} from "@/companion-stream/message-pin-operations";
 import { useMessagePin } from "@/companion-stream/use-message-pin";
 import { StreamTagScopeProvider } from "@/companion-stream/stream-tag-scope";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
@@ -194,6 +198,7 @@ function renderStreamItemWithTurnFooter(input: {
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
   onPin?: MessagePinHandler;
+  resolveSaveContent?: MessageSaveResolver;
 }): ReactNode {
   if (!input.content) {
     return null;
@@ -209,6 +214,7 @@ function renderStreamItemWithTurnFooter(input: {
       supportsTimelineCursor={input.supportsTimelineCursor}
       onForkAssistantTurn={input.onForkAssistantTurn}
       onPin={input.onPin}
+      resolveSaveContent={input.resolveSaveContent}
     />
   ) : null;
   const content = (
@@ -592,6 +598,20 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const effectiveStreamHead = useRetainedValue(streamHead, isActive);
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
     const isTurnActive = effectiveTurnPresentation.isActive;
+    // Only save actions resolve whole messages; rendering keeps the block text.
+    const getMessageSaveContent = useStableEvent((sourceId: string) => {
+      const id = sourceId.slice("msg:".length);
+      const text = createMessageSaveContentIndex(
+        effectiveStreamItems,
+        effectiveStreamHead ?? EMPTY_STREAM_HEAD,
+      ).get(id);
+      return text === undefined
+        ? undefined
+        : {
+            text,
+            streaming: isTurnActive && Boolean(effectiveStreamHead?.some((item) => item.id === id)),
+          };
+    });
     const presentStream = useMemo(() => createStreamPresentation(), []);
     const presentation = useMemo(
       () =>
@@ -865,6 +885,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               {(renderFullContent) => (
                 <MessagePinItem
                   text={item.text}
+                  resolveSaveContent={getMessageSaveContent}
                   onPin={handlePin}
                   sourceId={`msg:${getStreamItemMessageId(item)}`}
                 >
@@ -885,7 +906,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           </AssistantFileLinkResolverProvider>
         );
       },
-      [agentId, client, handleInlinePathPress, resolvedServerId, toast, workspaceRoot, handlePin],
+      [
+        agentId,
+        client,
+        handleInlinePathPress,
+        resolvedServerId,
+        toast,
+        workspaceRoot,
+        handlePin,
+        getMessageSaveContent,
+      ],
     );
 
     const renderThoughtItem = useCallback(
@@ -1064,11 +1094,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           supportsTimelineCursor: supportsAgentForkContextCursor,
           onForkAssistantTurn: readOnly ? undefined : handleForkAssistantTurn,
           onPin: handlePin,
+          resolveSaveContent: getMessageSaveContent,
         });
       },
       [
         handleForkAssistantTurn,
         handlePin,
+        getMessageSaveContent,
         readOnly,
         renderStreamItemContent,
         streamRenderStrategy,
@@ -1101,12 +1133,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             onForkAssistantTurn={readOnly ? undefined : handleForkAssistantTurn}
             onForkInFlightTurn={readOnly ? undefined : handleForkInFlightTurn}
             onPin={handlePin}
+            resolveSaveContent={getMessageSaveContent}
           />
         ) : null,
       [
         handleForkAssistantTurn,
         handleForkInFlightTurn,
         handlePin,
+        getMessageSaveContent,
         readOnly,
         isTurnActive,
         baseRenderModel.turnTiming.runningStartedAt,

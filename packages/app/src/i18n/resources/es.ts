@@ -659,11 +659,14 @@ export const es: TranslationResources = {
       possibleAnswerLabel: "Posible respuesta:",
       unpin: "Desfijar",
       pinToStream: "Fijar en el stream",
-      pinSelection: "Save selected text to Stream",
-      pinMessage: "Save message to Stream",
-      pinExcerpt: "Save excerpt…",
+      pinSelection: "Guardar texto seleccionado en el stream",
+      pinMessage: "Guardar mensaje en el stream",
+      pinResponse: "Guardar respuesta completa en el stream",
+      pinExcerpt: "Guardar extracto…",
+      pinFinalMessage: "Guardar mensaje final en el stream",
+      pinStreamingHint: "La respuesta sigue llegando. Revisa esta captura antes de guardarla.",
       pinExcerptHint:
-        "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",
+        "Solo se guarda el texto de abajo. Edítalo para conservar el mensaje o pasaje que quieras. El enlace a la conversación de origen va aparte. Límite: 4000 caracteres.",
       pinSaved: "Saved to Stream",
       activityTab: "Activity",
       noExplicitAsks:

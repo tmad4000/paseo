@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 import type {
@@ -42,6 +44,20 @@ const MOCK_LOAD_TEST_INTERVAL_MS = 40;
 
 function getPositiveFeatureInteger(value: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function getMockAssistantMessages(value: unknown): string[] | null {
+  return Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((text: unknown) => typeof text === "string")
+    ? value
+    : null;
+}
+
+function getMockAssistantMessagesContinueFile(config: AgentSessionConfig): string | null {
+  return config.featureValues?.mockAssistantMessagesWaitForContinue === true
+    ? join(config.cwd, ".paseo-mock-stream-continue")
+    : null;
 }
 
 interface MockShellToolCall {
@@ -755,6 +771,8 @@ export class MockLoadTestAgentSession implements AgentSession {
   private modeId: string | null;
   private modelId: string | null;
   private readonly assistantResponse: string | null;
+  private readonly assistantMessages: string[] | null;
+  private readonly assistantMessagesContinueFile: string | null;
   private readonly shellToolCalls: MockShellToolCall[];
   private readonly streamingAssistantResponse: string | null;
   private readonly streamingAssistantIntervalMs: number;
@@ -771,6 +789,10 @@ export class MockLoadTestAgentSession implements AgentSession {
       typeof options.config.featureValues?.mockAssistantResponse === "string"
         ? options.config.featureValues.mockAssistantResponse
         : null;
+    this.assistantMessages = getMockAssistantMessages(
+      options.config.featureValues?.mockAssistantMessages,
+    );
+    this.assistantMessagesContinueFile = getMockAssistantMessagesContinueFile(options.config);
     this.shellToolCalls = getMockShellToolCalls(options.config.featureValues?.mockShellToolCalls);
     this.streamingAssistantResponse =
       typeof options.config.featureValues?.mockStreamingAssistantResponse === "string"
@@ -858,6 +880,11 @@ export class MockLoadTestAgentSession implements AgentSession {
         this.scheduleFailedTurn(turn);
       } else if (steeringReplayShape) {
         this.scheduleSteeringReplayTurn(turn, steeringReplayShape);
+      } else if (this.assistantMessages) {
+        this.scheduleStreamingAssistantTurn(
+          turn,
+          this.assistantMessages[this.assistantMessages.length - 1]!,
+        );
       } else if (this.streamingAssistantResponse !== null) {
         this.scheduleStreamingAssistantTurn(turn, this.streamingAssistantResponse);
       } else if (this.assistantResponse !== null) {
@@ -1247,13 +1274,32 @@ export class MockLoadTestAgentSession implements AgentSession {
   }
 
   private scheduleStreamingAssistantTurn(turn: ActiveTurn, finalText: string): void {
-    const tokens = tokenize(finalText);
+    const tokens = (this.assistantMessages ?? [finalText]).flatMap((text, index) =>
+      tokenize(text).map((token) => ({
+        text: token,
+        messageId:
+          index === 0 ? turn.assistantMessageId : `${turn.assistantMessageId}-message-${index}`,
+      })),
+    );
+    // Browser tests can pause an unfinished first message without racing wall-clock time.
+    const pauseAfter = tokenize(
+      (this.assistantMessages?.[0] ?? finalText).split("\n\n")[0]!,
+    ).length;
     const emitNext = () => {
       if (this.activeTurn !== turn) {
         return;
       }
       this.clearTurnTimer(turn);
       this.emitTurnStarted(turn);
+      if (
+        this.assistantMessagesContinueFile &&
+        turn.emittedTokens >= pauseAfter &&
+        !existsSync(this.assistantMessagesContinueFile)
+      ) {
+        turn.timer = setTimeout(emitNext, this.streamingAssistantIntervalMs);
+        turn.timer.unref?.();
+        return;
+      }
       const token = tokens.shift();
       if (token === undefined) {
         this.finishTurnWithText(turn, finalText);
@@ -1262,8 +1308,8 @@ export class MockLoadTestAgentSession implements AgentSession {
       turn.emittedTokens += 1;
       this.emitTimeline(turn.turnId, {
         type: "assistant_message",
-        text: token,
-        messageId: turn.assistantMessageId,
+        text: token.text,
+        messageId: token.messageId,
       });
       turn.timer = setTimeout(emitNext, this.streamingAssistantIntervalMs);
       turn.timer.unref?.();

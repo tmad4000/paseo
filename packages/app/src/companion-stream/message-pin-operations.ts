@@ -1,3 +1,39 @@
+import type { StreamItem } from "@/types/stream";
+
+/** Save menus address source messages rather than their rendered Markdown blocks. */
+export function createMessageSaveContentIndex(tail: StreamItem[], head: StreamItem[]) {
+  return new Map(
+    [...tail, ...head]
+      .filter((item) => item.kind === "assistant_message")
+      .map((item) => [item.id, item.text]),
+  );
+}
+
+export interface MessageSaveContent {
+  text: string;
+  streaming: boolean;
+  sourceId?: string;
+}
+
+export type MessageSaveResolver = (sourceId: string) => MessageSaveContent | undefined;
+
+/** A failed whole-message attempt retries its original snapshot until dismissed. */
+export class MessageSaveAttempt {
+  private readonly contents = new Map<string, MessageSaveContent>();
+
+  resolve(read: () => MessageSaveContent, scope = "message"): MessageSaveContent {
+    const existing = this.contents.get(scope);
+    if (existing) return existing;
+    const content = { ...read() };
+    this.contents.set(scope, content);
+    return content;
+  }
+
+  clear(): void {
+    this.contents.clear();
+  }
+}
+
 interface MessagePinInput {
   agentId: string;
   entryId: string;

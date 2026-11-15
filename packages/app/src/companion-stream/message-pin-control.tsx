@@ -20,7 +20,12 @@ import { isWeb } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
 import type { Theme } from "@/styles/theme";
 import { getMessageSelection } from "./message-selection";
-import { messagePinErrorMessage, type MessagePinHandler } from "./message-pin-operations";
+import {
+  MessageSaveAttempt,
+  messagePinErrorMessage,
+  type MessageSaveContent,
+  type MessagePinHandler,
+} from "./message-pin-operations";
 import { appendStreamTags } from "@getpaseo/protocol/stream-tags";
 import { useStreamTagSuggestions } from "./stream-tag-scope";
 import { TagField } from "./tag-field";
@@ -31,13 +36,19 @@ const iconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 export const MessagePinControl = memo(function MessagePinControl({
   getContent,
+  resolveSaveContent,
+  getFinalMessage,
   onPin,
   sourceId,
   containerStyle,
   onActivityChange,
   children,
+  scope = "message",
 }: {
+  scope?: "message" | "response";
   getContent: () => string;
+  resolveSaveContent?: () => MessageSaveContent;
+  getFinalMessage?: () => MessageSaveContent;
   onPin?: MessagePinHandler;
   sourceId?: string;
   containerStyle?: StyleProp<ViewStyle>;
@@ -46,10 +57,14 @@ export const MessagePinControl = memo(function MessagePinControl({
 }) {
   const { t } = useTranslation();
   const triggerRef = useRef<View | null>(null);
+  const messageAttempt = useRef(new MessageSaveAttempt());
+  const [draftStreaming, setDraftStreaming] = useState(false);
+  const [draftSourceId, setDraftSourceId] = useState<string | undefined>(sourceId);
   const [selection, setSelection] = useState<string | undefined>();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState<SaveAction | null>(null);
+  const saving = savingAction !== null;
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -59,13 +74,14 @@ export const MessagePinControl = memo(function MessagePinControl({
   }, [open, draft, saving, saved, error, onActivityChange]);
   const header = useMemo(() => ({ title: t("agentPanel.stream.pinExcerpt") }), [t]);
   const save = useCallback(
-    async (text: string) => {
-      setSaving(true);
+    async (text: string, savedSourceId = sourceId, action: SaveAction = "message") => {
+      setSavingAction(action);
       setError(null);
       setSaved(false);
       try {
         if (!onPin) return;
-        await onPin(text.trim(), sourceId);
+        await onPin(text.trim(), savedSourceId);
+        messageAttempt.current.clear();
         setSaved(true);
         setDraft(null);
         setTags([]);
@@ -73,60 +89,103 @@ export const MessagePinControl = memo(function MessagePinControl({
       } catch (failure) {
         setError(messagePinErrorMessage(failure, t("globalStream.saveFailed")));
       } finally {
-        setSaving(false);
+        setSavingAction(null);
       }
     },
     [onPin, sourceId, t],
   );
+  const readSaveContent = useCallback(() => {
+    const content = resolveSaveContent?.() ?? { text: getContent(), streaming: false };
+    return { ...content, sourceId: content.sourceId ?? sourceId };
+  }, [getContent, resolveSaveContent, sourceId]);
+  const saveResolvedContent = useCallback(
+    (content: MessageSaveContent, action: SaveAction = "message") => {
+      if (content.streaming || content.text.length > 4000) {
+        setDraft(content.text);
+        setDraftStreaming(content.streaming);
+        setDraftSourceId(content.sourceId ?? sourceId);
+        messageAttempt.current.clear();
+        setOpen(false);
+        return;
+      }
+      void save(content.text, content.sourceId ?? sourceId, action);
+    },
+    [save, sourceId],
+  );
   const pinMessage = useCallback(() => {
-    const text = getContent();
-    if (text.length > 4000) {
-      setDraft(text);
-      setOpen(false);
-      return;
+    saveResolvedContent(messageAttempt.current.resolve(readSaveContent));
+  }, [readSaveContent, saveResolvedContent]);
+  const pinFinalMessage = useCallback(() => {
+    if (!getFinalMessage) return;
+    try {
+      saveResolvedContent(messageAttempt.current.resolve(getFinalMessage, "final"), "final");
+    } catch (failure) {
+      setError(messagePinErrorMessage(failure, t("globalStream.saveFailed")));
     }
-    void save(text);
-  }, [getContent, save]);
+  }, [getFinalMessage, saveResolvedContent, t]);
   const chooseExcerpt = useCallback(() => {
+    const content = readSaveContent();
+    messageAttempt.current.clear();
     setError(null);
-    setDraft(getContent());
+    setDraft(selection ?? content.text);
+    setDraftStreaming(!selection && content.streaming);
+    setDraftSourceId(content.sourceId ?? sourceId);
     setOpen(false);
-  }, [getContent]);
+  }, [readSaveContent, selection, sourceId]);
   const closeExcerpt = useCallback(() => {
-    if (!saving) setDraft(null);
+    if (!saving) {
+      messageAttempt.current.clear();
+      setDraft(null);
+    }
   }, [saving]);
   const changeOpen = useCallback(
     (next: boolean) => {
       if (saving) return;
       if (next) setSelection(getMessageSelection(triggerRef.current));
+      else messageAttempt.current.clear();
       setOpen(next);
     },
     [saving],
   );
 
   const saveSelection = useCallback(() => {
-    if (selection) void save(selection);
-  }, [save, selection]);
+    if (selection) void save(selection, sourceId, "selection");
+  }, [save, selection, sourceId]);
   const draftWithTags = draft === null ? null : appendStreamTags(draft.trim(), tags);
   const saveDraft = useCallback(() => {
-    if (draftWithTags !== null) void save(draftWithTags);
-  }, [save, draftWithTags]);
+    if (draftWithTags !== null) void save(draftWithTags, draftSourceId, "draft");
+  }, [save, draftWithTags, draftSourceId]);
 
   const Item = children ? ContextMenuItem : DropdownMenuItem;
   const menuItems = (
     <>
       {selection ? (
-        <Item disabled={saving} closeOnSelect={false} onSelect={saveSelection}>
+        <Item
+          disabled={saving}
+          closeOnSelect={false}
+          onSelect={saveSelection}
+          status={saveActionStatus(savingAction, "selection")}
+        >
           {t("agentPanel.stream.pinSelection")}
+        </Item>
+      ) : null}
+      {getFinalMessage ? (
+        <Item
+          disabled={saving}
+          closeOnSelect={false}
+          onSelect={pinFinalMessage}
+          status={saveActionStatus(savingAction, "final")}
+        >
+          {t("agentPanel.stream.pinFinalMessage")}
         </Item>
       ) : null}
       <Item
         disabled={saving}
         closeOnSelect={false}
-        status={saving ? "pending" : undefined}
+        status={saveActionStatus(savingAction, "message")}
         onSelect={pinMessage}
       >
-        {t("agentPanel.stream.pinMessage")}
+        {t(messageSaveLabelKey(scope))}
       </Item>
       <Item disabled={saving} onSelect={chooseExcerpt}>
         {t("agentPanel.stream.pinExcerpt")}
@@ -182,6 +241,7 @@ export const MessagePinControl = memo(function MessagePinControl({
         >
           <View style={styles.body} testID="message-pin-excerpt-body">
             <Text style={styles.hint}>{t("agentPanel.stream.pinExcerptHint")}</Text>
+            <StreamingSaveHint visible={draftStreaming} />
             <AdaptiveTextInput
               initialValue={draft}
               onChangeText={setDraft}
@@ -225,6 +285,26 @@ export const MessagePinControl = memo(function MessagePinControl({
   );
 });
 
+type SaveAction = "message" | "final" | "selection" | "draft";
+
+function saveActionStatus(active: SaveAction | null, expected: SaveAction) {
+  return active === expected ? "pending" : undefined;
+}
+
+function messageSaveLabelKey(scope: "message" | "response") {
+  return scope === "response" ? "agentPanel.stream.pinResponse" : "agentPanel.stream.pinMessage";
+}
+
+function StreamingSaveHint({ visible }: { visible: boolean }) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <Text style={styles.hint} testID="message-pin-streaming-hint">
+      {t("agentPanel.stream.pinStreamingHint")}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   trigger: {
     padding: theme.spacing[2],
@@ -248,18 +328,29 @@ const styles = StyleSheet.create((theme) => ({
 
 export const MessagePinItem = memo(function MessagePinItem({
   text,
+  resolveSaveContent,
   onPin,
   sourceId,
   children,
 }: {
   text: string;
+  resolveSaveContent?: (sourceId: string) => MessageSaveContent | undefined;
   onPin?: MessagePinHandler;
   sourceId: string;
   children: ReactNode;
 }) {
   const getContent = useCallback(() => text, [text]);
+  const resolveMessageContent = useCallback(
+    () => resolveSaveContent?.(sourceId) ?? { text, streaming: false },
+    [resolveSaveContent, sourceId, text],
+  );
   return (
-    <MessagePinControl getContent={getContent} onPin={onPin} sourceId={sourceId}>
+    <MessagePinControl
+      getContent={getContent}
+      resolveSaveContent={resolveMessageContent}
+      onPin={onPin}
+      sourceId={sourceId}
+    >
       {children}
     </MessagePinControl>
   );
