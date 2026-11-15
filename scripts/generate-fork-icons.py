@@ -4,7 +4,7 @@ Run nice -n 19 python3 scripts/generate-fork-icons.py [--check].
 """
 from pathlib import Path
 from io import BytesIO
-import argparse, json, hashlib, struct
+import argparse, json, hashlib, struct, math
 import xml.etree.ElementTree as ET
 import cairosvg
 from PIL import Image, ImageDraw, ImageChops
@@ -162,18 +162,37 @@ for style,label in [('web','Web rounded'),('square','iOS opaque'),('adaptive','A
    x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+size+55),fill=bg)
    tile=cache[((size,size),style)][0];sheet.paste(tile,(x+20,y+40),tile)
  out=BytesIO();sheet.save(out,format='PNG');outputs[ROOT/f'assets/fork-icon/contact-sheet-{style}.png']=out.getvalue()
-# Circle/squircle masks use the generated Android foreground, with its actual inset.
+def android_mask_preview(size,shape):
+    # AdaptiveIconDrawable layers are 108 dp; the masked viewport is the central 72 dp.
+    # Use the exact generated foreground, then crop its viewport before masking.
+    side=1024
+    tile=Image.new('RGBA',(side,side),'black')
+    tile.alpha_composite(cache[((side,side),'adaptive')][0])
+    margin=round(side*(1-72/108)/2)
+    tile=tile.crop((margin,margin,side-margin,side-margin)).resize((size,size),Image.Resampling.LANCZOS)
+    factor=4 if size<=128 else 1
+    dimension=size*factor
+    mask=Image.new('L',(dimension,dimension));md=ImageDraw.Draw(mask)
+    if shape=='circle':md.ellipse((0,0,dimension-1,dimension-1),fill=255)
+    else:
+        radius=(dimension-1)/2
+        points=[]
+        for step in range(512):
+            angle=2*math.pi*step/512
+            cosine,sine=math.cos(angle),math.sin(angle)
+            points.append((radius+radius*math.copysign(abs(cosine)**0.5,cosine),radius+radius*math.copysign(abs(sine)**0.5,sine)))
+        md.polygon(points,fill=255)
+    tile.putalpha(mask.resize((size,size),Image.Resampling.LANCZOS))
+    return tile
+# Circle/squircle previews show the Android 72 dp viewport, not the full 108 dp layer.
+
 sheet=Image.new('RGB',(2304,2920),'#e5e7eb');draw=ImageDraw.Draw(sheet)
 for size,y in [(16,35),(32,120),(64,220),(128,360),(1024,650)]:
  draw.text((20,y),f'Android {size}px circle / squircle masks — badge safe-zone check passed',fill='black')
  for col,bg in enumerate(('#fff','#15171c')):
   x=30+col*1140;draw.rectangle((x,y+25,x+1100,y+size+55),fill=bg)
   for i,shape in enumerate(('circle','squircle')):
-   tile=Image.new('RGBA',(size,size),'black');tile.alpha_composite(cache[((size,size),'adaptive')][0])
-   mask=Image.new('L',(size,size));md=ImageDraw.Draw(mask)
-   if shape=='circle':md.ellipse((0,0,size-1,size-1),fill=255)
-   else:md.rounded_rectangle((0,0,size-1,size-1),radius=size*0.22,fill=255)
-   tile.putalpha(mask)
+   tile=android_mask_preview(size,shape)
    # Full-size mask previews are stacked so every exported pixel remains inspectable.
    px=x+20+(i*(size+24) if size<1024 else 0);py=y+40+(i*1080 if size==1024 else 0)
    if size==1024:draw.rectangle((x,py-10,x+1100,py+size+10),fill=bg)
@@ -181,11 +200,8 @@ for size,y in [(16,35),(32,120),(64,220),(128,360),(1024,650)]:
  out=BytesIO()
  # Native-sized circle and squircle PNGs accompany the sheet at every scale.
  for shape in ('circle','squircle'):
-  tile=Image.new('RGBA',(size,size),'black');tile.alpha_composite(cache[((size,size),'adaptive')][0])
-  mask=Image.new('L',(size,size));md=ImageDraw.Draw(mask)
-  if shape=='circle':md.ellipse((0,0,size-1,size-1),fill=255)
-  else:md.rounded_rectangle((0,0,size-1,size-1),radius=size*0.22,fill=255)
-  tile.putalpha(mask);out=BytesIO();tile.save(out,format='PNG');outputs[ROOT/f'assets/fork-icon/previews/android-{shape}-{size}.png']=out.getvalue()
+  tile=android_mask_preview(size,shape)
+  out=BytesIO();tile.save(out,format='PNG');outputs[ROOT/f'assets/fork-icon/previews/android-{shape}-{size}.png']=out.getvalue()
 out=BytesIO();sheet.save(out,format='PNG');outputs[ROOT/'assets/fork-icon/contact-sheet-masks.png']=out.getvalue()
 manifest={str(p.relative_to(ROOT)):hashlib.sha256(data).hexdigest() for p,data in sorted(outputs.items())}
 outputs[ROOT/'assets/fork-icon/manifest.json']=(json.dumps(manifest,indent=2)+'\n').encode()
