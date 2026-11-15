@@ -654,6 +654,7 @@ export const ko: TranslationResources = {
       pinToStream: "스트림에 고정",
       pinSelection: "Save selected text to Stream",
       pinMessage: "Save message to Stream",
+      pinResponse: "전체 응답을 스트림에 저장",
       pinExcerpt: "Save excerpt…",
       pinExcerptHint:
         "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",

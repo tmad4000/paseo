@@ -850,6 +850,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
       />
       {onPin ? (
         <MessagePinControl
+          scope="response"
           getContent={getContent}
           onPin={onPin}
           containerStyle={assistantTurnFooterStylesheet.copyButton}

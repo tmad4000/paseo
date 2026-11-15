@@ -656,6 +656,7 @@ export const ja: TranslationResources = {
       pinToStream: "ストリームにピン留め",
       pinSelection: "Save selected text to Stream",
       pinMessage: "Save message to Stream",
+      pinResponse: "応答全体をストリームに保存",
       pinExcerpt: "Save excerpt…",
       pinExcerptHint:
         "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",

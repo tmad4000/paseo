@@ -1,3 +1,14 @@
+import type { StreamItem } from "@/types/stream";
+
+/** Save menus address source messages rather than their rendered Markdown blocks. */
+export function createMessageSaveContentIndex(tail: StreamItem[], head: StreamItem[]) {
+  return new Map(
+    [...tail, ...head]
+      .filter((item) => item.kind === "assistant_message")
+      .map((item) => [item.id, item.text]),
+  );
+}
+
 interface MessagePinInput {
   agentId: string;
   entryId: string;

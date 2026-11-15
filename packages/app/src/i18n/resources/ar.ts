@@ -650,6 +650,7 @@ export const ar: TranslationResources = {
       pinToStream: "تثبيت في التدفق",
       pinSelection: "Save selected text to Stream",
       pinMessage: "Save message to Stream",
+      pinResponse: "حفظ الرد بالكامل في التدفق",
       pinExcerpt: "Save excerpt…",
       pinExcerptHint:
         "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",

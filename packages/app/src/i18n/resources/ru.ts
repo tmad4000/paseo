@@ -656,6 +656,7 @@ export const ru: TranslationResources = {
       pinToStream: "Закрепить в потоке",
       pinSelection: "Save selected text to Stream",
       pinMessage: "Save message to Stream",
+      pinResponse: "Сохранить весь ответ в поток",
       pinExcerpt: "Save excerpt…",
       pinExcerptHint:
         "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",

@@ -36,7 +36,9 @@ export const MessagePinControl = memo(function MessagePinControl({
   containerStyle,
   onActivityChange,
   children,
+  scope = "message",
 }: {
+  scope?: "message" | "response";
   getContent: () => string;
   onPin?: MessagePinHandler;
   sourceId?: string;
@@ -89,9 +91,9 @@ export const MessagePinControl = memo(function MessagePinControl({
   }, [getContent, save]);
   const chooseExcerpt = useCallback(() => {
     setError(null);
-    setDraft(getContent());
+    setDraft(selection ?? getContent());
     setOpen(false);
-  }, [getContent]);
+  }, [getContent, selection]);
   const closeExcerpt = useCallback(() => {
     if (!saving) setDraft(null);
   }, [saving]);
@@ -126,7 +128,9 @@ export const MessagePinControl = memo(function MessagePinControl({
         status={saving ? "pending" : undefined}
         onSelect={pinMessage}
       >
-        {t("agentPanel.stream.pinMessage")}
+        {scope === "response"
+          ? t("agentPanel.stream.pinResponse")
+          : t("agentPanel.stream.pinMessage")}
       </Item>
       <Item disabled={saving} onSelect={chooseExcerpt}>
         {t("agentPanel.stream.pinExcerpt")}
@@ -248,18 +252,23 @@ const styles = StyleSheet.create((theme) => ({
 
 export const MessagePinItem = memo(function MessagePinItem({
   text,
+  getContent,
   onPin,
   sourceId,
   children,
 }: {
   text: string;
+  getContent?: (sourceId: string) => string | undefined;
   onPin?: MessagePinHandler;
   sourceId: string;
   children: ReactNode;
 }) {
-  const getContent = useCallback(() => text, [text]);
+  const getMessageContent = useCallback(
+    () => getContent?.(sourceId) ?? text,
+    [getContent, sourceId, text],
+  );
   return (
-    <MessagePinControl getContent={getContent} onPin={onPin} sourceId={sourceId}>
+    <MessagePinControl getContent={getMessageContent} onPin={onPin} sourceId={sourceId}>
       {children}
     </MessagePinControl>
   );

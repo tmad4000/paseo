@@ -661,6 +661,7 @@ export const fr: TranslationResources = {
       pinToStream: "Épingler dans le flux",
       pinSelection: "Save selected text to Stream",
       pinMessage: "Save message to Stream",
+      pinResponse: "Enregistrer toute la réponse dans Stream",
       pinExcerpt: "Save excerpt…",
       pinExcerptHint:
         "Keep the line or passage you want to save. Saved excerpts can contain up to 4,000 characters.",

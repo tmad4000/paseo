@@ -1,3 +1,4 @@
+import { createMessageSaveContentIndex } from "@/companion-stream/message-pin-operations";
 import { MessagePinItem } from "@/companion-stream/message-pin-control";
 import type { MessagePinHandler } from "@/companion-stream/message-pin-operations";
 import { useMessagePin } from "@/companion-stream/use-message-pin";
@@ -590,6 +591,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const isActive = useRetainedPanelActive();
     const effectiveStreamItems = useRetainedValue(streamItems, isActive);
     const effectiveStreamHead = useRetainedValue(streamHead, isActive);
+    // Save actions address source messages, not the Markdown rows used for rendering.
+    const getMessageSaveContent = useStableEvent((sourceId: string) =>
+      createMessageSaveContentIndex(
+        effectiveStreamItems,
+        effectiveStreamHead ?? EMPTY_STREAM_HEAD,
+      ).get(sourceId.slice("msg:".length)),
+    );
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
     const isTurnActive = effectiveTurnPresentation.isActive;
     const presentStream = useMemo(() => createStreamPresentation(), []);
@@ -865,6 +873,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               {(renderFullContent) => (
                 <MessagePinItem
                   text={item.text}
+                  getContent={getMessageSaveContent}
                   onPin={handlePin}
                   sourceId={`msg:${getStreamItemMessageId(item)}`}
                 >
@@ -885,7 +894,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           </AssistantFileLinkResolverProvider>
         );
       },
-      [agentId, client, handleInlinePathPress, resolvedServerId, toast, workspaceRoot, handlePin],
+      [
+        agentId,
+        client,
+        handleInlinePathPress,
+        resolvedServerId,
+        toast,
+        workspaceRoot,
+        handlePin,
+        getMessageSaveContent,
+      ],
     );
 
     const renderThoughtItem = useCallback(

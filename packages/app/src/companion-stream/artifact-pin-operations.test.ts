@@ -1,6 +1,46 @@
+import type { StreamItem } from "@/types/stream";
+import { createMessageSaveContentIndex } from "./message-pin-operations";
 import { describe, expect, it } from "vitest";
 import { ArtifactPinOperations } from "./artifact-pin-operations";
 import { MessagePinOperations, messagePinErrorMessage } from "./message-pin-operations";
+
+describe("logical message save scope", () => {
+  it.each(["live", "history"])(
+    "keeps all paragraphs of one message and excludes neighboring messages in %s",
+    async (location) => {
+      const progress = {
+        kind: "assistant_message" as const,
+        id: "progress",
+        turnId: "turn-1",
+        timestamp: new Date(0),
+        text: "Dispatching the work.\n\nThe brief covers two questions.",
+      };
+      const final = { ...progress, id: "final", text: "Finished.\n\nReview the evidence." };
+      const other = { ...progress, id: "other", turnId: "turn-0", text: "An earlier turn." };
+      const tail: StreamItem[] = location === "history" ? [other, progress, final] : [other];
+      const head: StreamItem[] = location === "live" ? [progress, final] : [];
+      const content = createMessageSaveContentIndex(tail, head);
+      const saved: unknown[] = [];
+      const write = async (input: unknown) => {
+        saved.push(input);
+      };
+      await new MessagePinOperations().save(
+        "host",
+        "agent",
+        content.get("progress")!,
+        "msg:progress",
+        write,
+      );
+      expect(saved).toEqual([
+        expect.objectContaining({
+          text: progress.text,
+          sourceId: "msg:progress",
+          action: "add_pin",
+        }),
+      ]);
+    },
+  );
+});
 
 describe("message pin operations", () => {
   it("shows the actionable server error without request diagnostics", () => {
