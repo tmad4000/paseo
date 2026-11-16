@@ -118,33 +118,85 @@ test.describe("Project picker search", () => {
 // project row in place with a ghost "+ New workspace" child row.
 test.describe("Project with no workspaces persists", () => {
   test("adding a project starts with only a new-workspace child row", async ({ page }) => {
-    const repo = await createTempGitRepo("empty-project-add-");
-    const client = await connectSeedClient();
-    let projectId: string | null = null;
+    let repo: Awaited<ReturnType<typeof createTempGitRepo>> | undefined;
+    let client: Awaited<ReturnType<typeof connectSeedClient>> | undefined;
+    let beforeProjectIds: Set<string> | undefined;
+    const failures: unknown[] = [];
 
     try {
+      repo = await createTempGitRepo("empty-project-add-");
+      client = await connectSeedClient();
+      beforeProjectIds = new Set(
+        (await client.listProjects()).projects.map((project) => project.projectId),
+      );
       await gotoAppShell(page);
       await waitForSidebarProjectListReady(page);
 
-      projectId = await addProjectFromPicker(page, repo.path);
-      const projectRow = page.getByTestId(`sidebar-project-row-${projectId}`);
+      const projectViewKey = await addProjectFromPicker(page, repo.path);
+      const projectRow = page.getByTestId(`sidebar-project-row-${projectViewKey}`);
       await expect(projectRow).toBeVisible({ timeout: 30_000 });
       await expect(projectRow).toContainText(path.basename(repo.path));
-      await expect(page.getByTestId(`sidebar-workspace-list-${projectId}`)).toHaveCount(0);
+      await expect(page.getByTestId(`sidebar-workspace-list-${projectViewKey}`)).toHaveCount(0);
 
-      const newWorkspaceRow = page.getByTestId(`sidebar-project-new-workspace-row-${projectId}`);
+      const newWorkspaceRow = page.getByTestId(
+        `sidebar-project-new-workspace-row-${projectViewKey}`,
+      );
       await expect(newWorkspaceRow).toBeVisible({ timeout: 30_000 });
       await expect(newWorkspaceRow).toContainText("New workspace");
 
-      const workspaces = await client.fetchWorkspaces({ filter: { projectId } });
+      const baseline = beforeProjectIds;
+      const addedProjects = (await client.listProjects()).projects.filter(
+        (entry) => !baseline.has(entry.projectId),
+      );
+      expect(addedProjects).toHaveLength(1);
+      const workspaces = await client.fetchWorkspaces({
+        filter: { projectId: addedProjects[0]!.projectId },
+      });
       expect(workspaces.entries).toEqual([]);
-    } finally {
-      if (projectId) {
-        await client.removeProject(projectId).catch(() => undefined);
-      }
-      await client.close().catch(() => undefined);
-      await repo.cleanup().catch(() => undefined);
+    } catch (error) {
+      failures.push(error);
     }
+
+    try {
+      const before = beforeProjectIds;
+      const activeClient = client;
+      if (before && activeClient) {
+        // Sidebar view keys can group hosts; daemon removal needs registry IDs.
+        const ownedIds = new Set(
+          (await activeClient.listProjects()).projects
+            .filter((project) => !before.has(project.projectId))
+            .map((project) => project.projectId),
+        );
+        for (const projectId of ownedIds) {
+          try {
+            await activeClient.removeProject(projectId);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+        await expect
+          .poll(async () => {
+            const remaining: string[] = [];
+            for (const project of (await activeClient.listProjects()).projects) {
+              if (ownedIds.has(project.projectId)) remaining.push(project.projectId);
+            }
+            return remaining;
+          })
+          .toEqual([]);
+      }
+    } catch (error) {
+      failures.push(error);
+    }
+    for (const cleanup of [() => client?.close(), () => repo?.cleanup()]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, "Empty-project fixture or cleanup failed");
   });
 
   test("archiving the only workspace keeps the project row with creation still reachable", async ({

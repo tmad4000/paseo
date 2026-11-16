@@ -507,9 +507,10 @@ jobs:
         timeout-minutes: 10
         run: >-
           npm run test:e2e --workspace=@getpaseo/app --
+          e2e/browser/empty-project-persists.spec.ts
           e2e/browser/projects-settings.spec.ts
           e2e/browser/sidebar-project-filter.spec.ts
-          --grep="freshly-added project with no workspace|hides the filter row when there is only one project"
+          --grep="adding a project starts with only a new-workspace child row|freshly-added project with no workspace|hides the filter row when there is only one project"
           --workers=1 --repeat-each=3 --retries=0 --reporter=line,json
           --output=test-results/project-cleanup-repeat
         env:
