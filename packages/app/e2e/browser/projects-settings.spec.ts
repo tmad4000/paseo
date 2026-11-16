@@ -184,16 +184,16 @@ async function addProjectFromSidebar(page: Page, projectPath: string): Promise<s
   return testId!.replace("sidebar-project-row-", "");
 }
 
-async function openProjectSettingsFromSidebar(page: Page, projectId: string): Promise<void> {
-  const projectRow = page.getByTestId(`sidebar-project-row-${projectId}`);
+async function openProjectSettingsFromSidebar(page: Page, projectViewKey: string): Promise<void> {
+  const projectRow = page.getByTestId(`sidebar-project-row-${projectViewKey}`);
   await expect(projectRow).toBeVisible({ timeout: 30_000 });
   await projectRow.hover();
 
-  const kebab = page.getByTestId(`sidebar-project-kebab-${projectId}`);
+  const kebab = page.getByTestId(`sidebar-project-kebab-${projectViewKey}`);
   await expect(kebab).toBeVisible({ timeout: 10_000 });
   await kebab.click();
 
-  const openSettingsItem = page.getByTestId(`sidebar-project-menu-open-settings-${projectId}`);
+  const openSettingsItem = page.getByTestId(`sidebar-project-menu-open-settings-${projectViewKey}`);
   await expect(openSettingsItem).toBeVisible({ timeout: 10_000 });
   await openSettingsItem.click();
 }
@@ -202,25 +202,68 @@ test.describe("Projects settings", () => {
   test("freshly-added project with no workspace is editable from the sidebar without a reload", async ({
     page,
   }) => {
-    const repo = await createTempGitRepo("projects-settings-empty-");
-    const client = await connectSeedClient();
-    let projectId: string | null = null;
+    let repo: Awaited<ReturnType<typeof createTempGitRepo>> | undefined;
+    let client: Awaited<ReturnType<typeof connectSeedClient>> | undefined;
+    let beforeProjectIds: Set<string> | undefined;
+    const failures: unknown[] = [];
 
     try {
+      repo = await createTempGitRepo("projects-settings-empty-");
+      client = await connectSeedClient();
+      beforeProjectIds = new Set(
+        (await client.listProjects()).projects.map((project) => project.projectId),
+      );
       await gotoAppShell(page);
 
-      projectId = await addProjectFromSidebar(page, repo.path);
-      await openProjectSettingsFromSidebar(page, projectId);
+      const projectViewKey = await addProjectFromSidebar(page, repo.path);
+      await openProjectSettingsFromSidebar(page, projectViewKey);
 
       await expectProjectSettingsFormVisible(page);
       await expect(page.getByTestId("project-settings-back-button")).not.toBeVisible();
-    } finally {
-      if (projectId) {
-        await client.removeProject(projectId).catch(() => undefined);
-      }
-      await client.close().catch(() => undefined);
-      await repo.cleanup().catch(() => undefined);
+    } catch (error) {
+      failures.push(error);
     }
+
+    try {
+      const before = beforeProjectIds;
+      const activeClient = client;
+      if (before && activeClient) {
+        // Sidebar view keys can group hosts; daemon removal needs registry IDs.
+        const ownedIds = new Set(
+          (await activeClient.listProjects()).projects
+            .filter((project) => !before.has(project.projectId))
+            .map((project) => project.projectId),
+        );
+        for (const projectId of ownedIds) {
+          try {
+            await activeClient.removeProject(projectId);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+        await expect
+          .poll(async () => {
+            const remaining: string[] = [];
+            for (const project of (await activeClient.listProjects()).projects) {
+              if (ownedIds.has(project.projectId)) remaining.push(project.projectId);
+            }
+            return remaining;
+          })
+          .toEqual([]);
+      }
+    } catch (error) {
+      failures.push(error);
+    }
+    for (const cleanup of [() => client?.close(), () => repo?.cleanup()]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, "Empty-project fixture or cleanup failed");
   });
 
   test("user edits worktree setup from the projects page", async ({ page, editableProject }) => {
