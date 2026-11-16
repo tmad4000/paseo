@@ -1,0 +1,5 @@
+Independent codex/gpt-6.1-sol review, read-only.
+
+No blocking findings. Approve the two-file change, subject to pending required checks.
+The shared header keeps native accessibility state, exposes matching aria-expanded, and always renders the correct chevron. Regression coverage checks unhovered visibility, direction, keyboard toggling, and screenshots at both widths.
+No tests, builds, services, or merge actions performed by the reviewer.

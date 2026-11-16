@@ -1,0 +1,15 @@
+Warming Metro with one worker
+
+Running 2 tests using 1 worker
+
+(node:4069361) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4069361) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] Worker 0 daemon started on port 43293, home: /tmp/paseo-e2e-worker-0-C17LJC
+  ✓  1 e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:366:7 › Pinned disclosure stays visible and keyboard-toggleable at 390px (28.7s)
+  ✓  2 e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:366:7 › Pinned disclosure stays visible and keyboard-toggleable at 1280px (27.4s)
+[e2e] Worker 0 daemon stopped
+
+  2 passed (1.2m)
+Task Metro stopped

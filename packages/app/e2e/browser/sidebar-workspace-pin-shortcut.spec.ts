@@ -361,3 +361,50 @@ test("session pin rejection is visible and retry succeeds", async ({ page }) => 
     await workspace.cleanup();
   }
 });
+
+for (const width of [390, 1280]) {
+  test(`Pinned disclosure stays visible and keyboard-toggleable at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const workspace = await seedWorkspace({
+      repoPrefix: "pinned-disclosure-",
+      title: "Pinned disclosure",
+    });
+    try {
+      await workspace.client.setWorkspacePinned(workspace.workspaceId, true);
+      await resetSeededPageState(page);
+      await page.setViewportSize({ width, height: 900 });
+      await gotoAppShell(page);
+      if (width === 390) await openMobileAgentSidebar(page);
+      const header = page.getByTestId("sidebar-pinned-section-header");
+      const chevron = header.locator("svg");
+      await page.mouse.move(width - 1, 899);
+      await expect(header).toHaveRole("button");
+      await expect(header).toHaveAttribute("aria-expanded", "true");
+      await expect(chevron).toBeVisible();
+      await expect(chevron.locator("path")).toHaveAttribute("d", "m6 9 6 6 6-6");
+      await page.screenshot({
+        path: testInfo.outputPath(`pinned-expanded-${width}.png`),
+        fullPage: true,
+      });
+      await header.focus();
+      await header.press("Enter");
+      await expect(header).toHaveAttribute("aria-expanded", "false");
+      await expect(pinnedSection(page).getByTestId("sidebar-pinned-list")).toHaveCount(0);
+      await page.mouse.move(width - 1, 899);
+      await expect(chevron).toBeVisible();
+      await expect(chevron.locator("path")).toHaveAttribute("d", "m9 18 6-6-6-6");
+      await page.screenshot({
+        path: testInfo.outputPath(`pinned-collapsed-${width}.png`),
+        fullPage: true,
+      });
+      await header.press("Space");
+      await expect(header).toHaveAttribute("aria-expanded", "true");
+      await expect(chevron).toBeVisible();
+      await expect(chevron.locator("path")).toHaveAttribute("d", "m6 9 6 6 6-6");
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}

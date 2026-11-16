@@ -1,0 +1,64 @@
+Warming Metro with one worker
+
+Running 1 test using 1 worker
+
+(node:4063463) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4063463) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] Worker 0 daemon started on port 40797, home: /tmp/paseo-e2e-worker-0-e03Fag
+[e2e] Worker 0 daemon stopped
+  ✘  1 e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:366:7 › Pinned disclosure stays visible and keyboard-toggleable at 1280px (57.1s)
+
+
+  1) e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:366:7 › Pinned disclosure stays visible and keyboard-toggleable at 1280px 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveAttribute[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator:  getByTestId('sidebar-pinned-section-header')
+    Expected: [32m"true"[39m
+    Received: [31m""[39m
+    Timeout:  10000ms
+
+    Call log:
+    [2m  - Expect "toHaveAttribute" with timeout 10000ms[22m
+    [2m  - waiting for getByTestId('sidebar-pinned-section-header')[22m
+    [2m    14 × locator resolved to <button tabindex="0" role="button" type="button" data-testid="sidebar-pinned-section-header" class="css-view-g5y9jx r-cursor-1loqt21 r-touchAction-1otgn73 unistyles_1qz65hqnxrb ">…</button>[22m
+    [2m       - unexpected value "null"[22m
+
+
+      377 |       await page.mouse.move(width - 1, 899);
+      378 |       await expect(header).toHaveRole("button");
+    > 379 |       await expect(header).toHaveAttribute("aria-expanded", "true");
+          |                            ^
+      380 |       await expect(chevron).toBeVisible();
+      381 |       await expect(chevron.locator("path")).toHaveAttribute("d", "m6 9 6 6 6-6");
+      382 |       await page.screenshot({path: testInfo.outputPath(`pinned-expanded-${width}.png`), fullPage: true});
+        at /home/dev/agent-worktrees/paseo-pinned-chevron-20261116/packages/app/e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:379:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../tmp/pinned-chevron-results/sidebar-workspace-pin-shor-16c86-yboard-toggleable-at-1280px/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: browser-console (text/plain) ────────────────────────────────────────────────────
+    [console:info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+    [console:log] Running application "main" with appParams:
+     {rootTag: #root, hydrate: undefined} 
+    Development-level warnings: ON.
+    Performance optimizations: OFF.
+    [co...
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../tmp/pinned-chevron-results/sidebar-workspace-pin-shor-16c86-yboard-toggleable-at-1280px/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../tmp/pinned-chevron-results/sidebar-workspace-pin-shor-16c86-yboard-toggleable-at-1280px/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../tmp/pinned-chevron-results/sidebar-workspace-pin-shor-16c86-yboard-toggleable-at-1280px/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/browser/sidebar-workspace-pin-shortcut.spec.ts:366:7 › Pinned disclosure stays visible and keyboard-toggleable at 1280px 
+Task Metro stopped
