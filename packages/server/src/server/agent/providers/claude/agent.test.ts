@@ -1339,6 +1339,145 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
+  test("preserves native permission diagnostics without approving the request", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      modeId: "bypassPermissions",
+    });
+    const internal = session as unknown as {
+      handlePermissionRequest(
+        name: string,
+        input: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ): Promise<PermissionResult>;
+    };
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    const input = { command: "gcloud billing projects describe example" };
+    const matchedAskRule = {
+      source: "user",
+      toolName: "Bash",
+      ruleContent: "gcloud billing *",
+    };
+    try {
+      const permission = internal.handlePermissionRequest("Bash", input, {
+        toolUseID: "tool-native-permission",
+        title: "Claude wants to inspect billing",
+        displayName: "Inspect billing",
+        description: "Read the selected project's billing status",
+        decisionReason: "A configured tool check requires confirmation",
+        matchedAskRule,
+      });
+      void permission.catch(() => undefined);
+      const request = session.getPendingPermissions()[0]!;
+      expect(request).toMatchObject({
+        name: "Bash",
+        kind: "tool",
+        title: "Claude wants to inspect billing",
+        description: "Read the selected project's billing status",
+        input,
+        metadata: {
+          toolUseId: "tool-native-permission",
+          displayName: "Inspect billing",
+          decisionReason: "A configured tool check requires confirmation",
+          matchedAskRule,
+        },
+      });
+      expect(events).toContainEqual({
+        type: "permission_requested",
+        provider: "claude",
+        request,
+      });
+      expect(session.getPendingPermissions()).toHaveLength(1);
+      expect(events.filter((event) => event.type === "permission_resolved")).toHaveLength(0);
+      await session.respondToPermission(request.id, {
+        behavior: "deny",
+        message: "Not authorized",
+      });
+      await expect(permission).resolves.toMatchObject({
+        behavior: "deny",
+        message: "Not authorized",
+      });
+      expect(session.getPendingPermissions()).toHaveLength(0);
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
+  });
+
+  test("native permission diagnostics retain question summaries and have useful fallbacks", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+    });
+    const internal = session as unknown as {
+      handlePermissionRequest(
+        name: string,
+        input: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ): Promise<PermissionResult>;
+    };
+    try {
+      const question = internal.handlePermissionRequest(
+        "AskUserQuestion",
+        {
+          questions: [
+            {
+              question: "Which source should I use?",
+              options: [{ label: "Local" }, { label: "Cloud" }],
+            },
+          ],
+        },
+        {
+          title: "Generic native prompt",
+          description: "Generic native description",
+        },
+      );
+      void question.catch(() => undefined);
+      const questionRequest = session.getPendingPermissions()[0]!;
+      expect(questionRequest).toMatchObject({
+        title: "Which source should I use?",
+        description: "Local / Cloud",
+      });
+      await session.respondToPermission(questionRequest.id, {
+        behavior: "deny",
+        message: "test cleanup",
+      });
+      await question;
+      const tool = internal.handlePermissionRequest(
+        "Bash",
+        { command: "pwd" },
+        {
+          displayName: "Inspect working directory",
+          decisionReason: "A host confirmation is required",
+        },
+      );
+      void tool.catch(() => undefined);
+      const toolRequest = session.getPendingPermissions()[0]!;
+      expect(toolRequest).toMatchObject({
+        title: "Inspect working directory",
+        description: "A host confirmation is required",
+      });
+      await session.respondToPermission(toolRequest.id, { behavior: "allow" });
+      await expect(tool).resolves.toMatchObject({ behavior: "allow" });
+    } finally {
+      await session.close();
+    }
+  });
+
   test("a non-human steer leaves a pending permission for the user", async () => {
     const { queryFactory } = createQueryMock();
     const client = new ClaudeAgentClient({
