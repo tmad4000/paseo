@@ -4959,6 +4959,17 @@ class ClaudeAgentSession implements AgentSession {
     if (options.toolUseID) {
       metadata.toolUseId = options.toolUseID;
     }
+    // These explain a native gate that can still apply in bypass mode. Keep
+    // the provider's reason; a missing reason is not permission to skip it.
+    if (options.decisionReason) {
+      metadata.decisionReason = options.decisionReason;
+    }
+    if (options.displayName) {
+      metadata.displayName = options.displayName;
+    }
+    if (options.matchedAskRule) {
+      metadata.matchedAskRule = { ...options.matchedAskRule };
+    }
     if (toolName === "ExitPlanMode" && typeof input.plan === "string") {
       metadata.planText = input.plan;
     }
@@ -4977,6 +4988,8 @@ class ClaudeAgentSession implements AgentSession {
       provider: "claude",
       name: toolName,
       kind,
+      title: options.title || options.displayName || undefined,
+      description: options.description || options.decisionReason || undefined,
       ...buildClaudeQuestionPermissionSummary(toolName, input),
       input: requestInput,
       detail: toolDetail,
