@@ -1,4 +1,5 @@
 import { setTimeout as waitForRestartPoll } from "node:timers/promises";
+import { summarizeLoadedFleet } from "./agent-fleet-summary.js";
 import type { WorkspaceRegistry } from "../workspace-registry.js";
 import { getWorkspacePreparationRevision, runWorkspaceMutation } from "../workspace-mutations.js";
 import {
@@ -1220,6 +1221,10 @@ export class AgentManager {
 
   subscriptionCount(): number {
     return this.subscribers.size;
+  }
+
+  getFleetSummary(rootAgentId: string) {
+    return summarizeLoadedFleet(this.agents, rootAgentId);
   }
 
   listAgents(): ManagedAgent[] {

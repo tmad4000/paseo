@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { hash } from "bcryptjs";
 import { readFile, stat, writeFile } from "node:fs/promises";
@@ -6,6 +7,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
 import { DaemonAuthenticationError, DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { AgentFleetSummaryResponseSchema } from "@getpaseo/protocol/messages";
 import { readLocalCredentialForTarget } from "./local-credential.js";
 
 const originalEnv = { ...process.env };
@@ -22,6 +24,12 @@ function connectWebSocket(params: {
     );
     ws.once("open", () => resolve({ ws, protocol: ws.protocol }));
     ws.once("error", reject);
+  });
+}
+
+function receiveJson(ws: WebSocket): Promise<unknown> {
+  return new Promise((resolve) => {
+    ws.once("message", (data) => resolve(JSON.parse(data.toString())));
   });
 }
 
@@ -226,6 +234,132 @@ describe("daemon bearer auth", () => {
     await expect(
       readFile(join(daemonHandle.paseoHome, "local-credential"), "utf8"),
     ).rejects.toThrow();
+  });
+
+  test("fleet summary visits live unplaced agents without reading stored snapshots", async () => {
+    const daemonHandle = await createTestPaseoDaemon();
+    const { agentManager, agentStorage } = daemonHandle.daemon;
+    const sockets: WebSocket[] = [];
+    try {
+      const agentId = randomUUID();
+      const dormantId = randomUUID();
+      const cwd = daemonHandle.paseoHome;
+      const timestamp = new Date().toISOString();
+      await agentStorage.upsert({
+        id: dormantId,
+        provider: "codex",
+        cwd,
+        title: "private stored title",
+        labels: {},
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        lastStatus: "running",
+        persistence: { provider: "codex", sessionId: "stored-only" },
+      });
+      const agent = await agentManager.createAgent({ provider: "codex", cwd }, agentId, {
+        workspaceId: undefined,
+      });
+      expect(agent.workspaceId).toBeUndefined();
+      expect(agentManager.getAgent(dormantId)).toBeNull();
+      await agentManager.appendTimelineItem(agentId, {
+        type: "assistant_message",
+        text: "private live timeline",
+      });
+      await agentManager.flush();
+
+      const token = (await readFile(join(cwd, "local-credential"), "utf8")).trim();
+      const clientId = randomUUID();
+      const hello = async (auth?: { kind: "localCredential"; token: string }) => {
+        const { ws } = await connectWebSocket({ port: daemonHandle.port });
+        sockets.push(ws);
+        const info = receiveJson(ws);
+        ws.send(
+          JSON.stringify({ type: "hello", clientId, clientType: "cli", protocolVersion: 1, auth }),
+        );
+        await expect(info).resolves.toMatchObject({
+          type: "session",
+          message: { payload: { status: "server_info", features: { agentFleetSummary: true } } },
+        });
+        return ws;
+      };
+      const authorized = await hello({ kind: "localCredential", token });
+      const sibling = await hello({ kind: "localCredential", token: "stale-token" });
+      const siblingFrames: unknown[] = [];
+      sibling.on("message", (data) => siblingFrames.push(JSON.parse(data.toString())));
+      const cost = [
+        vi.spyOn(agentStorage, "list"),
+        vi.spyOn(agentStorage, "get"),
+        vi.spyOn(agentManager, "listAgents"),
+        vi.spyOn(agentManager, "getAgent"),
+        vi.spyOn(agentManager, "getTimeline"),
+        vi.spyOn(agentManager, "getTimelineRows"),
+        vi.spyOn(agentManager, "resumeAgentFromPersistence"),
+      ];
+      const send = (ws: WebSocket, requestId: string, requestedAgentId: string) => {
+        const reply = receiveJson(ws);
+        ws.send(
+          JSON.stringify({
+            type: "session",
+            message: { type: "agent.fleet.summary.request", requestId, agentId: requestedAgentId },
+          }),
+        );
+        return reply;
+      };
+      for (const [requestedAgentId, state] of [
+        [agentId, "idle"],
+        [dormantId, "unknown"],
+      ]) {
+        const requestId = randomUUID();
+        const now = Math.floor(Date.now() / 1000);
+        const reply = await send(authorized, requestId, requestedAgentId);
+        expect(reply).toEqual({
+          type: "session",
+          message: {
+            type: "agent.fleet.summary.response",
+            payload: {
+              requestId,
+              serverId: daemonHandle.daemon.getServerId(),
+              observedAt: expect.any(Number),
+              scope: "loaded-noninternal-nonclosed-v1",
+              availability: "ok",
+              coverage: { seen: 1, total: 1, complete: true },
+              counts: {
+                running: 0,
+                idle: 1,
+                blocked: 0,
+                needsPermission: 0,
+                initializing: 0,
+                unknown: 0,
+              },
+              root: { agentId: requestedAgentId, state },
+              error: null,
+            },
+          },
+        });
+        const result = AgentFleetSummaryResponseSchema.parse(
+          (reply as { message: unknown }).message,
+        );
+        expect(result.payload.observedAt).toBeGreaterThanOrEqual(now);
+        expect(result.payload.observedAt).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+        expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThanOrEqual(4096);
+      }
+
+      const requestId = randomUUID();
+      const denied = await send(sibling, requestId, agentId);
+      expect(denied).toMatchObject({
+        type: "session",
+        message: {
+          type: "rpc_error",
+          payload: { requestId, requestType: "agent.fleet.summary.request", code: "access_denied" },
+        },
+      });
+      expect(siblingFrames).toEqual([denied]);
+      for (const spy of cost) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+      for (const socket of sockets) socket.close();
+      await daemonHandle.close();
+    }
   });
 
   test("uses the per-run credential in memory after the file changes", async () => {

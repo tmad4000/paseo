@@ -89,6 +89,7 @@ import {
   isBearerTokenValidAsync,
   type DaemonAuthConfig,
 } from "./auth.js";
+import { matchesLocalCredential } from "./local-credential.js";
 import { resolveSessionAdmission } from "./session-admission-auth.js";
 import {
   WebSocketRuntimeMetricsWindow,
@@ -145,6 +146,7 @@ interface WebSocketConnectionIdentity {
   transport: "direct" | "relay" | "hub";
   peer: "loopback" | "local_ipc" | "external";
   browserOrigin: boolean;
+  authenticatedLocalCredential?: true;
   host?: string;
   origin?: string;
   userAgent?: string;
@@ -1643,6 +1645,8 @@ export class VoiceAssistantWebSocketServer {
               getSpeechReadiness: () => this.speech!.getReadiness(),
             }
           : undefined,
+      canReadFleetSummary: (source) =>
+        this.socketIdentities.get(source as WebSocketLike)?.authenticatedLocalCredential === true,
       serverId: this.serverId,
       daemonVersion: this.daemonVersion,
       daemonRuntimeConfig: this.daemonRuntimeConfig,
@@ -1783,10 +1787,11 @@ export class VoiceAssistantWebSocketServer {
   ): Promise<boolean> {
     if (pending.admission) return true;
     try {
+      const localCredential = this.credentialSource?.localCredential?.() ?? null;
       const resolved = await resolveSessionAdmission({
         credential: message.auth,
         passwordHash: this.passwordHash,
-        localCredential: this.credentialSource?.localCredential?.() ?? null,
+        localCredential,
         transport: pending.identity.transport === "relay" ? "relay" : "direct",
       });
       if (this.pendingConnections.get(ws) !== pending) return false;
@@ -1794,6 +1799,17 @@ export class VoiceAssistantWebSocketServer {
         this.clearPendingConnection(ws);
         await this.rejectHello(ws, message, resolved.rejection);
         return false;
+      }
+      // Owner admission can also come from passwordless or remote connections.
+      // Bind proof of the local credential to the physical socket, not the reusable session.
+      if (
+        pending.identity.transport === "direct" &&
+        pending.identity.peer !== "external" &&
+        message.auth?.kind === "localCredential" &&
+        localCredential &&
+        matchesLocalCredential(localCredential, message.auth.token)
+      ) {
+        pending.identity.authenticatedLocalCredential = true;
       }
       pending.admission = resolved.admission;
       return true;
@@ -1968,6 +1984,7 @@ export class VoiceAssistantWebSocketServer {
         sessionDecisionRouting: true,
         // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
         sessionTextSearch: true,
+        agentFleetSummary: true,
         conversationMessageActivity: true,
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: true,

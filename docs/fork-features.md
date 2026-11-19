@@ -21,6 +21,24 @@ failure release; queue durability; checkpoint recovery and partial provider fail
 restart integration file has opt-in Linux supervisor/Codex coverage via
 `PASEO_DAEMON_RESTART_QA=1`.
 
+## Fleet summary
+
+`agent-fleet-summary` gives local consumers such as the Buzz agent indicator a bounded
+snapshot of aggregate lifecycle and permission state. Gate polling on
+`server_info.features.agentFleetSummary` and send `agent.fleet.summary.request` with
+a fresh request UUID and the exact root agent UUID. The physical loopback or local IPC
+socket must prove the existing local credential in hello and have `workspace.read`.
+Validate the response's paired request UUID, daemon identity, root UUID, and coverage
+before using it. Partial counts describe the scanned subset, while the root comes from
+the same live map even when it falls beyond that subset. An unavailable read has null
+counts. Disable polling on older daemons or authorization failure.
+
+Acceptance covers unplaced loaded agents, dormant stored agents, disjoint counts,
+current permissions, exact root state, the total visit cap and source-only delivery.
+The bootstrap auth regression exercises the actual wire route with a stored-only
+running record and verifies that polling reads no snapshots or timelines and resumes no
+provider. Installation and Buzz activation require their own live receipt.
+
 ## Fork icon badge
 
 `fork-icon-badge`: Preserve the upstream butterfly while identifying Paseo Fork with a blue
