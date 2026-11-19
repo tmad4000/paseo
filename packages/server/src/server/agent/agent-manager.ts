@@ -1,3 +1,4 @@
+import { summarizeLoadedFleet } from "./agent-fleet-summary.js";
 import {
   advanceMessageActivity,
   deriveHistoricalMessageActivity,
@@ -1094,6 +1095,10 @@ export class AgentManager {
 
   subscriptionCount(): number {
     return this.subscribers.size;
+  }
+
+  getFleetSummary(rootAgentId: string) {
+    return summarizeLoadedFleet(this.agents, rootAgentId);
   }
 
   listAgents(): ManagedAgent[] {

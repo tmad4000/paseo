@@ -280,6 +280,7 @@ import {
 } from "./worktree-session.js";
 import { archiveByScope, type ActiveWorkspaceRef } from "./workspace-archive-service.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
+import { AGENT_FLEET_SUMMARY_SERVER_ID_LIMIT } from "@getpaseo/protocol/messages";
 import { SessionAuthorization, type DaemonPermission } from "./authorization/index.js";
 
 function resolveWorkspaceSetupRuntime(
@@ -594,6 +595,7 @@ export interface SessionOptions {
   serverId?: string;
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
+  canReadFleetSummary?: (source: object) => boolean;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   /**
    * Send a message to every trusted client, not just this session's own.
@@ -788,6 +790,7 @@ export class Session {
   private readonly rewindInitiators = new Map<string, object | undefined>();
 
   private agentManager: AgentManager;
+  private readonly canReadFleetSummary?: (source: object) => boolean;
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -936,6 +939,7 @@ export class Session {
       broadcastToClients,
     } = options;
     this.daemonServerId = serverId;
+    this.canReadFleetSummary = options.canReadFleetSummary;
     this.broadcastToClients = broadcastToClients;
     this.browserToolsBroker = options.browserToolsBroker;
     this.clientId = clientId;
@@ -2209,7 +2213,11 @@ export class Session {
         },
         "agent.session.inbound",
       );
-      if (!this.authorization.allowsInbound(msg)) {
+      if (
+        !this.authorization.allowsInbound(msg) ||
+        (msg.type === "agent.fleet.summary.request" &&
+          (!source || !this.canReadFleetSummary?.(source)))
+      ) {
         const requestId = sessionRequestId(msg);
         if (requestId) {
           this.emit({
@@ -2225,7 +2233,11 @@ export class Session {
         return;
       }
       try {
-        await this.dispatchInboundMessage(msg, source);
+        if (msg.type === "agent.fleet.summary.request") {
+          this.handleFleetSummary(msg);
+        } else {
+          await this.dispatchInboundMessage(msg, source);
+        }
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         this.sessionLogger.error({ err }, "Error handling message");
@@ -2949,6 +2961,32 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private handleFleetSummary(
+    msg: Extract<SessionInboundMessage, { type: "agent.fleet.summary.request" }>,
+  ): void {
+    const serverId = this.daemonServerId;
+    if (!serverId || serverId.length > AGENT_FLEET_SUMMARY_SERVER_ID_LIMIT) {
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Fleet summary server identity unavailable",
+          code: "handler_error",
+        },
+      });
+      return;
+    }
+    this.emit({
+      type: "agent.fleet.summary.response",
+      payload: {
+        requestId: msg.requestId,
+        serverId,
+        ...this.agentManager.getFleetSummary(msg.agentId),
+      },
+    });
   }
 
   private dispatchAgentLifecycleMessage(msg: SessionInboundMessage): Promise<void> | undefined {

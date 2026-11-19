@@ -10,6 +10,24 @@ A merged PR, retained helper, passing typecheck, or old screenshot cannot establ
 UI still exposes the feature. Add newly discovered fork behaviors here; this starting inventory
 covers the known workflows below, not an exhaustive audit of every historical fork commit.
 
+## Fleet summary
+
+`agent-fleet-summary` gives local consumers such as the Buzz agent indicator a bounded
+snapshot of aggregate lifecycle and permission state. Gate polling on
+`server_info.features.agentFleetSummary` and send `agent.fleet.summary.request` with
+a fresh request UUID and the exact root agent UUID. The physical loopback or local IPC
+socket must prove the existing local credential in hello and have `workspace.read`.
+Validate the response's paired request UUID, daemon identity, root UUID, and coverage
+before using it. Partial counts describe the scanned subset, while the root comes from
+the same live map even when it falls beyond that subset. An unavailable read has null
+counts. Disable polling on older daemons or authorization failure.
+
+Acceptance covers unplaced loaded agents, dormant stored agents, disjoint counts,
+current permissions, exact root state, the total visit cap and source-only delivery.
+The bootstrap auth regression exercises the actual wire route with a stored-only
+running record and verifies that polling reads no snapshots or timelines and resumes no
+provider. Installation and Buzz activation require their own live receipt.
+
 ## Session task checklist — pspin-tg2
 
 `session-task-checklist`: each chat's own plan (Claude TodoWrite/TaskCreate/TaskUpdate/TaskList,
