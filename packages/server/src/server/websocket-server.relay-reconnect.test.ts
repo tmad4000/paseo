@@ -585,6 +585,50 @@ describe("relay external socket reconnect behavior", () => {
     vi.useRealTimers();
   });
 
+  test("does not grant the local fleet read to a remote socket with the same client ID and token", async () => {
+    const token = "test-local-token";
+    const server = createServer({
+      auth: {
+        password: "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36mULvpVK3DRZW",
+        localCredential: () => token,
+      },
+    });
+    try {
+      const direct = new MockSocket();
+      const relay = new MockSocket();
+      const remote = new MockSocket();
+      const hello = JSON.stringify({
+        ...createHelloMessage("shared-client"),
+        auth: { kind: "localCredential", token },
+      });
+      const internals = asInternals<WebSocketServerInternals>(server);
+      await internals.attachSocket(direct, createDirectRequest());
+      direct.emit("message", hello);
+      await vi.waitFor(() => expect(sentServerInfoEnvelopes(direct)).toHaveLength(1));
+
+      await server.attachExternalSocket(relay, { transport: "relay" });
+      relay.emit("message", hello);
+      await vi.waitFor(() => expect(sentServerInfoEnvelopes(relay)).toHaveLength(1));
+
+      await internals.attachSocket(remote, {
+        ...createDirectRequest(),
+        socket: { remoteAddress: "192.0.2.20" },
+      });
+      remote.emit("message", hello);
+      await vi.waitFor(() => expect(sentServerInfoEnvelopes(remote)).toHaveLength(1));
+
+      expect(sessionMock.instances).toHaveLength(1);
+      const canRead = sessionMock.instances[0]?.args.canReadFleetSummary;
+      expect(typeof canRead).toBe("function");
+      if (typeof canRead !== "function") throw new Error("Missing fleet authorization");
+      expect(canRead(direct)).toBe(true);
+      expect(canRead(relay)).toBe(false);
+      expect(canRead(remote)).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
   test("keeps the same session when relay reconnects within grace window", async () => {
     const server = createServer();
     const clientId = "cid-relay-reconnect";

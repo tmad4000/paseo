@@ -1585,6 +1585,12 @@ export const WaitForFinishRequestSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 });
 
+export const AgentFleetSummaryRequestSchema = z.strictObject({
+  type: z.literal("agent.fleet.summary.request"),
+  requestId: z.uuid(),
+  agentId: z.uuid(),
+});
+
 export const DaemonGetStatusRequestSchema = z.object({
   type: z.literal("daemon.get_status.request"),
   requestId: z.string(),
@@ -4142,6 +4148,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VoiceInputReceiptsReadRequestSchema,
   SendAgentMessageRequestSchema,
   WaitForFinishRequestSchema,
+  AgentFleetSummaryRequestSchema,
   DaemonGetStatusRequestSchema,
   DaemonGetPairingOfferRequestSchema,
   DaemonConfigReloadRequestSchema,
@@ -4604,6 +4611,7 @@ export const ServerInfoStatusPayloadSchema = z
         sessionDecisionRouting: z.boolean().optional(),
         // COMPAT(sessionTextSearch): added in v0.10.0 (fork), remove gate after 2027-04-10.
         sessionTextSearch: z.boolean().optional(),
+        agentFleetSummary: z.boolean().optional(),
         // COMPAT(conversationMessageActivity): added in v0.10.0; remove gate after 2027-04-06.
         conversationMessageActivity: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
@@ -6003,6 +6011,52 @@ export const GetDaemonConfigResponseMessageSchema = z.object({
     })
     .passthrough(),
 });
+
+export const AGENT_FLEET_SUMMARY_VISIT_LIMIT = 10_000;
+// Even with every code unit escaped as six JSON bytes, the full frame stays under 4096 bytes.
+export const AGENT_FLEET_SUMMARY_SERVER_ID_LIMIT = 512;
+const AgentFleetSummaryCountSchema = z.number().int().min(0).max(AGENT_FLEET_SUMMARY_VISIT_LIMIT);
+const AgentFleetSummaryStateSchema = z.enum([
+  "running",
+  "idle",
+  "blocked",
+  "needsPermission",
+  "initializing",
+  "unknown",
+]);
+
+export const AgentFleetSummaryResponseSchema = z.object({
+  type: z.literal("agent.fleet.summary.response"),
+  payload: z.object({
+    requestId: z.uuid(),
+    serverId: z.string().min(1).max(AGENT_FLEET_SUMMARY_SERVER_ID_LIMIT),
+    observedAt: z.number().int().nonnegative(),
+    scope: z.literal("loaded-noninternal-nonclosed-v1"),
+    availability: z.enum(["ok", "partial", "unavailable"]),
+    coverage: z.object({
+      seen: AgentFleetSummaryCountSchema,
+      total: AgentFleetSummaryCountSchema.nullable(),
+      complete: z.boolean(),
+    }),
+    counts: z
+      .object({
+        running: AgentFleetSummaryCountSchema,
+        idle: AgentFleetSummaryCountSchema,
+        blocked: AgentFleetSummaryCountSchema,
+        needsPermission: AgentFleetSummaryCountSchema,
+        initializing: AgentFleetSummaryCountSchema,
+        unknown: AgentFleetSummaryCountSchema,
+      })
+      .nullable(),
+    root: z.object({
+      agentId: z.uuid(),
+      state: AgentFleetSummaryStateSchema,
+    }),
+    error: z.literal("unavailable").nullable(),
+  }),
+});
+
+export type AgentFleetSummaryResponse = z.infer<typeof AgentFleetSummaryResponseSchema>;
 
 export const DaemonGetStatusResponseSchema = z.object({
   type: z.literal("daemon.get_status.response"),
@@ -8008,6 +8062,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RealtimeVoiceControlResponseSchema,
   VoiceInputSetMutedResponseSchema,
   VoiceInputReceiptsReadResponseSchema,
+  AgentFleetSummaryResponseSchema,
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
   DaemonConfigReloadResponseSchema,
