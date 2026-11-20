@@ -20,6 +20,9 @@ manager admission, initialization, permission, timeout and concurrent-operation 
 failure release; queue durability; checkpoint recovery and partial provider failure. The existing
 restart integration file has opt-in Linux supervisor/Codex coverage via
 `PASEO_DAEMON_RESTART_QA=1`.
+Interactive Codex resume must also expose an autonomous goal turn before returning the session,
+so its running state and Stop action remain accurate. The renewed upstream review carries the
+`v0.12.0` correction with fake app-server regressions; combined validation and installation remain pending.
 
 ## Fork icon badge
 
