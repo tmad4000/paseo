@@ -211,6 +211,12 @@ export type AgentPromptContentBlock =
 export type AgentPromptInput = string | AgentPromptContentBlock[];
 
 export interface AgentRunOptions {
+  /** Daemon-local callback at the literal provider submission boundary. Never deserialized. */
+  localSubmission?: (
+    mode: string,
+    cwd: string | undefined,
+    submit: () => Promise<unknown>,
+  ) => Promise<unknown>;
   /** Manager admission guard, checked synchronously with the run reservation. */
   requireNoPendingPermissions?: boolean;
   outputSchema?: unknown;

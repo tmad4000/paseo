@@ -4255,7 +4255,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     };
     this.pendingForegroundStart = pendingStart;
 
-    this.dismissPendingPlanApprovals("Dismissed by a new prompt");
+    if (!options?.localSubmission) this.dismissPendingPlanApprovals("Dismissed by a new prompt");
 
     try {
       await this.connect();
@@ -4263,7 +4263,9 @@ export class CodexAppServerAgentSession implements AgentSession {
         throw new Error("Codex client not initialized");
       }
 
-      const slashCommand = await this.resolveSlashCommandInvocation(prompt);
+      const slashCommand = options?.localSubmission
+        ? null
+        : await this.resolveSlashCommandInvocation(prompt);
       const effectivePrompt = slashCommand
         ? await this.buildCommandPromptInput(slashCommand.commandName, slashCommand.args)
         : prompt;
@@ -4304,7 +4306,12 @@ export class CodexAppServerAgentSession implements AgentSession {
           code: "AGENT_PROMPT_NOT_SUBMITTED",
         });
       }
-      await this.client.request("turn/start", turnStart.params, TURN_START_TIMEOUT_MS);
+      await this.submitForegroundTurn(
+        this.client,
+        turnStart.params,
+        prompt,
+        options?.localSubmission,
+      );
       return { turnId };
     } catch (error) {
       this.pendingForegroundTurnIdentification?.resolve(null);
@@ -4317,6 +4324,35 @@ export class CodexAppServerAgentSession implements AgentSession {
         this.pendingForegroundStart = null;
       }
       pendingStart.resolve();
+    }
+  }
+
+  private submitForegroundTurn(
+    client: CodexAppServerClient,
+    params: Record<string, unknown>,
+    prompt: AgentPromptInput,
+    admit: AgentRunOptions["localSubmission"],
+  ): Promise<unknown> {
+    if (admit) {
+      if (typeof prompt !== "string" || !["read-only", "auto"].includes(this.currentMode))
+        throw Error("Literal turn requires a scoped mode");
+      params.input = [{ type: "text", text: prompt }];
+      params.approvalPolicy = "on-request";
+      params.approvalsReviewer = "user";
+      params.sandboxPolicy = toSandboxPolicy(MODE_PRESETS[this.currentMode].sandbox, {
+        network_access: false,
+        writable_roots: [],
+        exclude_slash_tmp: true,
+        exclude_tmpdir_env_var: true,
+      });
+      // Do not inherit a config block that could override these turn-specific policies.
+      delete params.config;
+    }
+    const submit = () => client.request("turn/start", params, TURN_START_TIMEOUT_MS);
+    if (admit) {
+      return admit(this.currentMode, this.config.cwd, submit);
+    } else {
+      return submit();
     }
   }
 

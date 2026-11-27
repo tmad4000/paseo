@@ -3100,6 +3100,18 @@ export class DaemonClient {
     );
   }
 
+  async localApprovedTurn(
+    input: Omit<
+      Extract<SessionInboundMessage, { type: "local.approved_turn.request" }>,
+      "requestId" | "type" | "version"
+    >,
+  ) {
+    return this.sendNamespacedCorrelatedSessionRequest<"local.approved_turn.response">({
+      message: { ...input, version: 1, type: "local.approved_turn.request" },
+      timeout: input.op === "run" ? 120_000 : 5_000,
+    });
+  }
+
   async removeQueuedAgentMessage(agentId: string, itemId: string): Promise<AgentQueueSnapshot> {
     return this.requireAgentQueuePayload(
       await this.sendNamespacedCorrelatedSessionRequest<"agent.queue.remove.response">({

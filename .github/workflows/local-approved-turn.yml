@@ -1,0 +1,28 @@
+name: Local approved turn
+on:
+  pull_request:
+    branches: [sol/fleet-summary-beta27-fleet1]
+    paths:
+      - "packages/protocol/src/messages.ts"
+      - "packages/client/src/**"
+      - "packages/server/src/server/**"
+      - ".github/workflows/local-approved-turn.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm run build:server-deps
+      - run: npm run build:lib --workspace=@getpaseo/server
+      - run: ../../node_modules/.bin/vitest run src/server/local-approved-turn.test.ts src/server/agent/providers/codex-app-server-agent.test.ts --bail=1
+        working-directory: packages/server

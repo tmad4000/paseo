@@ -433,14 +433,22 @@ class FakeAgentSession implements AgentSession {
     return { sessionId: this.id, finalText: resultText, timeline, usage };
   }
 
-  async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+  async startTurn(
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<{ turnId: string }> {
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");
     }
 
     const turnId = `fake-turn-${this.nextTurnOrdinal++}`;
-    this.activeForegroundTurnId = turnId;
-    this.onStartTurn?.(prompt);
+    const submit = async () => {
+      this.activeForegroundTurnId = turnId;
+      this.onStartTurn?.(prompt);
+    };
+    if (options?.localSubmission)
+      await options.localSubmission(this.config.modeId ?? "", this.config.cwd, submit);
+    else await submit();
 
     void this.emitTurnEvents(prompt);
 

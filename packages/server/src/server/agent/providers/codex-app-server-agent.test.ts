@@ -752,6 +752,47 @@ describe("Codex app-server provider", () => {
     });
   });
 
+  test("local approval guards the literal text and effective policy at the Codex transport", async () => {
+    const session = createSession({
+      modeId: "read-only",
+      cwd: "/workspace/project",
+      thinkingOptionId: "medium",
+    });
+    session.currentThreadId = null;
+    session.activeForegroundTurnId = null;
+    const request = vi.fn(async (method: string, _params: unknown) => {
+      if (method === "thread/start") return { thread: { id: "local-approved" } };
+      if (method === "turn/start") return {};
+      throw new Error("Unexpected operation " + method);
+    });
+    session.client = { request };
+    let verified = false;
+    await session.startTurn("literal text", {
+      localSubmission: (mode, cwd, submit) => {
+        expect(request.mock.calls.some(([method]) => method === "turn/start")).toBe(false);
+        expect([mode, cwd]).toEqual(["read-only", "/workspace/project"]);
+        verified = true;
+        return submit();
+      },
+    });
+    expect(verified).toBe(true);
+    expect(
+      request.mock.calls
+        .filter(([method]) => method === "turn/start")
+        .map(([method, params]) => [method, params]),
+    ).toEqual([
+      [
+        "turn/start",
+        expect.objectContaining({
+          input: [{ type: "text", text: "literal text" }],
+          sandboxPolicy: { type: "readOnly" },
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+        }),
+      ],
+    ]);
+  });
+
   test("Default Permissions pins the user as approvals reviewer on thread/start", async () => {
     const requests: Array<{ method: string; params: unknown }> = [];
     const session = createSession(
