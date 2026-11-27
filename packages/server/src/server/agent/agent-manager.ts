@@ -3409,7 +3409,8 @@ export class AgentManager {
       const agent = this.requireSessionAgent(agentId);
       const run = this.runs.getRun(agentId);
       if (!run || agent.activeForegroundTurnId !== turnId) return false;
-      if (!(await this.interruptSession(agent.session, agentId))) return false;
+      if (!agent.session.interruptScopedTurn) return false;
+      await agent.session.interruptScopedTurn(turnId);
       return (
         (await this.waitWithTimeout({
           operation: run.settledPromise,

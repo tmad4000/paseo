@@ -24,7 +24,7 @@ function setup() {
     db = new DatabaseSync(file);
   chmodSync(file, 0o600);
   db.exec(
-    "CREATE TABLE grants(route,localProof,agent,workspace,mode,state,context,expires,offerUntil,stage,request,deadline,approvedHash,daemonTurn); CREATE TABLE scoped_receipts(route,turn)",
+    "CREATE TABLE grants(route,localProof,agent,workspace,mode,state,context,expires,offerUntil,stage,request,deadline,approvedHash,daemonTurn,nativeThread,nativeTurn); CREATE TABLE scoped_receipts(route,turn); CREATE TABLE native_requests(thread,turn,route,request,PRIMARY KEY(thread,turn))",
   );
   const item = randomBytes(16).toString("hex"),
     route = randomBytes(24).toString("hex"),
@@ -32,7 +32,7 @@ function setup() {
   const text = "literal fixture",
     until = Date.now() + 60_000;
   db.prepare(
-    "INSERT INTO grants VALUES(?,?,'agent','/test','auto','active','fresh',?,?,'reserved',?,?,?,NULL)",
+    "INSERT INTO grants VALUES(?,?,'agent','/test','auto','active','fresh',?,?,'reserved',?,?,?,NULL,NULL,NULL)",
   ).run(route, proof, until, until, item, until, createHash("sha256").update(text).digest("hex"));
   let items: { id: string }[] = [];
   const agent = {
@@ -66,7 +66,7 @@ function setup() {
       queue as unknown as AgentQueueService,
       {
         type: "local.approved_turn.request",
-        version: 1,
+        version: 2,
         requestId: "fixture",
         op,
         route,
@@ -142,3 +142,61 @@ it.each(["revoke", "expiry", "mode", "workspace"])(
     }
   },
 );
+const acceptedStart = async () => ({});
+it("keeps a local UUID and synthesized manager terminal quarantined without native terminal evidence", async () => {
+  const f = setup();
+  try {
+    f.manager.streamAgent.mockImplementation((_id, _text, opts) =>
+      (async function* () {
+        await opts.localSubmission("auto", "/test", acceptedStart);
+        opts.localTurnEvidence({
+          kind: "accepted",
+          localId: "local",
+          thread: "thread",
+          turn: "native",
+        });
+        yield { type: "turn_started", turnId: "local" };
+        yield { type: "turn_completed", turnId: "local" };
+      })(),
+    );
+    expect(await f.call("run")).toEqual({ status: "quarantined" });
+    expect(
+      f.db.prepare("SELECT stage,daemonTurn,nativeThread,nativeTurn FROM grants").get(),
+    ).toEqual({
+      stage: "submitting",
+      daemonTurn: "local",
+      nativeThread: "thread",
+      nativeTurn: "native",
+    });
+    f.db.exec("UPDATE grants SET state='revoked'");
+    expect(await f.call("cancel")).toEqual({ status: "quarantined" });
+  } finally {
+    f.db.close();
+  }
+});
+
+it("quarantines a reused native ACK before it acquires a new local owner", async () => {
+  const f = setup();
+  try {
+    f.db.exec("INSERT INTO native_requests VALUES('thread','reused','old','different')");
+    f.manager.streamAgent.mockImplementation((_id, _text, opts) =>
+      (async function* () {
+        await opts.localSubmission("auto", "/test", acceptedStart);
+        opts.localTurnEvidence({
+          kind: "accepted",
+          localId: "new",
+          thread: "thread",
+          turn: "reused",
+        });
+        yield { type: "turn_started", turnId: "new" };
+      })(),
+    );
+    expect(await f.call("run")).toEqual({ status: "quarantined" });
+    expect(f.db.prepare("SELECT stage,daemonTurn FROM grants").get()).toEqual({
+      stage: "submitting",
+      daemonTurn: null,
+    });
+  } finally {
+    f.db.close();
+  }
+});

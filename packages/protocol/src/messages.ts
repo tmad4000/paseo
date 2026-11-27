@@ -2899,7 +2899,7 @@ export const AgentQueueEnqueueRequestSchema = z.object({
 export const LocalApprovedTurnRequestSchema = z
   .object({
     type: z.literal("local.approved_turn.request"),
-    version: z.literal(1),
+    version: z.literal(2),
     requestId: z.string(),
     op: z.enum(["probe", "bind", "run", "cancel"]),
     route: z
@@ -2921,7 +2921,7 @@ export const LocalApprovedTurnResponseSchema = z.object({
   type: z.literal("local.approved_turn.response"),
   payload: z.object({
     requestId: z.string(),
-    version: z.literal(1),
+    version: z.literal(2),
     status: z.enum(["supported", "bound", "result", "stopped", "denied", "quarantined"]),
     item: z.string().optional(),
     turnId: z.string().optional(),

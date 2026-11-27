@@ -3107,7 +3107,7 @@ export class DaemonClient {
     >,
   ) {
     return this.sendNamespacedCorrelatedSessionRequest<"local.approved_turn.response">({
-      message: { ...input, version: 1, type: "local.approved_turn.request" },
+      message: { ...input, version: 2, type: "local.approved_turn.request" },
       timeout: input.op === "run" ? 120_000 : 5_000,
     });
   }

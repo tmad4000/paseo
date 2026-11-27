@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { NativeTurnEvidence } from "./agent/agent-sdk-types.js";
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
 
@@ -31,8 +32,17 @@ interface Permit {
   deadline: number | null;
   approvedHash: string | null;
   daemonTurn: string | null;
+  nativeThread: string | null;
+  nativeTurn: string | null;
 }
 
+function isBoundStart(
+  id: string | undefined,
+  accepted: NativeTurnEvidence | undefined,
+  previous: string | undefined,
+): id is string {
+  return !!id && id === accepted?.localId && (!previous || previous === id);
+}
 function assertPrivate(path: string, directory: boolean) {
   const st = lstatSync(path);
   if (
@@ -122,7 +132,9 @@ export async function localApprovedTurn(
         !agent ||
         agent.lifecycle !== "idle" ||
         manager.hasInFlightRun(g.agent) ||
-        current?.stage !== "terminal" ||
+        current?.stage !== "native-terminal" ||
+        !current.nativeThread ||
+        !current.nativeTurn ||
         !current.daemonTurn
       )
         return { status: "quarantined" };
@@ -215,9 +227,33 @@ export async function localApprovedTurn(
         let submitted = false,
           turnId: string | undefined,
           terminal = false;
+        let accepted: NativeTurnEvidence | undefined,
+          ended: Extract<NativeTurnEvidence, { kind: "terminal" }> | undefined;
+        const evidence = (e: NativeTurnEvidence) => {
+          if (!submitted || !e.thread || !e.turn || !e.localId)
+            throw Error("Missing native binding");
+          if (e.kind === "accepted" && !accepted) {
+            // Native IDs must be unique across requests even when a process restarts.
+            // Commit this claim before the provider exposes its interrupt target.
+            ledger
+              .prepare("INSERT INTO native_requests(thread,turn,route,request) VALUES(?,?,?,?)")
+              .run(e.thread, e.turn, route, item);
+            accepted = e;
+            return;
+          }
+          if (
+            e.kind !== "terminal" ||
+            ended ||
+            e.localId !== accepted?.localId ||
+            e.thread !== accepted.thread ||
+            e.turn !== accepted.turn
+          )
+            throw Error("Conflicting native binding");
+          ended = e;
+        };
         const stream = manager.streamAgent(g.agent, text, {
           clientMessageId: item,
-          requireNoPendingPermissions: true,
+          localTurnEvidence: evidence,
           localSubmission: (mode, cwd, submit) => {
             ledger.exec("BEGIN IMMEDIATE");
             try {
@@ -236,12 +272,13 @@ export async function localApprovedTurn(
         for await (const e of stream) {
           if (!submitted) throw Error("Provider did not enforce literal admission");
           if (e.type === "turn_started") {
-            if (!e.turnId || (turnId && turnId !== e.turnId))
-              throw Error("Ambiguous provider start");
+            if (!isBoundStart(e.turnId, accepted, turnId)) throw Error("Ambiguous provider start");
             turnId = e.turnId;
             ledger
-              .prepare("UPDATE grants SET daemonTurn=? WHERE route=? AND request=?")
-              .run(turnId, route, item);
+              .prepare(
+                "UPDATE grants SET daemonTurn=?,nativeThread=?,nativeTurn=? WHERE route=? AND request=?",
+              )
+              .run(turnId, accepted!.thread, accepted!.turn, route, item);
             if (row()?.state !== "active") {
               // Let the stream consume the terminal event while interruption awaits settlement.
               void manager.cancelExactForegroundTurn(g.agent, turnId).catch(() => false);
@@ -251,18 +288,23 @@ export async function localApprovedTurn(
             (e.type === "turn_completed" || e.type === "turn_canceled") &&
             e.turnId === turnId
           ) {
+            if (
+              !ended ||
+              ended.status !== (e.type === "turn_completed" ? "completed" : "interrupted")
+            )
+              throw Error("Missing native terminal acknowledgement");
             terminal = e.type === "turn_completed";
             ledger
               .prepare(
-                "UPDATE grants SET stage='terminal' WHERE route=? AND request=? AND daemonTurn=?",
+                "UPDATE grants SET stage='native-terminal' WHERE route=? AND request=? AND daemonTurn=? AND nativeThread=? AND nativeTurn=?",
               )
-              .run(route, item, turnId);
+              .run(route, item, turnId, ended.thread, ended.turn);
           }
         }
         if (!terminal || !turnId || row()?.state !== "active") return { status: "quarantined" };
-        return result(turnId);
+        return result(turnId, ended?.text);
       };
-      const result = async (turnId: string): Promise<Result> => {
+      const result = async (turnId: string, nativeText: string | undefined): Promise<Result> => {
         const rows = (await manager.getTimelineRows(g.agent)).filter((r) => r.turnId === turnId);
         const source = rows.filter((r) => r.item.type === "user_message");
         if (
@@ -272,17 +314,14 @@ export async function localApprovedTurn(
           ![source[0].item.messageId, source[0].item.clientMessageId].includes(item)
         )
           return { status: "quarantined" };
-        const last = rows.findLast(
-          (r) => r.seq > source[0].seq && r.item.type === "assistant_message",
-        );
-        if (last?.item.type !== "assistant_message" || row()?.state !== "active")
+        if (typeof nativeText !== "string" || !nativeText || row()?.state !== "active")
           return { status: "quarantined" };
         ledger.prepare("INSERT INTO scoped_receipts(route,turn) VALUES(?,?)").run(route, turnId);
         return {
           status: "result",
           turnId,
           item,
-          text: last.item.text.slice(0, 12000),
+          text: nativeText.slice(0, 12000),
         };
       };
       return run();

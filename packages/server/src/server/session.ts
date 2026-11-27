@@ -3271,7 +3271,7 @@ export class Session {
         (payload) =>
           this.emit({
             type: "local.approved_turn.response",
-            payload: { ...payload, version: 1, requestId: msg.requestId },
+            payload: { ...payload, version: 2, requestId: msg.requestId },
           }),
       );
     }

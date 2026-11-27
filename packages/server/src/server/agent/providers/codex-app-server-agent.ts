@@ -1,3 +1,4 @@
+import { ScopedCodexTurn } from "./codex/scoped-turn.js";
 import {
   getAgentStreamEventTurnId,
   type AgentPermissionAction,
@@ -3363,6 +3364,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   > | null = null;
   private resolvedSandboxPolicy: Record<string, unknown> | null = null;
   private currentThreadId: string | null = null;
+  private scopedTurn?: { binding: ScopedCodexTurn; client: CodexAppServerClient };
   private currentTurnId: string | null = null;
   private pendingForegroundTurnIdentification: {
     foregroundTurnId: string;
@@ -3537,7 +3539,10 @@ export class CodexAppServerAgentSession implements AgentSession {
     client.setUnexpectedTerminationHandler((error) => {
       this.handleUnexpectedTermination(error);
     });
-    client.setNotificationHandler((method, params) => this.handleNotification(method, params));
+    client.setNotificationHandler((method, params) => {
+      if (this.client !== client || (this.scopedTurn && this.scopedTurn.client !== client)) return;
+      this.handleNotification(method, params);
+    });
     this.registerRequestHandlers();
 
     try {
@@ -4241,7 +4246,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): Promise<{ turnId: string }> {
-    if (this.activeForegroundTurnId || this.pendingForegroundStart) {
+    if (this.activeForegroundTurnId || this.pendingForegroundStart || this.scopedTurn) {
       throw new Error("A foreground turn is already active");
     }
 
@@ -4263,12 +4268,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         throw new Error("Codex client not initialized");
       }
 
-      const slashCommand = options?.localSubmission
-        ? null
-        : await this.resolveSlashCommandInvocation(prompt);
-      const effectivePrompt = slashCommand
-        ? await this.buildCommandPromptInput(slashCommand.commandName, slashCommand.args)
-        : prompt;
+      const effectivePrompt = await this.foregroundPrompt(prompt, options);
 
       if (this.currentThreadId) {
         await this.ensureThreadLoaded();
@@ -4278,6 +4278,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
       const turnStart = await this.buildTurnStartParams(effectivePrompt, options);
       const turnId = this.createTurnId();
+      if (options?.localSubmission && this.currentTurnId) throw Error("Native turn is busy");
       this.activeForegroundTurnId = turnId;
       this.activeClientMessageId = options?.clientMessageId ?? null;
       this.currentTurnId = null;
@@ -4306,12 +4307,7 @@ export class CodexAppServerAgentSession implements AgentSession {
           code: "AGENT_PROMPT_NOT_SUBMITTED",
         });
       }
-      await this.submitForegroundTurn(
-        this.client,
-        turnStart.params,
-        prompt,
-        options?.localSubmission,
-      );
+      await this.startSubmittedTurn(this.client, turnId, turnStart.params, prompt, options);
       return { turnId };
     } catch (error) {
       this.pendingForegroundTurnIdentification?.resolve(null);
@@ -4325,6 +4321,78 @@ export class CodexAppServerAgentSession implements AgentSession {
       }
       pendingStart.resolve();
     }
+  }
+
+  private async foregroundPrompt(prompt: AgentPromptInput, options?: AgentRunOptions) {
+    if (options?.localSubmission) return prompt;
+    const command = await this.resolveSlashCommandInvocation(prompt);
+    return command ? this.buildCommandPromptInput(command.commandName, command.args) : prompt;
+  }
+
+  private async startSubmittedTurn(
+    client: CodexAppServerClient,
+    turnId: string,
+    params: Record<string, unknown>,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ) {
+    const binding = options?.localSubmission
+      ? this.bindScopedTurn(turnId, params.threadId, options)
+      : undefined;
+    const ack = await this.submitForegroundTurn(client, params, prompt, options?.localSubmission);
+    if (!binding) return;
+    if (this.scopedTurn?.binding !== binding || this.client !== client)
+      throw Error("Scoped transport changed");
+    binding.acknowledge(ack);
+  }
+
+  private bindScopedTurn(localId: string, thread: unknown, options: AgentRunOptions) {
+    const client = this.client,
+      evidence = options.localTurnEvidence;
+    if (!client || typeof thread !== "string" || thread !== this.currentThreadId || !evidence)
+      throw Error("Scoped transport evidence required");
+    const binding = new ScopedCodexTurn(
+      localId,
+      thread,
+      evidence,
+      () => this.emitEvent({ type: "turn_started", provider: CODEX_PROVIDER, turnId: localId }),
+      (status, text) => {
+        if (text !== undefined && status === "completed")
+          this.emitEvent({
+            type: "timeline",
+            provider: CODEX_PROVIDER,
+            turnId: localId,
+            item: { type: "assistant_message", text },
+          });
+        this.handleTurnCompletedNotification({
+          kind: "turn_completed",
+          threadId: thread,
+          status,
+          errorMessage: null,
+        });
+        this.scopedTurn = undefined;
+      },
+    );
+    this.scopedTurn = { binding, client };
+    return binding;
+  }
+
+  async interruptScopedTurn(localId: string): Promise<void> {
+    const s = this.scopedTurn;
+    if (
+      !s ||
+      s.binding.localId !== localId ||
+      !s.binding.nativeId ||
+      s.client !== this.client ||
+      this.currentThreadId !== s.binding.thread ||
+      this.activeForegroundTurnId !== localId
+    )
+      throw Error("Unconfirmed scoped interrupt target");
+    await s.client.request(
+      "turn/interrupt",
+      { threadId: s.binding.thread, turnId: s.binding.nativeId },
+      INTERRUPT_TIMEOUT_MS,
+    );
   }
 
   private submitForegroundTurn(
@@ -4912,11 +4980,18 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   async interrupt(): Promise<void> {
+    const scoped = this.scopedTurn;
     const pendingStart = this.pendingForegroundStart;
     if (pendingStart) {
       pendingStart.cancelRequested = true;
       await pendingStart.promise;
     }
+    if (scoped) return this.interruptScopedTurn(scoped.binding.localId);
+    if (this.scopedTurn) return this.interruptScopedTurn(this.scopedTurn.binding.localId);
+    return this.interruptOrdinaryTurn();
+  }
+
+  private async interruptOrdinaryTurn() {
     if (!this.client || !this.currentThreadId) {
       if (
         !this.activeForegroundTurnId &&
@@ -5334,6 +5409,10 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private handleNotification(method: string, params: unknown): void {
+    if (this.scopedTurn) {
+      this.scopedTurn.binding.notification(method, params);
+      return;
+    }
     const notificationParams = toObjectRecord(params);
     if (method === "serverRequest/resolved" && typeof notificationParams?.requestId === "number") {
       const requestId = this.mcpElicitationPermissionIds.get(notificationParams.requestId);

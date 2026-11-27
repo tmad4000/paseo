@@ -221,6 +221,127 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+describe("scoped Codex JSON-RPC turn ownership", () => {
+  function setup() {
+    const ack = deferred<Record<string, unknown>>();
+    const app = createFakeCodexAppServer({
+      "turn/start": () => ack.promise,
+      "turn/interrupt": () => ({}),
+    });
+    const session = new CodexAppServerAgentSession(
+      createConfig(),
+      null,
+      createTestLogger(),
+      async () => app.child,
+      {},
+    );
+    const evidence = vi.fn();
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((e) => events.push(e));
+    const start = session.startTurn("approved", {
+      localSubmission: (_mode, _cwd, submit) => submit(),
+      localTurnEvidence: evidence,
+    });
+    const notify = (method: string, params: unknown) =>
+      app.child.stdout.write(JSON.stringify({ method, params }) + "\n");
+    const answer = (turnId: string | undefined, text: string, threadId = "thread-1") =>
+      notify("item/completed", {
+        threadId,
+        turnId,
+        item: { id: "item", type: "agentMessage", text },
+      });
+    const terminal = (id: string, status: string, threadId = "thread-1") =>
+      notify("turn/completed", { threadId, turn: { id, status } });
+    return { ack, app, session, evidence, events, start, notify, answer, terminal };
+  }
+
+  test("only the acknowledged pair supplies the result, including notifications before the reply", async () => {
+    const f = setup();
+    await f.app.waitForTurnStart();
+    f.app.startsTurn({ threadId: "thread-1", turnId: "foreign" });
+    f.answer("foreign", "stale");
+    f.terminal("foreign", "completed");
+    f.answer("owned", "genuine");
+    expect(f.evidence).not.toHaveBeenCalled();
+    f.ack.resolve({ turn: { id: "owned", status: "inProgress", items: [] } });
+    const { turnId } = await f.start;
+    f.answer("owned", "wrong thread", "another");
+    f.answer(undefined, "missing");
+    f.answer("foreign", "stale again");
+    f.terminal("foreign", "completed");
+    f.notify("codex/event/agent_message", { threadId: "thread-1", msg: { message: "legacy" } });
+    f.terminal("owned", "unknown");
+    f.terminal("owned", "completed", "another");
+    expect(f.evidence).toHaveBeenCalledTimes(1);
+    f.terminal("owned", "completed");
+    await vi.waitFor(() => expect(f.evidence).toHaveBeenCalledTimes(2));
+    expect(f.evidence.mock.calls.map(([e]) => e)).toEqual([
+      { kind: "accepted", localId: turnId, thread: "thread-1", turn: "owned" },
+      {
+        kind: "terminal",
+        localId: turnId,
+        thread: "thread-1",
+        turn: "owned",
+        status: "completed",
+        text: "genuine",
+      },
+    ]);
+    expect(f.events.filter((e) => e.type === "timeline")).toEqual([
+      expect.objectContaining({ turnId, item: { type: "assistant_message", text: "genuine" } }),
+    ]);
+    await f.session.close();
+    f.app.assertNoErrors();
+  });
+
+  test("a pending interrupt waits for its ACK and never targets a later same-thread start", async () => {
+    const f = setup();
+    await f.app.waitForTurnStart();
+    f.app.startsTurn({ threadId: "thread-1", turnId: "stale" });
+    const interrupted = f.session.interrupt();
+    expect(f.app.requests().some((r) => r.method === "turn/interrupt")).toBe(false);
+    f.ack.resolve({ turn: { id: "owned" } });
+    const { turnId } = await f.start;
+    f.app.startsTurn({ threadId: "thread-1", turnId: "autonomous" });
+    await interrupted;
+    await expect(f.session.interruptScopedTurn("other-local")).rejects.toThrow();
+    await f.session.interruptScopedTurn(turnId);
+    expect(
+      f.app
+        .requests()
+        .filter((r) => r.method === "turn/interrupt")
+        .map((r) => r.params),
+    ).toEqual(Array(2).fill({ threadId: "thread-1", turnId: "owned" }));
+    f.terminal("autonomous", "interrupted");
+    expect(f.evidence).toHaveBeenCalledTimes(1);
+    f.terminal("owned", "interrupted");
+    await vi.waitFor(() =>
+      expect(f.evidence).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "terminal", status: "interrupted", turn: "owned" }),
+      ),
+    );
+    await f.session.close();
+    f.app.assertNoErrors();
+  });
+
+  test.each([{}, { turn: { id: "owned" }, threadId: "other" }])(
+    "unconfirmed ACK leaves the turn uninterruptible and the receipt empty",
+    async (reply) => {
+      const f = setup();
+      await f.app.waitForTurnStart();
+      f.app.startsTurn({ threadId: "thread-1", turnId: "unconfirmed" });
+      f.answer("unconfirmed", "not evidence");
+      f.terminal("unconfirmed", "completed");
+      f.ack.resolve(reply);
+      await expect(f.start).rejects.toThrow(/acknowledgement/);
+      await expect(f.session.interrupt()).rejects.toThrow();
+      expect(f.evidence).not.toHaveBeenCalled();
+      expect(f.app.requests().some((r) => r.method === "turn/interrupt")).toBe(false);
+      await f.session.close();
+      f.app.assertNoErrors();
+    },
+  );
+});
+
 describe("Codex active-turn steering admission", () => {
   test("a steer without the clearing contract leaves permissions open", async () => {
     const appServer = createFakeCodexAppServer({
@@ -762,12 +883,13 @@ describe("Codex app-server provider", () => {
     session.activeForegroundTurnId = null;
     const request = vi.fn(async (method: string, _params: unknown) => {
       if (method === "thread/start") return { thread: { id: "local-approved" } };
-      if (method === "turn/start") return {};
+      if (method === "turn/start") return { turn: { id: "native-local" } };
       throw new Error("Unexpected operation " + method);
     });
     session.client = { request };
     let verified = false;
     await session.startTurn("literal text", {
+      localTurnEvidence: () => {},
       localSubmission: (mode, cwd, submit) => {
         expect(request.mock.calls.some(([method]) => method === "turn/start")).toBe(false);
         expect([mode, cwd]).toEqual(["read-only", "/workspace/project"]);
