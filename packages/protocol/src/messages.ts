@@ -2896,6 +2896,38 @@ export const AgentQueueEnqueueRequestSchema = z.object({
   composerAttachments: z.array(QueuedComposerAttachmentSchema).optional(),
 });
 
+export const LocalApprovedTurnRequestSchema = z
+  .object({
+    type: z.literal("local.approved_turn.request"),
+    version: z.literal(2),
+    requestId: z.string(),
+    op: z.enum(["probe", "bind", "run", "cancel"]),
+    route: z
+      .string()
+      .regex(/^[a-f0-9]{48}$/)
+      .optional(),
+    proof: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    item: z
+      .string()
+      .regex(/^[a-f0-9]{32}$/)
+      .optional(),
+    text: z.string().min(1).max(2000).optional(),
+  })
+  .strict();
+export const LocalApprovedTurnResponseSchema = z.object({
+  type: z.literal("local.approved_turn.response"),
+  payload: z.object({
+    requestId: z.string(),
+    version: z.literal(2),
+    status: z.enum(["supported", "bound", "result", "stopped", "denied", "quarantined"]),
+    item: z.string().optional(),
+    turnId: z.string().optional(),
+    text: z.string().max(12000).optional(),
+  }),
+});
 export const AgentQueueRemoveRequestSchema = z.object({
   type: z.literal("agent.queue.remove.request"),
   requestId: z.string(),
@@ -4176,6 +4208,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SessionSearchRequestSchema,
   SessionTextSearchRequestSchema,
   AgentQueueEnqueueRequestSchema,
+  LocalApprovedTurnRequestSchema,
   AgentQueueRemoveRequestSchema,
   AgentQueueEditRequestSchema,
   AgentQueueEditHoldRequestSchema,
@@ -7962,6 +7995,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SessionSearchResponseSchema,
   SessionTextSearchResponseSchema,
   AgentQueueEnqueueResponseSchema,
+  LocalApprovedTurnResponseSchema,
   AgentQueueRemoveResponseSchema,
   AgentQueueEditResponseSchema,
   AgentQueueEditHoldResponseSchema,

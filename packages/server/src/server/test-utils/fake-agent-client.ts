@@ -374,6 +374,8 @@ class FakeAgentSession implements AgentSession {
     ];
   }
 
+  private scopedEvidence?: AgentRunOptions["localTurnEvidence"];
+  private scopedAnswer = "";
   private async appendHistoryEvent(event: AgentStreamEvent): Promise<void> {
     const folder = path.dirname(this.historyPath);
     await mkdir(folder, { recursive: true });
@@ -433,15 +435,26 @@ class FakeAgentSession implements AgentSession {
     return { sessionId: this.id, finalText: resultText, timeline, usage };
   }
 
-  async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+  async startTurn(
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<{ turnId: string }> {
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");
     }
 
     const turnId = `fake-turn-${this.nextTurnOrdinal++}`;
-    this.activeForegroundTurnId = turnId;
-    this.onStartTurn?.(prompt);
+    const submit = async () => {
+      this.activeForegroundTurnId = turnId;
+      this.onStartTurn?.(prompt);
+    };
+    if (options?.localSubmission)
+      await options.localSubmission(this.config.modeId ?? "", this.config.cwd, submit);
+    else await submit();
 
+    this.scopedEvidence = options?.localTurnEvidence;
+    this.scopedAnswer = "";
+    this.scopedEvidence?.({ kind: "accepted", localId: turnId, thread: this.id, turn: turnId });
     void this.emitTurnEvents(prompt);
 
     return { turnId };
@@ -456,6 +469,21 @@ class FakeAgentSession implements AgentSession {
 
   private notifySubscribers(event: AgentStreamEvent): void {
     const turnId = this.activeForegroundTurnId;
+    if (turnId && this.scopedEvidence) {
+      if (event.type === "timeline" && event.item.type === "assistant_message")
+        this.scopedAnswer += event.item.text;
+      if (event.type === "turn_completed" || event.type === "turn_canceled") {
+        this.scopedEvidence({
+          kind: "terminal",
+          localId: turnId,
+          thread: this.id,
+          turn: turnId,
+          status: event.type === "turn_completed" ? "completed" : "interrupted",
+          text: this.scopedAnswer,
+        });
+        this.scopedEvidence = undefined;
+      }
+    }
     const tagged = turnId ? { ...event, turnId } : event;
     for (const callback of this.subscribers) {
       try {
@@ -882,6 +910,10 @@ class FakeAgentSession implements AgentSession {
     );
   }
 
+  async interruptScopedTurn(id: string) {
+    if (!this.scopedEvidence || this.activeForegroundTurnId !== id) throw Error("Wrong fake turn");
+    await this.interrupt();
+  }
   async interrupt(): Promise<void> {
     this.interruptSignal.resolve();
   }

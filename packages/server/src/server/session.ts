@@ -241,6 +241,7 @@ import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { ScheduleService } from "./schedule/service.js";
 import { sendOrQueuePromptToAgent } from "./agent-queue/send-or-queue.js";
+import { localApprovedTurn } from "./local-approved-turn.js";
 import type { AgentQueueService } from "./agent-queue/service.js";
 import type { ClientDiagnosticsStore } from "./client-diagnostics/store.js";
 import type { AgentQueueSnapshot } from "@getpaseo/protocol/messages";
@@ -3265,6 +3266,15 @@ export class Session {
 
   /** Fork-added client-directed messages: UI tab commands and the agent queue. */
   private dispatchForkMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (msg.type === "local.approved_turn.request") {
+      return localApprovedTurn(this.paseoHome, this.agentManager, this.agentQueueService, msg).then(
+        (payload) =>
+          this.emit({
+            type: "local.approved_turn.response",
+            payload: { ...payload, version: 2, requestId: msg.requestId },
+          }),
+      );
+    }
     return (
       this.dispatchUiCommandMessage(msg) ??
       this.dispatchAgentQueueMessage(msg) ??

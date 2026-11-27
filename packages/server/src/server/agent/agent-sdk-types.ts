@@ -210,7 +210,18 @@ export type AgentPromptContentBlock =
 
 export type AgentPromptInput = string | AgentPromptContentBlock[];
 
+export type NativeTurnEvidence = { localId: string; thread: string; turn: string } & (
+  | { kind: "accepted" }
+  | { kind: "terminal"; status: "completed" | "interrupted" | "failed"; text?: string }
+);
 export interface AgentRunOptions {
+  localTurnEvidence?: (event: NativeTurnEvidence) => void;
+  /** Daemon-local callback at the literal provider submission boundary. Never deserialized. */
+  localSubmission?: (
+    mode: string,
+    cwd: string | undefined,
+    submit: () => Promise<unknown>,
+  ) => Promise<unknown>;
   /** Manager admission guard, checked synchronously with the run reservation. */
   requireNoPendingPermissions?: boolean;
   outputSchema?: unknown;
@@ -704,6 +715,7 @@ export interface AgentSession {
    * still uncertain.
    */
   interrupt(): Promise<void>;
+  interruptScopedTurn?(localId: string): Promise<void>;
   /** Release live runtime resources without archiving or deleting the durable native session. */
   close(): Promise<void>;
   listCommands?(): Promise<AgentSlashCommand[]>;

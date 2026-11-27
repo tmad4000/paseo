@@ -525,6 +525,7 @@ export interface PaseoApi {
 }
 
 export interface PaseoClient extends PaseoApi {
+  localApprovedTurn: DaemonClient["localApprovedTurn"];
   connect(): Promise<void>;
   close(): Promise<void>;
   ensureConnected(): void;
@@ -540,6 +541,7 @@ export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
   const api = createPaseoApi(daemonClient);
   return {
     ...api,
+    localApprovedTurn: daemonClient.localApprovedTurn.bind(daemonClient),
     connect: () => daemonClient.connect(),
     close: async () => {
       try {

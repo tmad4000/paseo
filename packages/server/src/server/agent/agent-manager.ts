@@ -1451,6 +1451,14 @@ export class AgentManager {
     return this.trackAgentRegistrationOperation(this.createAgentInternal(config, agentId, options));
   }
 
+  // An opaque context identity is issued only for a newly created provider session.
+  // Imported, resumed, replaced or restarted sessions require a new local grant.
+  private readonly freshContexts = new WeakMap<AgentSession, string>();
+  freshContext(id: string): string | undefined {
+    const agent = this.agents.get(id);
+    return agent?.session ? this.freshContexts.get(agent.session) : undefined;
+  }
+
   private async createAgentInternal(
     config: AgentSessionConfig,
     agentId: string | undefined,
@@ -1488,6 +1496,7 @@ export class AgentManager {
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     const createOptions = this.buildCreateSessionOptions(options);
     const session = await client.createSession(providerLaunchConfig, launchContext, createOptions);
+    this.freshContexts.set(session, randomUUID());
     await this.requireExternalMcpSupport(session, storedConfig);
     const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       labels: options.labels,
@@ -3393,6 +3402,22 @@ export class AgentManager {
       agent.inFlightPermissionResponses.delete(requestId);
       agent.bufferedPermissionResolutions.delete(requestId);
     }
+  }
+
+  async cancelExactForegroundTurn(agentId: string, turnId: string): Promise<boolean> {
+    return this.runForegroundMutation(agentId, async () => {
+      const agent = this.requireSessionAgent(agentId);
+      const run = this.runs.getRun(agentId);
+      if (!run || agent.activeForegroundTurnId !== turnId) return false;
+      if (!agent.session.interruptScopedTurn) return false;
+      await agent.session.interruptScopedTurn(turnId);
+      return (
+        (await this.waitWithTimeout({
+          operation: run.settledPromise,
+          timeoutMs: INTERRUPT_SESSION_TIMEOUT_MS,
+        })) === "completed"
+      );
+    });
   }
 
   async cancelAgentRun(agentId: string): Promise<AgentRunCancellationResult> {

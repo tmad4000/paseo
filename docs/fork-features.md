@@ -319,3 +319,7 @@ Existing checks still apply to code changes.
 
 Until those automation items land, the preservation matrix and release smoke receipt are process
 checks, not an automated guarantee that a regression will be blocked.
+
+## Machine-local approved literal turns
+
+A local operator can dedicate a newly created Codex session to one device. The optional v1 operation reads a private operator ledger at `<paseoHome>/openchat-machine/authority.db`. A daemon restart, provider session replacement, stale approval, changed mode or workspace, queued work, or foreign conversation history closes admission. The client checks operation support before enrollment. Verify one literal turn and its causal receipt, cancellation by exact turn ID, persistent quarantine on uncertain outcomes, and rejection of preexisting history. Installation requires a separate daemon rollout with session-preservation verification.
